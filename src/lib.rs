@@ -14,8 +14,13 @@
 mod archtype;
 mod component;
 mod entity;
+#[macro_use]
+pub mod macros;
 mod util;
 mod world;
+
+#[macro_use]
+pub use paste::paste;
 
 pub use component::*;
 pub use entity::Entity;
