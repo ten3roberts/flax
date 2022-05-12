@@ -1,5 +1,6 @@
 use core::fmt;
 use core::num::{NonZeroU32, NonZeroU64};
+use std::mem::ManuallyDrop;
 
 #[derive(Clone, Copy, PartialEq)]
 #[repr(transparent)]
@@ -54,18 +55,21 @@ struct Vacant {
     next: Option<NonZeroU32>,
 }
 
-union SlotValue {
-    occupied: (),
+union SlotValue<T> {
+    occupied: ManuallyDrop<T>,
     vacant: Vacant,
 }
 
-struct Slot {
-    val: SlotValue,
+struct Slot<T> {
+    val: SlotValue<T>,
     gen: u32,
 }
 
+#[derive(Debug, Default, PartialEq)]
+pub struct EntityData {}
+
 pub struct EntityStore {
-    slots: Vec<Slot>,
+    slots: Vec<Slot<EntityData>>,
     count: u32,
     cap: usize,
     free_head: Option<NonZeroU32>,
@@ -99,7 +103,9 @@ impl EntityStore {
             // Push
             let gen = 0;
             self.slots.push(Slot {
-                val: SlotValue { occupied: () },
+                val: SlotValue {
+                    occupied: ManuallyDrop::new(EntityData::default()),
+                },
                 gen,
             });
             let idx = self.slots.len();
@@ -108,11 +114,11 @@ impl EntityStore {
         }
     }
 
-    fn slot(&self, idx: NonZeroU32) -> &Slot {
+    fn slot(&self, idx: NonZeroU32) -> &Slot<EntityData> {
         &self.slots[idx.get() as usize - 1]
     }
 
-    fn get_mut(&mut self, id: NonZeroU32) -> &mut Slot {
+    fn get_mut(&mut self, id: NonZeroU32) -> &mut Slot<EntityData> {
         &mut self.slots[id.get() as usize - 1]
     }
 
@@ -133,6 +139,9 @@ impl EntityStore {
         assert_eq!(slot.gen, gen);
         slot.gen = slot.gen.wrapping_add(1);
 
+        unsafe {
+            ManuallyDrop::<EntityData>::drop(&mut slot.val.occupied);
+        }
         slot.val.vacant = Vacant { next };
 
         self.free_head = Some(id);

@@ -11,7 +11,7 @@
 //! - Declarative queries and iteration
 //! - Change detection
 
-mod archtype;
+mod archetype;
 mod component;
 mod entity;
 #[macro_use]
