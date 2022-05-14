@@ -2,6 +2,8 @@ use core::fmt;
 use core::num::{NonZeroU32, NonZeroU64};
 use std::mem::ManuallyDrop;
 
+use crate::archetype::ArchetypeId;
+
 #[derive(Clone, Copy, PartialEq)]
 #[repr(transparent)]
 pub struct Entity(NonZeroU64);
@@ -66,10 +68,13 @@ struct Slot<T> {
 }
 
 #[derive(Debug, Default, PartialEq)]
-pub struct EntityData {}
+pub struct EntityLocation {
+    pub(crate) archetype: ArchetypeId,
+    pub(crate) location: usize,
+}
 
 pub struct EntityStore {
-    slots: Vec<Slot<EntityData>>,
+    slots: Vec<Slot<EntityLocation>>,
     count: u32,
     cap: usize,
     free_head: Option<NonZeroU32>,
@@ -104,7 +109,7 @@ impl EntityStore {
             let gen = 0;
             self.slots.push(Slot {
                 val: SlotValue {
-                    occupied: ManuallyDrop::new(EntityData::default()),
+                    occupied: ManuallyDrop::new(EntityLocation::default()),
                 },
                 gen,
             });
@@ -114,11 +119,11 @@ impl EntityStore {
         }
     }
 
-    fn slot(&self, idx: NonZeroU32) -> &Slot<EntityData> {
+    fn slot(&self, idx: NonZeroU32) -> &Slot<EntityLocation> {
         &self.slots[idx.get() as usize - 1]
     }
 
-    fn get_mut(&mut self, id: NonZeroU32) -> &mut Slot<EntityData> {
+    fn get_mut(&mut self, id: NonZeroU32) -> &mut Slot<EntityLocation> {
         &mut self.slots[id.get() as usize - 1]
     }
 
@@ -140,7 +145,7 @@ impl EntityStore {
         slot.gen = slot.gen.wrapping_add(1);
 
         unsafe {
-            ManuallyDrop::<EntityData>::drop(&mut slot.val.occupied);
+            ManuallyDrop::<EntityLocation>::drop(&mut slot.val.occupied);
         }
         slot.val.vacant = Vacant { next };
 

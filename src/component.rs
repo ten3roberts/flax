@@ -1,45 +1,70 @@
 use std::{
     marker::PhantomData,
-    sync::atomic::{
-        AtomicU64,
-        Ordering::{Acquire, Relaxed, Release},
-    },
+    sync::atomic::{AtomicU64, Ordering::Relaxed},
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
 
 impl<T> ComponentValue for T where T: Send + Sync + 'static {}
 
-static MAX_ID: AtomicU64 = AtomicU64::new(1);
+static MAX_ID: AtomicU64 = AtomicU64::new(5);
 // A value of 0 means the typeid has yet to be aquired
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ComponentId(u64);
+
+impl ComponentId {
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
 
 impl ComponentId {
     /// Return a unique always incrementing id for each invocation
     pub(crate) fn unique_id() -> u64 {
-        dbg!(MAX_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst))
+        MAX_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn static_init(id: &AtomicU64) -> ComponentId {
-        match id.fetch_update(Acquire, Relaxed, |v| {
-            if v == 0 {
-                Some(Self::unique_id())
-            } else {
-                None
-            }
-        }) {
-            Ok(v) => ComponentId(v),
-            Err(v) => ComponentId(v),
+        let v = id.load(Relaxed);
+        if v == 0 {
+            let v = ComponentId::unique_id();
+            id.store(v, Relaxed);
+            ComponentId(v)
+        } else {
+            ComponentId(v)
         }
     }
 }
 
 /// Defines a strongly typed component
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Component<T: ComponentValue> {
     id: ComponentId,
     marker: PhantomData<T>,
+}
+
+impl<T: ComponentValue> Eq for Component<T> {}
+
+impl<T: ComponentValue> PartialEq for Component<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl<T: ComponentValue> Copy for Component<T> {}
+
+impl<T: ComponentValue> Clone for Component<T> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T: ComponentValue> std::fmt::Debug for Component<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Component").field("id", &self.id).finish()
+    }
 }
 
 impl<T: ComponentValue> Component<T> {
