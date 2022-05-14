@@ -26,17 +26,18 @@ impl<T> SparseVec<T> {
     }
 
     pub fn remove(&mut self, index: u64) -> Option<T> {
-        if let Some(i) = self.sparse.get(index as usize) {
+        if let Some(&d_index) = self.sparse.get(index as usize) {
             // Swap index with last value
-            let i = *i;
             if let Some(back) = self.dense.last() {
                 let back_i = back.1;
-                // Update the last element to point to the whole of the removed
+                // Update the last element to point to the hole of the removed
                 // element
-                self.sparse[back_i] = i;
+                println!("back_i: {back_i}, index: {index}");
+                self.sparse[back_i] = d_index;
+                self.sparse[index as usize] = 0;
 
                 // The last elem is now at i
-                let val = self.dense.swap_remove(i - 1).0;
+                let val = self.dense.swap_remove(d_index - 1).0;
                 Some(val)
             } else {
                 None
@@ -54,22 +55,21 @@ impl<T> SparseVec<T> {
                 Some(&self.dense[*i - 1].0)
             }
         } else {
-            None
+            panic!("");
         }
     }
 
     pub fn insert(&mut self, index: u64, value: T) {
         if let Some(val) = self.get_mut(index) {
-            mem::replace(val, value);
+            *val = value;
         } else {
             let i = self.dense.len() + 1;
-            self.dense.push((value, i));
+            self.dense.push((value, index as _));
             if (self.sparse.len() as u64) < index {
                 self.sparse
-                    .extend(repeat(0).take(index as usize - self.sparse.len()));
-
-                self.sparse[index as usize] = i
+                    .extend(repeat(0).take(index as usize - self.sparse.len() + 1));
             }
+            self.sparse[index as usize] = i
         }
     }
 }
@@ -85,6 +85,7 @@ mod tests {
         vec.insert(6, "baz");
 
         assert_eq!(vec.get(2), Some(&"foo"));
+        dbg!(&vec.sparse);
         assert_eq!(vec.get(1), Some(&"bar"));
 
         vec.remove(1);
