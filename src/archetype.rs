@@ -138,7 +138,8 @@ impl ComponentBuffer {
             }
         } else {
             let layout = Layout::new::<T>();
-            let new_len = self.len + layout.size();
+            let offset = self.len + (self.len % layout.align());
+            let new_len = offset + layout.size();
             // Reallocate if the current buffer cannot fit an additional
             // T+align bytes
             if new_len >= self.layout.size() {
@@ -164,14 +165,16 @@ impl ComponentBuffer {
                 self.layout = new_layout;
             }
 
+            eprintln!("pad: {}", self.len % layout.align());
+
             // Regardless, the bytes after `len` are allocated and
             // unoccupied
             unsafe {
-                let ptr = self.data.as_ptr().offset(self.len as _) as *mut T;
+                let ptr = self.data.as_ptr().offset(offset as _) as *mut T;
                 *ptr = value;
             }
             assert_eq!(
-                self.component_map.insert(component.id().as_u64(), self.len),
+                self.component_map.insert(component.id().as_u64(), offset),
                 None
             );
             self.len = new_len;
