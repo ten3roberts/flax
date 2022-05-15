@@ -16,12 +16,13 @@ mod component;
 mod entity;
 #[macro_use]
 pub mod macros;
+mod buffer;
 mod util;
 mod world;
 
-#[macro_use]
 pub use paste::paste;
 
+pub use buffer::*;
 pub use component::*;
 pub use entity::Entity;
 pub use world::*;
