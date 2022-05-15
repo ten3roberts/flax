@@ -37,22 +37,22 @@ impl ComponentId {
 }
 
 /// Defines a strongly typed component
-pub struct Component<T: ComponentValue> {
+pub struct Component<T> {
     id: ComponentId,
     marker: PhantomData<T>,
 }
 
-impl<T: ComponentValue> Eq for Component<T> {}
+impl<T> Eq for Component<T> {}
 
-impl<T: ComponentValue> PartialEq for Component<T> {
+impl<T> PartialEq for Component<T> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<T: ComponentValue> Copy for Component<T> {}
+impl<T> Copy for Component<T> {}
 
-impl<T: ComponentValue> Clone for Component<T> {
+impl<T> Clone for Component<T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id.clone(),

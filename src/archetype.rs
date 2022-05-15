@@ -23,14 +23,16 @@ pub struct Archetype {
 impl Archetype {
     pub fn new(mut components: Vec<ComponentInfo>) -> Self {
         components.sort_by_key(|v| v.id);
+
         let max_component = components.last().unwrap();
 
-        let mut component_map = vec![0; max_component.id.as_raw() as _].into_boxed_slice();
+        let mut component_map = vec![0; max_component.id.as_raw() as usize + 1].into_boxed_slice();
+
         let storage = components
             .iter()
             .enumerate()
             .map(|(i, component)| {
-                component_map[component.id.as_raw() as usize] = i;
+                component_map[component.id.as_raw() as usize] = i + 1;
                 Storage {
                     data: NonNull::dangling(),
                 }
@@ -50,15 +52,16 @@ impl Archetype {
         &mut self,
         component: Component<T>,
     ) -> StorageBorrowMut<T> {
-        let storage = self
-            .storage
-            .get(
-                *self
-                    .component_map
-                    .get(component.id().as_raw() as usize)
-                    .unwrap(),
-            )
+        let index = *self
+            .component_map
+            .get(component.id().as_raw() as usize)
             .unwrap();
+
+        if index == 0 {
+            panic!("Component does not exist");
+        }
+
+        let storage = &mut self.storage[(index - 1)];
 
         // Type is guaranteed by `component_map`
         let data =
@@ -71,15 +74,16 @@ impl Archetype {
     }
 
     pub fn storage<T: ComponentValue>(&self, component: Component<T>) -> StorageBorrow<T> {
-        let storage = self
-            .storage
-            .get(
-                *self
-                    .component_map
-                    .get(component.id().as_raw() as usize)
-                    .unwrap(),
-            )
+        let index = *self
+            .component_map
+            .get(component.id().as_raw() as usize)
             .unwrap();
+
+        if index == 0 {
+            panic!("Component does not exist");
+        }
+
+        let storage = &self.storage[(index - 1)];
 
         // Type is guaranteed by `component_map`
         let data =
@@ -91,10 +95,15 @@ impl Archetype {
         }
     }
 
-    pub fn get<T: ComponentValue>(&self, entity: &EntityLocation, component: Component<T>) -> &T {
+    /// Get a component from the entity at `slot`. Assumes slot is valid.
+    pub fn get<T: ComponentValue + std::fmt::Debug>(
+        &self,
+        slot: Slot,
+        component: Component<T>,
+    ) -> &T {
         let storage = self.storage(component);
 
-        let value = &storage.data[entity.location];
+        let value = &storage.data[slot];
         value
     }
 
@@ -103,8 +112,8 @@ impl Archetype {
     /// will be ignored.
     ///
     /// Returns the index of the entity
-    pub fn insert<T: ComponentValue>(&mut self, mut components: ComponentBuffer) -> Slot {
-        let index = self.len;
+    pub fn insert(&mut self, mut components: ComponentBuffer) -> Slot {
+        let slot = self.len;
         self.len += 1;
 
         // Make sure a new component will fit
@@ -115,15 +124,15 @@ impl Archetype {
             for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
                 let src = components
                     .take_dyn(&component)
-                    .expect("Missing component: {component:?}");
+                    .expect(&format!("Missing component: {component:?}"));
 
-                let dst = storage.elem_raw(index, &component);
+                let dst = storage.elem_raw(slot, &component);
 
                 std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
             }
         }
 
-        index
+        slot
     }
 
     /// Reserves space for atleast `additional` entities.
@@ -137,8 +146,6 @@ impl Archetype {
             return;
         }
 
-        eprintln!("Growing to: {new_cap}");
-
         unsafe {
             for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
                 let new_layout = Layout::from_size_align(
@@ -148,14 +155,14 @@ impl Archetype {
                 .unwrap();
                 let new_data = alloc(new_layout);
 
-                // Copy over the previous contiguous data
-                std::ptr::copy_nonoverlapping(
-                    storage.data.as_ptr(),
-                    new_data,
-                    component.layout.size() * self.len,
-                );
-
                 if old_cap > 0 {
+                    // Copy over the previous contiguous data
+                    std::ptr::copy_nonoverlapping(
+                        storage.data.as_ptr(),
+                        new_data,
+                        component.layout.size() * self.len,
+                    );
+
                     dealloc(
                         storage.data.as_ptr(),
                         Layout::from_size_align(
@@ -200,18 +207,20 @@ impl Archetype {
 impl Drop for Archetype {
     fn drop(&mut self) {
         self.clear();
-        for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
-            // Handle ZST
-            if component.layout.size() > 0 {
-                unsafe {
-                    dealloc(
-                        storage.data.as_ptr(),
-                        Layout::from_size_align(
-                            component.layout.size() * self.cap,
-                            component.layout.align(),
-                        )
-                        .unwrap(),
-                    );
+        if self.cap > 0 {
+            for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
+                // Handle ZST
+                if component.layout.size() > 0 {
+                    unsafe {
+                        dealloc(
+                            storage.data.as_ptr(),
+                            Layout::from_size_align(
+                                component.layout.size() * self.cap,
+                                component.layout.align(),
+                            )
+                            .unwrap(),
+                        );
+                    }
                 }
             }
         }
@@ -271,7 +280,6 @@ impl ComponentBuffer {
 
     pub fn insert<T: ComponentValue>(&mut self, component: Component<T>, value: T) {
         if let Some(&(offset, _)) = self.component_map.get(component.id().as_raw()) {
-            eprintln!("Reusing spot");
             unsafe {
                 let ptr = self.data.as_ptr().offset(offset as _) as *mut T;
                 *ptr = value;
@@ -280,14 +288,9 @@ impl ComponentBuffer {
             let layout = Layout::new::<T>();
             let offset = self.end + (layout.align() - self.end % layout.align());
             let new_len = offset + layout.size();
-            eprintln!(
-                "Here {component:?} {offset} {new_len} l: {layout:?} {}",
-                self.layout.size()
-            );
             // Reallocate if the current buffer cannot fit an additional
             // T+align bytes
             if new_len >= self.layout.size() {
-                eprintln!("Allocating {new_len}");
                 // Enforce alignment to be the strictest of all stored types
                 let alignment = self.layout.align().max(layout.align());
 
@@ -298,9 +301,8 @@ impl ComponentBuffer {
                     // Don't realloc since  layout may change
                     let new_data = alloc(new_layout);
 
-                    std::ptr::copy_nonoverlapping(self.data.as_ptr(), new_data, self.end);
-
-                    if self.layout.size() != 0 {
+                    if self.layout.size() > 0 {
+                        std::ptr::copy_nonoverlapping(self.data.as_ptr(), new_data, self.end);
                         dealloc(self.data.as_ptr(), self.layout)
                     }
 
@@ -308,8 +310,6 @@ impl ComponentBuffer {
                 }
                 self.layout = new_layout;
             }
-
-            eprintln!("pad: {} {}", self.end, self.end % layout.align());
 
             // Regardless, the bytes after `len` are allocated and
             // unoccupied
@@ -437,7 +437,18 @@ mod tests {
         assert_eq!(Arc::strong_count(&shared_2), 2);
     }
 
-    pub fn test_archetype() {}
+    #[test]
+    pub fn test_archetype() {
+        let mut arch = Archetype::new(vec![ComponentInfo::of(b()), ComponentInfo::of(a())]);
+
+        let mut buffer = ComponentBuffer::new();
+        buffer.insert(a(), 7);
+        buffer.insert(b(), "Foo".to_string());
+        let slot = arch.insert(buffer);
+
+        assert_eq!(arch.get(slot, a()), &7);
+        assert_eq!(arch.get(slot, b()), "Foo");
+    }
 }
 
 impl Storage {

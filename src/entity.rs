@@ -70,7 +70,7 @@ struct Slot<T> {
 #[derive(Debug, Default, PartialEq)]
 pub struct EntityLocation {
     pub(crate) archetype: ArchetypeId,
-    pub(crate) location: usize,
+    pub(crate) slot: usize,
 }
 
 pub struct EntityStore {

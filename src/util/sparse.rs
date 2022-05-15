@@ -28,6 +28,10 @@ impl<T: std::fmt::Debug> SparseVec<T> {
 
     pub fn remove(&mut self, index: u64) -> Option<T> {
         if let Some(&d_index) = self.sparse.get(index as usize) {
+            // Empty slot
+            if d_index == 0 {
+                return None;
+            }
             // Swap index with last value
             if let Some(back) = self.dense.last() {
                 let back_i = back.0;
