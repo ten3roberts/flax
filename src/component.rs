@@ -3,6 +3,8 @@ use std::{
     sync::atomic::{AtomicU64, Ordering::Relaxed},
 };
 
+use crate::archetype::ComponentInfo;
+
 pub trait ComponentValue: Send + Sync + 'static {}
 
 impl<T> ComponentValue for T where T: Send + Sync + 'static {}
@@ -39,6 +41,7 @@ impl ComponentId {
 /// Defines a strongly typed component
 pub struct Component<T> {
     id: ComponentId,
+    name: &'static str,
     marker: PhantomData<T>,
 }
 
@@ -55,7 +58,8 @@ impl<T> Copy for Component<T> {}
 impl<T> Clone for Component<T> {
     fn clone(&self) -> Self {
         Self {
-            id: self.id.clone(),
+            id: self.id,
+            name: self.name,
             marker: PhantomData,
         }
     }
@@ -68,9 +72,10 @@ impl<T: ComponentValue> std::fmt::Debug for Component<T> {
 }
 
 impl<T: ComponentValue> Component<T> {
-    pub fn new(id: ComponentId) -> Self {
+    pub fn new(id: ComponentId, name: &'static str) -> Self {
         Self {
             id,
+            name,
             marker: PhantomData,
         }
     }
@@ -80,6 +85,17 @@ impl<T: ComponentValue> Component<T> {
     #[inline(always)]
     pub fn id(&self) -> ComponentId {
         self.id
+    }
+
+    pub fn info(self) -> ComponentInfo {
+        ComponentInfo::of(self)
+    }
+
+    /// Get the component's name.
+    #[must_use]
+    #[inline(always)]
+    pub fn name(&self) -> &'static str {
+        self.name
     }
 }
 

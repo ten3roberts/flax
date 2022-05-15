@@ -1,6 +1,6 @@
 use std::{iter::repeat, mem};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SparseVec<T> {
     sparse: Vec<usize>,
     dense: Vec<(u64, T)>,

@@ -38,7 +38,7 @@ impl ComponentBuffer {
     }
 
     pub fn clear(&mut self) {
-        for (id, &(offset, info)) in self.component_map.iter() {
+        for (_, &(offset, info)) in self.component_map.iter() {
             unsafe { (info.drop)(self.data.as_ptr().offset(offset as _)) }
         }
 

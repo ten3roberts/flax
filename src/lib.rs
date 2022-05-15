@@ -17,6 +17,7 @@ mod entity;
 #[macro_use]
 pub mod macros;
 mod buffer;
+mod entity_builder;
 mod util;
 mod world;
 

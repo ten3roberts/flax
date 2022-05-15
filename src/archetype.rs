@@ -21,12 +21,27 @@ pub struct Archetype {
     len: usize,
     // Number of slots
     cap: usize,
+
+    // ComponentId => ArchetypeId
+    // If the key is an existing component, it means it is a backwards edge
+    edges: SparseVec<ArchetypeId>,
 }
 
 impl Archetype {
-    pub fn new(mut components: Vec<ComponentInfo>) -> Self {
-        components.sort_by_key(|v| v.id);
+    pub fn empty() -> Self {
+        Self {
+            component_map: Box::new([]),
+            components: Box::new([]),
+            storage: Box::new([]),
+            len: 0,
+            cap: 0,
+            edges: SparseVec::new(),
+        }
+    }
 
+    /// Create a new archetype.
+    /// Assumes `components` are sorted by id.
+    pub fn new(mut components: Vec<ComponentInfo>) -> Self {
         let max_component = components.last().unwrap();
 
         let mut component_map = vec![0; max_component.id.as_raw() as usize + 1].into_boxed_slice();
@@ -48,7 +63,31 @@ impl Archetype {
             component_map,
             components: components.into_boxed_slice(),
             storage,
+            edges: SparseVec::new(),
         }
+    }
+
+    /// Returns true if the archtype has `component`
+    pub fn has(&self, component: ComponentId) -> bool {
+        self.component_map
+            .get(component.as_raw() as usize)
+            .unwrap_or(&0)
+            != &0
+    }
+
+    pub fn edge_to(&self, component: ComponentId) -> Option<ArchetypeId> {
+        self.edges.get(component.as_raw()).copied()
+    }
+
+    pub fn add_edge_to(
+        &mut self,
+        dst: &mut Archetype,
+        dst_id: ArchetypeId,
+        src_id: ArchetypeId,
+        component: ComponentId,
+    ) {
+        assert!(self.edges.insert(component.as_raw(), dst_id).is_none());
+        assert!(dst.edges.insert(component.as_raw(), src_id).is_none());
     }
 
     pub fn storage_mut<T: ComponentValue>(
@@ -215,6 +254,12 @@ impl Archetype {
     pub fn cap(&self) -> usize {
         self.cap
     }
+
+    /// Get a reference to the archetype's components.
+    #[must_use]
+    pub fn components(&self) -> &[ComponentInfo] {
+        self.components.as_ref()
+    }
 }
 
 impl Drop for Archetype {
@@ -259,7 +304,7 @@ struct Storage {
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ComponentInfo {
-    pub(crate) type_name: &'static str,
+    pub(crate) name: &'static str,
     pub(crate) layout: Layout,
     pub(crate) id: ComponentId,
     pub(crate) drop: unsafe fn(*mut u8),
@@ -272,7 +317,7 @@ impl ComponentInfo {
         }
         Self {
             drop: drop_ptr::<T>,
-            type_name: type_name::<T>(),
+            name: component.name(),
             layout: Layout::new::<T>(),
             id: component.id(),
         }
