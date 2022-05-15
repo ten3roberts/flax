@@ -32,7 +32,7 @@ macro_rules! hash {
 /// ```
 /// This will create a function `health()` which returns the component id.
 macro_rules! component {
-    ($name: ident: $ty: ident) => {
+    ($name: ident: $ty: ty) => {
 
         $crate::paste! {
             #[allow(dead_code)]
@@ -42,7 +42,7 @@ macro_rules! component {
             }
         }
     };
-    ($($name: ident: $ty: ident,)*) => {
+    ($($name: ident: $ty: ty,)*) => {
         $(
         $crate::component!{ $name: $ty }
     ) *

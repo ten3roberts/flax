@@ -233,6 +233,7 @@ mod tests {
         b: String,
         c: i16,
         d: f32,
+        e: [f64; 100],
     }
 
     #[test]
@@ -241,10 +242,12 @@ mod tests {
         buffer.insert(a(), 7);
         buffer.insert(c(), 9);
         buffer.insert(b(), "Hello, World".to_string());
+        buffer.insert(e(), [5.0; 100]);
 
         assert_eq!(buffer.get(a()), Some(&7));
         assert_eq!(buffer.get(c()), Some(&9));
         assert_eq!(buffer.get(b()), Some(&"Hello, World".to_string()));
         assert_eq!(buffer.get(d()), None);
+        assert_eq!(buffer.get(e()), Some(&[5.0; 100]));
     }
 }
