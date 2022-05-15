@@ -96,6 +96,17 @@ impl Archetype {
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
+    pub fn get_mut<T: ComponentValue + std::fmt::Debug>(
+        &mut self,
+        slot: Slot,
+        component: Component<T>,
+    ) -> &mut T {
+        let storage = self.storage_mut(component);
+
+        &mut storage.data[slot]
+    }
+
+    /// Get a component from the entity at `slot`. Assumes slot is valid.
     pub fn get<T: ComponentValue + std::fmt::Debug>(
         &self,
         slot: Slot,
@@ -103,8 +114,7 @@ impl Archetype {
     ) -> &T {
         let storage = self.storage(component);
 
-        let value = &storage.data[slot];
-        value
+        &storage.data[slot]
     }
 
     /// Insert a new entity into the archetype.
@@ -448,6 +458,9 @@ mod tests {
 
         assert_eq!(arch.get(slot, a()), &7);
         assert_eq!(arch.get(slot, b()), "Foo");
+
+        arch.get_mut(slot, b()).push_str("Bar");
+        assert_eq!(arch.get(slot, b()), "FooBar");
     }
 }
 
