@@ -4,6 +4,7 @@ use std::{
     ptr::NonNull,
 };
 
+use crate::util;
 use crate::{archetype::ComponentInfo, util::SparseVec, Component, ComponentValue};
 
 #[derive(Debug)]
@@ -93,7 +94,7 @@ impl ComponentBuffer {
             // Regardless, the bytes after `len` are allocated and
             // unoccupied
             unsafe {
-                let ptr = self.data.as_ptr().offset(offset as _) as *mut T;
+                let ptr = self.data.as_ptr().add(offset) as *mut T;
                 assert_eq!(self.data.as_ptr() as usize % layout.align(), 0);
                 assert_eq!(ptr as usize % layout.align(), 0);
                 std::ptr::write(ptr, value)
@@ -107,6 +108,38 @@ impl ComponentBuffer {
             );
             self.end = new_len;
         }
+    }
+
+    pub(crate) unsafe fn take_all(mut self) -> IntoIter {
+        let component_map = std::mem::take(&mut self.component_map);
+        let data = std::mem::replace(&mut self.data, NonNull::dangling());
+        let layout = std::mem::replace(&mut self.layout, Layout::from_size_align_unchecked(0, 64));
+        IntoIter {
+            components: component_map.into_iter(),
+            data,
+            layout,
+        }
+    }
+}
+
+pub struct IntoIter {
+    components: util::IntoIter<(usize, ComponentInfo)>,
+    data: NonNull<u8>,
+    layout: Layout,
+}
+
+impl Drop for IntoIter {
+    fn drop(&mut self) {
+        unsafe { dealloc(self.data.as_ptr(), self.layout) }
+    }
+}
+
+impl Iterator for IntoIter {
+    type Item = (ComponentInfo, *mut u8);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (_, (offset, info)) = self.components.next()?;
+        Some(unsafe { (info, self.data.as_ptr().add(offset)) })
     }
 }
 

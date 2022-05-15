@@ -1,13 +1,10 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
-    any::type_name,
+    num::NonZeroU32,
     ptr::NonNull,
 };
 
-use crate::{
-    entity::EntityLocation, util::SparseVec, Component, ComponentBuffer, ComponentId,
-    ComponentValue,
-};
+use crate::{util::SparseVec, Component, ComponentBuffer, ComponentId, ComponentValue};
 
 pub type ArchetypeId = u32;
 pub type Slot = usize;
@@ -16,6 +13,8 @@ pub type Slot = usize;
 pub struct Archetype {
     component_map: Box<[usize]>,
     components: Box<[ComponentInfo]>,
+    /// Slot to entity id
+    entities: Box<[u32]>,
     storage: Box<[Storage]>,
     // Number of entities in the archetype
     len: usize,
@@ -36,12 +35,13 @@ impl Archetype {
             len: 0,
             cap: 0,
             edges: SparseVec::new(),
+            entities: Box::new([]),
         }
     }
 
     /// Create a new archetype.
     /// Assumes `components` are sorted by id.
-    pub fn new(mut components: Vec<ComponentInfo>) -> Self {
+    pub fn new(components: Vec<ComponentInfo>) -> Self {
         let max_component = components.last().unwrap();
 
         let mut component_map = vec![0; max_component.id.as_raw() as usize + 1].into_boxed_slice();
@@ -64,6 +64,7 @@ impl Archetype {
             components: components.into_boxed_slice(),
             storage,
             edges: SparseVec::new(),
+            entities: Box::new([]),
         }
     }
 
@@ -97,7 +98,7 @@ impl Archetype {
         let index = *self
             .component_map
             .get(component.id().as_raw() as usize)
-            .unwrap();
+            .unwrap_or(&0);
 
         if index == 0 {
             panic!("Component does not exist");
@@ -119,7 +120,7 @@ impl Archetype {
         let index = *self
             .component_map
             .get(component.id().as_raw() as usize)
-            .unwrap();
+            .unwrap_or(&0);
 
         if index == 0 {
             panic!("Component does not exist");
@@ -148,6 +149,16 @@ impl Archetype {
         &mut storage.data[slot]
     }
 
+    fn storage_raw(&mut self, id: ComponentId) -> &Storage {
+        let index = *self.component_map.get(id.as_raw() as usize).unwrap_or(&0);
+
+        if index == 0 {
+            panic!("Component does not exist");
+        }
+
+        &self.storage[index - 1]
+    }
+
     /// Get a component from the entity at `slot`. Assumes slot is valid.
     pub fn get<T: ComponentValue + std::fmt::Debug>(
         &self,
@@ -160,31 +171,107 @@ impl Archetype {
     }
 
     /// Insert a new entity into the archetype.
-    /// The components must be a superset of the archetype. Other components
-    /// will be ignored.
+    /// The components must match exactly.
     ///
     /// Returns the index of the entity
-    pub fn insert(&mut self, mut components: ComponentBuffer) -> Slot {
-        let slot = self.len;
-        self.len += 1;
-
-        // Make sure a new component will fit
-        self.reserve(1);
-
-        // Insert all components
+    pub fn insert(&mut self, entity_id: NonZeroU32, components: ComponentBuffer) -> Slot {
+        let slot = unsafe { self.allocate(entity_id) };
+        eprintln!("Inserting components into {slot}");
         unsafe {
-            for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
-                let src = components
-                    .take_dyn(&component)
-                    .expect(&format!("Missing component: {component:?}"));
-
-                let dst = storage.elem_raw(slot, &component);
-
-                std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
+            for (component, src) in components.take_all() {
+                let storage = self.storage_raw(component.id);
+                std::ptr::copy_nonoverlapping(
+                    src,
+                    storage.at(&component, slot),
+                    component.layout.size(),
+                );
             }
         }
 
         slot
+    }
+
+    /// Allocated space for a new slot.
+    /// # Safety
+    /// All components of slot are unspecified. `pub_dyn` needs to be called for
+    /// all components in archetype.
+    pub unsafe fn allocate(&mut self, entity_id: NonZeroU32) -> Slot {
+        self.reserve(1);
+
+        let slot = self.len;
+
+        self.len += 1;
+        self.entities[slot] = entity_id.get();
+
+        slot
+    }
+
+    /// Put a typeerased component info a slot.
+    /// `src` shall be considered moved.
+    /// `component` must match the type of data.
+    /// Must be called only **ONCE**. Returns Err(src) if move was unsuccesfull
+    pub unsafe fn put_dyn(
+        &mut self,
+        slot: Slot,
+        component: &ComponentInfo,
+        src: *mut u8,
+    ) -> Result<(), *mut u8> {
+        let index = *self
+            .component_map
+            .get(component.id.as_raw() as usize)
+            .unwrap_or(&0);
+
+        if index == 0 {
+            return Err(src);
+        }
+
+        let storage = &mut self.storage[(index - 1)];
+
+        let dst = storage.at(component, slot);
+        std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
+
+        Ok(())
+    }
+
+    /// Move all components in `slot` to archetype of `dst`. The components not
+    /// in self will be left unspecified.
+    /// `dst.put_dyn` must be called immediately after for each missing
+    /// component.
+    ///
+    /// Returns the entity which was moved into `slot`, if any.
+    pub unsafe fn move_to(&mut self, dst: &mut Self, slot: Slot) -> Option<NonZeroU32> {
+        let entity = self.entity(slot).expect("Invalid entity");
+        let dst_slot = dst.allocate(entity);
+        let last = self.len - 1;
+
+        for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
+            let src = storage.at(component, slot);
+            match dst.put_dyn(dst_slot, component, src) {
+                Ok(()) => {}
+                Err(p) => {
+                    eprintln!("Dropping component {component:?} in move");
+                    (component.drop)(p);
+                }
+            };
+
+            // Move back in to fill the gap
+            if slot != last {
+                let dst = storage.at(component, last);
+                std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
+            }
+        }
+
+        self.len -= 1;
+
+        if slot != last {
+            self.entities[slot] = self.entities[last];
+            Some(
+                NonZeroU32::new(std::mem::take(&mut self.entities[last]))
+                    .expect("Invalid entity at last pos"),
+            )
+        } else {
+            None
+        }
     }
 
     /// Reserves space for atleast `additional` entities.
@@ -229,7 +316,15 @@ impl Archetype {
             }
         }
 
+        // Copy over entity ids
+        let mut new_entities = vec![0; new_cap].into_boxed_slice();
+        new_entities[0..self.len].copy_from_slice(&self.entities[0..self.len]);
+        self.entities = new_entities;
         self.cap = new_cap;
+    }
+
+    pub fn entity(&self, slot: Slot) -> Option<NonZeroU32> {
+        NonZeroU32::new(self.entities[slot])
     }
 
     pub fn clear(&mut self) {
@@ -341,8 +436,8 @@ mod tests {
     #[test]
     pub fn test_archetype() {
         let mut arch = Archetype::new(vec![
-            ComponentInfo::of(b()),
             ComponentInfo::of(a()),
+            ComponentInfo::of(b()),
             ComponentInfo::of(c()),
         ]);
 
@@ -353,7 +448,8 @@ mod tests {
         buffer.insert(b(), "Foo".to_string());
         buffer.insert(c(), shared.clone());
 
-        let slot = arch.insert(buffer);
+        let slot = arch.insert(NonZeroU32::new(1).unwrap(), buffer);
+        eprintln!("Slot: {slot}");
 
         assert_eq!(arch.get(slot, a()), &7);
         assert_eq!(arch.get(slot, b()), "Foo");
@@ -384,6 +480,10 @@ impl Storage {
 
     /// Returns the `index`th element of type represented by info.
     unsafe fn elem_raw(&mut self, index: usize, info: &ComponentInfo) -> *mut u8 {
-        self.data.as_ptr().offset((index * info.layout.size()) as _)
+        self.data.as_ptr().add(index * info.layout.size())
+    }
+
+    unsafe fn at(&self, component: &ComponentInfo, slot: Slot) -> *mut u8 {
+        self.data.as_ptr().add(component.layout.size() * slot)
     }
 }

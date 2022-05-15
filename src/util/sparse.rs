@@ -6,6 +6,15 @@ pub struct SparseVec<T> {
     dense: Vec<(u64, T)>,
 }
 
+impl<T> Default for SparseVec<T> {
+    fn default() -> Self {
+        Self {
+            sparse: Default::default(),
+            dense: Default::default(),
+        }
+    }
+}
+
 impl<T: std::fmt::Debug> SparseVec<T> {
     pub fn new() -> Self {
         Self {
@@ -90,6 +99,12 @@ impl<T: std::fmt::Debug> SparseVec<T> {
             dense: self.dense.iter(),
         }
     }
+
+    pub fn into_iter(self) -> IntoIter<T> {
+        IntoIter {
+            dense: self.dense.into_iter(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -132,5 +147,18 @@ impl<'a, T> Iterator for Iter<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         let (index, val) = self.dense.next()?;
         Some((*index, val))
+    }
+}
+
+pub struct IntoIter<T> {
+    dense: std::vec::IntoIter<(u64, T)>,
+}
+
+impl<T> Iterator for IntoIter<T> {
+    type Item = (u64, T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (index, val) = self.dense.next()?;
+        Some((index, val))
     }
 }

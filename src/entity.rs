@@ -11,7 +11,7 @@ pub struct Entity(NonZeroU64);
 const ID_MASK: u64 = 0xFFFF0000;
 
 impl Entity {
-    fn id(&self) -> u32 {
+    pub fn id(&self) -> u32 {
         self.0.get() as u32
     }
 
@@ -93,7 +93,7 @@ impl EntityStore {
         }
     }
 
-    pub fn spawn(&mut self) -> Entity {
+    pub fn spawn(&mut self, value: EntityLocation) -> Entity {
         if let Some(idx) = self.free_head.take() {
             let free = &self.slot(idx);
             let gen = free.gen;
@@ -109,7 +109,7 @@ impl EntityStore {
             let gen = 0;
             self.slots.push(Slot {
                 val: SlotValue {
-                    occupied: ManuallyDrop::new(EntityLocation::default()),
+                    occupied: ManuallyDrop::new(value),
                 },
                 gen,
             });
@@ -119,12 +119,42 @@ impl EntityStore {
         }
     }
 
+    #[inline]
     fn slot(&self, idx: NonZeroU32) -> &Slot<EntityLocation> {
         &self.slots[idx.get() as usize - 1]
     }
 
-    fn get_mut(&mut self, id: NonZeroU32) -> &mut Slot<EntityLocation> {
+    #[inline]
+    fn slot_mut(&mut self, id: NonZeroU32) -> &mut Slot<EntityLocation> {
         &mut self.slots[id.get() as usize - 1]
+    }
+
+    pub fn get_mut(&mut self, id: Entity) -> Option<&mut EntityLocation> {
+        let (id, gen) = id.into_parts();
+        if id.get() <= self.slots.len() as _ {
+            let slot = self.slot_mut(id);
+            if slot.gen == gen {
+                Some(unsafe { &mut slot.val.occupied })
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn get(&self, id: Entity) -> Option<&EntityLocation> {
+        let (id, gen) = id.into_parts();
+        if id.get() <= self.slots.len() as _ {
+            let slot = self.slot(id);
+            if slot.gen == gen {
+                Some(unsafe { &slot.val.occupied })
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     pub fn is_alive(&self, id: Entity) -> bool {
@@ -139,7 +169,7 @@ impl EntityStore {
         let (id, gen) = id.into_parts();
 
         let next = self.free_head.take();
-        let slot = self.get_mut(id);
+        let slot = self.slot_mut(id);
 
         assert_eq!(slot.gen, gen);
         slot.gen = slot.gen.wrapping_add(1);
@@ -163,21 +193,38 @@ impl Default for EntityStore {
 mod tests {
     use std::num::NonZeroU32;
 
-    use crate::Entity;
+    use crate::{entity::EntityLocation, Entity};
 
     use super::EntityStore;
     #[test]
     fn entity_store() {
         let mut entities = EntityStore::new();
-        let a = entities.spawn();
-        let b = entities.spawn();
-        let c = entities.spawn();
+        let a = entities.spawn(EntityLocation {
+            archetype: 0,
+            slot: 4,
+        });
+        let b = entities.spawn(EntityLocation {
+            archetype: 3,
+            slot: 2,
+        });
+        let c = entities.spawn(EntityLocation {
+            archetype: 5,
+            slot: 3,
+        });
 
         entities.despawn(b);
 
         assert!(entities.is_alive(a));
         assert!(!entities.is_alive(b));
         assert!(entities.is_alive(c));
+        assert_eq!(
+            entities.get(c),
+            Some(&EntityLocation {
+                archetype: 5,
+                slot: 3
+            })
+        );
+        assert_eq!(entities.get(b), None);
     }
 
     #[test]

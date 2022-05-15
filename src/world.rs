@@ -1,7 +1,7 @@
 use crate::{
     archetype::{Archetype, ComponentInfo},
-    entity::EntityStore,
-    ComponentId, Entity,
+    entity::{EntityLocation, EntityStore},
+    Component, ComponentId, ComponentValue, Entity,
 };
 
 pub struct World {
@@ -70,7 +70,11 @@ impl World {
 
     /// Spawn a new empty entity
     pub fn spawn(&mut self) -> Entity {
-        self.entities.spawn()
+        self.entities.spawn(EntityLocation::default())
+    }
+
+    pub fn insert<T: ComponentValue>(&mut self, id: Entity, component: Component<T>, value: T) {
+        let loc = self.entities.get(id).unwrap();
     }
 
     /// Despawns an entity
