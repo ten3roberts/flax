@@ -3,7 +3,7 @@ use std::{iter::repeat, mem};
 #[derive(Debug, Clone)]
 pub struct SparseVec<T> {
     sparse: Vec<usize>,
-    dense: Vec<(T, usize)>,
+    dense: Vec<(u64, T)>,
 }
 
 impl<T: std::fmt::Debug> SparseVec<T> {
@@ -19,7 +19,7 @@ impl<T: std::fmt::Debug> SparseVec<T> {
             if *i == 0 {
                 None
             } else {
-                Some(&mut self.dense[*i - 1].0)
+                Some(&mut self.dense[*i - 1].1)
             }
         } else {
             None
@@ -30,15 +30,15 @@ impl<T: std::fmt::Debug> SparseVec<T> {
         if let Some(&d_index) = self.sparse.get(index as usize) {
             // Swap index with last value
             if let Some(back) = self.dense.last() {
-                let back_i = back.1;
+                let back_i = back.0;
                 // Update the last element to point to the hole of the removed
                 // element
                 println!("back_i: {back_i}, index: {index}");
-                self.sparse[back_i] = d_index;
+                self.sparse[back_i as usize] = d_index;
                 self.sparse[index as usize] = 0;
 
                 // The last elem is now at i
-                let val = self.dense.swap_remove(d_index - 1).0;
+                let val = self.dense.swap_remove(d_index - 1).1;
                 Some(val)
             } else {
                 None
@@ -53,7 +53,7 @@ impl<T: std::fmt::Debug> SparseVec<T> {
             if *i == 0 {
                 None
             } else {
-                Some(&self.dense[*i - 1].0)
+                Some(&self.dense[*i - 1].1)
             }
         } else {
             None
@@ -66,13 +66,24 @@ impl<T: std::fmt::Debug> SparseVec<T> {
         } else {
             eprintln!("Inserting: {index}, {value:?}");
             let i = self.dense.len() + 1;
-            self.dense.push((value, index as _));
+            self.dense.push((index, value));
             if (self.sparse.len() as u64) <= index {
                 self.sparse
                     .extend(repeat(0).take(index as usize - self.sparse.len() + 1));
             }
             self.sparse[index as usize] = i;
             None
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.sparse.clear();
+        self.dense.clear();
+    }
+
+    pub fn iter(&self) -> Iter<T> {
+        Iter {
+            dense: self.dense.iter(),
         }
     }
 }
@@ -91,11 +102,31 @@ mod tests {
         dbg!(&vec.sparse);
         assert_eq!(vec.get(1), Some(&"bar"));
 
+        let mut iter: Vec<_> = vec.iter().collect();
+        iter.sort_by_key(|v| v.0);
+        assert_eq!(iter, [(1, &"bar"), (2, &"foo"), (6, &"baz")]);
+
         assert_eq!(vec.remove(1), Some("bar"));
 
         assert_eq!(vec.get(2), Some(&"foo"));
         assert_eq!(vec.get(1), None);
         assert_eq!(vec.get(6), Some(&"baz"));
         assert_eq!(vec.insert(2, "Fizz"), Some("foo"));
+        let mut iter: Vec<_> = vec.iter().collect();
+        iter.sort_by_key(|v| v.0);
+        assert_eq!(iter, [(2, &"Fizz"), (6, &"baz")]);
+    }
+}
+
+pub struct Iter<'a, T> {
+    dense: std::slice::Iter<'a, (u64, T)>,
+}
+
+impl<'a, T> Iterator for Iter<'a, T> {
+    type Item = (u64, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (index, val) = self.dense.next()?;
+        Some((*index, val))
     }
 }

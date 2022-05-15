@@ -13,7 +13,7 @@ static MAX_ID: AtomicU64 = AtomicU64::new(5);
 pub struct ComponentId(u64);
 
 impl ComponentId {
-    pub fn as_u64(self) -> u64 {
+    pub fn as_raw(self) -> u64 {
         self.0
     }
 }
@@ -77,6 +77,7 @@ impl<T: ComponentValue> Component<T> {
 
     /// Get the component's id.
     #[must_use]
+    #[inline(always)]
     pub fn id(&self) -> ComponentId {
         self.id
     }
