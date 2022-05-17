@@ -1,10 +1,9 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
-    num::NonZeroU32,
     ptr::NonNull,
 };
 
-use crate::{util::SparseVec, Component, ComponentBuffer, ComponentId, ComponentValue};
+use crate::{util::SparseVec, Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 
 pub type ArchetypeId = u32;
 pub type Slot = usize;
@@ -14,7 +13,7 @@ pub struct Archetype {
     component_map: Box<[usize]>,
     components: Box<[ComponentInfo]>,
     /// Slot to entity id
-    entities: Box<[u32]>,
+    entities: Box<[Option<Entity>]>,
     storage: Box<[Storage]>,
     // Number of entities in the archetype
     len: usize,
@@ -94,92 +93,90 @@ impl Archetype {
     pub fn storage_mut<T: ComponentValue>(
         &mut self,
         component: Component<T>,
-    ) -> StorageBorrowMut<T> {
+    ) -> Option<StorageBorrowMut<T>> {
         let index = *self
             .component_map
             .get(component.id().as_raw() as usize)
             .unwrap_or(&0);
 
         if index == 0 {
-            panic!("Component does not exist");
-        }
+            None
+        } else {
+            let storage = &mut self.storage[(index - 1)];
 
-        let storage = &mut self.storage[(index - 1)];
+            // Type is guaranteed by `component_map`
+            let data = unsafe {
+                std::slice::from_raw_parts_mut(storage.data.as_ptr() as *mut T, self.len)
+            };
 
-        // Type is guaranteed by `component_map`
-        let data =
-            unsafe { std::slice::from_raw_parts_mut(storage.data.as_ptr() as *mut T, self.len) };
-
-        StorageBorrowMut {
-            data,
-            id: component.id(),
+            Some(StorageBorrowMut {
+                data,
+                id: component.id(),
+            })
         }
     }
 
-    pub fn storage<T: ComponentValue>(&self, component: Component<T>) -> StorageBorrow<T> {
+    pub fn storage<T: ComponentValue>(&self, component: Component<T>) -> Option<StorageBorrow<T>> {
         let index = *self
             .component_map
             .get(component.id().as_raw() as usize)
             .unwrap_or(&0);
 
         if index == 0 {
-            panic!("Component does not exist");
-        }
+            None
+        } else {
+            let storage = &self.storage[(index - 1)];
 
-        let storage = &self.storage[(index - 1)];
+            // Type is guaranteed by `component_map`
+            let data =
+                unsafe { std::slice::from_raw_parts(storage.data.as_ptr() as *const T, self.len) };
 
-        // Type is guaranteed by `component_map`
-        let data =
-            unsafe { std::slice::from_raw_parts(storage.data.as_ptr() as *const T, self.len) };
-
-        StorageBorrow {
-            data,
-            id: component.id(),
+            Some(StorageBorrow {
+                data,
+                id: component.id(),
+            })
         }
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
-    pub fn get_mut<T: ComponentValue + std::fmt::Debug>(
+    pub fn get_mut<T: ComponentValue>(
         &mut self,
         slot: Slot,
         component: Component<T>,
-    ) -> &mut T {
-        let storage = self.storage_mut(component);
+    ) -> Option<&mut T> {
+        let storage = self.storage_mut(component)?;
 
-        &mut storage.data[slot]
+        Some(&mut storage.data[slot])
     }
 
-    fn storage_raw(&mut self, id: ComponentId) -> &Storage {
+    fn storage_raw(&mut self, id: ComponentId) -> Option<&Storage> {
         let index = *self.component_map.get(id.as_raw() as usize).unwrap_or(&0);
 
         if index == 0 {
-            panic!("Component does not exist");
+            None
+        } else {
+            Some(&self.storage[index - 1])
         }
-
-        &self.storage[index - 1]
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
-    pub fn get<T: ComponentValue + std::fmt::Debug>(
-        &self,
-        slot: Slot,
-        component: Component<T>,
-    ) -> &T {
-        let storage = self.storage(component);
+    pub fn get<T: ComponentValue>(&self, slot: Slot, component: Component<T>) -> Option<&T> {
+        let storage = self.storage(component)?;
 
-        &storage.data[slot]
+        Some(&storage.data[slot])
     }
 
     /// Insert a new entity into the archetype.
     /// The components must match exactly.
     ///
     /// Returns the index of the entity
-    pub fn insert(&mut self, entity_id: NonZeroU32, components: ComponentBuffer) -> Slot {
-        let slot = unsafe { self.allocate(entity_id) };
+    /// Entity must not exist in archetype
+    pub fn insert(&mut self, id: Entity, components: &mut ComponentBuffer) -> Slot {
+        let slot = unsafe { self.allocate(id) };
         eprintln!("Inserting components into {slot}");
         unsafe {
             for (component, src) in components.take_all() {
-                let storage = self.storage_raw(component.id);
+                let storage = self.storage_raw(component.id).unwrap();
                 std::ptr::copy_nonoverlapping(
                     src,
                     storage.at(&component, slot),
@@ -193,15 +190,15 @@ impl Archetype {
 
     /// Allocated space for a new slot.
     /// # Safety
-    /// All components of slot are unspecified. `pub_dyn` needs to be called for
+    /// All components of slot are uninitialized. `pub_dyn` needs to be called for
     /// all components in archetype.
-    pub unsafe fn allocate(&mut self, entity_id: NonZeroU32) -> Slot {
+    pub unsafe fn allocate(&mut self, id: Entity) -> Slot {
         self.reserve(1);
 
         let slot = self.len;
 
         self.len += 1;
-        self.entities[slot] = entity_id.get();
+        self.entities[slot] = Some(id);
 
         slot
     }
@@ -209,7 +206,7 @@ impl Archetype {
     /// Put a typeerased component info a slot.
     /// `src` shall be considered moved.
     /// `component` must match the type of data.
-    /// Must be called only **ONCE**. Returns Err(src) if move was unsuccesfull
+    /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
     pub unsafe fn put_dyn(
         &mut self,
         slot: Slot,
@@ -234,12 +231,12 @@ impl Archetype {
     }
 
     /// Move all components in `slot` to archetype of `dst`. The components not
-    /// in self will be left unspecified.
+    /// in self will be left uninitialized.
     /// `dst.put_dyn` must be called immediately after for each missing
     /// component.
     ///
-    /// Returns the entity which was moved into `slot`, if any.
-    pub unsafe fn move_to(&mut self, dst: &mut Self, slot: Slot) -> Option<NonZeroU32> {
+    /// Returns the slot in dst and entity which was moved into current `slot`, if any.
+    pub unsafe fn move_to(&mut self, dst: &mut Self, slot: Slot) -> (Slot, Option<Entity>) {
         let entity = self.entity(slot).expect("Invalid entity");
         let dst_slot = dst.allocate(entity);
         let last = self.len - 1;
@@ -265,12 +262,12 @@ impl Archetype {
 
         if slot != last {
             self.entities[slot] = self.entities[last];
-            Some(
-                NonZeroU32::new(std::mem::take(&mut self.entities[last]))
-                    .expect("Invalid entity at last pos"),
+            (
+                dst_slot,
+                Some(std::mem::take(&mut self.entities[last]).expect("Invalid entity at last pos")),
             )
         } else {
-            None
+            (dst_slot, None)
         }
     }
 
@@ -317,14 +314,14 @@ impl Archetype {
         }
 
         // Copy over entity ids
-        let mut new_entities = vec![0; new_cap].into_boxed_slice();
+        let mut new_entities = vec![None; new_cap].into_boxed_slice();
         new_entities[0..self.len].copy_from_slice(&self.entities[0..self.len]);
         self.entities = new_entities;
         self.cap = new_cap;
     }
 
-    pub fn entity(&self, slot: Slot) -> Option<NonZeroU32> {
-        NonZeroU32::new(self.entities[slot])
+    pub fn entity(&self, slot: Slot) -> Option<Entity> {
+        self.entities[slot]
     }
 
     pub fn clear(&mut self) {
@@ -426,6 +423,7 @@ mod tests {
     use crate::{component, ComponentBuffer};
 
     use super::*;
+    use std::num::NonZeroU32;
 
     component! {
         a: i32,
@@ -448,14 +446,30 @@ mod tests {
         buffer.insert(b(), "Foo".to_string());
         buffer.insert(c(), shared.clone());
 
-        let slot = arch.insert(NonZeroU32::new(1).unwrap(), buffer);
+        let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2);
+        let id_2 = Entity::from_parts(NonZeroU32::new(7).unwrap(), 2);
+        let slot = arch.insert(id, &mut buffer);
         eprintln!("Slot: {slot}");
 
-        assert_eq!(arch.get(slot, a()), &7);
-        assert_eq!(arch.get(slot, b()), "Foo");
+        // Reuse buffer and insert again
+        buffer.insert(a(), 9);
+        buffer.insert(b(), "Bar".to_string());
+        buffer.insert(c(), shared.clone());
 
-        arch.get_mut(slot, b()).push_str("Bar");
-        assert_eq!(arch.get(slot, b()), "FooBar");
+        let slot_2 = arch.insert(id_2, &mut buffer);
+
+        assert_eq!(slot, 0);
+        assert_eq!(arch.get(slot, a()), Some(&7));
+        assert_eq!(arch.get(slot, b()), Some(&"Foo".to_string()));
+        assert_eq!(arch.get(slot_2, b()), Some(&"Bar".to_string()));
+
+        arch.get_mut(slot, b())
+            .unwrap()
+            .push_str(&"Bar".to_string());
+
+        assert_eq!(arch.get(slot, b()), Some(&"FooBar".to_string()));
+        assert_eq!(arch.entity(slot), Some(id));
+        assert_eq!(arch.entity(slot_2), Some(id_2));
 
         drop(arch);
 

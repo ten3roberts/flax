@@ -11,8 +11,8 @@ pub struct Entity(NonZeroU64);
 const ID_MASK: u64 = 0xFFFF0000;
 
 impl Entity {
-    pub fn id(&self) -> u32 {
-        self.0.get() as u32
+    pub fn id(&self) -> NonZeroU32 {
+        NonZeroU32::new(self.0.get() as u32).unwrap()
     }
 
     pub fn gen(&self) -> u32 {
@@ -67,7 +67,7 @@ struct Slot<T> {
     gen: u32,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct EntityLocation {
     pub(crate) archetype: ArchetypeId,
     pub(crate) slot: usize,

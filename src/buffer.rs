@@ -110,36 +110,26 @@ impl ComponentBuffer {
         }
     }
 
-    pub(crate) unsafe fn take_all(mut self) -> IntoIter {
+    pub(crate) unsafe fn take_all(&mut self) -> IntoIter {
         let component_map = std::mem::take(&mut self.component_map);
-        let data = std::mem::replace(&mut self.data, NonNull::dangling());
-        let layout = std::mem::replace(&mut self.layout, Layout::from_size_align_unchecked(0, 64));
         IntoIter {
             components: component_map.into_iter(),
-            data,
-            layout,
+            buffer: self,
         }
     }
 }
 
-pub struct IntoIter {
+pub struct IntoIter<'a> {
+    buffer: &'a mut ComponentBuffer,
     components: util::IntoIter<(usize, ComponentInfo)>,
-    data: NonNull<u8>,
-    layout: Layout,
 }
 
-impl Drop for IntoIter {
-    fn drop(&mut self) {
-        unsafe { dealloc(self.data.as_ptr(), self.layout) }
-    }
-}
-
-impl Iterator for IntoIter {
+impl<'a> Iterator for IntoIter<'a> {
     type Item = (ComponentInfo, *mut u8);
 
     fn next(&mut self) -> Option<Self::Item> {
         let (_, (offset, info)) = self.components.next()?;
-        Some(unsafe { (info, self.data.as_ptr().add(offset)) })
+        Some(unsafe { (info, self.buffer.data.as_ptr().add(offset)) })
     }
 }
 
