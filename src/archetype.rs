@@ -420,7 +420,7 @@ impl ComponentInfo {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{component, ComponentBuffer};
+    use crate::{component, entity::EntityKind, ComponentBuffer};
 
     use super::*;
     use std::num::NonZeroU32;
@@ -446,8 +446,8 @@ mod tests {
         buffer.insert(b(), "Foo".to_string());
         buffer.insert(c(), shared.clone());
 
-        let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2);
-        let id_2 = Entity::from_parts(NonZeroU32::new(7).unwrap(), 2);
+        let id = Entity::from_parts(6, true, 2, EntityKind::empty());
+        let id_2 = Entity::from_parts(7, true, 2, EntityKind::empty());
         let slot = arch.insert(id, &mut buffer);
         eprintln!("Slot: {slot}");
 
