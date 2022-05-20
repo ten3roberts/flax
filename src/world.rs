@@ -246,9 +246,13 @@ mod tests {
         let id = world.spawn();
 
         world.insert(id, a(), 65);
+
         assert_eq!(world.get(id, a()), Some(&65));
         assert_eq!(world.get(id, b()), None);
+
         world.insert(id, b(), 0.3);
+
+        eprintln!("a: {}, b: {}, c: {}, id: {}", a(), a(), c(), id);
 
         assert_eq!(world.get(id, a()), Some(&65));
         assert_eq!(world.get(id, b()), Some(&0.3));

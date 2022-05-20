@@ -1,5 +1,6 @@
 use core::fmt;
 use core::num::NonZeroU64;
+use std::fmt::Display;
 use std::mem::ManuallyDrop;
 use std::num::NonZeroU32;
 use std::sync::atomic::AtomicU32;
@@ -24,7 +25,8 @@ use crate::util::Key;
 /// Any entity with a generatio = 0 is considered static
 pub struct Entity(NonZeroU64);
 
-const INDEX_MASK: u64 = /*     */ 0x00000000FFFFFFFF;
+// A simple u32 cast is used instead
+const _INDEX_MASK: u64 = /*     */ 0x00000000FFFFFFFF;
 const GENERATION_MASK: u64 = /**/ 0x0000FFFF00000000;
 const KIND_MASK: u64 = /*      */ 0xFFFF000000000000;
 
@@ -34,9 +36,18 @@ bitflags::bitflags! {
     }
 }
 
+impl Display for EntityFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.is_empty() {
+            write!(f, "{self:?}")
+        } else {
+            Ok(())
+        }
+    }
+}
+
 static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
-pub type Dynamic = bool;
 pub type Generation = u16;
 pub type EntityIndex = NonZeroU32;
 
@@ -109,8 +120,12 @@ impl fmt::Debug for Entity {
 
 impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, generation, kind) = self.into_parts();
-        write!(f, "Entity({index}:{generation}:{kind:?})")
+        let (index, generation, flags) = self.into_parts();
+        if self.flags().is_empty() {
+            write!(f, "{index}:{generation}")
+        } else {
+            write!(f, "{flags}:{index}:{generation}")
+        }
     }
 }
 

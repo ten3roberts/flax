@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     marker::PhantomData,
     sync::atomic::{
         AtomicU32,
@@ -47,6 +48,12 @@ impl<T> Clone for Component<T> {
 impl<T: ComponentValue> std::fmt::Debug for Component<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Component").field("id", &self.id).finish()
+    }
+}
+
+impl<T> Display for Component<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}({})", self.name, self.id)
     }
 }
 
