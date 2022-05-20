@@ -3,6 +3,8 @@ use std::{
     ptr::NonNull,
 };
 
+use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+
 use crate::{
     util::{Key, SparseVec},
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity,
@@ -11,7 +13,7 @@ use crate::{
 pub type ArchetypeId = u32;
 pub type Slot = usize;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct Archetype {
     component_map: Box<[usize]>,
     components: Box<[ComponentInfo]>,
@@ -54,7 +56,7 @@ impl Archetype {
             .map(|(i, component)| {
                 component_map[component.id.as_usize()] = i + 1;
                 Storage {
-                    data: NonNull::dangling(),
+                    data: AtomicRefCell::new(NonNull::dangling()),
                 }
             })
             .collect();
@@ -94,28 +96,22 @@ impl Archetype {
         &mut self,
         component: Component<T>,
     ) -> Option<StorageBorrowMut<T>> {
-        let index = *self
-            .component_map
-            .get(component.id().as_usize())
-            .unwrap_or(&0);
+        let len = self.len;
+        let storage = unsafe { self.storage_raw(component.id())? };
 
-        if index == 0 {
-            None
-        } else {
-            let storage = &mut self.storage[(index - 1)];
+        // Type is guaranteed by `component_map`
+        let data = storage.data.borrow_mut();
+        let data = AtomicRefMut::map(data, |v| unsafe {
+            std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), len)
+        });
 
-            // Type is guaranteed by `component_map`
-            let data = unsafe {
-                std::slice::from_raw_parts_mut(storage.data.as_ptr() as *mut T, self.len)
-            };
-
-            Some(StorageBorrowMut {
-                data,
-                id: component.id(),
-            })
-        }
+        Some(StorageBorrowMut {
+            data,
+            id: component.id(),
+        })
     }
 
+    #[inline]
     pub fn storage<T: ComponentValue>(&self, component: Component<T>) -> Option<StorageBorrow<T>> {
         let index = *self
             .component_map
@@ -128,8 +124,10 @@ impl Archetype {
             let storage = &self.storage[(index - 1)];
 
             // Type is guaranteed by `component_map`
-            let data =
-                unsafe { std::slice::from_raw_parts(storage.data.as_ptr() as *const T, self.len) };
+            let data = storage.data.borrow();
+            let data = AtomicRef::map(data, |v| unsafe {
+                std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
+            });
 
             Some(StorageBorrow {
                 data,
@@ -140,16 +138,48 @@ impl Archetype {
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
     pub fn get_mut<T: ComponentValue>(
-        &mut self,
+        &self,
         slot: Slot,
         component: Component<T>,
-    ) -> Option<&mut T> {
-        let storage = self.storage_mut(component)?;
+    ) -> Option<AtomicRefMut<T>> {
+        let storage = unsafe { self.storage_raw(component.id())? };
 
-        Some(&mut storage.data[slot])
+        if slot < self.len {
+            Some(AtomicRefMut::map(storage.data.borrow_mut(), |v| unsafe {
+                &mut *(v.as_ptr().cast::<T>().add(slot))
+            }))
+        } else {
+            None
+        }
     }
 
-    fn storage_raw(&mut self, id: ComponentId) -> Option<&Storage> {
+    /// Get a component from the entity at `slot`. Assumes slot is valid.
+    pub fn get<T: ComponentValue>(
+        &self,
+        slot: Slot,
+        component: Component<T>,
+    ) -> Option<AtomicRef<T>> {
+        let storage = unsafe { self.storage_raw(component.id())? };
+
+        if slot < self.len {
+            Some(AtomicRef::map(storage.data.borrow(), |v| unsafe {
+                &*(v.as_ptr().cast::<T>().add(slot))
+            }))
+        } else {
+            None
+        }
+    }
+    unsafe fn storage_raw_uniq(&mut self, id: ComponentId) -> Option<&mut Storage> {
+        let index = *self.component_map.get(id.as_usize()).unwrap_or(&0);
+
+        if index == 0 {
+            None
+        } else {
+            Some(&mut self.storage[index - 1])
+        }
+    }
+
+    unsafe fn storage_raw(&self, id: ComponentId) -> Option<&Storage> {
         let index = *self.component_map.get(id.as_usize()).unwrap_or(&0);
 
         if index == 0 {
@@ -157,13 +187,6 @@ impl Archetype {
         } else {
             Some(&self.storage[index - 1])
         }
-    }
-
-    /// Get a component from the entity at `slot`. Assumes slot is valid.
-    pub fn get<T: ComponentValue>(&self, slot: Slot, component: Component<T>) -> Option<&T> {
-        let storage = self.storage(component)?;
-
-        Some(&storage.data[slot])
     }
 
     /// Insert a new entity into the archetype.
@@ -176,10 +199,14 @@ impl Archetype {
         eprintln!("Inserting components into {slot}");
         unsafe {
             for (component, src) in components.take_all() {
-                let storage = self.storage_raw(component.id).unwrap();
+                let storage = self.storage_raw_uniq(component.id).unwrap();
                 std::ptr::copy_nonoverlapping(
                     src,
-                    storage.at(&component, slot),
+                    storage
+                        .data
+                        .get_mut()
+                        .as_ptr()
+                        .add(component.layout.size() * slot),
                     component.layout.size(),
                 );
             }
@@ -224,7 +251,7 @@ impl Archetype {
 
         let storage = &mut self.storage[(index - 1)];
 
-        let dst = storage.at(component, slot);
+        let dst = storage.at_mut(component, slot);
         std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
 
         Ok(())
@@ -242,7 +269,7 @@ impl Archetype {
         let last = self.len - 1;
 
         for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
-            let src = storage.at(component, slot);
+            let src = storage.at_mut(component, slot);
             match dst.put_dyn(dst_slot, component, src) {
                 Ok(()) => {}
                 Err(p) => {
@@ -253,7 +280,7 @@ impl Archetype {
 
             // Move back in to fill the gap
             if slot != last {
-                let dst = storage.at(component, last);
+                let dst = storage.at_mut(component, last);
                 std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
             }
         }
@@ -291,16 +318,17 @@ impl Archetype {
                 .unwrap();
                 let new_data = alloc(new_layout);
 
+                let data = storage.data.get_mut();
                 if old_cap > 0 {
                     // Copy over the previous contiguous data
                     std::ptr::copy_nonoverlapping(
-                        storage.data.as_ptr(),
+                        data.as_ptr(),
                         new_data,
                         component.layout.size() * self.len,
                     );
 
                     dealloc(
-                        storage.data.as_ptr(),
+                        data.as_ptr(),
                         Layout::from_size_align(
                             component.layout.size() * old_cap,
                             component.layout.align(),
@@ -309,7 +337,7 @@ impl Archetype {
                     );
                 }
 
-                storage.data = NonNull::new(new_data).unwrap();
+                *storage.data.get_mut() = NonNull::new(new_data).unwrap();
             }
         }
 
@@ -328,7 +356,11 @@ impl Archetype {
         for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
             for slot in 0..self.len {
                 unsafe {
-                    let value = storage.data.as_ptr().add(slot * component.layout.size());
+                    let value = storage
+                        .data
+                        .get_mut()
+                        .as_ptr()
+                        .add(slot * component.layout.size());
                     (component.drop)(value);
                 }
             }
@@ -363,7 +395,7 @@ impl Drop for Archetype {
                 if component.layout.size() > 0 {
                     unsafe {
                         dealloc(
-                            storage.data.as_ptr(),
+                            storage.data.get_mut().as_ptr(),
                             Layout::from_size_align(
                                 component.layout.size() * self.cap,
                                 component.layout.align(),
@@ -379,19 +411,19 @@ impl Drop for Archetype {
 
 /// Borrow of a single component
 pub struct StorageBorrow<'a, T> {
-    data: &'a [T],
+    data: AtomicRef<'a, [T]>,
     id: ComponentId,
 }
 
 pub struct StorageBorrowMut<'a, T> {
-    data: &'a mut [T],
+    data: AtomicRefMut<'a, [T]>,
     id: ComponentId,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 /// Holds components for a single type
 struct Storage {
-    data: NonNull<u8>,
+    data: AtomicRefCell<NonNull<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -460,15 +492,15 @@ mod tests {
         let slot_2 = arch.insert(id_2, &mut buffer);
 
         assert_eq!(slot, 0);
-        assert_eq!(arch.get(slot, a()), Some(&7));
-        assert_eq!(arch.get(slot, b()), Some(&"Foo".to_string()));
-        assert_eq!(arch.get(slot_2, b()), Some(&"Bar".to_string()));
+        assert_eq!(arch.get(slot, a()).as_deref(), Some(&7));
+        assert_eq!(arch.get(slot, b()).as_deref(), Some(&"Foo".to_string()));
+        assert_eq!(arch.get(slot_2, b()).as_deref(), Some(&"Bar".to_string()));
 
         arch.get_mut(slot, b())
             .unwrap()
             .push_str(&"Bar".to_string());
 
-        assert_eq!(arch.get(slot, b()), Some(&"FooBar".to_string()));
+        assert_eq!(arch.get(slot, b()).as_deref(), Some(&"FooBar".to_string()));
         assert_eq!(arch.entity(slot), Some(id));
         assert_eq!(arch.entity(slot_2), Some(id_2));
 
@@ -483,22 +515,27 @@ impl Storage {
     /// Assumes the type `T` is compatible with the stored type.
     /// `len` is the length of the allocated slice in T
     unsafe fn as_slice_mut<T>(&mut self, len: usize) -> &mut [T] {
-        std::slice::from_raw_parts_mut(self.data.as_ptr().cast(), len)
+        std::slice::from_raw_parts_mut(self.data.get_mut().as_ptr().cast(), len)
     }
 
     /// # Safety
     /// Assumes the type `T` is compatible with the stored type.
     /// `len` is the length of the allocated slice in T
-    unsafe fn as_slice<T>(&self, len: usize) -> &[T] {
-        std::slice::from_raw_parts(self.data.as_ptr().cast(), len)
+    unsafe fn as_slice<T>(&mut self, len: usize) -> &mut [T] {
+        std::slice::from_raw_parts_mut(self.data.get_mut().as_ptr().cast(), len)
     }
 
     /// Returns the `index`th element of type represented by info.
     unsafe fn elem_raw(&mut self, index: usize, info: &ComponentInfo) -> *mut u8 {
-        self.data.as_ptr().add(index * info.layout.size())
+        self.data.get_mut().as_ptr().add(index * info.layout.size())
     }
 
-    unsafe fn at(&self, component: &ComponentInfo, slot: Slot) -> *mut u8 {
-        self.data.as_ptr().add(component.layout.size() * slot)
+    unsafe fn at_mut(&mut self, component: &ComponentInfo, slot: Slot) -> *mut u8 {
+        self.data
+            .get_mut()
+            .as_ptr()
+            .add(component.layout.size() * slot)
     }
 }
+
+const HIGH_BIT: u32 = !(u32::MAX >> 1);

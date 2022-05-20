@@ -1,3 +1,5 @@
+use atomic_refcell::{AtomicRef, AtomicRefMut};
+
 use crate::{
     archetype::{Archetype, ArchetypeId, ComponentInfo},
     entity::{EntityLocation, EntityStore},
@@ -161,25 +163,25 @@ impl World {
     }
 
     /// Randomly access an entity's component.
-    pub fn get<T: ComponentValue>(&self, id: Entity, component: Component<T>) -> Option<&T> {
+    pub fn get<T: ComponentValue>(
+        &self,
+        id: Entity,
+        component: Component<T>,
+    ) -> Option<AtomicRef<T>> {
         let loc = self.entities.get(id)?;
 
-        let arch = self.archetype(loc.archetype);
-
-        arch.get(loc.slot, component)
+        self.archetypes[loc.archetype as usize].get(loc.slot, component)
     }
 
     /// Randomly access an entity's component.
     pub fn get_mut<T: ComponentValue>(
-        &mut self,
+        &self,
         id: Entity,
         component: Component<T>,
-    ) -> Option<&mut T> {
+    ) -> Option<AtomicRefMut<T>> {
         let loc = self.entities.get(id)?;
 
-        let arch = &mut self.archetypes[loc.archetype as usize];
-
-        arch.get_mut(loc.slot, component)
+        self.archetypes[loc.archetype as usize].get_mut(loc.slot, component)
     }
 
     /// Returns true if the entity has the specified component.
@@ -247,15 +249,40 @@ mod tests {
 
         world.insert(id, a(), 65);
 
-        assert_eq!(world.get(id, a()), Some(&65));
-        assert_eq!(world.get(id, b()), None);
+        assert_eq!(world.get(id, a()).as_deref(), Some(&65));
+        assert_eq!(world.get(id, b()).as_deref(), None);
 
         world.insert(id, b(), 0.3);
 
         eprintln!("a: {}, b: {}, c: {}, id: {}", a(), a(), c(), id);
 
-        assert_eq!(world.get(id, a()), Some(&65));
-        assert_eq!(world.get(id, b()), Some(&0.3));
+        assert_eq!(world.get(id, a()).as_deref(), Some(&65));
+        assert_eq!(world.get(id, b()).as_deref(), Some(&0.3));
         assert_eq!(world.has(id, c()), false);
+    }
+
+    #[test]
+    fn concurrent_borrow() {
+        let mut world = World::new();
+        let id1 = world.spawn();
+        let id2 = world.spawn();
+
+        world.insert(id1, a(), 40);
+
+        world.insert(id2, b(), 4.3);
+
+        // Borrow a
+        let id_a = world.get(id1, a()).unwrap();
+        assert_eq!(*id_a, 40);
+        // Borrow b uniquely while a is in scope
+        let mut id2_b = world.get_mut(id2, b()).unwrap();
+
+        *id2_b = 3.21;
+
+        assert_eq!(*id_a, 40);
+
+        // Borrow another component on an entity with a mutably borrowed
+        // **other** component.
+        assert_eq!(world.get(id2, a()).as_deref(), None);
     }
 }
