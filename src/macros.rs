@@ -36,9 +36,9 @@ macro_rules! component {
 
         $crate::paste! {
             #[allow(dead_code)]
-            static [<COMPONENT_ $name:snake:upper _ID>]: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            static [<COMPONENT_ $name:snake:upper _ID>]: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             pub fn $name() -> $crate::Component<$ty> {
-                $crate::Component::new( $crate::ComponentId::static_init(&[<COMPONENT_ $name:snake:upper _ID>]), stringify!($name) )
+                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name))
             }
         }
     };

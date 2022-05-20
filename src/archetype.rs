@@ -3,7 +3,10 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::{util::SparseVec, Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
+use crate::{
+    util::{Key, SparseVec},
+    Component, ComponentBuffer, ComponentId, ComponentValue, Entity,
+};
 
 pub type ArchetypeId = u32;
 pub type Slot = usize;
@@ -22,7 +25,7 @@ pub struct Archetype {
 
     // ComponentId => ArchetypeId
     // If the key is an existing component, it means it is a backwards edge
-    edges: SparseVec<ArchetypeId>,
+    edges: SparseVec<Entity, ArchetypeId>,
 }
 
 impl Archetype {
@@ -43,13 +46,13 @@ impl Archetype {
     pub fn new(components: Vec<ComponentInfo>) -> Self {
         let max_component = components.last().unwrap();
 
-        let mut component_map = vec![0; max_component.id.as_raw() as usize + 1].into_boxed_slice();
+        let mut component_map = vec![0; max_component.id.as_usize() + 1].into_boxed_slice();
 
         let storage = components
             .iter()
             .enumerate()
             .map(|(i, component)| {
-                component_map[component.id.as_raw() as usize] = i + 1;
+                component_map[component.id.as_usize()] = i + 1;
                 Storage {
                     data: NonNull::dangling(),
                 }
@@ -69,14 +72,11 @@ impl Archetype {
 
     /// Returns true if the archtype has `component`
     pub fn has(&self, component: ComponentId) -> bool {
-        self.component_map
-            .get(component.as_raw() as usize)
-            .unwrap_or(&0)
-            != &0
+        self.component_map.get(component.as_usize()).unwrap_or(&0) != &0
     }
 
     pub fn edge_to(&self, component: ComponentId) -> Option<ArchetypeId> {
-        self.edges.get(component.as_raw()).copied()
+        self.edges.get(&component).copied()
     }
 
     pub fn add_edge_to(
@@ -86,8 +86,8 @@ impl Archetype {
         src_id: ArchetypeId,
         component: ComponentId,
     ) {
-        assert!(self.edges.insert(component.as_raw(), dst_id).is_none());
-        assert!(dst.edges.insert(component.as_raw(), src_id).is_none());
+        assert!(self.edges.insert(component, dst_id).is_none());
+        assert!(dst.edges.insert(component, src_id).is_none());
     }
 
     pub fn storage_mut<T: ComponentValue>(
@@ -96,7 +96,7 @@ impl Archetype {
     ) -> Option<StorageBorrowMut<T>> {
         let index = *self
             .component_map
-            .get(component.id().as_raw() as usize)
+            .get(component.id().as_usize())
             .unwrap_or(&0);
 
         if index == 0 {
@@ -119,7 +119,7 @@ impl Archetype {
     pub fn storage<T: ComponentValue>(&self, component: Component<T>) -> Option<StorageBorrow<T>> {
         let index = *self
             .component_map
-            .get(component.id().as_raw() as usize)
+            .get(component.id().index().get() as usize)
             .unwrap_or(&0);
 
         if index == 0 {
@@ -150,7 +150,7 @@ impl Archetype {
     }
 
     fn storage_raw(&mut self, id: ComponentId) -> Option<&Storage> {
-        let index = *self.component_map.get(id.as_raw() as usize).unwrap_or(&0);
+        let index = *self.component_map.get(id.as_usize()).unwrap_or(&0);
 
         if index == 0 {
             None
@@ -215,7 +215,7 @@ impl Archetype {
     ) -> Result<(), *mut u8> {
         let index = *self
             .component_map
-            .get(component.id.as_raw() as usize)
+            .get(component.id.as_usize())
             .unwrap_or(&0);
 
         if index == 0 {
@@ -420,7 +420,7 @@ impl ComponentInfo {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{component, entity::EntityKind, ComponentBuffer};
+    use crate::{component, entity::EntityFlags, ComponentBuffer};
 
     use super::*;
     use std::num::NonZeroU32;
@@ -446,8 +446,9 @@ mod tests {
         buffer.insert(b(), "Foo".to_string());
         buffer.insert(c(), shared.clone());
 
-        let id = Entity::from_parts(6, true, 2, EntityKind::empty());
-        let id_2 = Entity::from_parts(7, true, 2, EntityKind::empty());
+        let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2, EntityFlags::empty());
+        let id_2 = Entity::from_parts(NonZeroU32::new(5).unwrap(), 2, EntityFlags::empty());
+
         let slot = arch.insert(id, &mut buffer);
         eprintln!("Slot: {slot}");
 

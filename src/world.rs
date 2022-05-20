@@ -118,14 +118,13 @@ impl World {
         components.push(component_info);
         components.extend_from_slice(right);
 
-        components
-            .iter()
-            .scan(0, |prev, v| {
-                assert!(*prev < v.id.as_raw());
-                *prev = v.id.as_raw();
-                Some(())
-            })
-            .for_each(|_| {});
+        // assert in order
+
+        {
+            let mut sorted = components.clone();
+            sorted.sort_by_key(|v| v.id);
+            assert_eq!(sorted, components);
+        }
 
         let (dst_id, _) = self.fetch_archetype(0, &components);
         // let src = self.archetype_mut(src_id);

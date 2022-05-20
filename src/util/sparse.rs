@@ -1,12 +1,34 @@
 use std::{iter::repeat, mem};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SparseVec<T> {
-    sparse: Vec<usize>,
-    dense: Vec<(u64, T)>,
+pub trait Key: Eq + Ord {
+    fn as_usize(&self) -> usize;
 }
 
-impl<T> Default for SparseVec<T> {
+impl Key for usize {
+    fn as_usize(&self) -> usize {
+        *self
+    }
+}
+
+impl Key for u32 {
+    fn as_usize(&self) -> usize {
+        *self as usize
+    }
+}
+
+impl Key for u64 {
+    fn as_usize(&self) -> usize {
+        *self as usize
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SparseVec<K, V> {
+    sparse: Vec<usize>,
+    dense: Vec<(K, V)>,
+}
+
+impl<K, V> Default for SparseVec<K, V> {
     fn default() -> Self {
         Self {
             sparse: Default::default(),
@@ -15,7 +37,7 @@ impl<T> Default for SparseVec<T> {
     }
 }
 
-impl<T: std::fmt::Debug> SparseVec<T> {
+impl<K: Key, V: std::fmt::Debug> SparseVec<K, V> {
     pub fn new() -> Self {
         Self {
             sparse: Vec::new(),
@@ -23,8 +45,8 @@ impl<T: std::fmt::Debug> SparseVec<T> {
         }
     }
 
-    pub fn get_mut(&mut self, index: u64) -> Option<&mut T> {
-        if let Some(i) = self.sparse.get(index as usize) {
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        if let Some(i) = self.sparse.get(key.as_usize()) {
             if *i == 0 {
                 None
             } else {
@@ -35,20 +57,20 @@ impl<T: std::fmt::Debug> SparseVec<T> {
         }
     }
 
-    pub fn remove(&mut self, index: u64) -> Option<T> {
-        if let Some(&d_index) = self.sparse.get(index as usize) {
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let index = key.as_usize();
+        if let Some(&d_index) = self.sparse.get(index) {
             // Empty slot
             if d_index == 0 {
                 return None;
             }
             // Swap index with last value
             if let Some(back) = self.dense.last() {
-                let back_i = back.0;
+                let back_i = back.0.as_usize();
                 // Update the last element to point to the hole of the removed
                 // element
-                println!("back_i: {back_i}, index: {index}");
-                self.sparse[back_i as usize] = d_index;
-                self.sparse[index as usize] = 0;
+                self.sparse[back_i] = d_index;
+                self.sparse[index] = 0;
 
                 // The last elem is now at i
                 let val = self.dense.swap_remove(d_index - 1).1;
@@ -61,8 +83,8 @@ impl<T: std::fmt::Debug> SparseVec<T> {
         }
     }
 
-    pub fn get(&self, index: u64) -> Option<&T> {
-        if let Some(i) = self.sparse.get(index as usize) {
+    pub fn get(&self, key: &K) -> Option<&V> {
+        if let Some(i) = self.sparse.get(key.as_usize()) {
             if *i == 0 {
                 None
             } else {
@@ -73,14 +95,15 @@ impl<T: std::fmt::Debug> SparseVec<T> {
         }
     }
 
-    pub fn insert(&mut self, index: u64, value: T) -> Option<T> {
-        if let Some(val) = self.get_mut(index) {
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let index = key.as_usize();
+        if let Some(val) = self.get_mut(&key) {
             Some(mem::replace(val, value))
         } else {
             eprintln!("Inserting: {index}, {value:?}");
             let i = self.dense.len() + 1;
-            self.dense.push((index, value));
-            if (self.sparse.len() as u64) <= index {
+            self.dense.push((key, value));
+            if self.sparse.len() <= index {
                 self.sparse
                     .extend(repeat(0).take(index as usize - self.sparse.len() + 1));
             }
@@ -94,13 +117,13 @@ impl<T: std::fmt::Debug> SparseVec<T> {
         self.dense.clear();
     }
 
-    pub fn iter(&self) -> Iter<T> {
+    pub fn iter(&self) -> Iter<K, V> {
         Iter {
             dense: self.dense.iter(),
         }
     }
 
-    pub fn into_iter(self) -> IntoIter<T> {
+    pub fn into_iter(self) -> IntoIter<K, V> {
         IntoIter {
             dense: self.dense.into_iter(),
         }
@@ -112,50 +135,50 @@ mod tests {
     use super::*;
     #[test]
     fn sparse_vec() {
-        let mut vec = SparseVec::new();
+        let mut vec = SparseVec::<u32, _>::new();
         vec.insert(2, "foo");
         vec.insert(1, "bar");
         vec.insert(6, "baz");
 
-        assert_eq!(vec.get(2), Some(&"foo"));
+        assert_eq!(vec.get(&2), Some(&"foo"));
         dbg!(&vec.sparse);
-        assert_eq!(vec.get(1), Some(&"bar"));
+        assert_eq!(vec.get(&1), Some(&"bar"));
 
         let mut iter: Vec<_> = vec.iter().collect();
         iter.sort_by_key(|v| v.0);
-        assert_eq!(iter, [(1, &"bar"), (2, &"foo"), (6, &"baz")]);
+        assert_eq!(iter, [(&1, &"bar"), (&2, &"foo"), (&6, &"baz")]);
 
-        assert_eq!(vec.remove(1), Some("bar"));
+        assert_eq!(vec.remove(&1), Some("bar"));
 
-        assert_eq!(vec.get(2), Some(&"foo"));
-        assert_eq!(vec.get(1), None);
-        assert_eq!(vec.get(6), Some(&"baz"));
+        assert_eq!(vec.get(&2), Some(&"foo"));
+        assert_eq!(vec.get(&1), None);
+        assert_eq!(vec.get(&6), Some(&"baz"));
         assert_eq!(vec.insert(2, "Fizz"), Some("foo"));
         let mut iter: Vec<_> = vec.iter().collect();
         iter.sort_by_key(|v| v.0);
-        assert_eq!(iter, [(2, &"Fizz"), (6, &"baz")]);
+        assert_eq!(iter, [(&2, &"Fizz"), (&6, &"baz")]);
     }
 }
 
-pub struct Iter<'a, T> {
-    dense: std::slice::Iter<'a, (u64, T)>,
+pub struct Iter<'a, K, V> {
+    dense: std::slice::Iter<'a, (K, V)>,
 }
 
-impl<'a, T> Iterator for Iter<'a, T> {
-    type Item = (u64, &'a T);
+impl<'a, K, V> Iterator for Iter<'a, K, V> {
+    type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
         let (index, val) = self.dense.next()?;
-        Some((*index, val))
+        Some((index, val))
     }
 }
 
-pub struct IntoIter<T> {
-    dense: std::vec::IntoIter<(u64, T)>,
+pub struct IntoIter<K, V> {
+    dense: std::vec::IntoIter<(K, V)>,
 }
 
-impl<T> Iterator for IntoIter<T> {
-    type Item = (u64, T);
+impl<K, V> Iterator for IntoIter<K, V> {
+    type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
         let (index, val) = self.dense.next()?;

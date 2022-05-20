@@ -1,42 +1,21 @@
 use std::{
     marker::PhantomData,
-    sync::atomic::{AtomicU64, Ordering::Relaxed},
+    sync::atomic::{
+        AtomicU32,
+        Ordering::{Acquire, Relaxed},
+    },
 };
 
-use crate::archetype::ComponentInfo;
+use crate::{
+    archetype::ComponentInfo,
+    entity::{EntityFlags, EntityIndex},
+    Entity,
+};
 
 pub trait ComponentValue: Send + Sync + 'static {}
+pub type ComponentId = Entity;
 
 impl<T> ComponentValue for T where T: Send + Sync + 'static {}
-
-static MAX_ID: AtomicU64 = AtomicU64::new(5);
-// A value of 0 means the typeid has yet to be aquired
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ComponentId(u64);
-
-impl ComponentId {
-    pub fn as_raw(self) -> u64 {
-        self.0
-    }
-}
-
-impl ComponentId {
-    /// Return a unique always incrementing id for each invocation
-    pub(crate) fn unique_id() -> u64 {
-        MAX_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-    }
-
-    pub fn static_init(id: &AtomicU64) -> ComponentId {
-        let v = id.load(Relaxed);
-        if v == 0 {
-            let v = ComponentId::unique_id();
-            id.store(v, Relaxed);
-            ComponentId(v)
-        } else {
-            ComponentId(v)
-        }
-    }
-}
 
 /// Defines a strongly typed component
 pub struct Component<T> {
@@ -78,6 +57,28 @@ impl<T: ComponentValue> Component<T> {
             name,
             marker: PhantomData,
         }
+    }
+
+    pub fn static_init(id: &AtomicU32, name: &'static str) -> Self {
+        let index = match id.fetch_update(Acquire, Relaxed, |v| {
+            if v != 0 {
+                None
+            } else {
+                Some(
+                    ComponentId::acquire_static_id(EntityFlags::empty())
+                        .index()
+                        .get(),
+                )
+            }
+        }) {
+            Ok(_) => id.load(Acquire),
+            Err(old) => old,
+        };
+
+        Self::new(
+            ComponentId::component(EntityIndex::new(index).unwrap()),
+            name,
+        )
     }
 
     /// Get the component's id.

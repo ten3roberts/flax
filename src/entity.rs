@@ -1,8 +1,11 @@
 use core::fmt;
 use core::num::NonZeroU64;
 use std::mem::ManuallyDrop;
+use std::num::NonZeroU32;
+use std::sync::atomic::AtomicU32;
 
 use crate::archetype::ArchetypeId;
+use crate::util::Key;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 #[repr(transparent)]
@@ -16,64 +19,59 @@ use crate::archetype::ArchetypeId;
 ///
 /// The Index is always NonZero.
 ///
-/// The Lower (generation + kind) bit can be ommitted as they do not contribute
-/// to uniqueness.
+/// The Index part is always non-zero.
+///
+/// Any entity with a generatio = 0 is considered static
 pub struct Entity(NonZeroU64);
 
-const INDEX_MASK: u64 = 0xFFFFFFFE00000000;
-const DYNAMIC_MASK: u64 = 0x0000000100000000;
-const GENERATION_MASK: u64 = 0x00000000FFFF00;
-const KIND_MASK: u64 = 0xFF;
+const INDEX_MASK: u64 = /*     */ 0x00000000FFFFFFFF;
+const GENERATION_MASK: u64 = /**/ 0x0000FFFF00000000;
+const KIND_MASK: u64 = /*      */ 0xFFFF000000000000;
 
 bitflags::bitflags! {
-    pub struct EntityKind: u16  {
-       const COMPONENT = 1;
+    pub struct EntityFlags: u16  {
+
     }
 }
 
+static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
+
 pub type Dynamic = bool;
 pub type Generation = u16;
-pub type EntityIndex = u32;
+pub type EntityIndex = NonZeroU32;
 
 impl Entity {
-    pub fn index(self) -> EntityIndex {
-        // Can only be constructed from parts
-        ((self.0.get() & INDEX_MASK) >> 33) as u32 - 1
+    /// Generate a new static id
+    pub fn acquire_static_id(kind: EntityFlags) -> Entity {
+        let index = STATIC_IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Entity::from_parts(NonZeroU32::new(index).unwrap(), 0, kind)
     }
 
-    pub fn dynamic(self) -> Dynamic {
-        (self.0.get() & DYNAMIC_MASK) != 0
+    pub fn index(self) -> EntityIndex {
+        // Can only be constructed from parts
+        NonZeroU32::new(self.0.get() as u32).unwrap()
     }
 
     pub fn generation(self) -> Generation {
-        ((self.0.get() & GENERATION_MASK) >> 4) as Generation
+        ((self.0.get() & GENERATION_MASK) >> 32) as Generation
     }
 
-    pub fn kind(self) -> EntityKind {
-        EntityKind::from_bits_truncate((self.0.get() & KIND_MASK) as u16)
+    pub fn flags(self) -> EntityFlags {
+        EntityFlags::from_bits_truncate(((self.0.get() & KIND_MASK) >> 48) as u16)
     }
 
-    pub fn into_parts(self) -> (EntityIndex, Dynamic, Generation, EntityKind) {
+    pub fn into_parts(self) -> (EntityIndex, Generation, EntityFlags) {
         let bits = self.0.get();
 
         (
-            ((bits & INDEX_MASK) >> 33) as u32 - 1,
-            (bits & DYNAMIC_MASK) != 0,
-            ((bits & GENERATION_MASK) >> 16) as Generation,
-            EntityKind::from_bits_truncate((bits & KIND_MASK) as u16),
+            NonZeroU32::new(bits as u32).unwrap(),
+            ((bits & GENERATION_MASK) >> 32) as Generation,
+            EntityFlags::from_bits_truncate(((bits & KIND_MASK) >> 48) as u16),
         )
     }
 
-    pub fn from_parts(
-        id: EntityIndex,
-        dynamic: Dynamic,
-        gen: Generation,
-        kind: EntityKind,
-    ) -> Self {
-        let bits = (((id + 1) as u64) << 33)
-            | ((dynamic as u64) << 32)
-            | ((gen as u64) << 16)
-            | (kind.bits() as u64);
+    pub fn from_parts(index: EntityIndex, gen: Generation, kind: EntityFlags) -> Self {
+        let bits = ((index.get()) as u64) | ((gen as u64) << 32) | ((kind.bits() as u64) << 48);
 
         Self(NonZeroU64::new(bits).unwrap())
     }
@@ -85,14 +83,24 @@ impl Entity {
     pub fn to_bits(&self) -> NonZeroU64 {
         self.0
     }
+
+    /// Construct a static component entity
+    pub fn component(index: EntityIndex) -> Entity {
+        Self::from_parts(index, 0, EntityFlags::empty())
+    }
+}
+
+impl Key for Entity {
+    fn as_usize(&self) -> usize {
+        self.0.get() as _
+    }
 }
 
 impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, dynamic, generation, kind) = self.into_parts();
+        let (index, generation, kind) = self.into_parts();
         f.debug_tuple("Entity")
             .field(&index)
-            .field(&dynamic)
             .field(&generation)
             .field(&kind)
             .finish()
@@ -101,14 +109,14 @@ impl fmt::Debug for Entity {
 
 impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, dynamic, generation, kind) = self.into_parts();
-        write!(f, "Entity({index}:{dynamic}:{generation}:{kind:?})")
+        let (index, generation, kind) = self.into_parts();
+        write!(f, "Entity({index}:{generation}:{kind:?})")
     }
 }
 
 #[derive(Clone, Copy, Debug)]
 struct Vacant {
-    next: Option<u32>,
+    next: Option<NonZeroU32>,
 }
 
 union SlotValue<T> {
@@ -118,6 +126,7 @@ union SlotValue<T> {
 
 struct Slot<T> {
     val: SlotValue<T>,
+    // != 0
     gen: u16,
 }
 
@@ -129,7 +138,7 @@ pub struct EntityLocation {
 
 pub struct EntityStore {
     slots: Vec<Slot<EntityLocation>>,
-    free_head: Option<u32>,
+    free_head: Option<NonZeroU32>,
 }
 
 impl EntityStore {
@@ -145,7 +154,7 @@ impl EntityStore {
 
     pub fn spawn(&mut self, value: EntityLocation) -> Entity {
         if let Some(index) = self.free_head.take() {
-            let free = &self.slot(index);
+            let free = &self.slot(index).unwrap();
             let gen = free.gen;
 
             // Update free head
@@ -153,10 +162,10 @@ impl EntityStore {
                 self.free_head = free.val.vacant.next;
             }
 
-            Entity::from_parts(index, true, gen, EntityKind::empty())
+            Entity::from_parts(index, gen, EntityFlags::empty())
         } else {
             // Push
-            let gen = 0;
+            let gen = 1;
             let index = self.slots.len() as u32;
             self.slots.push(Slot {
                 val: SlotValue {
@@ -165,52 +174,52 @@ impl EntityStore {
                 gen,
             });
 
-            Entity::from_parts(index, true, gen, EntityKind::empty())
+            Entity::from_parts(
+                NonZeroU32::new(index + 1).unwrap(),
+                gen,
+                EntityFlags::empty(),
+            )
         }
     }
 
     #[inline]
-    fn slot(&self, idx: u32) -> &Slot<EntityLocation> {
-        &self.slots[idx as usize]
+    fn slot(&self, index: EntityIndex) -> Option<&Slot<EntityLocation>> {
+        self.slots.get(index.get() as usize - 1)
     }
 
     #[inline]
-    fn slot_mut(&mut self, id: u32) -> &mut Slot<EntityLocation> {
-        &mut self.slots[id as usize]
+    fn slot_mut(&mut self, index: EntityIndex) -> Option<&mut Slot<EntityLocation>> {
+        self.slots.get_mut(index.get() as usize - 1)
     }
 
     pub fn get_mut(&mut self, id: Entity) -> Option<&mut EntityLocation> {
-        let (index, dynamic, gen, _) = id.into_parts();
-        if index < self.slots.len() as _ {
-            let slot = self.slot_mut(index);
-            if dynamic && slot.gen == gen {
-                Some(unsafe { &mut slot.val.occupied })
-            } else {
-                None
-            }
+        let (index, gen, _) = id.into_parts();
+        let slot = self.slot_mut(index)?;
+        if slot.gen == gen {
+            Some(unsafe { &mut slot.val.occupied })
         } else {
             None
         }
     }
 
     pub fn get(&self, id: Entity) -> Option<&EntityLocation> {
-        let (index, dynamic, gen, _) = id.into_parts();
-        if index < self.slots.len() as _ {
-            let slot = self.slot(index);
-            if dynamic && slot.gen == gen {
-                Some(unsafe { &slot.val.occupied })
-            } else {
-                None
-            }
+        let (index, gen, _) = id.into_parts();
+        let slot = self.slot(index)?;
+        if slot.gen == gen {
+            Some(unsafe { &slot.val.occupied })
         } else {
             None
         }
     }
 
     pub fn is_alive(&self, id: Entity) -> bool {
-        let (index, dynamic, gen, _) = id.into_parts();
+        let (index, gen, _) = id.into_parts();
         eprintln!("{index}");
-        dynamic && index < self.slots.len() as _ && dbg!(self.slot(index).gen) == gen
+        if let Some(slot) = self.slot(index) {
+            slot.gen == gen
+        } else {
+            false
+        }
     }
 
     pub fn despawn(&mut self, id: Entity) {
@@ -221,8 +230,9 @@ impl EntityStore {
 
         let next = self.free_head.take();
         eprintln!("Removing index: {index}");
-        let slot = self.slot_mut(index);
+        let slot = self.slot_mut(index).unwrap();
 
+        eprintln!("id: {id}");
         assert_eq!(slot.gen, gen);
         slot.gen = slot.gen.wrapping_add(1);
 
@@ -244,8 +254,10 @@ impl Default for EntityStore {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
+
     use crate::{
-        entity::{EntityKind, EntityLocation},
+        entity::{EntityFlags, EntityLocation},
         Entity,
     };
 
@@ -284,9 +296,9 @@ mod tests {
 
     #[test]
     fn entity_id() {
-        let parts = (0xFFF, true, 30, EntityKind::COMPONENT);
+        let parts = (NonZeroU32::new(0xFFF).unwrap(), 30, EntityFlags::empty());
 
-        let a = Entity::from_parts(parts.0, parts.1, parts.2, parts.3);
+        let a = Entity::from_parts(parts.0, parts.1, parts.2);
 
         eprintln!("a: {:b}", a.0.get());
 

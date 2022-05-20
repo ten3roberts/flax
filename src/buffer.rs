@@ -4,13 +4,15 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::util;
 use crate::{archetype::ComponentInfo, util::SparseVec, Component, ComponentValue};
+use crate::{util, ComponentId};
+
+type Offset = usize;
 
 #[derive(Debug)]
 pub struct ComponentBuffer {
     /// Stores ComponentId => offset into data
-    component_map: SparseVec<(usize, ComponentInfo)>,
+    component_map: SparseVec<ComponentId, (Offset, ComponentInfo)>,
     layout: Layout,
     data: NonNull<u8>,
     end: usize, // Number of meaningful bytes
@@ -27,13 +29,13 @@ impl ComponentBuffer {
     }
 
     pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Option<&mut T> {
-        let &(offset, _) = self.component_map.get(component.id().as_raw())?;
+        let &(offset, _) = self.component_map.get(&component.id())?;
 
         Some(unsafe { &mut *self.data.as_ptr().offset(offset as _).cast() })
     }
 
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
-        let &(offset, _) = self.component_map.get(component.id().as_raw())?;
+        let &(offset, _) = self.component_map.get(&component.id())?;
 
         Some(unsafe { &*self.data.as_ptr().offset(offset as _).cast() })
     }
@@ -53,13 +55,13 @@ impl ComponentBuffer {
     /// The callee is responsible for dropping. This creates a whole in the
     /// buffer. As such, the buffer should be cleared to free up space.
     pub unsafe fn take_dyn(&mut self, component: &ComponentInfo) -> Option<*mut u8> {
-        let (offset, info) = self.component_map.remove(component.id.as_raw())?;
+        let (offset, info) = self.component_map.remove(&component.id)?;
         assert_eq!(&info, component);
         Some(self.data.as_ptr().offset(offset as _))
     }
 
     pub fn insert<T: ComponentValue>(&mut self, component: Component<T>, value: T) {
-        if let Some(&(offset, _)) = self.component_map.get(component.id().as_raw()) {
+        if let Some(&(offset, _)) = self.component_map.get(&component.id()) {
             unsafe {
                 let ptr = self.data.as_ptr().offset(offset as _) as *mut T;
                 *ptr = value;
@@ -100,10 +102,8 @@ impl ComponentBuffer {
                 std::ptr::write(ptr, value)
             }
             assert_eq!(
-                self.component_map.insert(
-                    component.id().as_raw(),
-                    (offset, ComponentInfo::of(component))
-                ),
+                self.component_map
+                    .insert(component.id(), (offset, ComponentInfo::of(component))),
                 None
             );
             self.end = new_len;
@@ -121,7 +121,7 @@ impl ComponentBuffer {
 
 pub struct IntoIter<'a> {
     buffer: &'a mut ComponentBuffer,
-    components: util::IntoIter<(usize, ComponentInfo)>,
+    components: util::IntoIter<ComponentId, (Offset, ComponentInfo)>,
 }
 
 impl<'a> Iterator for IntoIter<'a> {
