@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     archetype::ComponentInfo,
-    entity::{EntityFlags, EntityIndex},
+    entity::{EntityIndex, EntityKind},
     Entity,
 };
 
@@ -72,7 +72,7 @@ impl<T: ComponentValue> Component<T> {
                 None
             } else {
                 Some(
-                    ComponentId::acquire_static_id(EntityFlags::empty())
+                    ComponentId::acquire_static_id(EntityKind::empty())
                         .index()
                         .get(),
                 )
@@ -83,7 +83,11 @@ impl<T: ComponentValue> Component<T> {
         };
 
         Self::new(
-            ComponentId::component(EntityIndex::new(index).unwrap()),
+            Entity::from_parts(
+                EntityIndex::new(index).unwrap(),
+                0,
+                EntityKind::COMPONENT | EntityKind::STATIC,
+            ),
             name,
         )
     }

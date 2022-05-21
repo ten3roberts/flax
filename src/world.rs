@@ -1,3 +1,5 @@
+use std::mem;
+
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
 use crate::{
@@ -141,11 +143,15 @@ impl World {
             let dst =
                 &mut *((&self.archetypes[dst_id as usize]) as *const Archetype as *mut Archetype);
 
+            eprintln!("Moving {:#?} => {:#?}", src.components(), dst.components());
             let (dst_slot, swapped) = src.move_to(dst, slot);
 
             // Insert the missing component
             dst.put_dyn(dst_slot, &component_info, &mut value as *mut T as *mut u8)
                 .expect("Insert should not fail");
+
+            // And don't forget to forget to drop it
+            mem::forget(value);
 
             assert_eq!(dst.entity(dst_slot), Some(id));
             if let Some(swapped) = swapped {
@@ -260,14 +266,20 @@ mod tests {
 
         assert_eq!(world.get(id, a()).as_deref(), Some(&65));
         assert_eq!(world.get(id, b()).as_deref(), None);
+        assert_eq!(world.has(id, c()), false);
 
-        world.insert(id, b(), 0.3);
+        let id2 = world.spawn();
+        world.insert(id2, a(), 7);
+
+        world.insert(id2, c(), "Foo".to_string());
 
         eprintln!("a: {}, b: {}, c: {}, id: {}", a(), a(), c(), id);
 
         assert_eq!(world.get(id, a()).as_deref(), Some(&65));
-        assert_eq!(world.get(id, b()).as_deref(), Some(&0.3));
+        assert_eq!(world.get(id, b()).as_deref(), None);
         assert_eq!(world.has(id, c()), false);
+        assert_eq!(world.get(id2, a()).as_deref(), Some(&7));
+        assert_eq!(world.get(id2, c()).as_deref(), Some(&"Foo".to_string()));
     }
 
     #[test]

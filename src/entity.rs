@@ -15,28 +15,30 @@ use crate::util::Key;
 /// a static entity or component, or a typed relation between two entities.
 ///
 /// # Structure
-/// | 31    | 1       | 16         | 16   |
-/// | Index | Dynamic | Generation | Kind |
+
+/// | 16         | 4    | 28    |
+/// | Generation | Kind | Index |
 ///
 /// The Index is always NonZero.
 ///
-/// The Index part is always non-zero.
-///
-/// Any entity with a generatio = 0 is considered static
+/// An entity id retains uniqueness if cast to a u32. To allow global static
+/// entities to coexist as the flags are kept.
 pub struct Entity(NonZeroU64);
 
-// A simple u32 cast is used instead
-const _INDEX_MASK: u64 = /*     */ 0x00000000FFFFFFFF;
+const INDEX_MASK: u64 = /*     */ 0x000000000FFFFFFF;
 const GENERATION_MASK: u64 = /**/ 0x0000FFFF00000000;
-const KIND_MASK: u64 = /*      */ 0xFFFF000000000000;
+const KIND_MASK: u64 = /*     */ 0x00000000F0000000;
 
 bitflags::bitflags! {
-    pub struct EntityFlags: u16  {
-
+    /// Flags for an entity.
+    /// Can not exceed 4 bits
+    pub struct EntityKind: u8 {
+        const STATIC = 1;
+        const COMPONENT = 2;
     }
 }
 
-impl Display for EntityFlags {
+impl Display for EntityKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if !self.is_empty() {
             write!(f, "{self:?}")
@@ -53,36 +55,39 @@ pub type EntityIndex = NonZeroU32;
 
 impl Entity {
     /// Generate a new static id
-    pub fn acquire_static_id(kind: EntityFlags) -> Entity {
+    pub fn acquire_static_id(kind: EntityKind) -> Entity {
         let index = STATIC_IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Entity::from_parts(NonZeroU32::new(index).unwrap(), 0, kind)
     }
 
     pub fn index(self) -> EntityIndex {
         // Can only be constructed from parts
-        NonZeroU32::new(self.0.get() as u32).unwrap()
+        NonZeroU32::new((self.0.get() & INDEX_MASK) as u32).unwrap()
     }
 
     pub fn generation(self) -> Generation {
         ((self.0.get() & GENERATION_MASK) >> 32) as Generation
     }
 
-    pub fn flags(self) -> EntityFlags {
-        EntityFlags::from_bits_truncate(((self.0.get() & KIND_MASK) >> 48) as u16)
+    pub fn flags(self) -> EntityKind {
+        EntityKind::from_bits_truncate(((self.0.get() & KIND_MASK) >> 28) as u8)
     }
 
-    pub fn into_parts(self) -> (EntityIndex, Generation, EntityFlags) {
+    pub fn into_parts(self) -> (EntityIndex, Generation, EntityKind) {
         let bits = self.0.get();
 
         (
-            NonZeroU32::new(bits as u32).unwrap(),
+            NonZeroU32::new((bits & INDEX_MASK) as u32).unwrap(),
             ((bits & GENERATION_MASK) >> 32) as Generation,
-            EntityFlags::from_bits_truncate(((bits & KIND_MASK) >> 48) as u16),
+            EntityKind::from_bits_truncate(((bits & KIND_MASK) >> 28) as u8),
         )
     }
 
-    pub fn from_parts(index: EntityIndex, gen: Generation, kind: EntityFlags) -> Self {
-        let bits = ((index.get()) as u64) | ((gen as u64) << 32) | ((kind.bits() as u64) << 48);
+    pub fn from_parts(index: EntityIndex, gen: Generation, kind: EntityKind) -> Self {
+        assert!(index.get() < (u32::MAX >> 1));
+        let bits = ((index.get() as u64) & INDEX_MASK)
+            | ((gen as u64) << 32)
+            | ((kind.bits() as u64) << 28);
 
         Self(NonZeroU64::new(bits).unwrap())
     }
@@ -94,16 +99,14 @@ impl Entity {
     pub fn to_bits(&self) -> NonZeroU64 {
         self.0
     }
-
-    /// Construct a static component entity
-    pub fn component(index: EntityIndex) -> Entity {
-        Self::from_parts(index, 0, EntityFlags::empty())
-    }
 }
 
 impl Key for Entity {
     fn as_usize(&self) -> usize {
-        self.0.get() as _
+        let bits = self.0.get() as usize;
+        // Store static components sequentially
+        let bits = bits ^ (((EntityKind::COMPONENT | EntityKind::STATIC).bits as usize) << 28);
+        bits
     }
 }
 
@@ -177,7 +180,7 @@ impl EntityStore {
                 self.free_head = free.val.vacant.next;
             }
 
-            Entity::from_parts(index, gen, EntityFlags::empty())
+            Entity::from_parts(index, gen, EntityKind::empty())
         } else {
             // Push
             let gen = 1;
@@ -192,7 +195,7 @@ impl EntityStore {
             Entity::from_parts(
                 NonZeroU32::new(index + 1).unwrap(),
                 gen,
-                EntityFlags::empty(),
+                EntityKind::empty(),
             )
         }
     }
@@ -272,7 +275,7 @@ mod tests {
     use std::num::NonZeroU32;
 
     use crate::{
-        entity::{EntityFlags, EntityLocation},
+        entity::{EntityKind, EntityLocation},
         Entity,
     };
 
@@ -311,9 +314,9 @@ mod tests {
 
     #[test]
     fn entity_id() {
-        let parts = (NonZeroU32::new(0xFFF).unwrap(), 30, EntityFlags::empty());
+        let parts = (NonZeroU32::new(0xFFF).unwrap(), 30, EntityKind::COMPONENT);
 
-        let a = Entity::from_parts(parts.0, parts.1, parts.2);
+        let a = Entity::from_parts(parts.0, parts.1, EntityKind::COMPONENT);
 
         eprintln!("a: {:b}", a.0.get());
 
