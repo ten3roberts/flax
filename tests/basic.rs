@@ -1,4 +1,6 @@
-use flax::{component, Query, World};
+use std::sync::Arc;
+
+use flax::{component, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 #[test]
@@ -45,4 +47,48 @@ fn query() {
         .collect_vec();
 
     assert_eq!(items, [4, 8, 9])
+}
+
+#[test]
+fn builder() {
+    component! {
+        a: i32,
+        b: Arc<String>,
+        c: String,
+    }
+
+    let mut world = World::new();
+
+    let shared = Arc::new("Bar".to_string());
+
+    let id = EntityBuilder::new()
+        .set(a(), 5)
+        .set(b(), shared.clone())
+        .set(c(), "Foo".to_string())
+        .set(b(), shared.clone())
+        .spawn(&mut world);
+
+    EntityBuilder::new()
+        .set(a(), 38)
+        .set(b(), shared.clone())
+        .set(c(), "Baz".to_string())
+        .set(b(), shared.clone())
+        .spawn(&mut world);
+
+    let id2 = EntityBuilder::new()
+        .set(a(), 9)
+        .set(c(), "Bar".to_string())
+        .spawn(&mut world);
+
+    let mut query = Query::new((a(), c()));
+    let components = query.iter(&world).sorted().collect_vec();
+
+    assert_eq!(
+        components,
+        [
+            (&5, &"Foo".to_string()),
+            (&9, &"Bar".to_string()),
+            (&38, &"Baz".to_string())
+        ]
+    );
 }

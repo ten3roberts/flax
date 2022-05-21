@@ -4,7 +4,7 @@ use itertools::Itertools;
 use crate::{
     archetype::{Archetype, ArchetypeId, ComponentInfo},
     entity::{EntityLocation, EntityStore},
-    Component, ComponentId, ComponentValue, Entity,
+    Component, ComponentBuffer, ComponentId, ComponentValue, Entity,
 };
 
 pub struct World {
@@ -40,23 +40,23 @@ impl World {
 
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    pub fn fetch_archetype(
+    pub fn fetch_archetype<'a>(
         &mut self,
         root: ArchetypeId,
-        mut components: &[ComponentInfo],
+        components: impl IntoIterator<Item = &'a ComponentInfo>,
     ) -> (ArchetypeId, &mut Archetype) {
+        let mut components = components.into_iter();
         let mut cursor = root;
 
-        let all = components;
         let mut i = 0;
 
-        while let [head, tail @ ..] = components {
+        while let Some(head) = components.next() {
             let id = self.archetypes.len() as u32;
             let cur = &mut self.archetypes[cursor as usize];
             cursor = match cur.edge_to(head.id) {
                 Some(id) => id,
                 None => {
-                    let mut new = Archetype::new(all[..=i].iter().copied());
+                    let mut new = Archetype::new(cur.components().copied().chain([*head]));
 
                     cur.add_edge_to(&mut new, id, cursor, head.id);
 
@@ -64,7 +64,6 @@ impl World {
                     id
                 }
             };
-            components = tail;
 
             i += 1;
         }
@@ -90,6 +89,23 @@ impl World {
     /// Access an archetype by id
     pub fn archetype_mut(&mut self, id: ArchetypeId) -> &mut Archetype {
         &mut self.archetypes[id as usize]
+    }
+
+    /// Spawn an entity with the given components.
+    ///
+    /// For increased ergonomics, prefer [crate::EntityBuilder]
+    pub fn spawn_with(&mut self, components: &mut ComponentBuffer) -> Entity {
+        let id = self.spawn();
+
+        let (archetype_id, arch) = self.fetch_archetype(0, components.components());
+
+        let slot = arch.insert(id, components);
+        *self.entities.get_mut(id).unwrap() = EntityLocation {
+            archetype: archetype_id,
+            slot,
+        };
+
+        id
     }
 
     pub fn insert<T: ComponentValue>(&mut self, id: Entity, component: Component<T>, mut value: T) {
@@ -215,6 +231,10 @@ impl World {
             .iter()
             .enumerate()
             .map(|(i, v)| (i as ArchetypeId, v))
+    }
+
+    pub(crate) fn location(&self, entity: Entity) -> Option<&EntityLocation> {
+        self.entities.get(entity)
     }
 }
 

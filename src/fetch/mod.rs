@@ -1,5 +1,5 @@
 use crate::{
-    archetype::{Archetype, Slot, StorageBorrow},
+    archetype::{Archetype, Slot, StorageBorrow, StorageBorrowMut},
     Component, ComponentValue,
 };
 
@@ -7,7 +7,7 @@ use crate::{
 pub trait Fetch<'a> {
     type Item;
     type Prepared: PreparedFetch<'a, Item = Self::Item>;
-    fn prepare(&self, archetype: &'a Archetype) -> Self::Prepared;
+    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared>;
     fn matches(&self, archetype: &'a Archetype) -> bool;
 }
 
@@ -20,21 +20,30 @@ pub unsafe trait PreparedFetch<'a> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&self, slot: Slot) -> Self::Item;
+    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item;
+}
+
+pub struct PreparedComponentMut<'a, T> {
+    borrow: StorageBorrowMut<'a, T>,
 }
 
 pub struct PreparedComponent<'a, T> {
     borrow: StorageBorrow<'a, T>,
 }
 
+/// Marker type for fetches which can be safely aliased and coexist.
+pub unsafe trait ImmutableFetch: for<'x> Fetch<'x> {}
+
 unsafe impl<'a, T> PreparedFetch<'a> for PreparedComponent<'a, T> {
     type Item = &'a T;
 
-    unsafe fn fetch(&self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         &*(self.borrow.at(slot) as *const T)
     }
 }
+
+unsafe impl<'a, T: ComponentValue> ImmutableFetch for Component<T> {}
 
 impl<'a, T> Fetch<'a> for Component<T>
 where
@@ -44,10 +53,9 @@ where
 
     type Prepared = PreparedComponent<'a, T>;
 
-    fn prepare(&self, archetype: &'a Archetype) -> Self::Prepared {
-        PreparedComponent {
-            borrow: archetype.storage(*self).unwrap(),
-        }
+    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+        let borrow = archetype.storage(*self)?;
+        Some(PreparedComponent { borrow })
     }
 
     fn matches(&self, archetype: &'a Archetype) -> bool {
@@ -55,6 +63,33 @@ where
     }
 }
 
+pub struct Mutable<T: ComponentValue>(Component<T>);
+
+unsafe impl<'a, T> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
+    type Item = &'a mut T;
+
+    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
+        // Perform a reborrow
+        &mut *(self.borrow.at_mut(slot) as *mut T)
+    }
+}
+impl<'a, T> Fetch<'a> for Mutable<T>
+where
+    T: ComponentValue,
+{
+    type Item = &'a mut T;
+
+    type Prepared = PreparedComponentMut<'a, T>;
+
+    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+        let borrow = archetype.storage_mut(self.0)?;
+        Some(PreparedComponentMut { borrow })
+    }
+
+    fn matches(&self, archetype: &'a Archetype) -> bool {
+        archetype.has(self.0.id())
+    }
+}
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
@@ -64,10 +99,10 @@ macro_rules! tuple_impl {
             type Item = ($(<$ty as Fetch<'a>>::Item,)*);
             type Prepared = ($(<$ty as Fetch<'a>>::Prepared,)*);
 
-            fn prepare(&self, archetype: &'a Archetype) -> Self::Prepared {
-                ($(
-                    (self.$idx).prepare(archetype),
-                )*)
+            fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+                Some(($(
+                    (self.$idx).prepare(archetype)?,
+                )*))
             }
 
             fn matches(&self, archetype: &'a Archetype) -> bool {
@@ -80,12 +115,15 @@ macro_rules! tuple_impl {
         {
             type Item = ($(<$ty as PreparedFetch<'a>>::Item,)*);
 
-            unsafe fn fetch(&self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)
             }
         }
+
+        unsafe impl<$($ty, )*> ImmutableFetch for ($($ty,)*)
+            where $($ty: ImmutableFetch,)* {}
     };
 }
 

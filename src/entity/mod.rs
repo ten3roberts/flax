@@ -1,3 +1,4 @@
+mod builder;
 mod store;
 
 use core::fmt;
@@ -6,8 +7,7 @@ use std::fmt::Display;
 use std::num::NonZeroU32;
 use std::sync::atomic::AtomicU32;
 
-use crate::util::Key;
-
+pub use builder::*;
 pub use store::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]

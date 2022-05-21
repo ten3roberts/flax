@@ -120,6 +120,10 @@ impl ComponentBuffer {
             buffer: self,
         }
     }
+
+    pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
+        self.components.values().map(|v| &v.1)
+    }
 }
 
 pub struct IntoIter<'a> {

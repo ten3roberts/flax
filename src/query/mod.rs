@@ -1,9 +1,10 @@
-use std::{iter::FusedIterator, slice::Iter};
+use std::{iter::FusedIterator, marker::PhantomData, ops::Deref, slice::Iter};
 
 use crate::{
     archetype::{ArchetypeId, Slot},
+    entity::EntityLocation,
     fetch::{Fetch, PreparedFetch},
-    World,
+    Entity, World,
 };
 
 /// Represents a query and state for a given world.
@@ -46,6 +47,23 @@ where
         }
     }
 
+    /// Execute the query for a single entity
+    fn get<'a>(
+        &'a self,
+        entity: Entity,
+        world: &'a World,
+    ) -> Option<QueryBorrow<'a, <Q as Fetch<'_>>::Prepared>> {
+        let &EntityLocation { archetype, slot } = world.location(entity)?;
+
+        let archetype = world.archetype(archetype);
+
+        let mut fetch = self.fetch.prepare(archetype)?;
+        // Aliasing is guaranteed due to fetch being prepared and alive for this
+        // instance only
+        let item = unsafe { fetch.fetch(slot) };
+        Some(QueryBorrow { item, fetch })
+    }
+
     fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q) {
         let fetch = &self.fetch;
         (
@@ -57,6 +75,19 @@ where
             }),
             fetch,
         )
+    }
+}
+
+pub struct QueryBorrow<'a, F: PreparedFetch<'a>> {
+    item: F::Item,
+    fetch: F,
+}
+
+impl<'a, F: PreparedFetch<'a>> Deref for QueryBorrow<'a, F> {
+    type Target = F::Item;
+
+    fn deref(&self) -> &Self::Target {
+        &self.item
     }
 }
 
@@ -112,7 +143,7 @@ where
 
             let arch = *self.archetypes.next()?;
             let arch = self.world.archetype(arch);
-            let fetch = self.fetch.prepare(arch);
+            let fetch = self.fetch.prepare(arch).unwrap();
 
             self.current = Some(ArchIter {
                 fetch,

@@ -7,7 +7,7 @@ use std::{
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{util::SparseVec, Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
+use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 
 pub type ArchetypeId = u32;
 pub type Slot = usize;
@@ -169,7 +169,6 @@ impl Archetype {
     /// Entity must not exist in archetype
     pub fn insert(&mut self, id: Entity, components: &mut ComponentBuffer) -> Slot {
         let slot = unsafe { self.allocate(id) };
-        eprintln!("Inserting components into {slot}");
         unsafe {
             for (component, src) in components.take_all() {
                 let storage = self.storage_raw_mut(component.id).unwrap();

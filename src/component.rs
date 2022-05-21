@@ -19,23 +19,23 @@ pub type ComponentId = Entity;
 impl<T> ComponentValue for T where T: Send + Sync + 'static {}
 
 /// Defines a strongly typed component
-pub struct Component<T> {
+pub struct Component<T: ComponentValue> {
     id: ComponentId,
     name: &'static str,
     marker: PhantomData<T>,
 }
 
-impl<T> Eq for Component<T> {}
+impl<T: ComponentValue> Eq for Component<T> {}
 
-impl<T> PartialEq for Component<T> {
+impl<T: ComponentValue> PartialEq for Component<T> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<T> Copy for Component<T> {}
+impl<T: ComponentValue> Copy for Component<T> {}
 
-impl<T> Clone for Component<T> {
+impl<T: ComponentValue> Clone for Component<T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
@@ -51,7 +51,7 @@ impl<T: ComponentValue> std::fmt::Debug for Component<T> {
     }
 }
 
-impl<T> Display for Component<T> {
+impl<T: ComponentValue> Display for Component<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}({})", self.name, self.id)
     }
