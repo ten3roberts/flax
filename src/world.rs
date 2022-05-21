@@ -88,11 +88,13 @@ impl World {
         id
     }
 
-    fn archetype(&self, id: ArchetypeId) -> &Archetype {
+    /// Access an archetype by id
+    pub fn archetype(&self, id: ArchetypeId) -> &Archetype {
         &self.archetypes[id as usize]
     }
 
-    fn archetype_mut(&mut self, id: ArchetypeId) -> &mut Archetype {
+    /// Access an archetype by id
+    pub fn archetype_mut(&mut self, id: ArchetypeId) -> &mut Archetype {
         &mut self.archetypes[id as usize]
     }
 
@@ -203,6 +205,13 @@ impl World {
     /// Returns true if the entity is still alive
     pub fn is_alive(&self, id: Entity) -> bool {
         self.entities.is_alive(id)
+    }
+
+    pub(crate) fn archetypes(&self) -> impl Iterator<Item = (ArchetypeId, &Archetype)> {
+        self.archetypes
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (i as ArchetypeId, v))
     }
 }
 

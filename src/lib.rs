@@ -18,6 +18,8 @@ mod entity;
 pub mod macros;
 mod buffer;
 mod entity_builder;
+pub mod fetch;
+mod query;
 mod util;
 mod world;
 
@@ -26,4 +28,6 @@ pub use paste::paste;
 pub use buffer::*;
 pub use component::*;
 pub use entity::Entity;
+pub use fetch::*;
+pub use query::*;
 pub use world::*;

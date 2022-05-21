@@ -1,11 +1,13 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
+    ops::Range,
     ptr::NonNull,
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
 use crate::{
+    entity::EntityLocation,
     util::{Key, SparseVec},
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity,
 };
@@ -70,6 +72,10 @@ impl Archetype {
             edges: SparseVec::new(),
             entities: Box::new([]),
         }
+    }
+
+    pub fn slots(&self) -> Range<Slot> {
+        0..self.len
     }
 
     /// Returns true if the archtype has `component`
@@ -415,9 +421,31 @@ pub struct StorageBorrow<'a, T> {
     id: ComponentId,
 }
 
+impl<'a, T> StorageBorrow<'a, T> {
+    /// # Panics
+    /// If the entity does not exist in the storage
+    pub fn at(&self, slot: Slot) -> &T {
+        &self.data[slot]
+    }
+}
+
 pub struct StorageBorrowMut<'a, T> {
     data: AtomicRefMut<'a, [T]>,
     id: ComponentId,
+}
+
+impl<'a, T> StorageBorrowMut<'a, T> {
+    /// # Panics
+    /// If the entity does not exist in the storage
+    pub fn at_mut(&mut self, slot: Slot) -> &mut T {
+        &mut self.data[slot]
+    }
+
+    /// # Panics
+    /// If the entity does not exist in the storage
+    pub fn at(&self, slot: Slot) -> &T {
+        &self.data[slot]
+    }
 }
 
 #[derive(Debug)]
