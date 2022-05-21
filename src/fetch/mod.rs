@@ -1,3 +1,5 @@
+mod ext;
+
 use crate::{
     archetype::{Archetype, Slot, StorageBorrow, StorageBorrowMut},
     Component, ComponentValue,
@@ -63,7 +65,7 @@ where
     }
 }
 
-pub struct Mutable<T: ComponentValue>(Component<T>);
+pub struct Mutable<T>(pub(crate) Component<T>);
 
 unsafe impl<'a, T> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
     type Item = &'a mut T;

@@ -10,7 +10,7 @@ use std::{
 use crate::{
     archetype::ComponentInfo,
     entity::{EntityIndex, EntityKind},
-    Entity,
+    Entity, Mutable,
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
@@ -19,7 +19,7 @@ pub type ComponentId = Entity;
 impl<T> ComponentValue for T where T: Send + Sync + 'static {}
 
 /// Defines a strongly typed component
-pub struct Component<T: ComponentValue> {
+pub struct Component<T> {
     id: ComponentId,
     name: &'static str,
     marker: PhantomData<T>,
@@ -101,6 +101,11 @@ impl<T: ComponentValue> Component<T> {
 
     pub fn info(self) -> ComponentInfo {
         ComponentInfo::of(self)
+    }
+
+    /// Transform this into a mutable fetch
+    pub fn mutable(self) -> Mutable<T> {
+        Mutable(self)
     }
 
     /// Get the component's name.

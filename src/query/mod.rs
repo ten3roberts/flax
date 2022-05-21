@@ -1,4 +1,8 @@
-use std::{iter::FusedIterator, marker::PhantomData, ops::Deref, slice::Iter};
+use std::{
+    iter::FusedIterator,
+    ops::{Deref, DerefMut},
+    slice::Iter,
+};
 
 use crate::{
     archetype::{ArchetypeId, Slot},
@@ -48,7 +52,7 @@ where
     }
 
     /// Execute the query for a single entity
-    fn get<'a>(
+    pub fn get<'a>(
         &'a self,
         entity: Entity,
         world: &'a World,
@@ -61,7 +65,10 @@ where
         // Aliasing is guaranteed due to fetch being prepared and alive for this
         // instance only
         let item = unsafe { fetch.fetch(slot) };
-        Some(QueryBorrow { item, fetch })
+        Some(QueryBorrow {
+            item,
+            _fetch: fetch,
+        })
     }
 
     fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q) {
@@ -80,7 +87,8 @@ where
 
 pub struct QueryBorrow<'a, F: PreparedFetch<'a>> {
     item: F::Item,
-    fetch: F,
+    /// Ensures the borrow is not freed
+    _fetch: F,
 }
 
 impl<'a, F: PreparedFetch<'a>> Deref for QueryBorrow<'a, F> {
@@ -88,6 +96,12 @@ impl<'a, F: PreparedFetch<'a>> Deref for QueryBorrow<'a, F> {
 
     fn deref(&self) -> &Self::Target {
         &self.item
+    }
+}
+
+impl<'a, F: PreparedFetch<'a>> DerefMut for QueryBorrow<'a, F> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.item
     }
 }
 

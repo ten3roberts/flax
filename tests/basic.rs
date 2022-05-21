@@ -52,7 +52,7 @@ fn query() {
 #[test]
 fn builder() {
     component! {
-        a: i32,
+        a: usize,
         b: Arc<String>,
         c: String,
     }
@@ -90,5 +90,21 @@ fn builder() {
             (&9, &"Bar".to_string()),
             (&38, &"Baz".to_string())
         ]
+    );
+
+    assert_eq!(
+        Some(&(&5, &"Foo".to_string())),
+        query.get(id, &world).as_deref()
+    );
+
+    {
+        let query = Query::new((a(), c().mutable()));
+        let mut items = query.get(id, &world).unwrap();
+        *items.1 = items.1.repeat(*items.0);
+    }
+
+    assert_eq!(
+        world.get(id, c()).as_deref(),
+        Some(&"FooFooFooFooFoo".to_string())
     );
 }
