@@ -113,7 +113,6 @@ impl<T: ComponentValue> Component<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::*;
 
     component! {

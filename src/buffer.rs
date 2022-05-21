@@ -1,18 +1,19 @@
 use std::alloc::alloc;
+use std::collections::{btree_map, BTreeMap};
 use std::{
     alloc::{dealloc, Layout},
     ptr::NonNull,
 };
 
-use crate::{archetype::ComponentInfo, util::SparseVec, Component, ComponentValue};
-use crate::{util, ComponentId};
+use crate::ComponentId;
+use crate::{archetype::ComponentInfo, Component, ComponentValue};
 
 type Offset = usize;
 
 #[derive(Debug)]
 pub struct ComponentBuffer {
     /// Stores ComponentId => offset into data
-    component_map: SparseVec<ComponentId, (Offset, ComponentInfo)>,
+    components: BTreeMap<ComponentId, (Offset, ComponentInfo)>,
     layout: Layout,
     data: NonNull<u8>,
     end: usize, // Number of meaningful bytes
@@ -21,7 +22,7 @@ pub struct ComponentBuffer {
 impl ComponentBuffer {
     pub fn new() -> Self {
         Self {
-            component_map: SparseVec::new(),
+            components: BTreeMap::new(),
             data: NonNull::dangling(),
             end: 0,
             layout: Layout::from_size_align(0, 8).unwrap(),
@@ -29,23 +30,23 @@ impl ComponentBuffer {
     }
 
     pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Option<&mut T> {
-        let &(offset, _) = self.component_map.get(&component.id())?;
+        let &(offset, _) = self.components.get(&component.id())?;
 
         Some(unsafe { &mut *self.data.as_ptr().offset(offset as _).cast() })
     }
 
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
-        let &(offset, _) = self.component_map.get(&component.id())?;
+        let &(offset, _) = self.components.get(&component.id())?;
 
         Some(unsafe { &*self.data.as_ptr().offset(offset as _).cast() })
     }
 
     pub fn clear(&mut self) {
-        for (_, &(offset, info)) in self.component_map.iter() {
+        for (_, &(offset, info)) in self.components.iter() {
             unsafe { (info.drop)(self.data.as_ptr().offset(offset as _)) }
         }
 
-        self.component_map.clear();
+        self.components.clear();
         self.end = 0;
     }
 
@@ -55,13 +56,13 @@ impl ComponentBuffer {
     /// The callee is responsible for dropping. This creates a whole in the
     /// buffer. As such, the buffer should be cleared to free up space.
     pub unsafe fn take_dyn(&mut self, component: &ComponentInfo) -> Option<*mut u8> {
-        let (offset, info) = self.component_map.remove(&component.id)?;
+        let (offset, info) = self.components.remove(&component.id)?;
         assert_eq!(&info, component);
         Some(self.data.as_ptr().offset(offset as _))
     }
 
     pub fn insert<T: ComponentValue>(&mut self, component: Component<T>, value: T) {
-        if let Some(&(offset, _)) = self.component_map.get(&component.id()) {
+        if let Some(&(offset, _)) = self.components.get(&component.id()) {
             unsafe {
                 let ptr = self.data.as_ptr().offset(offset as _) as *mut T;
                 *ptr = value;
@@ -102,7 +103,7 @@ impl ComponentBuffer {
                 std::ptr::write(ptr, value)
             }
             assert_eq!(
-                self.component_map
+                self.components
                     .insert(component.id(), (offset, ComponentInfo::of(component))),
                 None
             );
@@ -110,10 +111,12 @@ impl ComponentBuffer {
         }
     }
 
+    /// Take all components for the buffer.
+    /// The returned pointer needs to be dropped manually.
     pub(crate) unsafe fn take_all(&mut self) -> IntoIter {
-        let component_map = std::mem::take(&mut self.component_map);
+        let components = std::mem::take(&mut self.components);
         IntoIter {
-            components: component_map.into_iter(),
+            components: components.into_iter(),
             buffer: self,
         }
     }
@@ -121,7 +124,7 @@ impl ComponentBuffer {
 
 pub struct IntoIter<'a> {
     buffer: &'a mut ComponentBuffer,
-    components: util::IntoIter<ComponentId, (Offset, ComponentInfo)>,
+    components: btree_map::IntoIter<ComponentId, (Offset, ComponentInfo)>,
 }
 
 impl<'a> Iterator for IntoIter<'a> {

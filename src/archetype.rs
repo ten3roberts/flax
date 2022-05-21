@@ -1,27 +1,22 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
+    collections::BTreeMap,
     ops::Range,
     ptr::NonNull,
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{
-    entity::EntityLocation,
-    util::{Key, SparseVec},
-    Component, ComponentBuffer, ComponentId, ComponentValue, Entity,
-};
+use crate::{util::SparseVec, Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 
 pub type ArchetypeId = u32;
 pub type Slot = usize;
 
 #[derive(Debug)]
 pub struct Archetype {
-    component_map: Box<[usize]>,
-    components: Box<[ComponentInfo]>,
+    storage: BTreeMap<Entity, Storage>,
     /// Slot to entity id
     entities: Box<[Option<Entity>]>,
-    storage: Box<[Storage]>,
     // Number of entities in the archetype
     len: usize,
     // Number of slots
@@ -29,47 +24,41 @@ pub struct Archetype {
 
     // ComponentId => ArchetypeId
     // If the key is an existing component, it means it is a backwards edge
-    edges: SparseVec<Entity, ArchetypeId>,
+    edges: BTreeMap<Entity, ArchetypeId>,
 }
 
 impl Archetype {
     pub fn empty() -> Self {
         Self {
-            component_map: Box::new([]),
-            components: Box::new([]),
-            storage: Box::new([]),
+            storage: BTreeMap::new(),
             len: 0,
             cap: 0,
-            edges: SparseVec::new(),
+            edges: BTreeMap::new(),
             entities: Box::new([]),
         }
     }
 
     /// Create a new archetype.
     /// Assumes `components` are sorted by id.
-    pub fn new(components: Vec<ComponentInfo>) -> Self {
-        let max_component = components.last().unwrap();
-
-        let mut component_map = vec![0; max_component.id.as_usize() + 1].into_boxed_slice();
-
+    pub fn new(components: impl IntoIterator<Item = ComponentInfo>) -> Self {
         let storage = components
-            .iter()
-            .enumerate()
-            .map(|(i, component)| {
-                component_map[component.id.as_usize()] = i + 1;
-                Storage {
-                    data: AtomicRefCell::new(NonNull::dangling()),
-                }
+            .into_iter()
+            .map(|component| {
+                (
+                    component.id,
+                    Storage {
+                        data: AtomicRefCell::new(NonNull::dangling()),
+                        component,
+                    },
+                )
             })
             .collect();
 
         Self {
             len: 0,
             cap: 0,
-            component_map,
-            components: components.into_boxed_slice(),
             storage,
-            edges: SparseVec::new(),
+            edges: BTreeMap::new(),
             entities: Box::new([]),
         }
     }
@@ -80,7 +69,7 @@ impl Archetype {
 
     /// Returns true if the archtype has `component`
     pub fn has(&self, component: ComponentId) -> bool {
-        self.component_map.get(component.as_usize()).unwrap_or(&0) != &0
+        self.storage.get(&component).is_some()
     }
 
     pub fn edge_to(&self, component: ComponentId) -> Option<ArchetypeId> {
@@ -94,18 +83,18 @@ impl Archetype {
         src_id: ArchetypeId,
         component: ComponentId,
     ) {
-        assert!(self.edges.insert(component, dst_id).is_none());
-        assert!(dst.edges.insert(component, src_id).is_none());
+        self.edges.insert(component, dst_id);
+        dst.edges.insert(component, src_id);
     }
 
     pub fn storage_mut<T: ComponentValue>(
-        &mut self,
+        &self,
         component: Component<T>,
     ) -> Option<StorageBorrowMut<T>> {
         let len = self.len;
-        let storage = unsafe { self.storage_raw(component.id())? };
+        let storage = self.storage.get(&component.id())?;
 
-        // Type is guaranteed by `component_map`
+        // Type is guaranteed by `map`
         let data = storage.data.borrow_mut();
         let data = AtomicRefMut::map(data, |v| unsafe {
             std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), len)
@@ -119,27 +108,17 @@ impl Archetype {
 
     #[inline]
     pub fn storage<T: ComponentValue>(&self, component: Component<T>) -> Option<StorageBorrow<T>> {
-        let index = *self
-            .component_map
-            .get(component.id().index().get() as usize)
-            .unwrap_or(&0);
+        let storage = self.storage.get(&component.id())?;
+        // Type is guaranteed by `map`
+        let data = storage.data.borrow();
+        let data = AtomicRef::map(data, |v| unsafe {
+            std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
+        });
 
-        if index == 0 {
-            None
-        } else {
-            let storage = &self.storage[(index - 1)];
-
-            // Type is guaranteed by `component_map`
-            let data = storage.data.borrow();
-            let data = AtomicRef::map(data, |v| unsafe {
-                std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
-            });
-
-            Some(StorageBorrow {
-                data,
-                id: component.id(),
-            })
-        }
+        Some(StorageBorrow {
+            data,
+            id: component.id(),
+        })
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
@@ -175,24 +154,12 @@ impl Archetype {
             None
         }
     }
-    unsafe fn storage_raw_uniq(&mut self, id: ComponentId) -> Option<&mut Storage> {
-        let index = *self.component_map.get(id.as_usize()).unwrap_or(&0);
-
-        if index == 0 {
-            None
-        } else {
-            Some(&mut self.storage[index - 1])
-        }
+    unsafe fn storage_raw_mut(&mut self, id: ComponentId) -> Option<&mut Storage> {
+        self.storage.get_mut(&id)
     }
 
     unsafe fn storage_raw(&self, id: ComponentId) -> Option<&Storage> {
-        let index = *self.component_map.get(id.as_usize()).unwrap_or(&0);
-
-        if index == 0 {
-            None
-        } else {
-            Some(&self.storage[index - 1])
-        }
+        self.storage.get(&id)
     }
 
     /// Insert a new entity into the archetype.
@@ -205,7 +172,7 @@ impl Archetype {
         eprintln!("Inserting components into {slot}");
         unsafe {
             for (component, src) in components.take_all() {
-                let storage = self.storage_raw_uniq(component.id).unwrap();
+                let storage = self.storage_raw_mut(component.id).unwrap();
                 std::ptr::copy_nonoverlapping(
                     src,
                     storage
@@ -246,18 +213,10 @@ impl Archetype {
         component: &ComponentInfo,
         src: *mut u8,
     ) -> Result<(), *mut u8> {
-        let index = *self
-            .component_map
-            .get(component.id.as_usize())
-            .unwrap_or(&0);
+        let storage = self.storage.get_mut(&component.id).ok_or(src)?;
 
-        if index == 0 {
-            return Err(src);
-        }
-
-        let storage = &mut self.storage[(index - 1)];
-
-        let dst = storage.at_mut(component, slot);
+        assert_eq!(component, &storage.component);
+        let dst = storage.at_mut(slot);
         std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
 
         Ok(())
@@ -274,20 +233,20 @@ impl Archetype {
         let dst_slot = dst.allocate(entity);
         let last = self.len - 1;
 
-        for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
-            let src = storage.at_mut(component, slot);
-            match dst.put_dyn(dst_slot, component, src) {
+        for storage in self.storage.values_mut() {
+            let src = storage.at_mut(slot);
+            match dst.put_dyn(dst_slot, &storage.component, src) {
                 Ok(()) => {}
                 Err(p) => {
-                    eprintln!("Dropping component {component:?} in move");
-                    (component.drop)(p);
+                    eprintln!("Dropping component {:?} in move", storage.component);
+                    (storage.component.drop)(p);
                 }
             };
 
             // Move back in to fill the gap
             if slot != last {
-                let dst = storage.at_mut(component, last);
-                std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
+                let dst = storage.at_mut(last);
+                std::ptr::copy_nonoverlapping(src, dst, storage.component.layout.size());
             }
         }
 
@@ -316,10 +275,10 @@ impl Archetype {
         }
 
         unsafe {
-            for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
+            for storage in self.storage.values_mut() {
                 let new_layout = Layout::from_size_align(
-                    component.layout.size() * new_cap,
-                    component.layout.align(),
+                    storage.component.layout.size() * new_cap,
+                    storage.component.layout.align(),
                 )
                 .unwrap();
                 let new_data = alloc(new_layout);
@@ -330,14 +289,14 @@ impl Archetype {
                     std::ptr::copy_nonoverlapping(
                         data.as_ptr(),
                         new_data,
-                        component.layout.size() * self.len,
+                        storage.component.layout.size() * self.len,
                     );
 
                     dealloc(
                         data.as_ptr(),
                         Layout::from_size_align(
-                            component.layout.size() * old_cap,
-                            component.layout.align(),
+                            storage.component.layout.size() * old_cap,
+                            storage.component.layout.align(),
                         )
                         .unwrap(),
                     );
@@ -358,19 +317,22 @@ impl Archetype {
         self.entities[slot]
     }
 
+    /// Drops all components while keeping the storage intact
     pub fn clear(&mut self) {
-        for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
+        for storage in self.storage.values_mut() {
             for slot in 0..self.len {
                 unsafe {
                     let value = storage
                         .data
                         .get_mut()
                         .as_ptr()
-                        .add(slot * component.layout.size());
-                    (component.drop)(value);
+                        .add(slot * storage.component.layout.size());
+                    (storage.component.drop)(value);
                 }
             }
         }
+
+        self.len = 0;
     }
 
     /// Get the archetype's len.
@@ -387,8 +349,8 @@ impl Archetype {
 
     /// Get a reference to the archetype's components.
     #[must_use]
-    pub fn components(&self) -> &[ComponentInfo] {
-        self.components.as_ref()
+    pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
+        self.storage.values().map(|v| &v.component)
     }
 }
 
@@ -396,15 +358,15 @@ impl Drop for Archetype {
     fn drop(&mut self) {
         self.clear();
         if self.cap > 0 {
-            for (storage, component) in self.storage.iter_mut().zip(self.components.iter()) {
+            for storage in self.storage.values_mut() {
                 // Handle ZST
-                if component.layout.size() > 0 {
+                if storage.component.layout.size() > 0 {
                     unsafe {
                         dealloc(
                             storage.data.get_mut().as_ptr(),
                             Layout::from_size_align(
-                                component.layout.size() * self.cap,
-                                component.layout.align(),
+                                storage.component.layout.size() * self.cap,
+                                storage.component.layout.align(),
                             )
                             .unwrap(),
                         );
@@ -452,9 +414,10 @@ impl<'a, T> StorageBorrowMut<'a, T> {
 /// Holds components for a single type
 struct Storage {
     data: AtomicRefCell<NonNull<u8>>,
+    component: ComponentInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct ComponentInfo {
     pub(crate) name: &'static str,
     pub(crate) layout: Layout,
@@ -558,11 +521,11 @@ impl Storage {
         self.data.get_mut().as_ptr().add(index * info.layout.size())
     }
 
-    unsafe fn at_mut(&mut self, component: &ComponentInfo, slot: Slot) -> *mut u8 {
+    unsafe fn at_mut(&mut self, slot: Slot) -> *mut u8 {
         self.data
             .get_mut()
             .as_ptr()
-            .add(component.layout.size() * slot)
+            .add(self.component.layout.size() * slot)
     }
 }
 

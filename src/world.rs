@@ -1,6 +1,5 @@
-use std::mem;
-
 use atomic_refcell::{AtomicRef, AtomicRefMut};
+use itertools::Itertools;
 
 use crate::{
     archetype::{Archetype, ArchetypeId, ComponentInfo},
@@ -57,14 +56,7 @@ impl World {
             cursor = match cur.edge_to(head.id) {
                 Some(id) => id,
                 None => {
-                    // Create archetype
-                    eprintln!(
-                        "Creating new archetype {:?} => {}\n {:#?}",
-                        cur.components().last().map(|v| v.name),
-                        head.name,
-                        &all[..=i]
-                    );
-                    let mut new = Archetype::new(all[..=i].to_vec());
+                    let mut new = Archetype::new(all[..=i].iter().copied());
 
                     cur.add_edge_to(&mut new, id, cursor, head.id);
 
@@ -107,33 +99,36 @@ impl World {
         } = self.entities.get(id).unwrap();
         let src = self.archetype(src_id);
 
-        let components = src.components();
-        let pivot = components
-            .iter()
-            .take_while(|v| v.id < component.id())
-            .count();
-
-        // Split the components
-        // A B C [new] D E F
-        let left = &components[0..pivot];
-        let right = &components[pivot..];
         let component_info = component.info();
+        let dst_id = match src.edge_to(component.id()) {
+            Some(dst) => dst,
+            None => {
+                let pivot = src
+                    .components()
+                    .take_while(|v| v.id < component.id())
+                    .count();
 
-        let mut components = Vec::with_capacity(left.len() + 1 + right.len());
-        components.extend_from_slice(left);
-        components.push(component_info);
-        components.extend_from_slice(right);
+                // Split the components
+                // A B C [new] D E F
+                let left = src.components().take(pivot).copied();
+                let right = src.components().skip(pivot).copied();
 
-        // assert in order
+                let components: Vec<_> = left.chain([component_info]).chain(right).collect();
 
-        {
-            let mut sorted = components.clone();
-            sorted.sort_by_key(|v| v.id);
-            assert_eq!(sorted, components);
-        }
+                // assert in order
 
-        let (dst_id, _) = self.fetch_archetype(0, &components);
-        // let src = self.archetype_mut(src_id);
+                {
+                    assert!(components
+                        .iter()
+                        .sorted_by_key(|v| v.id)
+                        .eq(components.iter()));
+                }
+
+                let (dst_id, _) = self.fetch_archetype(0, &components);
+
+                dst_id
+            }
+        };
 
         unsafe {
             assert_ne!(src_id, dst_id);
@@ -143,7 +138,6 @@ impl World {
             let dst =
                 &mut *((&self.archetypes[dst_id as usize]) as *const Archetype as *mut Archetype);
 
-            eprintln!("Moving {:#?} => {:#?}", src.components(), dst.components());
             let (dst_slot, swapped) = src.move_to(dst, slot);
 
             // Insert the missing component
@@ -151,7 +145,10 @@ impl World {
                 .expect("Insert should not fail");
 
             // And don't forget to forget to drop it
-            mem::forget(value);
+            std::mem::forget(value);
+
+            // Add a quick edge to refer to later
+            src.add_edge_to(dst, dst_id, src_id, component.id());
 
             assert_eq!(dst.entity(dst_slot), Some(id));
             if let Some(swapped) = swapped {
@@ -229,6 +226,8 @@ impl Default for World {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     component! {
@@ -236,6 +235,7 @@ mod tests {
         b: f32,
         c: String,
         d: Vec<u32>,
+        e: Arc<String>,
     }
 
     #[test]
@@ -263,6 +263,7 @@ mod tests {
         let id = world.spawn();
 
         world.insert(id, a(), 65);
+        let shared = Arc::new("Foo".to_string());
 
         assert_eq!(world.get(id, a()).as_deref(), Some(&65));
         assert_eq!(world.get(id, b()).as_deref(), None);
@@ -280,6 +281,15 @@ mod tests {
         assert_eq!(world.has(id, c()), false);
         assert_eq!(world.get(id2, a()).as_deref(), Some(&7));
         assert_eq!(world.get(id2, c()).as_deref(), Some(&"Foo".to_string()));
+        world.insert(id, e(), shared.clone());
+        assert_eq!(
+            world.get(id, e()).as_deref().map(|v| &**v),
+            Some(&"Foo".to_string())
+        );
+
+        assert_eq!(Arc::strong_count(&shared), 2);
+        drop(world);
+        assert_eq!(Arc::strong_count(&shared), 1);
     }
 
     #[test]
