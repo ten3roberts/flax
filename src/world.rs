@@ -1,3 +1,5 @@
+use std::mem;
+
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
@@ -48,8 +50,6 @@ impl World {
         let mut components = components.into_iter();
         let mut cursor = root;
 
-        let mut i = 0;
-
         while let Some(head) = components.next() {
             let id = self.archetypes.len() as u32;
             let cur = &mut self.archetypes[cursor as usize];
@@ -64,8 +64,6 @@ impl World {
                     id
                 }
             };
-
-            i += 1;
         }
 
         (cursor, &mut self.archetypes[cursor as usize])
@@ -108,7 +106,33 @@ impl World {
         id
     }
 
-    pub fn insert<T: ComponentValue>(&mut self, id: Entity, component: Component<T>, mut value: T) {
+    pub fn despawn(&mut self, id: Entity) -> Option<()> {
+        let &EntityLocation { archetype, slot } = self.location(id)?;
+
+        let src = self.archetype_mut(archetype);
+        unsafe {
+            let swapped = src.take(slot, |c, p| (c.drop)(p));
+            if let Some(swapped) = swapped {
+                // The last entity in src was moved into the slot occupied by id
+                eprintln!("Relocating entity");
+                self.entities
+                    .get_mut(swapped)
+                    .expect("Invalid entity id")
+                    .slot = slot;
+            }
+
+            self.entities.despawn(id);
+        }
+
+        Some(())
+    }
+
+    pub fn insert<T: ComponentValue>(
+        &mut self,
+        id: Entity,
+        component: Component<T>,
+        mut value: T,
+    ) -> Option<T> {
         let &EntityLocation {
             archetype: src_id,
             slot,
@@ -116,6 +140,11 @@ impl World {
         let src = self.archetype(src_id);
 
         let component_info = component.info();
+
+        if let Some(mut val) = src.get_mut(slot, component) {
+            return Some(mem::replace(&mut *val, value));
+        }
+
         let dst_id = match src.edge_to(component.id()) {
             Some(dst) => dst,
             None => {
@@ -154,7 +183,11 @@ impl World {
             let dst =
                 &mut *((&self.archetypes[dst_id as usize]) as *const Archetype as *mut Archetype);
 
-            let (dst_slot, swapped) = src.move_to(dst, slot);
+            let (dst_slot, swapped) =
+                src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
+
+            // Add a quick edge to refer to later
+            src.add_edge_to(dst, dst_id, src_id, component.id());
 
             // Insert the missing component
             dst.put_dyn(dst_slot, &component_info, &mut value as *mut T as *mut u8)
@@ -163,9 +196,77 @@ impl World {
             // And don't forget to forget to drop it
             std::mem::forget(value);
 
+            assert_eq!(dst.entity(dst_slot), Some(id));
+            if let Some(swapped) = swapped {
+                // The last entity in src was moved into the slot occupied by id
+                eprintln!("Relocating entity");
+                self.entities
+                    .get_mut(swapped)
+                    .expect("Invalid entity id")
+                    .slot = slot;
+            }
+            eprintln!("New slot: {dst_slot}");
+
+            *self.entities.get_mut(id).expect("Entity is not valid") = EntityLocation {
+                slot: dst_slot,
+                archetype: dst_id,
+            };
+        }
+
+        None
+    }
+
+    pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Option<T> {
+        let &EntityLocation {
+            archetype: src_id,
+            slot,
+        } = self.entities.get(id).unwrap();
+
+        let src = self.archetype(src_id);
+
+        if !src.has(component.id()) {
+            return None;
+        }
+
+        let dst_id = match src.edge_to(component.id()) {
+            Some(dst) => dst,
+            None => {
+                let components: Vec<_> = src
+                    .components()
+                    .filter(|v| v.id != component.id())
+                    .copied()
+                    .collect_vec();
+
+                let (dst_id, _) = self.fetch_archetype(0, &components);
+
+                dst_id
+            }
+        };
+
+        unsafe {
+            assert_ne!(src_id, dst_id);
+            // Borrow disjoint
+            let src =
+                &mut *((&self.archetypes[src_id as usize]) as *const Archetype as *mut Archetype);
+            let dst =
+                &mut *((&self.archetypes[dst_id as usize]) as *const Archetype as *mut Archetype);
+
             // Add a quick edge to refer to later
             src.add_edge_to(dst, dst_id, src_id, component.id());
 
+            // Take the value
+            // This moves the differing value out of the archetype before it is
+            // forgotten in the move
+
+            eprintln!("Moving {id} from {src_id} => {dst_id}");
+            let mut val = std::ptr::null();
+            // Capture the ONE moved value
+            let (dst_slot, swapped) = src.move_to(dst, slot, |_, p| {
+                assert_eq!(val as *const u8, std::ptr::null());
+                val = p
+            });
+
+            assert_ne!(val, std::ptr::null());
             assert_eq!(dst.entity(dst_slot), Some(id));
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
@@ -180,6 +281,8 @@ impl World {
                 slot: dst_slot,
                 archetype: dst_id,
             };
+
+            Some(val.cast::<T>().read())
         }
     }
 
@@ -216,11 +319,6 @@ impl World {
         }
     }
 
-    /// Despawns an entity
-    pub fn despawn(&mut self, id: Entity) {
-        self.entities.despawn(id)
-    }
-
     /// Returns true if the entity is still alive
     pub fn is_alive(&self, id: Entity) -> bool {
         self.entities.is_alive(id)
@@ -247,6 +345,8 @@ impl Default for World {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
+    use crate::{EntityBuilder, Query};
 
     use super::*;
 
@@ -335,5 +435,54 @@ mod tests {
         // Borrow another component on an entity with a mutably borrowed
         // **other** component.
         assert_eq!(world.get(id2, a()).as_deref(), None);
+    }
+
+    #[test]
+    fn remove() {
+        let mut world = World::new();
+        let id = EntityBuilder::new()
+            .set(a(), 9)
+            .set(b(), 0.3)
+            .set(c(), "Foo".to_string())
+            .spawn(&mut world);
+
+        let shared = Arc::new("The meaning of life is ...".to_string());
+
+        world.insert(id, e(), shared.clone());
+        let id2 = EntityBuilder::new()
+            .set(a(), 6)
+            .set(b(), 0.219)
+            .set(c(), "Bar".to_string())
+            .set(e(), shared.clone())
+            .spawn(&mut world);
+
+        assert_eq!(world.get(id, b()).as_deref(), Some(&0.3));
+        assert_eq!(world.get(id, e()).as_deref(), Some(&shared));
+
+        assert_eq!(world.remove(id, e()).as_ref(), Some(&shared));
+
+        assert_eq!(world.get(id, a()).as_deref(), Some(&9));
+        assert_eq!(world.get(id, c()).as_deref(), Some(&"Foo".to_string()));
+        assert_eq!(world.get(id, e()).as_deref(), None);
+
+        world.despawn(id).unwrap();
+
+        assert_eq!(world.get(id, a()).as_deref(), None);
+        assert_eq!(world.get(id, c()).as_deref(), None);
+        assert_eq!(world.get(id, e()).as_deref(), None);
+
+        assert_eq!(world.get(id2, e()).as_deref(), Some(&shared));
+        assert_eq!(world.get(id2, c()).as_deref(), Some(&"Bar".to_string()));
+
+        assert_eq!(world.get(id, e()).as_deref(), None);
+
+        assert_eq!(Arc::strong_count(&shared), 2);
+
+        // // Remove id
+
+        let mut query = Query::new((a(), c()));
+        let items = query.iter(&world).sorted().collect_vec();
+
+        assert_eq!(items, [(&6, &"Bar".to_string())]);
     }
 }

@@ -34,6 +34,7 @@ fn query() {
     let id3 = world.spawn();
 
     world.insert(id1, a(), 4);
+    world.insert(id1, a(), 4);
     world.insert(id2, a(), 9);
     world.insert(id3, a(), 8);
     world.insert(id3, b(), "foo".to_string());

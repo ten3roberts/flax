@@ -154,11 +154,12 @@ impl Archetype {
             None
         }
     }
-    unsafe fn storage_raw_mut(&mut self, id: ComponentId) -> Option<&mut Storage> {
+
+    pub(crate) unsafe fn storage_raw_mut(&mut self, id: ComponentId) -> Option<&mut Storage> {
         self.storage.get_mut(&id)
     }
 
-    unsafe fn storage_raw(&self, id: ComponentId) -> Option<&Storage> {
+    pub(crate) unsafe fn storage_raw(&self, id: ComponentId) -> Option<&Storage> {
         self.storage.get(&id)
     }
 
@@ -227,25 +228,27 @@ impl Archetype {
     /// component.
     ///
     /// Returns the slot in dst and entity which was moved into current `slot`, if any.
-    pub unsafe fn move_to(&mut self, dst: &mut Self, slot: Slot) -> (Slot, Option<Entity>) {
+    pub unsafe fn move_to(
+        &mut self,
+        dst: &mut Self,
+        slot: Slot,
+        mut on_drop: impl FnMut(ComponentInfo, *mut u8),
+    ) -> (Slot, Option<Entity>) {
         let entity = self.entity(slot).expect("Invalid entity");
         let dst_slot = dst.allocate(entity);
         let last = self.len - 1;
 
         for storage in self.storage.values_mut() {
-            let src = storage.at_mut(slot);
-            match dst.put_dyn(dst_slot, &storage.component, src) {
-                Ok(()) => {}
-                Err(p) => {
-                    eprintln!("Dropping component {:?} in move", storage.component);
-                    (storage.component.drop)(p);
-                }
+            let p = storage.at_mut(slot);
+            match dst.put_dyn(dst_slot, &storage.component, p) {
+                Err(p) => (on_drop)(storage.component, p),
+                _ => {}
             };
 
             // Move back in to fill the gap
             if slot != last {
-                let dst = storage.at_mut(last);
-                std::ptr::copy_nonoverlapping(src, dst, storage.component.layout.size());
+                let p_last = storage.at_mut(last);
+                std::ptr::copy_nonoverlapping(p_last, p, storage.component.layout.size());
             }
         }
 
@@ -262,6 +265,35 @@ impl Archetype {
         }
     }
 
+    /// Move all components of an entity out of an archetype
+    pub unsafe fn take(
+        &mut self,
+        slot: Slot,
+        mut on_take: impl FnMut(ComponentInfo, *mut u8),
+    ) -> Option<Entity> {
+        let _ = self.entity(slot).expect("Invalid entity");
+        let last = self.len - 1;
+
+        for storage in self.storage.values_mut() {
+            let src = storage.at_mut(slot);
+            (on_take)(storage.component, src);
+
+            // Move back in to fill the gap
+            if slot != last {
+                let dst = storage.at_mut(last);
+                std::ptr::copy_nonoverlapping(dst, src, storage.component.layout.size());
+            }
+        }
+
+        self.len -= 1;
+
+        if slot != last {
+            self.entities[slot] = self.entities[last];
+            Some(std::mem::take(&mut self.entities[last]).expect("Invalid entity at last pos"))
+        } else {
+            None
+        }
+    }
     /// Reserves space for atleast `additional` entities.
     /// Does nothing if the remaining capacity < additional.
     /// len remains unchanged, as does the internal order
@@ -411,9 +443,20 @@ impl<'a, T> StorageBorrowMut<'a, T> {
 
 #[derive(Debug)]
 /// Holds components for a single type
-struct Storage {
+pub(crate) struct Storage {
     data: AtomicRefCell<NonNull<u8>>,
     component: ComponentInfo,
+}
+
+impl Storage {
+    /// # Panics
+    /// If the entity does not exist in the storage
+    pub(crate) unsafe fn at(&mut self, slot: Slot) -> *mut u8 {
+        self.data
+            .get_mut()
+            .as_ptr()
+            .add(self.component.layout.size() * slot)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
