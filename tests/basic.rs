@@ -8,16 +8,19 @@ fn creation() {
     component! {
         a: i32,
         b: String,
+        zst: (),
     }
 
     let mut world = World::new();
 
-    let e = world.spawn();
-    world.insert(e, a(), 5);
+    let id = world.spawn();
+    world.insert(id, a(), 5);
 
-    assert!(world.is_alive(e));
-    world.despawn(e);
-    assert!(!world.is_alive(e));
+    world.insert(id, zst(), ());
+
+    assert!(world.is_alive(id));
+    world.despawn(id);
+    assert!(!world.is_alive(id));
 }
 
 #[test]
@@ -108,4 +111,38 @@ fn builder() {
         world.get(id, c()).as_deref(),
         Some(&"FooFooFooFooFoo".to_string())
     );
+}
+
+#[test]
+fn tags() {
+    component! {
+        health: i32,
+        player: (),
+        pos: (f32, f32),
+        alive: bool,
+    }
+
+    let mut world = World::new();
+    let player = EntityBuilder::new()
+        .set(health(), 100)
+        .set(alive(), true)
+        .tag(player())
+        .set(pos(), (4.5, 3.4))
+        .spawn(&mut world);
+
+    let enemies = (0..16)
+        .map(|i| {
+            EntityBuilder::new()
+                .set(health(), 50)
+                .set(alive(), true)
+                .set(pos(), (-4.0, 3.0 + i as f32))
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let mut query = Query::new(health());
+    let items = query.iter(&world).sorted().collect_vec();
+
+    let expected = (&[50; 16]).iter().chain(&[100]).collect_vec();
+    assert_eq!(items, expected);
 }

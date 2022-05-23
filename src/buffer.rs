@@ -72,8 +72,10 @@ impl ComponentBuffer {
             let offset = self.end + (layout.align() - self.end % layout.align());
             let new_len = offset + layout.size();
             // Reallocate if the current buffer cannot fit an additional
-            // T+align bytes
-            if new_len >= self.layout.size() {
+            // T+align bytes or stricter alignment
+            if (new_len >= self.layout.size() || layout.align() > self.layout.align())
+                && new_len > 0
+            {
                 // Enforce alignment to be the strictest of all stored types
                 let alignment = self.layout.align().max(layout.align());
 
@@ -81,7 +83,7 @@ impl ComponentBuffer {
                     Layout::from_size_align(new_len.next_power_of_two(), alignment).unwrap();
 
                 unsafe {
-                    // Don't realloc since  layout may change
+                    // Don't realloc since layout may change
                     let new_data = alloc(new_layout);
 
                     if self.layout.size() > 0 {
@@ -95,9 +97,10 @@ impl ComponentBuffer {
             }
 
             // Regardless, the bytes after `len` are allocated and
-            // unoccupied
+            // unoccupied, or the type is zero-sized
             unsafe {
                 let ptr = self.data.as_ptr().add(offset) as *mut T;
+                eprintln!("New alignt: {:#?}", component);
                 assert_eq!(self.data.as_ptr() as usize % layout.align(), 0);
                 assert_eq!(ptr as usize % layout.align(), 0);
                 std::ptr::write(ptr, value)

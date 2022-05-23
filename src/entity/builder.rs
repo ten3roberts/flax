@@ -17,6 +17,19 @@ impl EntityBuilder {
         self
     }
 
+    /// Shorthand for setting a unit type component
+    pub fn tag<T: From<()> + ComponentValue>(&mut self, component: Component<T>) -> &mut Self {
+        self.set(component, ().into())
+    }
+
+    /// Sets a component with the default value of `T`
+    pub fn set_default<T: ComponentValue + Default>(
+        &mut self,
+        component: Component<T>,
+    ) -> &mut Self {
+        self.set(component, Default::default())
+    }
+
     /// Spawns the build entities into the world.
     ///
     /// Clears the builder and allows it to be used again, reusing the builder

@@ -175,12 +175,8 @@ impl Archetype {
                 let storage = self.storage_raw_mut(component.id).unwrap();
                 std::ptr::copy_nonoverlapping(
                     src,
-                    storage
-                        .data
-                        .get_mut()
-                        .as_ptr()
-                        .add(component.layout.size() * slot),
-                    component.layout.size(),
+                    storage.data.get_mut().as_ptr().add(component.size() * slot),
+                    component.size(),
                 );
             }
         }
@@ -217,7 +213,7 @@ impl Archetype {
 
         assert_eq!(component, &storage.component);
         let dst = storage.at_mut(slot);
-        std::ptr::copy_nonoverlapping(src, dst, component.layout.size());
+        std::ptr::copy_nonoverlapping(src, dst, component.size());
 
         Ok(())
     }
@@ -248,7 +244,7 @@ impl Archetype {
             // Move back in to fill the gap
             if slot != last {
                 let p_last = storage.at_mut(last);
-                std::ptr::copy_nonoverlapping(p_last, p, storage.component.layout.size());
+                std::ptr::copy_nonoverlapping(p_last, p, storage.component.size());
             }
         }
 
@@ -281,7 +277,7 @@ impl Archetype {
             // Move back in to fill the gap
             if slot != last {
                 let dst = storage.at_mut(last);
-                std::ptr::copy_nonoverlapping(dst, src, storage.component.layout.size());
+                std::ptr::copy_nonoverlapping(dst, src, storage.component.size());
             }
         }
 
@@ -306,9 +302,9 @@ impl Archetype {
         }
 
         unsafe {
-            for storage in self.storage.values_mut() {
+            for storage in self.storage.values_mut().filter(|v| v.component.size() > 0) {
                 let new_layout = Layout::from_size_align(
-                    storage.component.layout.size() * new_cap,
+                    storage.component.size() * new_cap,
                     storage.component.layout.align(),
                 )
                 .unwrap();
@@ -320,13 +316,13 @@ impl Archetype {
                     std::ptr::copy_nonoverlapping(
                         data.as_ptr(),
                         new_data,
-                        storage.component.layout.size() * self.len,
+                        storage.component.size() * self.len,
                     );
 
                     dealloc(
                         data.as_ptr(),
                         Layout::from_size_align(
-                            storage.component.layout.size() * old_cap,
+                            storage.component.size() * old_cap,
                             storage.component.layout.align(),
                         )
                         .unwrap(),
@@ -357,7 +353,7 @@ impl Archetype {
                         .data
                         .get_mut()
                         .as_ptr()
-                        .add(slot * storage.component.layout.size());
+                        .add(slot * storage.component.size());
                     (storage.component.drop)(value);
                 }
             }
@@ -391,12 +387,12 @@ impl Drop for Archetype {
         if self.cap > 0 {
             for storage in self.storage.values_mut() {
                 // Handle ZST
-                if storage.component.layout.size() > 0 {
+                if storage.component.size() > 0 {
                     unsafe {
                         dealloc(
                             storage.data.get_mut().as_ptr(),
                             Layout::from_size_align(
-                                storage.component.layout.size() * self.cap,
+                                storage.component.size() * self.cap,
                                 storage.component.layout.align(),
                             )
                             .unwrap(),
@@ -455,13 +451,12 @@ impl Storage {
         self.data
             .get_mut()
             .as_ptr()
-            .add(self.component.layout.size() * slot)
+            .add(self.component.size() * slot)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct ComponentInfo {
-    pub(crate) name: &'static str,
     pub(crate) layout: Layout,
     pub(crate) id: ComponentId,
     pub(crate) drop: unsafe fn(*mut u8),
@@ -474,10 +469,13 @@ impl ComponentInfo {
         }
         Self {
             drop: drop_ptr::<T>,
-            name: component.name(),
             layout: Layout::new::<T>(),
             id: component.id(),
         }
+    }
+
+    fn size(&self) -> usize {
+        self.layout.size()
     }
 }
 
@@ -560,14 +558,14 @@ impl Storage {
 
     /// Returns the `index`th element of type represented by info.
     unsafe fn elem_raw(&mut self, index: usize, info: &ComponentInfo) -> *mut u8 {
-        self.data.get_mut().as_ptr().add(index * info.layout.size())
+        self.data.get_mut().as_ptr().add(index * info.size())
     }
 
     unsafe fn at_mut(&mut self, slot: Slot) -> *mut u8 {
         self.data
             .get_mut()
             .as_ptr()
-            .add(self.component.layout.size() * slot)
+            .add(self.component.size() * slot)
     }
 }
 
