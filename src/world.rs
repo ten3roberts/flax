@@ -11,14 +11,23 @@ use crate::{
 
 pub struct World {
     entities: EntityStore,
-    archetypes: Vec<Archetype>,
+    archetypes: EntityStore<Archetype>,
+    archetype_root: ArchetypeId,
+    change_tick: u64,
+    archetype_gen: u64,
 }
 
 impl World {
     pub fn new() -> Self {
+        let mut archetypes = EntityStore::new(255);
+        let root = archetypes.spawn(Archetype::empty());
+
         Self {
-            entities: EntityStore::new(),
-            archetypes: vec![Archetype::empty()],
+            entities: EntityStore::new(1),
+            archetypes,
+            change_tick: 0,
+            archetype_gen: 0,
+            archetype_root: root,
         }
     }
 
@@ -32,17 +41,17 @@ impl World {
         let mut cursor = root;
 
         while let [head, tail @ ..] = components {
-            let next = self.archetypes[cursor as usize].edge_to(*head)?;
+            let next = self.archetypes.get(cursor).unwrap().edge_to(*head)?;
             cursor = next;
             components = tail;
         }
 
-        Some(&self.archetypes[cursor as usize])
+        self.archetypes.get(cursor)
     }
 
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    pub fn fetch_archetype<'a>(
+    pub(crate) fn fetch_archetype<'a>(
         &mut self,
         root: ArchetypeId,
         components: impl IntoIterator<Item = &'a ComponentInfo>,
@@ -51,42 +60,47 @@ impl World {
         let mut cursor = root;
 
         while let Some(head) = components.next() {
-            let id = self.archetypes.len() as u32;
-            let cur = &mut self.archetypes[cursor as usize];
+            let cur = &mut self.archetypes.get(cursor).unwrap();
             cursor = match cur.edge_to(head.id) {
                 Some(id) => id,
                 None => {
-                    let mut new = Archetype::new(cur.components().copied().chain([*head]));
+                    let new = Archetype::new(cur.components().copied().chain([*head]));
+                    let id = self.archetypes.spawn(new);
 
-                    cur.add_edge_to(&mut new, id, cursor, head.id);
+                    let (cur, new) = self.archetypes.get_disjoint(cursor, id).unwrap();
+                    cur.add_edge_to(new, id, cursor, head.id);
 
-                    self.archetypes.push(new);
                     id
                 }
             };
         }
 
-        (cursor, &mut self.archetypes[cursor as usize])
+        (cursor, self.archetypes.get_mut(cursor).unwrap())
     }
 
     /// Spawn a new empty entity
     pub fn spawn(&mut self) -> Entity {
         // Place at root
-        let id = self.entities.spawn(EntityLocation::default());
+        let id = self.entities.spawn(EntityLocation {
+            archetype: self.archetype_root,
+            slot: 0,
+        });
+
+        let slot = unsafe { self.archetype_mut(self.archetype_root).allocate(id) };
+
         // This is safe as `root` does not contain any components
-        let slot = unsafe { self.archetype_mut(0).allocate(id) };
         self.entities.get_mut(id).unwrap().slot = slot;
         id
     }
 
     /// Access an archetype by id
     pub fn archetype(&self, id: ArchetypeId) -> &Archetype {
-        &self.archetypes[id as usize]
+        &self.archetypes.get(id).unwrap()
     }
 
     /// Access an archetype by id
     pub fn archetype_mut(&mut self, id: ArchetypeId) -> &mut Archetype {
-        &mut self.archetypes[id as usize]
+        self.archetypes.get_mut(id).unwrap()
     }
 
     /// Spawn an entity with the given components.
@@ -95,7 +109,8 @@ impl World {
     pub fn spawn_with(&mut self, components: &mut ComponentBuffer) -> Entity {
         let id = self.spawn();
 
-        let (archetype_id, arch) = self.fetch_archetype(0, components.components());
+        let (archetype_id, arch) =
+            self.fetch_archetype(self.archetype_root, components.components());
 
         let slot = arch.insert(id, components);
         *self.entities.get_mut(id).unwrap() = EntityLocation {
@@ -127,7 +142,7 @@ impl World {
         Some(())
     }
 
-    pub fn insert<T: ComponentValue>(
+    pub fn set<T: ComponentValue>(
         &mut self,
         id: Entity,
         component: Component<T>,
@@ -169,7 +184,7 @@ impl World {
                         .eq(components.iter()));
                 }
 
-                let (dst_id, _) = self.fetch_archetype(0, &components);
+                let (dst_id, _) = self.fetch_archetype(self.archetype_root, &components);
 
                 dst_id
             }
@@ -178,10 +193,7 @@ impl World {
         unsafe {
             assert_ne!(src_id, dst_id);
             // Borrow disjoint
-            let src =
-                &mut *((&self.archetypes[src_id as usize]) as *const Archetype as *mut Archetype);
-            let dst =
-                &mut *((&self.archetypes[dst_id as usize]) as *const Archetype as *mut Archetype);
+            let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
 
             let (dst_slot, swapped) =
                 src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
@@ -237,7 +249,7 @@ impl World {
                     .copied()
                     .collect_vec();
 
-                let (dst_id, _) = self.fetch_archetype(0, &components);
+                let (dst_id, _) = self.fetch_archetype(self.archetype_root, &components);
 
                 dst_id
             }
@@ -246,10 +258,7 @@ impl World {
         unsafe {
             assert_ne!(src_id, dst_id);
             // Borrow disjoint
-            let src =
-                &mut *((&self.archetypes[src_id as usize]) as *const Archetype as *mut Archetype);
-            let dst =
-                &mut *((&self.archetypes[dst_id as usize]) as *const Archetype as *mut Archetype);
+            let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
 
             // Add a quick edge to refer to later
             src.add_edge_to(dst, dst_id, src_id, component.id());
@@ -294,7 +303,7 @@ impl World {
     ) -> Option<AtomicRef<T>> {
         let loc = self.entities.get(id)?;
 
-        self.archetypes[loc.archetype as usize].get(loc.slot, component)
+        self.archetypes.get(loc.archetype)?.get(loc.slot, component)
     }
 
     /// Randomly access an entity's component.
@@ -305,7 +314,9 @@ impl World {
     ) -> Option<AtomicRefMut<T>> {
         let loc = self.entities.get(id)?;
 
-        self.archetypes[loc.archetype as usize].get_mut(loc.slot, component)
+        self.archetypes
+            .get(loc.archetype)?
+            .get_mut(loc.slot, component)
     }
 
     /// Returns true if the entity has the specified component.
@@ -325,10 +336,9 @@ impl World {
     }
 
     pub(crate) fn archetypes(&self) -> impl Iterator<Item = (ArchetypeId, &Archetype)> {
-        self.archetypes
-            .iter()
-            .enumerate()
-            .map(|(i, v)| (i as ArchetypeId, v))
+        self.archetypes.iter().inspect(|v| {
+            dbg!(v);
+        })
     }
 
     pub(crate) fn location(&self, entity: Entity) -> Option<&EntityLocation> {
@@ -362,8 +372,10 @@ mod tests {
     fn world_archetype_graph() {
         let mut world = World::new();
 
+        let root = world.archetype_root;
+
         // () -> (a) -> (ab) -> (abc)
-        let (_, archetype) = world.fetch_archetype(0, &[a().info(), b().info(), c().info()]);
+        let (_, archetype) = world.fetch_archetype(root, &[a().info(), b().info(), c().info()]);
         assert!(!archetype.has(d().id()));
         assert!(archetype.has(a().id()));
         assert!(archetype.has(b().id()));
@@ -372,7 +384,7 @@ mod tests {
 
         // () -> (a) -> (ab) -> (abc)
         //                   -> (abd)
-        let (_, archetype) = world.fetch_archetype(0, &[a().info(), b().info(), d().info()]);
+        let (_, archetype) = world.fetch_archetype(root, &[a().info(), b().info(), d().info()]);
         assert!(archetype.has(d().id()));
         assert!(!archetype.has(c().id()));
     }
@@ -382,7 +394,7 @@ mod tests {
         let mut world = World::new();
         let id = world.spawn();
 
-        world.insert(id, a(), 65);
+        world.set(id, a(), 65);
         let shared = Arc::new("Foo".to_string());
 
         assert_eq!(world.get(id, a()).as_deref(), Some(&65));
@@ -390,9 +402,9 @@ mod tests {
         assert_eq!(world.has(id, c()), false);
 
         let id2 = world.spawn();
-        world.insert(id2, a(), 7);
+        world.set(id2, a(), 7);
 
-        world.insert(id2, c(), "Foo".to_string());
+        world.set(id2, c(), "Foo".to_string());
 
         eprintln!("a: {}, b: {}, c: {}, id: {}", a(), a(), c(), id);
 
@@ -401,7 +413,7 @@ mod tests {
         assert_eq!(world.has(id, c()), false);
         assert_eq!(world.get(id2, a()).as_deref(), Some(&7));
         assert_eq!(world.get(id2, c()).as_deref(), Some(&"Foo".to_string()));
-        world.insert(id, e(), shared.clone());
+        world.set(id, e(), shared.clone());
         assert_eq!(
             world.get(id, e()).as_deref().map(|v| &**v),
             Some(&"Foo".to_string())
@@ -418,9 +430,9 @@ mod tests {
         let id1 = world.spawn();
         let id2 = world.spawn();
 
-        world.insert(id1, a(), 40);
+        world.set(id1, a(), 40);
 
-        world.insert(id2, b(), 4.3);
+        world.set(id2, b(), 4.3);
 
         // Borrow a
         let id_a = world.get(id1, a()).unwrap();
@@ -448,7 +460,7 @@ mod tests {
 
         let shared = Arc::new("The meaning of life is ...".to_string());
 
-        world.insert(id, e(), shared.clone());
+        world.set(id, e(), shared.clone());
         let id2 = EntityBuilder::new()
             .set(a(), 6)
             .set(b(), 0.219)

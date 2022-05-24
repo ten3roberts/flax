@@ -7,11 +7,7 @@ use std::{
     },
 };
 
-use crate::{
-    archetype::ComponentInfo,
-    entity::{EntityIndex, EntityKind},
-    Entity, Mutable,
-};
+use crate::{archetype::ComponentInfo, entity::EntityIndex, Entity, Mutable, STATIC_NAMESPACE};
 
 pub trait ComponentValue: Send + Sync + 'static {}
 pub type ComponentId = Entity;
@@ -71,11 +67,7 @@ impl<T: ComponentValue> Component<T> {
             if v != 0 {
                 None
             } else {
-                Some(
-                    ComponentId::acquire_static_id(EntityKind::empty())
-                        .index()
-                        .get(),
-                )
+                Some(ComponentId::acquire_static_id().index().get())
             }
         }) {
             Ok(_) => id.load(Acquire),
@@ -83,11 +75,7 @@ impl<T: ComponentValue> Component<T> {
         };
 
         Self::new(
-            Entity::from_parts(
-                EntityIndex::new(index).unwrap(),
-                0,
-                EntityKind::COMPONENT | EntityKind::STATIC,
-            ),
+            Entity::from_parts(EntityIndex::new(index).unwrap(), 0, STATIC_NAMESPACE),
             name,
         )
     }

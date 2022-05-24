@@ -14,9 +14,9 @@ fn creation() {
     let mut world = World::new();
 
     let id = world.spawn();
-    world.insert(id, a(), 5);
+    world.set(id, a(), 5);
 
-    world.insert(id, zst(), ());
+    world.set(id, zst(), ());
 
     assert!(world.is_alive(id));
     world.despawn(id);
@@ -36,11 +36,11 @@ fn query() {
     let id2 = world.spawn();
     let id3 = world.spawn();
 
-    world.insert(id1, a(), 4);
-    world.insert(id1, a(), 4);
-    world.insert(id2, a(), 9);
-    world.insert(id3, a(), 8);
-    world.insert(id3, b(), "foo".to_string());
+    world.set(id1, a(), 4);
+    world.set(id1, a(), 4);
+    world.set(id2, a(), 9);
+    world.set(id3, a(), 8);
+    world.set(id3, b(), "foo".to_string());
 
     let mut query = Query::new(a());
     let items = query

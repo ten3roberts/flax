@@ -1,7 +1,7 @@
-use crate::archetype::ArchetypeId;
-use std::{cmp::Ordering, collections::BTreeMap, mem::ManuallyDrop, num::NonZeroU32};
+use crate::{archetype::ArchetypeId, EntityNamespace, Generation};
+use std::{iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
 
-use super::{Entity, EntityIndex, EntityKind};
+use super::{Entity, EntityIndex};
 
 #[derive(Clone, Copy, Debug)]
 struct Vacant {
@@ -15,43 +15,77 @@ union SlotValue<T> {
 
 struct Slot<T> {
     val: SlotValue<T>,
-    // != 0
-    gen: u16,
+    // even = dead, odd = alive
+    gen: u32,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+impl<T> Slot<T> {
+    pub fn is_alive(&self) -> bool {
+        self.gen & 1 == 1
+    }
+
+    pub fn get(&self) -> Option<&T> {
+        if self.is_alive() {
+            Some(unsafe { &self.val.occupied })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_mut(&mut self) -> Option<&mut T> {
+        if self.is_alive() {
+            Some(unsafe { &mut self.val.occupied })
+        } else {
+            None
+        }
+    }
+}
+
+pub fn to_slot_gen(gen: Generation) -> u32 {
+    ((gen as u32) << 1) | 1
+}
+
+pub fn from_slot_gen(gen: u32) -> u16 {
+    (gen >> 1) as u16
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EntityLocation {
     pub(crate) archetype: ArchetypeId,
     pub(crate) slot: usize,
 }
 
-pub struct EntityStore {
-    slots: Vec<Slot<EntityLocation>>,
+pub struct EntityStore<V = EntityLocation> {
+    slots: Vec<Slot<V>>,
     free_head: Option<NonZeroU32>,
+    namespace: EntityNamespace,
 }
 
-impl EntityStore {
-    pub fn new() -> Self {
-        Self::with_capacity(0)
+impl<V> EntityStore<V> {
+    pub fn new(namespace: EntityNamespace) -> Self {
+        Self::with_capacity(namespace, 0)
     }
-    pub fn with_capacity(cap: usize) -> Self {
+
+    pub fn with_capacity(namespace: EntityNamespace, cap: usize) -> Self {
         Self {
             slots: Vec::with_capacity(cap),
             free_head: None,
+            namespace,
         }
     }
 
-    pub fn spawn(&mut self, value: EntityLocation) -> Entity {
+    pub fn spawn(&mut self, value: V) -> Entity {
         if let Some(index) = self.free_head.take() {
-            let free = &self.slot(index).unwrap();
-            let gen = free.gen;
+            let free = self.slot_mut(index).unwrap();
+            free.gen = free.gen | 1;
+            let gen = from_slot_gen(free.gen);
 
             // Update free head
             unsafe {
                 self.free_head = free.val.vacant.next;
             }
 
-            Entity::from_parts(index, gen, EntityKind::empty())
+            Entity::from_parts(index, gen, self.namespace)
         } else {
             // Push
             let gen = 1;
@@ -60,55 +94,71 @@ impl EntityStore {
                 val: SlotValue {
                     occupied: ManuallyDrop::new(value),
                 },
-                gen,
+                gen: to_slot_gen(gen),
             });
 
             Entity::from_parts(
                 NonZeroU32::new(index + 1).unwrap(),
-                gen,
-                EntityKind::empty(),
+                gen as u16,
+                self.namespace,
             )
         }
     }
 
     #[inline]
-    fn slot(&self, index: EntityIndex) -> Option<&Slot<EntityLocation>> {
+    fn slot(&self, index: EntityIndex) -> Option<&Slot<V>> {
         self.slots.get(index.get() as usize - 1)
     }
 
     #[inline]
-    fn slot_mut(&mut self, index: EntityIndex) -> Option<&mut Slot<EntityLocation>> {
+    fn slot_mut(&mut self, index: EntityIndex) -> Option<&mut Slot<V>> {
         self.slots.get_mut(index.get() as usize - 1)
     }
 
-    pub fn get_mut(&mut self, id: Entity) -> Option<&mut EntityLocation> {
-        let (index, gen, _) = id.into_parts();
-        let slot = self.slot_mut(index)?;
-        if slot.gen == gen {
-            Some(unsafe { &mut slot.val.occupied })
-        } else {
-            None
+    #[inline]
+    pub fn get_disjoint(&mut self, a: Entity, b: Entity) -> Option<(&mut V, &mut V)> {
+        if a == b {
+            return None;
+        }
+
+        unsafe {
+            let a = &mut *((self.get(a)?) as *const V as *mut V);
+            let b = &mut *((self.get(b)?) as *const V as *mut V);
+            Some((a, b))
         }
     }
 
-    pub fn get(&self, id: Entity) -> Option<&EntityLocation> {
-        let (index, gen, _) = id.into_parts();
-        let slot = self.slot(index)?;
-        if slot.gen == gen {
-            Some(unsafe { &slot.val.occupied })
-        } else {
-            None
-        }
+    #[inline]
+    pub fn get_mut(&mut self, id: Entity) -> Option<&mut V> {
+        let ns = self.namespace;
+        Some(unsafe {
+            &mut self
+                .slot_mut(id.index())
+                .filter(|v| ns == id.namespace() && v.gen == to_slot_gen(id.generation()))?
+                .val
+                .occupied
+        })
     }
 
+    #[inline]
+    pub fn get(&self, id: Entity) -> Option<&V> {
+        let ns = self.namespace;
+        Some(unsafe {
+            &self
+                .slot(id.index())
+                .filter(|v| ns == id.namespace() && v.gen == to_slot_gen(id.generation()))?
+                .val
+                .occupied
+        })
+    }
+
+    #[inline]
     pub fn is_alive(&self, id: Entity) -> bool {
-        let (index, gen, _) = id.into_parts();
-        eprintln!("{index}");
-        if let Some(slot) = self.slot(index) {
-            slot.gen == gen
-        } else {
-            false
-        }
+        dbg!(id.generation(), self.slot(id.index()).unwrap().gen);
+        let ns = self.namespace;
+        self.slot(id.index())
+            .filter(|v| ns == id.namespace() && v.gen == to_slot_gen(id.generation()))
+            .is_some()
     }
 
     pub fn despawn(&mut self, id: Entity) {
@@ -122,62 +172,65 @@ impl EntityStore {
         let slot = self.slot_mut(index).unwrap();
 
         eprintln!("id: {id}");
-        assert_eq!(slot.gen, gen);
         slot.gen = slot.gen.wrapping_add(1);
 
         unsafe {
-            ManuallyDrop::<EntityLocation>::drop(&mut slot.val.occupied);
+            ManuallyDrop::<V>::drop(&mut slot.val.occupied);
         }
 
         slot.val.vacant = Vacant { next };
 
         self.free_head = Some(index);
     }
+
+    pub fn iter(&self) -> EntityStoreIter<V> {
+        EntityStoreIter {
+            iter: self.slots.iter().enumerate(),
+            namespace: self.namespace,
+        }
+    }
 }
 
 impl Default for EntityStore {
     fn default() -> Self {
-        Self::new()
+        Self::new(1)
     }
 }
 
-// /// A map implementation for associating extra local data to an
-// /// entity.
-// pub struct EntityMap<V> {
-//     inner: Inner<V>,
-// }
+impl<V> Drop for EntityStore<V> {
+    fn drop(&mut self) {
+        for slot in &mut self.slots {
+            if slot.gen & 1 == 1 {
+                unsafe {
+                    ManuallyDrop::<V>::drop(&mut slot.val.occupied);
+                }
+            }
+        }
+    }
+}
 
-// enum Inner<V> {
-//     Linear(Vec<(Entity, V)>),
-//     Tree(BTreeMap<Entity, V>),
-// }
+pub struct EntityStoreIter<'a, V> {
+    iter: Enumerate<slice::Iter<'a, Slot<V>>>,
+    namespace: EntityNamespace,
+}
 
-// impl<V> Inner<V> {
-//     pub fn new() -> Self {
-//         Self::Linear(Vec::new())
-//     }
+impl<'a, V> Iterator for EntityStoreIter<'a, V> {
+    type Item = (Entity, &'a V);
 
-//     pub fn insert(&mut self, entity: Entity, value: V) {
-//         match self {
-//             Inner::Linear(data) => {
-//                 let mut l = 0;
-//                 let mut r = data.len();
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some((index, slot)) = self.iter.next() {
+            if slot.gen & 1 == 1 {
+                let val = unsafe { &slot.val.occupied };
+                let id = Entity::from_parts(
+                    NonZeroU32::new(index as u32 + 1).unwrap(),
+                    (slot.gen >> 1) as u16,
+                    self.namespace,
+                );
 
-//                 loop {
-//                     let i = (r - l) / 2;
-//                     let (mid, v) = &mut data[i];
-//                     match entity.cmp(mid) {
-//                         Ordering::Less => r = i,
-//                         Ordering::Equal => {
-//                             // Replace
-//                             *v = value;
-//                             return;
-//                         }
-//                         Ordering::Greater => l = i + 1,
-//                     }
-//                 }
-//             }
-//             Inner::Tree(_) => todo!(),
-//         }
-//     }
-// }
+                return Some((id, val));
+            }
+        }
+
+        None
+    }
+}

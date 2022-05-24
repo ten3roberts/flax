@@ -9,7 +9,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
 use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 
-pub type ArchetypeId = u32;
+pub type ArchetypeId = Entity;
 pub type Slot = usize;
 
 #[derive(Debug)]
@@ -483,7 +483,7 @@ impl ComponentInfo {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{component, entity::EntityKind, ComponentBuffer};
+    use crate::{component, ComponentBuffer};
 
     use super::*;
     use std::num::NonZeroU32;
@@ -509,8 +509,8 @@ mod tests {
         buffer.insert(b(), "Foo".to_string());
         buffer.insert(c(), shared.clone());
 
-        let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2, EntityKind::empty());
-        let id_2 = Entity::from_parts(NonZeroU32::new(5).unwrap(), 2, EntityKind::empty());
+        let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2, 0);
+        let id_2 = Entity::from_parts(NonZeroU32::new(5).unwrap(), 2, 0);
 
         let slot = arch.insert(id, &mut buffer);
         eprintln!("Slot: {slot}");

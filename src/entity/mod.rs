@@ -3,7 +3,6 @@ mod store;
 
 use core::fmt;
 use core::num::NonZeroU64;
-use std::fmt::Display;
 use std::num::NonZeroU32;
 use std::sync::atomic::AtomicU32;
 
@@ -18,8 +17,8 @@ pub use store::*;
 ///
 /// # Structure
 
-/// | 16         | 4    | 28    |
-/// | Generation | Kind | Index |
+/// | 16         | 24    | 8         |
+/// | Generation | Index | Namespace |
 ///
 /// The Index is always NonZero.
 ///
@@ -27,69 +26,52 @@ pub use store::*;
 /// entities to coexist as the flags are kept.
 pub struct Entity(NonZeroU64);
 
-const INDEX_MASK: u64 = /*     */ 0x000000000FFFFFFF;
+const INDEX_MASK: u64 = /*     */ 0x00000000FFFFFF00;
 const GENERATION_MASK: u64 = /**/ 0x0000FFFF00000000;
-const KIND_MASK: u64 = /*     */ 0x00000000F0000000;
-
-bitflags::bitflags! {
-    /// Flags for an entity.
-    /// Can not exceed 4 bits
-    pub struct EntityKind: u8 {
-        const STATIC = 1;
-        const COMPONENT = 2;
-    }
-}
-
-impl Display for EntityKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !self.is_empty() {
-            write!(f, "{self:?}")
-        } else {
-            Ok(())
-        }
-    }
-}
+const NAMESPACE_MASK: u64 = /* */ 0x00000000000000FF;
 
 static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
 pub type Generation = u16;
 pub type EntityIndex = NonZeroU32;
+pub type EntityNamespace = u8;
+
+pub const STATIC_NAMESPACE: EntityNamespace = 0;
 
 impl Entity {
     /// Generate a new static id
-    pub fn acquire_static_id(kind: EntityKind) -> Entity {
+    pub fn acquire_static_id() -> Entity {
         let index = STATIC_IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Entity::from_parts(NonZeroU32::new(index).unwrap(), 0, kind)
+        Entity::from_parts(NonZeroU32::new(index).unwrap(), 0, STATIC_NAMESPACE)
     }
 
     pub fn index(self) -> EntityIndex {
         // Can only be constructed from parts
-        NonZeroU32::new((self.0.get() & INDEX_MASK) as u32).unwrap()
+        NonZeroU32::new(((self.0.get() & INDEX_MASK) >> 8) as u32).unwrap()
     }
 
     pub fn generation(self) -> Generation {
         ((self.0.get() & GENERATION_MASK) >> 32) as Generation
     }
 
-    pub fn flags(self) -> EntityKind {
-        EntityKind::from_bits_truncate(((self.0.get() & KIND_MASK) >> 28) as u8)
+    pub fn namespace(self) -> EntityNamespace {
+        self.0.get() as u8
     }
 
-    pub fn into_parts(self) -> (EntityIndex, Generation, EntityKind) {
+    pub fn into_parts(self) -> (EntityIndex, Generation, EntityNamespace) {
         let bits = self.0.get();
 
         (
-            NonZeroU32::new((bits & INDEX_MASK) as u32).unwrap(),
+            NonZeroU32::new(((bits & INDEX_MASK) >> 8) as u32).unwrap(),
             ((bits & GENERATION_MASK) >> 32) as Generation,
-            EntityKind::from_bits_truncate(((bits & KIND_MASK) >> 28) as u8),
+            bits as u8,
         )
     }
 
-    pub fn from_parts(index: EntityIndex, gen: Generation, kind: EntityKind) -> Self {
+    pub fn from_parts(index: EntityIndex, gen: Generation, namespace: EntityNamespace) -> Self {
         assert!(index.get() < (u32::MAX >> 1));
-        let bits = ((index.get() as u64) & INDEX_MASK)
-            | ((gen as u64) << 32)
-            | ((kind.bits() as u64) << 28);
+        let bits =
+            (((index.get() as u64) << 8) & INDEX_MASK) | ((gen as u64) << 32) | (namespace as u64);
 
         Self(NonZeroU64::new(bits).unwrap())
     }
@@ -116,12 +98,8 @@ impl fmt::Debug for Entity {
 
 impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, generation, flags) = self.into_parts();
-        if self.flags().is_empty() {
-            write!(f, "{index}:{generation}")
-        } else {
-            write!(f, "{flags}:{index}:{generation}")
-        }
+        let (index, generation, namespace) = self.into_parts();
+        write!(f, "{namespace}:{index}:{generation}")
     }
 }
 
@@ -129,27 +107,17 @@ impl fmt::Display for Entity {
 mod tests {
     use std::num::NonZeroU32;
 
-    use crate::{
-        entity::{EntityKind, EntityLocation},
-        Entity,
-    };
+    use crate::{archetype::Archetype, entity::EntityLocation, Entity};
 
     use super::EntityStore;
     #[test]
     fn entity_store() {
-        let mut entities = EntityStore::new();
-        let a = entities.spawn(EntityLocation {
-            archetype: 0,
-            slot: 4,
-        });
-        let b = entities.spawn(EntityLocation {
-            archetype: 3,
-            slot: 2,
-        });
-        let c = entities.spawn(EntityLocation {
-            archetype: 5,
-            slot: 3,
-        });
+        let mut entities = EntityStore::new(1);
+        let archetype = EntityStore::new(2).spawn(Archetype::empty());
+
+        let a = entities.spawn(EntityLocation { archetype, slot: 4 });
+        let b = entities.spawn(EntityLocation { archetype, slot: 2 });
+        let c = entities.spawn(EntityLocation { archetype, slot: 3 });
 
         entities.despawn(b);
 
@@ -159,19 +127,16 @@ mod tests {
         assert!(entities.is_alive(c));
         assert_eq!(
             entities.get(c),
-            Some(&EntityLocation {
-                archetype: 5,
-                slot: 3
-            })
+            Some(&EntityLocation { archetype, slot: 3 })
         );
         assert_eq!(entities.get(b), None);
     }
 
     #[test]
     fn entity_id() {
-        let parts = (NonZeroU32::new(0xFFF).unwrap(), 30, EntityKind::COMPONENT);
+        let parts = (NonZeroU32::new(23298).unwrap(), 30, 1);
 
-        let a = Entity::from_parts(parts.0, parts.1, EntityKind::COMPONENT);
+        let a = Entity::from_parts(parts.0, parts.1, parts.2);
 
         eprintln!("a: {:b}", a.0.get());
 

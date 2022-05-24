@@ -1,4 +1,5 @@
 use flax::*;
+
 fn main() {
     // Declare static components
     component! {

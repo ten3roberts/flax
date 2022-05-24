@@ -1,5 +1,5 @@
 {
   "check": {
-    "cmd": "cargo check --tests"
+    "cmd": "cargo check --tests --examples"
   }
 }
