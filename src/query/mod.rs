@@ -20,7 +20,9 @@ use crate::{
 /// borrow an archetype's component mutably at the same time.
 pub struct Query<Q> {
     // The archetypes to visit
-    archetypes: Option<Vec<ArchetypeId>>,
+    archetypes: Vec<ArchetypeId>,
+    change_tick: u32,
+    archetype_gen: u32,
     fetch: Q,
 }
 
@@ -34,8 +36,10 @@ where
     /// any other type which implements [crate::Fetch].
     pub fn new(query: Q) -> Self {
         Self {
-            archetypes: None,
+            archetypes: Vec::new(),
             fetch: query,
+            change_tick: 0,
+            archetype_gen: 0,
         }
     }
 
@@ -73,15 +77,19 @@ where
 
     fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q) {
         let fetch = &self.fetch;
-        (
-            self.archetypes.get_or_insert_with(|| {
-                world
-                    .archetypes()
-                    .filter_map(|(id, arch)| if fetch.matches(arch) { Some(id) } else { None })
-                    .collect()
-            }),
-            fetch,
-        )
+        if world.archetype_gen() > self.archetype_gen {
+            self.archetypes.clear();
+            self.archetypes
+                .extend(world.archetypes().filter_map(|(id, arch)| {
+                    if fetch.matches(arch) {
+                        Some(id)
+                    } else {
+                        None
+                    }
+                }))
+        }
+
+        (&self.archetypes, fetch)
     }
 }
 

@@ -1,4 +1,7 @@
-use std::mem;
+use std::{
+    mem,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
@@ -13,8 +16,8 @@ pub struct World {
     entities: EntityStore,
     archetypes: EntityStore<Archetype>,
     archetype_root: ArchetypeId,
-    change_tick: u64,
-    archetype_gen: u64,
+    change_tick: AtomicU32,
+    archetype_gen: AtomicU32,
 }
 
 impl World {
@@ -25,8 +28,8 @@ impl World {
         Self {
             entities: EntityStore::new(1),
             archetypes,
-            change_tick: 0,
-            archetype_gen: 0,
+            change_tick: AtomicU32::default(),
+            archetype_gen: AtomicU32::default(),
             archetype_root: root,
         }
     }
@@ -65,6 +68,8 @@ impl World {
                 Some(id) => id,
                 None => {
                     let new = Archetype::new(cur.components().copied().chain([*head]));
+                    // Increase gen
+                    self.archetype_gen.fetch_add(1, Ordering::Relaxed);
                     let id = self.archetypes.spawn(new);
 
                     let (cur, new) = self.archetypes.get_disjoint(cursor, id).unwrap();
@@ -343,6 +348,21 @@ impl World {
 
     pub(crate) fn location(&self, entity: Entity) -> Option<&EntityLocation> {
         self.entities.get(entity)
+    }
+
+    /// Get a reference to the world's archetype generation
+    #[must_use]
+    pub fn archetype_gen(&self) -> u32 {
+        self.archetype_gen.load(Ordering::Relaxed)
+    }
+
+    #[must_use]
+    pub fn change_tick(&self) -> u32 {
+        self.change_tick.load(Ordering::Relaxed)
+    }
+
+    pub fn inscrease_change_tick(&self) {
+        self.change_tick.fetch_add(1, Ordering::Relaxed);
     }
 }
 

@@ -30,7 +30,9 @@ fn query() {
         b: String,
     }
 
+    let mut query = Query::new(a());
     let mut world = World::new();
+    query.iter(&world).for_each(|_| {});
 
     let id1 = world.spawn();
     let id2 = world.spawn();
@@ -42,7 +44,6 @@ fn query() {
     world.set(id3, a(), 8);
     world.set(id3, b(), "foo".to_string());
 
-    let mut query = Query::new(a());
     let items = query
         .iter(&world)
         .inspect(|&&v| println!("{v}"))

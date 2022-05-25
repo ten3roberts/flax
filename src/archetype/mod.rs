@@ -12,6 +12,9 @@ use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 pub type ArchetypeId = Entity;
 pub type Slot = usize;
 
+mod slice;
+pub use slice::*;
+
 #[derive(Debug)]
 pub struct Archetype {
     storage: BTreeMap<Entity, Storage>,
@@ -49,6 +52,7 @@ impl Archetype {
                     Storage {
                         data: AtomicRefCell::new(NonNull::dangling()),
                         component,
+                        changes: Vec::new(),
                     },
                 )
             })
@@ -441,10 +445,13 @@ impl<'a, T> StorageBorrowMut<'a, T> {
 /// Holds components for a single type
 pub(crate) struct Storage {
     data: AtomicRefCell<NonNull<u8>>,
+    changes: Vec<(EntitySlice, u64)>,
     component: ComponentInfo,
 }
 
 impl Storage {
+    pub fn register_change(&mut self, slice: EntitySlice, change_tick: u64) {}
+
     /// # Panics
     /// If the entity does not exist in the storage
     pub(crate) unsafe fn at(&mut self, slot: Slot) -> *mut u8 {
