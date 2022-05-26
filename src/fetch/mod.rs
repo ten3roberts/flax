@@ -36,7 +36,7 @@ pub struct PreparedComponent<'a, T> {
 /// Marker type for fetches which can be safely aliased and coexist.
 pub unsafe trait ImmutableFetch: for<'x> Fetch<'x> {}
 
-unsafe impl<'a, T> PreparedFetch<'a> for PreparedComponent<'a, T> {
+unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponent<'a, T> {
     type Item = &'a T;
 
     unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
@@ -67,7 +67,7 @@ where
 
 pub struct Mutable<T>(pub(crate) Component<T>);
 
-unsafe impl<'a, T> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
+unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
     type Item = &'a mut T;
 
     unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {

@@ -14,8 +14,8 @@ fn main() {
 
     // Spawn an entity
     let p = EntityBuilder::new()
-        .set(health(), 50.0)
         .tag(player())
+        .set(health(), 50.0)
         .set(pos(), (0.0, 0.0))
         .set(regen(), 1.0)
         .set_default(items())

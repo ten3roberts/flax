@@ -1,6 +1,6 @@
 use super::Slot;
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Clone, PartialEq, Copy)]
 pub struct EntitySlice {
     start: Slot,
     end: Slot,
@@ -8,23 +8,23 @@ pub struct EntitySlice {
 
 impl EntitySlice {
     /// Creates a new slice of entity slots.
-    fn new(start: Slot, end: Slot) -> Self {
+    pub fn new(start: Slot, end: Slot) -> Self {
         Self { start, end }
     }
 
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         Self { start: 0, end: 0 }
     }
 
-    fn len(&self) -> Slot {
-        self.end - self.start
+    pub fn len(&self) -> Slot {
+        (1 + self.end) - self.start
     }
 
-    fn is_empty(&self) -> bool {
-        self.end <= self.start
+    pub fn is_empty(&self) -> bool {
+        self.end < self.start
     }
 
-    fn intersect(&self, other: &Self) -> Self {
+    pub fn intersect(&self, other: &Self) -> Self {
         let start = self.start.max(other.start);
         let end = self.end.min(other.end);
 
@@ -32,11 +32,11 @@ impl EntitySlice {
     }
 
     /// Returns the union of two slices if contiguous.
-    fn union(&self, other: &Self) -> Option<Self> {
+    pub fn union(&self, other: &Self) -> Option<Self> {
         let start = self.start.min(other.start);
         let end = self.end.max(other.end);
 
-        if self.end >= other.start && self.start <= other.end {
+        if self.end + 1 >= other.start && self.start <= other.end + 1 {
             Some(Self::new(start, end))
         } else {
             None
@@ -47,7 +47,7 @@ impl EntitySlice {
     ///
     /// Returns `None` if `other` is contained within `self` and cannot be
     /// subtracted without splitting.
-    fn difference(&self, other: &Self) -> Option<Self> {
+    pub fn difference(&self, other: &Self) -> Option<Self> {
         // Subtract start
         if other.start <= self.start {
             Some(EntitySlice::new((other.end + 1).max(self.start), self.end))
@@ -60,6 +60,12 @@ impl EntitySlice {
             None
         }
         // Self::new((other.end + 1).min(self.start), (other.start).max(self.end))
+    }
+}
+
+impl std::fmt::Debug for EntitySlice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}..={})", self.start, self.end)
     }
 }
 
@@ -100,7 +106,7 @@ mod tests {
 
         let u = a.union(&b);
 
-        assert_eq!(u, None);
+        assert_eq!(u, Some(EntitySlice::new(0, 382)));
     }
 
     #[test]

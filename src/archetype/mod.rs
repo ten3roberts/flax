@@ -1,6 +1,7 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
     collections::BTreeMap,
+    marker::PhantomData,
     ops::Range,
     ptr::NonNull,
 };
@@ -12,8 +13,11 @@ use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 pub type ArchetypeId = Entity;
 pub type Slot = usize;
 
+mod changes;
 mod slice;
 pub use slice::*;
+
+use self::changes::Changes;
 
 #[derive(Debug)]
 pub struct Archetype {
@@ -52,7 +56,7 @@ impl Archetype {
                     Storage {
                         data: AtomicRefCell::new(NonNull::dangling()),
                         component,
-                        changes: Vec::new(),
+                        changes: AtomicRefCell::new(Changes::new()),
                     },
                 )
             })
@@ -131,7 +135,7 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRefMut<T>> {
-        let storage = unsafe { self.storage_raw(component.id())? };
+        let storage = self.storage.get(&component.id())?;
 
         if slot < self.len {
             Some(AtomicRefMut::map(storage.data.borrow_mut(), |v| unsafe {
@@ -148,7 +152,7 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRef<T>> {
-        let storage = unsafe { self.storage_raw(component.id())? };
+        let storage = self.storage.get(&component.id())?;
 
         if slot < self.len {
             Some(AtomicRef::map(storage.data.borrow(), |v| unsafe {
@@ -157,14 +161,6 @@ impl Archetype {
         } else {
             None
         }
-    }
-
-    pub(crate) unsafe fn storage_raw_mut(&mut self, id: ComponentId) -> Option<&mut Storage> {
-        self.storage.get_mut(&id)
-    }
-
-    pub(crate) unsafe fn storage_raw(&self, id: ComponentId) -> Option<&Storage> {
-        self.storage.get(&id)
     }
 
     /// Insert a new entity into the archetype.
@@ -176,7 +172,7 @@ impl Archetype {
         let slot = unsafe { self.allocate(id) };
         unsafe {
             for (component, src) in components.take_all() {
-                let storage = self.storage_raw_mut(component.id).unwrap();
+                let storage = self.storage.get_mut(&component.id).unwrap();
                 std::ptr::copy_nonoverlapping(
                     src,
                     storage.data.get_mut().as_ptr().add(component.size() * slot),
@@ -203,7 +199,7 @@ impl Archetype {
         slot
     }
 
-    /// Put a typeerased component info a slot.
+    /// Put a type erased component info a slot.
     /// `src` shall be considered moved.
     /// `component` must match the type of data.
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
@@ -306,7 +302,11 @@ impl Archetype {
         }
 
         unsafe {
-            for storage in self.storage.values_mut().filter(|v| v.component.size() > 0) {
+            for storage in self.storage.values_mut() {
+                if storage.component.size() == 0 {
+                    continue;
+                }
+
                 let new_layout = Layout::from_size_align(
                     storage.component.size() * new_cap,
                     storage.component.layout.align(),
@@ -314,17 +314,17 @@ impl Archetype {
                 .unwrap();
                 let new_data = alloc(new_layout);
 
-                let data = storage.data.get_mut();
+                let data = storage.data.get_mut().as_ptr();
                 if old_cap > 0 {
                     // Copy over the previous contiguous data
                     std::ptr::copy_nonoverlapping(
-                        data.as_ptr(),
+                        data,
                         new_data,
                         storage.component.size() * self.len,
                     );
 
                     dealloc(
-                        data.as_ptr(),
+                        data,
                         Layout::from_size_align(
                             storage.component.size() * old_cap,
                             storage.component.layout.align(),
@@ -353,11 +353,7 @@ impl Archetype {
         for storage in self.storage.values_mut() {
             for slot in 0..self.len {
                 unsafe {
-                    let value = storage
-                        .data
-                        .get_mut()
-                        .as_ptr()
-                        .add(slot * storage.component.size());
+                    let value = storage.at_mut(slot);
                     (storage.component.drop)(value);
                 }
             }
@@ -445,13 +441,11 @@ impl<'a, T> StorageBorrowMut<'a, T> {
 /// Holds components for a single type
 pub(crate) struct Storage {
     data: AtomicRefCell<NonNull<u8>>,
-    changes: Vec<(EntitySlice, u64)>,
+    changes: AtomicRefCell<Changes>,
     component: ComponentInfo,
 }
 
 impl Storage {
-    pub fn register_change(&mut self, slice: EntitySlice, change_tick: u64) {}
-
     /// # Panics
     /// If the entity does not exist in the storage
     pub(crate) unsafe fn at(&mut self, slot: Slot) -> *mut u8 {
@@ -483,6 +477,34 @@ impl ComponentInfo {
 
     fn size(&self) -> usize {
         self.layout.size()
+    }
+}
+
+impl Storage {
+    /// # Safety
+    /// Assumes the type `T` is compatible with the stored type.
+    /// `len` is the length of the allocated slice in T
+    unsafe fn as_slice_mut<T>(&mut self, len: usize) -> &mut [T] {
+        std::slice::from_raw_parts_mut(self.data.get_mut().as_ptr().cast(), len)
+    }
+
+    /// # Safety
+    /// Assumes the type `T` is compatible with the stored type.
+    /// `len` is the length of the allocated slice in T
+    unsafe fn as_slice<T>(&mut self, len: usize) -> &mut [T] {
+        std::slice::from_raw_parts_mut(self.data.get_mut().as_ptr().cast(), len)
+    }
+
+    /// Returns the `index`th element of type represented by info.
+    unsafe fn elem_raw(&mut self, index: usize, info: &ComponentInfo) -> *mut u8 {
+        self.data.get_mut().as_ptr().add(index * info.size())
+    }
+
+    unsafe fn at_mut(&mut self, slot: Slot) -> *mut u8 {
+        self.data
+            .get_mut()
+            .as_ptr()
+            .add(self.component.size() * slot)
     }
 }
 
@@ -547,33 +569,3 @@ mod tests {
         assert_eq!(Arc::strong_count(&shared), 1);
     }
 }
-
-impl Storage {
-    /// # Safety
-    /// Assumes the type `T` is compatible with the stored type.
-    /// `len` is the length of the allocated slice in T
-    unsafe fn as_slice_mut<T>(&mut self, len: usize) -> &mut [T] {
-        std::slice::from_raw_parts_mut(self.data.get_mut().as_ptr().cast(), len)
-    }
-
-    /// # Safety
-    /// Assumes the type `T` is compatible with the stored type.
-    /// `len` is the length of the allocated slice in T
-    unsafe fn as_slice<T>(&mut self, len: usize) -> &mut [T] {
-        std::slice::from_raw_parts_mut(self.data.get_mut().as_ptr().cast(), len)
-    }
-
-    /// Returns the `index`th element of type represented by info.
-    unsafe fn elem_raw(&mut self, index: usize, info: &ComponentInfo) -> *mut u8 {
-        self.data.get_mut().as_ptr().add(index * info.size())
-    }
-
-    unsafe fn at_mut(&mut self, slot: Slot) -> *mut u8 {
-        self.data
-            .get_mut()
-            .as_ptr()
-            .add(self.component.size() * slot)
-    }
-}
-
-const HIGH_BIT: u32 = !(u32::MAX >> 1);

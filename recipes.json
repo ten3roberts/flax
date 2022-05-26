@@ -1,5 +1,8 @@
 {
   "check": {
     "cmd": "cargo check --tests --examples"
+  },
+  "build": {
+    "cmd": "cargo build --examples"
   }
 }
