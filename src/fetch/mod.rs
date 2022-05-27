@@ -1,15 +1,26 @@
 mod ext;
+mod filter;
 
 use crate::{
-    archetype::{Archetype, Slot, StorageBorrow, StorageBorrowMut},
+    archetype::{Archetype, EntitySlice, Slot, StorageBorrow, StorageBorrowMut},
     Component, ComponentValue,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrepareInfo {
+    /// The current change tick of the world
+    pub old_tick: u32,
+    pub new_tick: u32,
+    pub slots: EntitySlice,
+}
+
 /// Describes a type which can fetch itself from an archetype
 pub trait Fetch<'a> {
+    const MUTABLE: bool;
+
     type Item;
     type Prepared: PreparedFetch<'a, Item = Self::Item>;
-    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared>;
+    fn prepare(&self, archetype: &'a Archetype, info: &PrepareInfo) -> Option<Self::Prepared>;
     fn matches(&self, archetype: &'a Archetype) -> bool;
 }
 
@@ -33,9 +44,6 @@ pub struct PreparedComponent<'a, T> {
     borrow: StorageBorrow<'a, T>,
 }
 
-/// Marker type for fetches which can be safely aliased and coexist.
-pub unsafe trait ImmutableFetch: for<'x> Fetch<'x> {}
-
 unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponent<'a, T> {
     type Item = &'a T;
 
@@ -45,17 +53,17 @@ unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponent<'a, T> {
     }
 }
 
-unsafe impl<'a, T: ComponentValue> ImmutableFetch for Component<T> {}
-
 impl<'a, T> Fetch<'a> for Component<T>
 where
     T: ComponentValue,
 {
+    const MUTABLE: bool = false;
+
     type Item = &'a T;
 
     type Prepared = PreparedComponent<'a, T>;
 
-    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+    fn prepare(&self, archetype: &'a Archetype, info: &PrepareInfo) -> Option<Self::Prepared> {
         let borrow = archetype.storage(*self)?;
         Some(PreparedComponent { borrow })
     }
@@ -79,11 +87,18 @@ impl<'a, T> Fetch<'a> for Mutable<T>
 where
     T: ComponentValue,
 {
+    const MUTABLE: bool = true;
+
     type Item = &'a mut T;
 
     type Prepared = PreparedComponentMut<'a, T>;
 
-    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+    fn prepare(&self, archetype: &'a Archetype, info: &PrepareInfo) -> Option<Self::Prepared> {
+        // Marked the prepared range as mutated
+        archetype
+            .changes_mut(self.0.id())?
+            .set(info.slots, info.new_tick);
+
         let borrow = archetype.storage_mut(self.0)?;
         Some(PreparedComponentMut { borrow })
     }
@@ -98,12 +113,13 @@ macro_rules! tuple_impl {
         impl<'a, $($ty, )*> Fetch<'a> for ($($ty,)*)
             where $($ty: Fetch<'a>,)*
         {
+            const MUTABLE: bool = $(<$ty as Fetch<'a>>::MUTABLE )|*;
             type Item = ($(<$ty as Fetch<'a>>::Item,)*);
             type Prepared = ($(<$ty as Fetch<'a>>::Prepared,)*);
 
-            fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+            fn prepare(&self, archetype: &'a Archetype, info: &PrepareInfo) -> Option<Self::Prepared> {
                 Some(($(
-                    (self.$idx).prepare(archetype)?,
+                    (self.$idx).prepare(archetype, info)?,
                 )*))
             }
 
@@ -123,9 +139,6 @@ macro_rules! tuple_impl {
                 )*)
             }
         }
-
-        unsafe impl<$($ty, )*> ImmutableFetch for ($($ty,)*)
-            where $($ty: ImmutableFetch,)* {}
     };
 }
 

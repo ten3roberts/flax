@@ -5,10 +5,10 @@ use std::{
 };
 
 use crate::{
-    archetype::{ArchetypeId, Slot},
+    archetype::{ArchetypeId, EntitySlice, Slot},
     entity::EntityLocation,
     fetch::{Fetch, PreparedFetch},
-    Entity, World,
+    Entity, EntityStore, PrepareInfo, World,
 };
 
 /// Represents a query and state for a given world.
@@ -45,9 +45,16 @@ where
 
     /// Execute the query on the world.
     pub fn iter<'a>(&'a mut self, world: &'a World) -> QueryIter<'a, Q> {
+        let change_tick = self.change_tick;
         let (archetypes, fetch) = self.get_archetypes(world);
 
         QueryIter {
+            old_tick: change_tick,
+            new_tick: if Q::MUTABLE {
+                world.increase_change_tick()
+            } else {
+                0
+            },
             archetypes: archetypes.into_iter(),
             current: None,
             fetch,
@@ -65,7 +72,13 @@ where
 
         let archetype = world.archetype(archetype);
 
-        let mut fetch = self.fetch.prepare(archetype)?;
+        let info = PrepareInfo {
+            old_tick: self.change_tick,
+            new_tick: self.change_tick,
+            slots: EntitySlice::new(slot, slot),
+        };
+
+        let mut fetch = self.fetch.prepare(archetype, &info)?;
         // Aliasing is guaranteed due to fetch being prepared and alive for this
         // instance only
         let item = unsafe { fetch.fetch(slot) };
@@ -91,6 +104,10 @@ where
 
         (&self.archetypes, fetch)
     }
+}
+
+pub struct ChunkIter<'a, Q: Fetch<'a>> {
+    fetch: Q::Prepared,
 }
 
 pub struct QueryBorrow<'a, F: PreparedFetch<'a>> {
@@ -143,6 +160,8 @@ pub struct QueryIter<'a, Q>
 where
     Q: Fetch<'a>,
 {
+    old_tick: u32,
+    new_tick: u32,
     archetypes: Iter<'a, ArchetypeId>,
     world: &'a World,
     current: Option<ArchIter<'a, Q>>,
@@ -165,7 +184,14 @@ where
 
             let arch = *self.archetypes.next()?;
             let arch = self.world.archetype(arch);
-            let fetch = self.fetch.prepare(arch).unwrap();
+
+            let info = PrepareInfo {
+                old_tick: self.old_tick,
+                new_tick: self.new_tick,
+                slots: arch.slots(),
+            };
+
+            let fetch = self.fetch.prepare(arch, &info).unwrap();
 
             self.current = Some(ArchIter {
                 fetch,

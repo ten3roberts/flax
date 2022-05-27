@@ -361,8 +361,9 @@ impl World {
         self.change_tick.load(Ordering::Relaxed)
     }
 
-    pub fn inscrease_change_tick(&self) {
-        self.change_tick.fetch_add(1, Ordering::Relaxed);
+    /// Increases the change tick and returns the new one
+    pub fn increase_change_tick(&self) -> u32 {
+        self.change_tick.fetch_add(1, Ordering::Relaxed) + 1
     }
 }
 

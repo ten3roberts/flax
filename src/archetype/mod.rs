@@ -1,7 +1,6 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
     collections::BTreeMap,
-    marker::PhantomData,
     ops::Range,
     ptr::NonNull,
 };
@@ -15,9 +14,8 @@ pub type Slot = usize;
 
 mod changes;
 mod slice;
+pub use changes::*;
 pub use slice::*;
-
-use self::changes::Changes;
 
 #[derive(Debug)]
 pub struct Archetype {
@@ -71,8 +69,8 @@ impl Archetype {
         }
     }
 
-    pub fn slots(&self) -> Range<Slot> {
-        0..self.len
+    pub fn slots(&self) -> EntitySlice {
+        EntitySlice::new(0, self.len)
     }
 
     /// Returns true if the archtype has `component`
@@ -112,6 +110,18 @@ impl Archetype {
             data,
             id: component.id(),
         })
+    }
+
+    /// Borrow the change list
+    pub fn changes(&self, component: ComponentId) -> Option<AtomicRef<Changes>> {
+        let changes = self.storage.get(&component)?.changes.borrow();
+        Some(changes)
+    }
+
+    /// Borrow the change list mutably
+    pub fn changes_mut(&self, component: ComponentId) -> Option<AtomicRefMut<Changes>> {
+        let changes = self.storage.get(&component)?.changes.borrow_mut();
+        Some(changes)
     }
 
     #[inline]

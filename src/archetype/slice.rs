@@ -1,9 +1,9 @@
 use super::Slot;
 
-#[derive(Clone, PartialEq, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EntitySlice {
-    start: Slot,
-    end: Slot,
+    pub start: Slot,
+    pub end: Slot,
 }
 
 impl EntitySlice {
@@ -13,7 +13,7 @@ impl EntitySlice {
     }
 
     pub fn empty() -> Self {
-        Self { start: 0, end: 0 }
+        Self { start: 1, end: 0 }
     }
 
     pub fn len(&self) -> Slot {
@@ -60,6 +60,26 @@ impl EntitySlice {
             None
         }
         // Self::new((other.end + 1).min(self.start), (other.start).max(self.end))
+    }
+
+    /// Split with another slice, returning the left, intersect, and right
+    /// portions.
+    ///
+    /// `other` must be a subset of `self`.
+    pub fn split_with(&self, other: &Self) -> Option<(Self, Self, Self)> {
+        if other.start < self.start || other.end > self.end {
+            None
+        } else {
+            Some((
+                Self::new(self.start, other.start - 1),
+                *other,
+                Self::new(other.end + 1, self.end),
+            ))
+        }
+    }
+
+    pub fn is_subset(&self, of: &Self) -> bool {
+        self.is_empty() || (self.start >= of.start && self.end <= of.end)
     }
 }
 
