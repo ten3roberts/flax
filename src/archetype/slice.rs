@@ -1,3 +1,5 @@
+use std::{collections::BTreeSet, ops::RangeInclusive};
+
 use super::Slot;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -7,23 +9,38 @@ pub struct EntitySlice {
 }
 
 impl EntitySlice {
+    // Convert the slice into a BTreeSet of entities.
+    // If using this in hot loops... don't
+    pub fn into_set(self) -> BTreeSet<Slot> {
+        BTreeSet::from_iter(self.start..=self.end)
+    }
+
+    pub fn iter(&self) -> RangeInclusive<Slot> {
+        self.start..=self.end
+    }
+
     /// Creates a new slice of entity slots.
+    #[inline]
     pub fn new(start: Slot, end: Slot) -> Self {
         Self { start, end }
     }
 
+    #[inline]
     pub fn empty() -> Self {
         Self { start: 1, end: 0 }
     }
 
+    #[inline]
     pub fn len(&self) -> Slot {
         (1 + self.end) - self.start
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.end < self.start
     }
 
+    #[inline]
     pub fn intersect(&self, other: &Self) -> Self {
         let start = self.start.max(other.start);
         let end = self.end.min(other.end);
@@ -32,6 +49,7 @@ impl EntitySlice {
     }
 
     /// Returns the union of two slices if contiguous.
+    #[inline]
     pub fn union(&self, other: &Self) -> Option<Self> {
         let start = self.start.min(other.start);
         let end = self.end.max(other.end);
@@ -47,6 +65,7 @@ impl EntitySlice {
     ///
     /// Returns `None` if `other` is contained within `self` and cannot be
     /// subtracted without splitting.
+    #[inline]
     pub fn difference(&self, other: &Self) -> Option<Self> {
         // Subtract start
         if other.start <= self.start {
@@ -66,6 +85,7 @@ impl EntitySlice {
     /// portions.
     ///
     /// `other` must be a subset of `self`.
+    #[inline]
     pub fn split_with(&self, other: &Self) -> Option<(Self, Self, Self)> {
         if other.start < self.start || other.end > self.end {
             None
@@ -86,6 +106,16 @@ impl EntitySlice {
 impl std::fmt::Debug for EntitySlice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}..={})", self.start, self.end)
+    }
+}
+
+impl IntoIterator for EntitySlice {
+    type Item = Slot;
+
+    type IntoIter = RangeInclusive<Slot>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.start..=self.end
     }
 }
 

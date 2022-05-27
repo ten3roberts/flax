@@ -1,10 +1,13 @@
-use std::{cmp::Reverse, collections::BTreeSet};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use itertools::Itertools;
 
-use super::EntitySlice;
+use super::{EntitySlice, Slot};
 
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Default, Clone, PartialEq)]
 /// A self compacting change tracking which holds either singular changes or a
 /// range of changes, automatically merging adjacent ones.
 ///
@@ -14,9 +17,30 @@ pub struct Changes {
     inner: Vec<(EntitySlice, u32)>,
 }
 
+impl std::fmt::Debug for Changes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(&self.inner).finish()
+    }
+}
+
 impl Changes {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn as_set(&self, tick: u32) -> BTreeSet<Slot> {
+        self.inner
+            .iter()
+            .filter(|(_, t)| *t > tick)
+            .flat_map(|(v, _)| v.iter())
+            .collect()
+    }
+
+    pub fn as_map(&self) -> BTreeMap<Slot, u32> {
+        self.inner
+            .iter()
+            .flat_map(|&(slice, tick)| slice.iter().map(move |v| (v, tick)))
+            .collect()
     }
 
     pub fn set(&mut self, slice: EntitySlice, change_tick: u32) {
