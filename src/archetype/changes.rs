@@ -152,7 +152,7 @@ mod tests {
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                (Slice::new(0, 2), 1),
+                (Slice::new(0, 3), 1),
                 (Slice::new(3, 5), 3),
                 (Slice::new(70, 92), 2),
             ]
@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                (Slice::new(0, 2), 1),
+                (Slice::new(0, 3), 1),
                 (Slice::new(3, 14), 3),
                 (Slice::new(70, 92), 2),
             ]
@@ -175,7 +175,7 @@ mod tests {
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
-            [(Slice::new(0, 89), 4), (Slice::new(90, 92), 2),]
+            [(Slice::new(0, 89), 4), (Slice::new(89, 92), 2),]
         );
     }
 
@@ -201,7 +201,7 @@ mod tests {
         let mut changes = Changes::new();
 
         changes.set(Slice::new(0, 63), 1);
-        changes.set(Slice::new(64, 182), 1);
+        changes.set(Slice::new(63, 182), 1);
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [(Slice::new(0, 182), 1)]

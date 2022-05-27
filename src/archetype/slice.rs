@@ -1,9 +1,12 @@
-use std::{collections::BTreeSet, ops::RangeInclusive};
+use std::{
+    collections::BTreeSet,
+    ops::{Range, RangeInclusive},
+};
 
 use super::Slot;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-/// Represents a contiguous inclusive range of slots within and archetype
+/// Represents a contiguous range of slots within and archetype
 pub struct Slice {
     pub start: Slot,
     pub end: Slot,
@@ -13,11 +16,11 @@ impl Slice {
     // Convert the slice into a BTreeSet of entities.
     // If using this in hot loops... don't
     pub fn into_set(self) -> BTreeSet<Slot> {
-        BTreeSet::from_iter(self.start..=self.end)
+        BTreeSet::from_iter(self.start..self.end)
     }
 
-    pub fn iter(&self) -> RangeInclusive<Slot> {
-        self.start..=self.end
+    pub fn iter(&self) -> Range<Slot> {
+        self.start..self.end
     }
 
     /// Creates a new slice of entity slots.
@@ -28,17 +31,17 @@ impl Slice {
 
     #[inline]
     pub fn empty() -> Self {
-        Self { start: 1, end: 0 }
+        Self { start: 0, end: 0 }
     }
 
     #[inline]
     pub fn len(&self) -> Slot {
-        (1 + self.end) - self.start
+        self.end.wrapping_sub(self.start)
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.end < self.start
+        self.end <= self.start
     }
 
     #[inline]
@@ -55,7 +58,8 @@ impl Slice {
         let start = self.start.min(other.start);
         let end = self.end.max(other.end);
 
-        if self.end + 1 >= other.start && self.start <= other.end + 1 {
+        // 1..2 u 2..3
+        if self.end >= other.start && self.start <= other.end {
             Some(Self::new(start, end))
         } else {
             None
@@ -70,9 +74,9 @@ impl Slice {
     pub fn difference(&self, other: &Self) -> Option<Self> {
         // Subtract start
         if other.start <= self.start {
-            Some(Slice::new((other.end + 1).max(self.start), self.end))
+            Some(Slice::new(other.end.max(self.start), self.end))
         } else if other.end >= self.end {
-            Some(Slice::new(self.start, (other.start - 1).min(self.end)))
+            Some(Slice::new(self.start, other.start.min(self.end)))
         } else {
             None
         }
@@ -90,13 +94,9 @@ impl Slice {
         } else {
             dbg!(self, other);
             Some((
-                if other.start == 0 {
-                    Self::empty()
-                } else {
-                    Self::new(self.start, other.start - 1)
-                },
+                Self::new(self.start, other.start),
                 *other,
-                Self::new(other.end + 1, self.end),
+                Self::new(other.end, self.end),
             ))
         }
     }
@@ -108,17 +108,17 @@ impl Slice {
 
 impl std::fmt::Debug for Slice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}..={})", self.start, self.end)
+        write!(f, "({}..{})", self.start, self.end)
     }
 }
 
 impl IntoIterator for Slice {
     type Item = Slot;
 
-    type IntoIter = RangeInclusive<Slot>;
+    type IntoIter = Range<Slot>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.start..=self.end
+        self.start..self.end
     }
 }
 
@@ -154,7 +154,7 @@ mod tests {
 
         assert_eq!(u, Some(Slice::new(0, 382)));
 
-        let a = Slice::new(41, 382);
+        let a = Slice::new(40, 382);
         let b = Slice::new(0, 40);
 
         let u = a.union(&b);
@@ -173,11 +173,11 @@ mod tests {
         dbg!(a);
         assert_eq!(a.difference(&b), Some(Slice::new(20, 190)));
 
-        assert_eq!(a.difference(&c), Some(Slice::new(31, 190)));
+        assert_eq!(a.difference(&c), Some(Slice::new(30, 190)));
 
-        assert_eq!(a.difference(&a), Some(Slice::new(191, 190)));
+        assert_eq!(a.difference(&a), Some(Slice::new(190, 190)));
 
-        assert_eq!(a.difference(&d), Some(Slice::new(20, 139)));
+        assert_eq!(a.difference(&d), Some(Slice::new(20, 140)));
 
         assert_eq!(a.difference(&e), None);
     }

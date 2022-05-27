@@ -39,7 +39,7 @@ pub unsafe trait PreparedFetch<'a> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item;
+    unsafe fn fetch(&self, slot: Slot) -> Self::Item;
 
     // Do something for a a slice of entity slots which have been visited, such
     // as updating change tracking for mutable queries. The current change tick
@@ -59,7 +59,7 @@ pub struct PreparedComponent<'a, T> {
 unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponent<'a, T> {
     type Item = &'a T;
 
-    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         &*(self.borrow.at(slot) as *const T)
     }
@@ -112,9 +112,11 @@ where
 unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
     type Item = &'a mut T;
 
-    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&self, slot: Slot) -> Self::Item {
         // Perform a reborrow
-        &mut *(self.borrow.at_mut(slot) as *mut T)
+        // Cast from a immutable to a mutable borrow as all calls to this
+        // function are guaranteed to be disjoint
+        &mut *(self.borrow.at(slot) as *const T as *mut T)
     }
 
     fn set_visited(&mut self, slots: Slice, change_tick: u32) {
@@ -149,7 +151,7 @@ macro_rules! tuple_impl {
         {
             type Item = ($(<$ty as PreparedFetch<'a>>::Item,)*);
 
-            unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(&self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)

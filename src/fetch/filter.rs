@@ -175,7 +175,9 @@ where
     fn filter(&mut self, slots: Slice) -> Option<Slice> {
         let l = self.left.filter(slots)?;
         let r = self.right.filter(slots)?;
-        match l.union(&r) {
+        let u = l.union(&r);
+        eprintln!("{l:?} u {r:?} = {u:?}");
+        match u {
             Some(v) => Some(v),
             None => {
                 // The slices where not contiguous
@@ -279,12 +281,9 @@ impl<F: PreparedFilter> FusedIterator for FilterIter<F> {}
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
 
     use atomic_refcell::AtomicRefCell;
     use itertools::Itertools;
-
-    use crate::archetype::Slot;
 
     use super::*;
     #[test]
@@ -303,35 +302,10 @@ mod tests {
 
         let changes = AtomicRefCell::new(changes);
 
-        let mut filter = PreparedChangeFilter::from_borrow(changes.borrow(), 2);
+        let filter = PreparedChangeFilter::from_borrow(changes.borrow(), 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
-
-        // let chunks = (0..)
-        //     .scan(slots, |slots, _| {
-        //         let new = filter.filter(*slots);
-
-        //         if new.is_empty() {
-        //             return None;
-        //         }
-
-        //         dbg!(new);
-        //         assert!(new.is_subset(slots));
-
-        //         let (l, m, r) = slots.split_with(&new).unwrap();
-
-        //         eprintln!("l: {l:?}, m: {m:?}, r: {r:?}");
-
-        //         // The left can be skipped.
-        //         // The middle can be chosen and iterated.
-        //         // The right part is undecided and will be determined in the next
-        //         // iteration
-
-        //         *slots = r;
-        //         Some(m)
-        //     })
-        //     .collect_vec();
 
         let chunks = FilterIter::new(slots, filter).collect_vec();
 
