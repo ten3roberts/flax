@@ -31,8 +31,11 @@ impl Changes {
                 if let Some(diff) = v.difference(&slice) {
                     eprintln!("Reduced change slice {tick} from {v:?} to {diff:?}");
                     *v = diff;
+                } else {
+                    eprintln!("No difference of {v:?} and {slice:?}");
                 }
-            } else if *tick == change_tick {
+            }
+            if *tick == change_tick {
                 // Merge atop change of the same change
                 if let Some(u) = v.union(&slice) {
                     joined = true;
@@ -94,7 +97,7 @@ impl Changes {
         self.inner.len()
     }
 
-    /// Iterate all changes from oldest to newest
+    /// Iterate all changes in ascending order
     pub fn iter(&self) -> std::slice::Iter<(EntitySlice, u32)> {
         self.inner.iter()
     }

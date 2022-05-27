@@ -26,11 +26,10 @@ impl<'a> ChangeFilter<'a> {
     }
 
     pub(crate) fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32) -> Self {
-        let index = changes.len();
         Self {
             changes,
             cur: None,
-            index,
+            index: 0,
             tick,
         }
     }
@@ -41,23 +40,17 @@ impl<'a> Filter for ChangeFilter<'a> {
         loop {
             let cur = match self.cur {
                 Some(ref v) => v,
-                None => {
-                    eprintln!("Taking next");
-                    if self.index == 0 {
+                None => loop {
+                    let v = self.changes.get(self.index);
+                    if let Some(&(slice, tick)) = v {
+                        self.index += 1;
+                        if tick > self.tick {
+                            break self.cur.get_or_insert(slice);
+                        }
+                    } else {
                         return EntitySlice::empty();
-                    }
-
-                    let (slice, tick) = self.changes.get(self.index - 1).unwrap();
-                    // This change is older than the minimum
-                    if *tick < self.tick {
-                        return EntitySlice::empty();
-                    }
-
-                    self.index -= 1;
-
-                    self.cur = Some(*slice);
-                    unsafe { self.cur.as_ref().unwrap_unchecked() }
-                }
+                    };
+                },
             };
 
             let intersect = cur.intersect(&slots);
@@ -144,12 +137,13 @@ mod tests {
         changes.set(EntitySlice::new(560, 893), 5);
         changes.set(EntitySlice::new(39, 60), 6);
         changes.set(EntitySlice::new(784, 800), 7);
+        changes.set(EntitySlice::new(945, 1139), 8);
 
         dbg!(&changes);
 
         let changes = AtomicRefCell::new(changes);
 
-        let mut filter = ChangeFilter::from_borrow(changes.borrow(), 0);
+        let mut filter = ChangeFilter::from_borrow(changes.borrow(), 2);
 
         // The whole "archetype"
         let slots = EntitySlice::new(0, 1238);
@@ -177,9 +171,15 @@ mod tests {
                 *slots = r;
                 Some(m)
             })
-            .take(20)
             .collect_vec();
 
-        eprintln!("Chunks: {chunks:#?}");
+        assert_eq!(
+            chunks,
+            [
+                EntitySlice::new(39, 60),
+                EntitySlice::new(560, 893),
+                EntitySlice::new(945, 1139)
+            ]
+        );
     }
 }
