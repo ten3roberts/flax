@@ -57,6 +57,17 @@ let dt = 0.1;
 *pos = Position(**pos + **vel * dt);
 ```
 
+Instead of this:
+
+```rust
+let vel = world.get(velocity(), entity);
+let mut pos = world.get_mut(position(), entity);
+let dt = 0.1;
+
+*pos = *pos + *vel;
+```
+
+
 On a further note, since the components have to be declared beforehand (not
 always true, more on that later), it limits the amount of types which can be
 inserted as components. This fixes subtle bugs which come by having the type
@@ -69,9 +80,16 @@ these cases and catches these bugs earlier.
 ## Motivation
 
 During development of a game in school I used the hecs ECS. It is an awesome
-library, and the author **Ralith** has been awesome in bringing some pull
+library, and the author [Ralith](https://github.com/Ralith) has been awesome in bringing some pull
 requests in.
 
 Despite this, I often made subtle bugs with *similar*. The game engine was
 cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
 coercions in order to coexist.
+
+## Unsafe
+This library makes use of unsafe for type erasure and the allocation in storage
+of ComponentBuffers and Archetypes.
+
+As such, there are tests covering most, if not all of the unsafe parts of the
+code, both directly through unit tests and indirectly using integration tests.
