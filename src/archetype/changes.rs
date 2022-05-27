@@ -5,7 +5,7 @@ use std::{
 
 use itertools::Itertools;
 
-use super::{EntitySlice, Slot};
+use super::{Slice, Slot};
 
 #[derive(Default, Clone, PartialEq)]
 /// A self compacting change tracking which holds either singular changes or a
@@ -14,7 +14,7 @@ use super::{EntitySlice, Slot};
 ///
 /// The changes are always stored in a non-overlapping ascending order.
 pub struct Changes {
-    inner: Vec<(EntitySlice, u32)>,
+    inner: Vec<(Slice, u32)>,
 }
 
 impl std::fmt::Debug for Changes {
@@ -43,25 +43,25 @@ impl Changes {
             .collect()
     }
 
-    pub fn set(&mut self, slice: EntitySlice, change_tick: u32) {
+    pub fn set(&mut self, slots: Slice, change_tick: u32) -> &mut Self {
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
 
-        eprintln!("Setting: {slice:?}");
+        eprintln!("Setting: {slots:?}");
 
         self.inner.retain_mut(|(v, tick)| {
             if *tick < change_tick {
-                if let Some(diff) = v.difference(&slice) {
+                if let Some(diff) = v.difference(&slots) {
                     eprintln!("Reduced change slice {tick} from {v:?} to {diff:?}");
                     *v = diff;
                 } else {
-                    eprintln!("No difference of {v:?} and {slice:?}");
+                    eprintln!("No difference of {v:?} and {slots:?}");
                 }
             }
             if *tick == change_tick {
                 // Merge atop change of the same change
-                if let Some(u) = v.union(&slice) {
+                if let Some(u) = v.union(&slots) {
                     joined = true;
                     *v = u;
                 }
@@ -69,7 +69,7 @@ impl Changes {
 
             if v.is_empty() {
                 false
-            } else if v.start < slice.start {
+            } else if v.start < slots.start {
                 insert_point += 1;
                 true
             } else {
@@ -80,7 +80,7 @@ impl Changes {
 
         if !joined {
             eprintln!("Inserting {insert_point}");
-            self.inner.insert(insert_point, (slice, change_tick));
+            self.inner.insert(insert_point, (slots, change_tick));
         }
 
         eprintln!("{:?}", self.inner);
@@ -93,6 +93,8 @@ impl Changes {
                 .collect_vec(),
             self.inner
         );
+
+        self
 
         // match self.inner.last_mut() {
         //     Some((v, tick)) if *tick == change_tick => {
@@ -113,7 +115,7 @@ impl Changes {
     }
 
     /// Returns the changes in the change list at a particular index.
-    pub fn get(&self, index: usize) -> Option<&(EntitySlice, u32)> {
+    pub fn get(&self, index: usize) -> Option<&(Slice, u32)> {
         self.inner.get(index)
     }
 
@@ -122,7 +124,7 @@ impl Changes {
     }
 
     /// Iterate all changes in ascending order
-    pub fn iter(&self) -> std::slice::Iter<(EntitySlice, u32)> {
+    pub fn iter(&self) -> std::slice::Iter<(Slice, u32)> {
         self.inner.iter()
     }
 }
@@ -136,44 +138,44 @@ mod tests {
     fn changes() {
         let mut changes = Changes::new();
 
-        changes.set(EntitySlice::new(0, 5), 1);
+        changes.set(Slice::new(0, 5), 1);
 
-        changes.set(EntitySlice::new(70, 92), 2);
+        changes.set(Slice::new(70, 92), 2);
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
-            [(EntitySlice::new(0, 5), 1), (EntitySlice::new(70, 92), 2)]
+            [(Slice::new(0, 5), 1), (Slice::new(70, 92), 2)]
         );
 
-        changes.set(EntitySlice::new(3, 5), 3);
+        changes.set(Slice::new(3, 5), 3);
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                (EntitySlice::new(0, 2), 1),
-                (EntitySlice::new(3, 5), 3),
-                (EntitySlice::new(70, 92), 2),
+                (Slice::new(0, 2), 1),
+                (Slice::new(3, 5), 3),
+                (Slice::new(70, 92), 2),
             ]
         );
 
         // Extend previous change
-        changes.set(EntitySlice::new(4, 14), 3);
+        changes.set(Slice::new(4, 14), 3);
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                (EntitySlice::new(0, 2), 1),
-                (EntitySlice::new(3, 14), 3),
-                (EntitySlice::new(70, 92), 2),
+                (Slice::new(0, 2), 1),
+                (Slice::new(3, 14), 3),
+                (Slice::new(70, 92), 2),
             ]
         );
 
         // Overwrite almost all
-        changes.set(EntitySlice::new(0, 89), 4);
+        changes.set(Slice::new(0, 89), 4);
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
-            [(EntitySlice::new(0, 89), 4), (EntitySlice::new(90, 92), 2),]
+            [(Slice::new(0, 89), 4), (Slice::new(90, 92), 2),]
         );
     }
 
@@ -184,12 +186,12 @@ mod tests {
         for i in 0..239 {
             let perm = (i * (i + 2)) % 300;
             // let perm = i;
-            changes.set(EntitySlice::new(perm, perm), i as _)
+            changes.set(Slice::new(perm, perm), i as _);
         }
 
-        changes.set(EntitySlice::new(70, 249), 300);
-        changes.set(EntitySlice::new(0, 89), 301);
-        changes.set(EntitySlice::new(209, 300), 302);
+        changes.set(Slice::new(70, 249), 300);
+        changes.set(Slice::new(0, 89), 301);
+        changes.set(Slice::new(209, 300), 302);
 
         eprintln!("Changes: {changes:#?}");
     }
@@ -198,11 +200,11 @@ mod tests {
     fn adjacent() {
         let mut changes = Changes::new();
 
-        changes.set(EntitySlice::new(0, 63), 1);
-        changes.set(EntitySlice::new(64, 182), 1);
+        changes.set(Slice::new(0, 63), 1);
+        changes.set(Slice::new(64, 182), 1);
         assert_eq!(
             changes.iter().copied().collect_vec(),
-            [(EntitySlice::new(0, 182), 1)]
+            [(Slice::new(0, 182), 1)]
         );
     }
 }

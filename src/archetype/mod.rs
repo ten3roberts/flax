@@ -69,8 +69,8 @@ impl Archetype {
         }
     }
 
-    pub fn slots(&self) -> EntitySlice {
-        EntitySlice::new(0, self.len)
+    pub fn slots(&self) -> Slice {
+        Slice::new(0, self.len)
     }
 
     /// Returns true if the archtype has `component`

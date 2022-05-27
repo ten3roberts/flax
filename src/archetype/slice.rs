@@ -3,12 +3,13 @@ use std::{collections::BTreeSet, ops::RangeInclusive};
 use super::Slot;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EntitySlice {
+/// Represents a contiguous inclusive range of slots within and archetype
+pub struct Slice {
     pub start: Slot,
     pub end: Slot,
 }
 
-impl EntitySlice {
+impl Slice {
     // Convert the slice into a BTreeSet of entities.
     // If using this in hot loops... don't
     pub fn into_set(self) -> BTreeSet<Slot> {
@@ -69,12 +70,9 @@ impl EntitySlice {
     pub fn difference(&self, other: &Self) -> Option<Self> {
         // Subtract start
         if other.start <= self.start {
-            Some(EntitySlice::new((other.end + 1).max(self.start), self.end))
+            Some(Slice::new((other.end + 1).max(self.start), self.end))
         } else if other.end >= self.end {
-            Some(EntitySlice::new(
-                self.start,
-                (other.start - 1).min(self.end),
-            ))
+            Some(Slice::new(self.start, (other.start - 1).min(self.end)))
         } else {
             None
         }
@@ -90,8 +88,13 @@ impl EntitySlice {
         if other.start < self.start || other.end > self.end {
             None
         } else {
+            dbg!(self, other);
             Some((
-                Self::new(self.start, other.start - 1),
+                if other.start == 0 {
+                    Self::empty()
+                } else {
+                    Self::new(self.start, other.start - 1)
+                },
                 *other,
                 Self::new(other.end + 1, self.end),
             ))
@@ -103,13 +106,13 @@ impl EntitySlice {
     }
 }
 
-impl std::fmt::Debug for EntitySlice {
+impl std::fmt::Debug for Slice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}..={})", self.start, self.end)
     }
 }
 
-impl IntoIterator for EntitySlice {
+impl IntoIterator for Slice {
     type Item = Slot;
 
     type IntoIter = RangeInclusive<Slot>;
@@ -124,57 +127,57 @@ mod tests {
     use super::*;
     #[test]
     fn slices() {
-        let a = EntitySlice::new(0, 40);
-        let b = EntitySlice::new(10, 38);
+        let a = Slice::new(0, 40);
+        let b = Slice::new(10, 38);
 
         let i = a.intersect(&b);
         let i2 = b.intersect(&a);
 
-        assert_eq!(i, EntitySlice::new(10, 38));
-        assert_eq!(i2, EntitySlice::new(10, 38));
+        assert_eq!(i, Slice::new(10, 38));
+        assert_eq!(i2, Slice::new(10, 38));
 
         let u = a.union(&b);
 
-        assert_eq!(u, Some(EntitySlice::new(0, 40)));
+        assert_eq!(u, Some(Slice::new(0, 40)));
 
-        let a = EntitySlice::new(0, 40);
-        let b = EntitySlice::new(10, 79);
-
-        let u = a.union(&b);
-
-        assert_eq!(u, Some(EntitySlice::new(0, 79)));
-
-        let a = EntitySlice::new(40, 382);
-        let b = EntitySlice::new(0, 40);
+        let a = Slice::new(0, 40);
+        let b = Slice::new(10, 79);
 
         let u = a.union(&b);
 
-        assert_eq!(u, Some(EntitySlice::new(0, 382)));
+        assert_eq!(u, Some(Slice::new(0, 79)));
 
-        let a = EntitySlice::new(41, 382);
-        let b = EntitySlice::new(0, 40);
+        let a = Slice::new(40, 382);
+        let b = Slice::new(0, 40);
 
         let u = a.union(&b);
 
-        assert_eq!(u, Some(EntitySlice::new(0, 382)));
+        assert_eq!(u, Some(Slice::new(0, 382)));
+
+        let a = Slice::new(41, 382);
+        let b = Slice::new(0, 40);
+
+        let u = a.union(&b);
+
+        assert_eq!(u, Some(Slice::new(0, 382)));
     }
 
     #[test]
     fn slice_intersect() {
-        let a = EntitySlice::new(20, 190);
-        let b = EntitySlice::new(0, 13);
-        let c = EntitySlice::new(0, 30);
-        let d = EntitySlice::new(140, 1000);
-        let e = EntitySlice::new(30, 121);
+        let a = Slice::new(20, 190);
+        let b = Slice::new(0, 13);
+        let c = Slice::new(0, 30);
+        let d = Slice::new(140, 1000);
+        let e = Slice::new(30, 121);
 
         dbg!(a);
-        assert_eq!(a.difference(&b), Some(EntitySlice::new(20, 190)));
+        assert_eq!(a.difference(&b), Some(Slice::new(20, 190)));
 
-        assert_eq!(a.difference(&c), Some(EntitySlice::new(31, 190)));
+        assert_eq!(a.difference(&c), Some(Slice::new(31, 190)));
 
-        assert_eq!(a.difference(&a), Some(EntitySlice::new(191, 190)));
+        assert_eq!(a.difference(&a), Some(Slice::new(191, 190)));
 
-        assert_eq!(a.difference(&d), Some(EntitySlice::new(20, 139)));
+        assert_eq!(a.difference(&d), Some(Slice::new(20, 139)));
 
         assert_eq!(a.difference(&e), None);
     }

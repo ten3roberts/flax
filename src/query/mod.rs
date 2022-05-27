@@ -1,14 +1,15 @@
 use std::{
     iter::FusedIterator,
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     slice::Iter,
 };
 
 use crate::{
-    archetype::{ArchetypeId, EntitySlice, Slot},
+    archetype::{ArchetypeId, Slice, Slot},
     entity::EntityLocation,
     fetch::{Fetch, PreparedFetch},
-    Entity, EntityStore, PrepareInfo, World,
+    All, Entity, FilterIter, PrepareInfo, World,
 };
 
 /// Represents a query and state for a given world.
@@ -51,7 +52,7 @@ where
         QueryIter {
             old_tick: change_tick,
             new_tick: if Q::MUTABLE {
-                world.increase_change_tick()
+                world.advance_change_tick()
             } else {
                 0
             },
@@ -62,7 +63,8 @@ where
         }
     }
 
-    /// Execute the query for a single entity
+    /// Execute the query for a single entity.
+    /// A mutable query will advance the global change tick of the world.
     pub fn get<'a>(
         &'a self,
         entity: Entity,
@@ -75,13 +77,26 @@ where
         let info = PrepareInfo {
             old_tick: self.change_tick,
             new_tick: self.change_tick,
-            slots: EntitySlice::new(slot, slot),
+            slots: Slice::new(slot, slot),
         };
 
-        let mut fetch = self.fetch.prepare(archetype, &info)?;
+        let mut fetch = self.fetch.prepare(archetype)?;
+
+        // It is only necessary to acquire a new change tick if the query will
+        // change anything
+        let new_tick = if Q::MUTABLE {
+            world.advance_change_tick()
+        } else {
+            world.change_tick()
+        };
+
+        fetch.set_visited(Slice::new(slot, slot), new_tick);
+
         // Aliasing is guaranteed due to fetch being prepared and alive for this
-        // instance only
+        // instance only. The lock is held and causes fetches for the same
+        // archetype to fail
         let item = unsafe { fetch.fetch(slot) };
+
         Some(QueryBorrow {
             item,
             _fetch: fetch,
@@ -106,8 +121,41 @@ where
     }
 }
 
-pub struct ChunkIter<'a, Q: Fetch<'a>> {
-    fetch: Q::Prepared,
+pub struct ArchetypeIter<'a, F: PreparedFetch<'a>, I: Iterator<Item = Slice> = FilterIter<All>> {
+    fetch: F,
+    chunks: I,
+    current: Option<Chunk<'a, F>>,
+    _marker: PhantomData<&'a ()>,
+    new_tick: u32,
+}
+
+impl<'a, Q, I> Iterator for ArchetypeIter<'a, Q, I>
+where
+    Q: PreparedFetch<'a> + 'a,
+    I: Iterator<Item = Slice>,
+{
+    type Item = Q::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = match self.current {
+            Some(ref mut v) => v,
+            None => {
+                let v = self.chunks.next()?;
+
+                self.fetch.set_visited(v, self.new_tick);
+
+                let chunk = Chunk {
+                    pos: v.start,
+                    end: v.end,
+                    _marker: PhantomData,
+                };
+
+                self.current.get_or_insert(chunk)
+            }
+        };
+
+        current.next(&mut self.fetch)
+    }
 }
 
 pub struct QueryBorrow<'a, F: PreparedFetch<'a>> {
@@ -130,27 +178,19 @@ impl<'a, F: PreparedFetch<'a>> DerefMut for QueryBorrow<'a, F> {
     }
 }
 
-pub struct ArchIter<'a, Q>
-where
-    Q: Fetch<'a>,
-{
-    fetch: Q::Prepared,
+pub struct Chunk<'a, F: PreparedFetch<'a>> {
     pos: Slot,
-    len: Slot,
+    end: Slot,
+    _marker: PhantomData<&'a F>,
 }
 
-impl<'a, Q> Iterator for ArchIter<'a, Q>
-where
-    Q: Fetch<'a>,
-{
-    type Item = Q::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.pos == self.len {
+impl<'a, F: PreparedFetch<'a>> Chunk<'a, F> {
+    fn next(&mut self, fetch: &mut F) -> Option<F::Item> {
+        if self.pos == self.end {
             return None;
         }
 
-        let item = unsafe { self.fetch.fetch(self.pos) };
+        let item = unsafe { fetch.fetch(self.pos) };
         self.pos += 1;
         Some(item)
     }
@@ -164,7 +204,7 @@ where
     new_tick: u32,
     archetypes: Iter<'a, ArchetypeId>,
     world: &'a World,
-    current: Option<ArchIter<'a, Q>>,
+    current: Option<ArchetypeIter<'a, Q::Prepared>>,
     fetch: &'a Q,
 }
 
@@ -176,8 +216,8 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(ref mut arch) = self.current {
-                if let Some(items) = arch.next() {
+            if let Some(ref mut chunk) = self.current {
+                if let Some(items) = chunk.next() {
                     return Some(items);
                 }
             }
@@ -185,18 +225,14 @@ where
             let arch = *self.archetypes.next()?;
             let arch = self.world.archetype(arch);
 
-            let info = PrepareInfo {
-                old_tick: self.old_tick,
-                new_tick: self.new_tick,
-                slots: arch.slots(),
-            };
+            let fetch = self.fetch.prepare(arch).unwrap();
 
-            let fetch = self.fetch.prepare(arch, &info).unwrap();
-
-            self.current = Some(ArchIter {
+            self.current = Some(ArchetypeIter {
                 fetch,
-                pos: 0,
-                len: arch.len(),
+                chunks: FilterIter::new(arch.slots(), All),
+                current: None,
+                _marker: PhantomData,
+                new_tick: self.new_tick,
             });
         }
     }

@@ -341,9 +341,7 @@ impl World {
     }
 
     pub(crate) fn archetypes(&self) -> impl Iterator<Item = (ArchetypeId, &Archetype)> {
-        self.archetypes.iter().inspect(|v| {
-            dbg!(v);
-        })
+        self.archetypes.iter()
     }
 
     pub(crate) fn location(&self, entity: Entity) -> Option<&EntityLocation> {
@@ -362,7 +360,7 @@ impl World {
     }
 
     /// Increases the change tick and returns the new one
-    pub fn increase_change_tick(&self) -> u32 {
+    pub fn advance_change_tick(&self) -> u32 {
         self.change_tick.fetch_add(1, Ordering::Relaxed) + 1
     }
 }

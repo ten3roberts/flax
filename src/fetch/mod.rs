@@ -1,8 +1,13 @@
 mod ext;
 mod filter;
 
+pub use ext::*;
+pub use filter::*;
+
+use atomic_refcell::AtomicRefMut;
+
 use crate::{
-    archetype::{Archetype, EntitySlice, Slot, StorageBorrow, StorageBorrowMut},
+    archetype::{Archetype, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
     Component, ComponentValue,
 };
 
@@ -11,7 +16,7 @@ pub struct PrepareInfo {
     /// The current change tick of the world
     pub old_tick: u32,
     pub new_tick: u32,
-    pub slots: EntitySlice,
+    pub slots: Slice,
 }
 
 /// Describes a type which can fetch itself from an archetype
@@ -20,7 +25,8 @@ pub trait Fetch<'a> {
 
     type Item;
     type Prepared: PreparedFetch<'a, Item = Self::Item>;
-    fn prepare(&self, archetype: &'a Archetype, info: &PrepareInfo) -> Option<Self::Prepared>;
+    /// Prepare the query against an archetype. Returns None if doesn't match
+    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared>;
     fn matches(&self, archetype: &'a Archetype) -> bool;
 }
 
@@ -34,10 +40,16 @@ pub unsafe trait PreparedFetch<'a> {
     ///
     /// The callee is responsible for assuring disjoint calls.
     unsafe fn fetch(&mut self, slot: Slot) -> Self::Item;
+
+    // Do something for a a slice of entity slots which have been visited, such
+    // as updating change tracking for mutable queries. The current change tick
+    // is passed.
+    fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
 }
 
 pub struct PreparedComponentMut<'a, T> {
     borrow: StorageBorrowMut<'a, T>,
+    changes: AtomicRefMut<'a, Changes>,
 }
 
 pub struct PreparedComponent<'a, T> {
@@ -63,7 +75,7 @@ where
 
     type Prepared = PreparedComponent<'a, T>;
 
-    fn prepare(&self, archetype: &'a Archetype, info: &PrepareInfo) -> Option<Self::Prepared> {
+    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
         let borrow = archetype.storage(*self)?;
         Some(PreparedComponent { borrow })
     }
@@ -75,14 +87,6 @@ where
 
 pub struct Mutable<T>(pub(crate) Component<T>);
 
-unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
-    type Item = &'a mut T;
-
-    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
-        // Perform a reborrow
-        &mut *(self.borrow.at_mut(slot) as *mut T)
-    }
-}
 impl<'a, T> Fetch<'a> for Mutable<T>
 where
     T: ComponentValue,
@@ -93,20 +97,32 @@ where
 
     type Prepared = PreparedComponentMut<'a, T>;
 
-    fn prepare(&self, archetype: &'a Archetype, info: &PrepareInfo) -> Option<Self::Prepared> {
-        // Marked the prepared range as mutated
-        archetype
-            .changes_mut(self.0.id())?
-            .set(info.slots, info.new_tick);
-
+    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
         let borrow = archetype.storage_mut(self.0)?;
-        Some(PreparedComponentMut { borrow })
+        let changes = archetype.changes_mut(self.0.id())?;
+
+        Some(PreparedComponentMut { borrow, changes })
     }
 
     fn matches(&self, archetype: &'a Archetype) -> bool {
         archetype.has(self.0.id())
     }
 }
+
+unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
+    type Item = &'a mut T;
+
+    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
+        // Perform a reborrow
+        &mut *(self.borrow.at_mut(slot) as *mut T)
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        eprintln!("Setting changes for {slots:?}: {change_tick}");
+        self.changes.set(slots, change_tick);
+    }
+}
+
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
@@ -117,9 +133,9 @@ macro_rules! tuple_impl {
             type Item = ($(<$ty as Fetch<'a>>::Item,)*);
             type Prepared = ($(<$ty as Fetch<'a>>::Prepared,)*);
 
-            fn prepare(&self, archetype: &'a Archetype, info: &PrepareInfo) -> Option<Self::Prepared> {
+            fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
                 Some(($(
-                    (self.$idx).prepare(archetype, info)?,
+                    (self.$idx).prepare(archetype)?,
                 )*))
             }
 
@@ -137,6 +153,10 @@ macro_rules! tuple_impl {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)
+            }
+
+            fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+                $((self.$idx).set_visited(slots, change_tick);)*
             }
         }
     };
