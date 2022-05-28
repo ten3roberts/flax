@@ -1,33 +1,35 @@
-use std::{iter::FusedIterator, slice::Iter};
+use std::{iter::FusedIterator, marker::PhantomData, slice::Iter};
 
 use crate::{
-    archetype::{ArchetypeId, Slot},
+    archetype::{ArchetypeId, Slice, Slot},
     All, Fetch, Filter, FilterIter, PreparedFetch, World,
 };
 
 /// Iterates over a chunk of entities, specified by a predicate.
 /// In essence, this is the unflattened version of [crate::QueryIter].
-pub struct ChunkIter<'a, 'q, Q: Fetch<'a>> {
-    fetch: &'q Q::Prepared,
-    start: Slot,
+pub struct ChunkIter<'a, Q: Fetch<'a>> {
     pos: Slot,
     end: Slot,
-    new_tick: u32,
+    _marker: PhantomData<&'a Q>,
 }
 
-impl<'a, 'q, Q> FusedIterator for ChunkIter<'a, 'q, Q> where Q: Fetch<'a> {}
-
-impl<'a, 'q, Q> Iterator for ChunkIter<'a, 'q, Q>
+impl<'a, Q> ChunkIter<'a, Q>
 where
     Q: Fetch<'a>,
 {
-    type Item = Q::Item;
+    pub fn new(slice: Slice) -> Self {
+        Self {
+            pos: slice.start,
+            end: slice.end,
+            _marker: PhantomData,
+        }
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self, fetch: &mut Q::Prepared) -> Option<Q::Item> {
         if self.pos == self.end {
             None
         } else {
-            let item = unsafe { self.fetch.fetch(self.pos) };
+            let item = unsafe { fetch.fetch(self.pos) };
             self.pos += 1;
             Some(item)
         }
@@ -44,8 +46,20 @@ pub struct ArchetypeIter<'a, Q: Fetch<'a>, F: Filter<'a>> {
     /// This field will never change, as such it is safe to hand out references
     /// to this fetch as long as self is valid.
     fetch: Q::Prepared,
+    current_chunk: Option<ChunkIter<'a, Q>>,
     chunks: FilterIter<F::Prepared>,
     new_tick: u32,
+}
+
+impl<'a, Q: Fetch<'a>, F: Filter<'a>> ArchetypeIter<'a, Q, F> {
+    fn new(fetch: Q::Prepared, new_tick: u32, chunks: FilterIter<F::Prepared>) -> Self {
+        Self {
+            fetch,
+            current_chunk: None,
+            chunks,
+            new_tick,
+        }
+    }
 }
 
 impl<'a, 'q, Q, F> ArchetypeIter<'a, Q, F>
@@ -53,23 +67,21 @@ where
     F: Filter<'a>,
     Q: Fetch<'a>,
 {
-    fn next(&mut self) -> Option<ChunkIter<'a, '_, Q>> {
-        let chunk = self.chunks.next()?;
+    fn next(&mut self) -> Option<Q::Item> {
+        loop {
+            if let Some(ref mut chunk) = self.current_chunk {
+                if let Some(item) = chunk.next(&mut self.fetch) {
+                    return Some(item);
+                }
+            }
 
-        // Set the chunk as visited.
-        // Has to be done now as the chunk will only have a immutable refernce
-        // to the fetch. This is to allow the chunks to be spread across
-        // threads. As such, register before multithreading since *this* part is
-        // exclusive.
-        self.fetch.set_visited(chunk, self.new_tick);
+            let chunk = self.chunks.next()?;
 
-        Some(ChunkIter {
-            fetch: &self.fetch,
-            start: chunk.start,
-            pos: chunk.start,
-            end: chunk.end,
-            new_tick: self.new_tick,
-        })
+            // Mark any changes
+            self.fetch.set_visited(chunk, self.new_tick);
+
+            self.current_chunk = Some(ChunkIter::new(chunk));
+        }
     }
 }
 
@@ -83,7 +95,7 @@ where
     /// The lifetime of chunk iter is promoted from <'a, 'q>, where 'q refers to
     /// the `ArchetypeIter`. The archetype iter is held atleast as long as
     /// chunkiter.
-    current: Option<(ArchetypeIter<'a, Q, All>, Option<ChunkIter<'a, 'a, Q>>)>,
+    current: Option<ArchetypeIter<'a, Q, All>>,
     fetch: &'a Q,
 }
 
@@ -121,54 +133,24 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.current.as_mut() {
-                Some((_arch, Some(chunk))) => match chunk.next() {
-                    Some(item) => return Some(item),
-                    // This chunk is exhausted, request a new chunk in the next
-                    // iteration of the loop
-                    None => self.current.as_mut().unwrap().1 = None,
-                },
-                Some((arch, chunk @ None)) => {
-                    // Acquire the next chunk from the archetype iterator
-                    match arch.next() {
-                        Some(new_chunk) => {
-                            // Promote the chunks lifetime. The chunk will never be dropped
-                            // before the wrapping arch in `current`
-                            let new_chunk = ChunkIter {
-                                fetch: unsafe { &*(new_chunk.fetch as *const Q::Prepared) },
-                                // We cannot use struct update syntax since it links the
-                                // lifetime of fetch back to 'q, which we want to avoid
-                                start: new_chunk.start,
-                                pos: new_chunk.pos,
-                                end: new_chunk.end,
-                                new_tick: new_chunk.new_tick,
-                            };
-
-                            *chunk = Some(new_chunk);
-                        }
-                        // Current archetype is empty, request a new one
-                        None => self.current = None,
-                    }
-                }
-                None => {
-                    let &arch = self.archetypes.next()?;
-                    let arch = self.world.archetype(arch);
-
-                    let fetch = self
-                        .fetch
-                        .prepare(arch)
-                        .expect("Iterated a non matched archetype");
-
-                    self.current = Some((
-                        ArchetypeIter {
-                            fetch,
-                            chunks: FilterIter::new(arch.slots(), All),
-                            new_tick: self.new_tick,
-                        },
-                        None,
-                    ));
+            if let Some(ref mut arch) = self.current {
+                if let Some(item) = arch.next() {
+                    return Some(item);
                 }
             }
+
+            // Get the next archetype
+            let arch = *self.archetypes.next()?;
+            let arch = self.world.archetype(arch);
+
+            let fetch = self
+                .fetch
+                .prepare(arch)
+                .expect("Encountered non matched archetype");
+
+            let chunks = FilterIter::new(arch.slots(), All);
+
+            self.current = Some(ArchetypeIter::new(fetch, self.new_tick, chunks));
         }
     }
 }
