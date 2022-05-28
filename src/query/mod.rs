@@ -9,7 +9,7 @@ use crate::{
     archetype::{ArchetypeId, Slice},
     entity::EntityLocation,
     fetch::{Fetch, PreparedFetch},
-    Entity, World,
+    All, And, Entity, Filter, World,
 };
 
 /// Represents a query and state for a given world.
@@ -19,15 +19,16 @@ use crate::{
 /// The archetype borrowing assures aliasing.
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
-pub struct Query<Q> {
+pub struct Query<Q, F> {
     // The archetypes to visit
     archetypes: Vec<ArchetypeId>,
+    filter: F,
     change_tick: u32,
     archetype_gen: u32,
     fetch: Q,
 }
 
-impl<Q> Query<Q>
+impl<Q> Query<Q, All>
 where
     Q: for<'x> Fetch<'x>,
 {
@@ -38,27 +39,58 @@ where
     pub fn new(query: Q) -> Self {
         Self {
             archetypes: Vec::new(),
+            filter: All,
             fetch: query,
             change_tick: 0,
             archetype_gen: 0,
         }
     }
+}
 
-    /// Execute the query on the world.
-    pub fn iter<'a>(&'a mut self, world: &'a World) -> QueryIter<'a, Q> {
+impl<Q, F> Query<Q, F>
+where
+    Q: for<'x> Fetch<'x>,
+    F: for<'x> Filter<'x>,
+{
+    /// Adds a new filter to the query.
+    /// This filter is and:ed with the existing filters.
+    pub fn filter<'a, G: Filter<'a>>(self, filter: G) -> Query<Q, And<F, G>> {
+        Query {
+            filter: self.filter.and(filter),
+            archetypes: Vec::new(),
+            change_tick: self.change_tick,
+            archetype_gen: self.archetype_gen,
+            fetch: self.fetch,
+        }
+    }
+
+    /// Prepare the next change tick and return the old one for the last time
+    /// the query ran
+    fn prepare_tick(&mut self, world: &World) -> (u32, u32) {
+        // The tick of the last iteration
+        let old_tick = self.change_tick;
+
         // Set the change_tick for self to that of the query, to make all
-        // changees before this invocation too old
-        let change_tick = if Q::MUTABLE {
+        // changes before this invocation too old
+        //
+        // It is only necessary to acquire a new change tick if the query will
+        // change anything
+        let new_tick = if Q::MUTABLE {
             world.advance_change_tick()
         } else {
             world.change_tick()
         };
 
-        self.change_tick = change_tick;
+        self.change_tick = new_tick;
+        (old_tick, new_tick)
+    }
 
-        let (archetypes, fetch) = self.get_archetypes(world);
+    /// Execute the query on the world.
+    pub fn iter<'a>(&'a mut self, world: &'a World) -> QueryIter<'a, Q, F> {
+        let (old_tick, new_tick) = self.prepare_tick(world);
+        let (archetypes, fetch, filter) = self.get_archetypes(world);
 
-        QueryIter::new(world, archetypes.iter(), fetch, change_tick)
+        QueryIter::new(world, archetypes.iter(), fetch, new_tick, old_tick, filter)
     }
 
     /// Execute the query for a single entity.
@@ -68,7 +100,10 @@ where
         entity: Entity,
         world: &'a World,
     ) -> Option<QueryBorrow<'a, <Q as Fetch<'_>>::Prepared>> {
-        let &EntityLocation { archetype, slot } = world.location(entity)?;
+        let &EntityLocation {
+            arch: archetype,
+            slot,
+        } = world.location(entity)?;
 
         let archetype = world.archetype(archetype);
 
@@ -95,7 +130,7 @@ where
         })
     }
 
-    fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q) {
+    fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q, &F) {
         let fetch = &self.fetch;
         if world.archetype_gen() > self.archetype_gen {
             self.archetypes.clear();
@@ -109,7 +144,7 @@ where
                 }))
         }
 
-        (&self.archetypes, fetch)
+        (&self.archetypes, fetch, &self.filter)
     }
 }
 pub struct QueryBorrow<'a, F: PreparedFetch<'a>> {

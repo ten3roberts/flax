@@ -28,7 +28,8 @@ pub struct Entity(NonZeroU64);
 
 const INDEX_MASK: u64 = /*     */ 0x00000000FFFFFF00;
 const GENERATION_MASK: u64 = /**/ 0x0000FFFF00000000;
-const NAMESPACE_MASK: u64 = /* */ 0x00000000000000FF;
+// A simple u8 cast will suffice
+const _NAMESPACE_MASK: u64 = /* */ 0x00000000000000FF;
 
 static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
@@ -113,11 +114,11 @@ mod tests {
     #[test]
     fn entity_store() {
         let mut entities = EntityStore::new(1);
-        let archetype = EntityStore::new(2).spawn(Archetype::empty());
+        let arch = EntityStore::new(2).spawn(Archetype::empty());
 
-        let a = entities.spawn(EntityLocation { archetype, slot: 4 });
-        let b = entities.spawn(EntityLocation { archetype, slot: 2 });
-        let c = entities.spawn(EntityLocation { archetype, slot: 3 });
+        let a = entities.spawn(EntityLocation { arch, slot: 4 });
+        let b = entities.spawn(EntityLocation { arch, slot: 2 });
+        let c = entities.spawn(EntityLocation { arch, slot: 3 });
 
         entities.despawn(b);
 
@@ -125,10 +126,7 @@ mod tests {
         assert!(entities.is_alive(a));
         assert!(!entities.is_alive(b));
         assert!(entities.is_alive(c));
-        assert_eq!(
-            entities.get(c),
-            Some(&EntityLocation { archetype, slot: 3 })
-        );
+        assert_eq!(entities.get(c), Some(&EntityLocation { arch, slot: 3 }));
         assert_eq!(entities.get(b), None);
     }
 

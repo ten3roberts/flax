@@ -4,7 +4,7 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Archetype, Changes, Slice},
-    Component, ComponentId, ComponentValue,
+    ComponentId, Fetch,
 };
 
 /// A filter over a query which will be prepared for an archetype, yielding
@@ -34,18 +34,41 @@ where
     }
 }
 
-pub struct ChangedFilter<T> {
-    component: Component<T>,
+pub struct ChangedFilter<F> {
+    component: ComponentId,
+    fetch: F,
 }
 
-impl<'a, T> Filter<'a> for ChangedFilter<T>
-where
-    T: ComponentValue,
-{
+impl<F> ChangedFilter<F> {
+    pub fn new(component: ComponentId, fetch: F) -> Self {
+        Self { component, fetch }
+    }
+}
+
+impl<'a, F> Filter<'a> for ChangedFilter<F> {
     type Prepared = PreparedChangeFilter<'a>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedChangeFilter::new(archetype, self.component.id(), change_tick)
+        PreparedChangeFilter::new(archetype, self.component, change_tick)
+    }
+}
+
+impl<'a, F> Fetch<'a> for ChangedFilter<F>
+where
+    F: Fetch<'a>,
+{
+    const MUTABLE: bool = F::MUTABLE;
+
+    type Item = F::Item;
+
+    type Prepared = F::Prepared;
+
+    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+        self.fetch.prepare(archetype)
+    }
+
+    fn matches(&self, archetype: &'a Archetype) -> bool {
+        self.fetch.matches(archetype)
     }
 }
 
@@ -383,9 +406,9 @@ mod tests {
 
         let archetype = Archetype::new([a().info(), b().info(), c().info()]);
 
-        let filter = ChangedFilter { component: a() }
-            .and(ChangedFilter { component: b() })
-            .or(ChangedFilter { component: c() });
+        let filter = ChangedFilter::new(a().id(), ())
+            .and(ChangedFilter::new(b().id(), ()))
+            .or(ChangedFilter::new(c().id(), ()));
 
         // Mock changes
         let a_map = archetype

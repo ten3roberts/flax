@@ -7,7 +7,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, ComponentInfo},
+    archetype::{Archetype, ArchetypeId, ComponentInfo, Slice},
     entity::{EntityLocation, EntityStore},
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity,
 };
@@ -87,7 +87,7 @@ impl World {
     pub fn spawn(&mut self) -> Entity {
         // Place at root
         let id = self.entities.spawn(EntityLocation {
-            archetype: self.archetype_root,
+            arch: self.archetype_root,
             slot: 0,
         });
 
@@ -119,7 +119,7 @@ impl World {
 
         let slot = arch.insert(id, components);
         *self.entities.get_mut(id).unwrap() = EntityLocation {
-            archetype: archetype_id,
+            arch: archetype_id,
             slot,
         };
 
@@ -127,7 +127,10 @@ impl World {
     }
 
     pub fn despawn(&mut self, id: Entity) -> Option<()> {
-        let &EntityLocation { archetype, slot } = self.location(id)?;
+        let &EntityLocation {
+            arch: archetype,
+            slot,
+        } = self.location(id)?;
 
         let src = self.archetype_mut(archetype);
         unsafe {
@@ -153,15 +156,18 @@ impl World {
         component: Component<T>,
         mut value: T,
     ) -> Option<T> {
-        let &EntityLocation {
-            archetype: src_id,
-            slot,
-        } = self.entities.get(id).unwrap();
+        let &EntityLocation { arch: src_id, slot } = self.entities.get(id).unwrap();
         let src = self.archetype(src_id);
 
         let component_info = component.info();
 
+        // We know things will change either way
+        let change_tick = self.advance_change_tick();
+
         if let Some(mut val) = src.get_mut(slot, component) {
+            src.changes_mut(component.id())?
+                .set(Slice::single(slot), change_tick);
+
             return Some(mem::replace(&mut *val, value));
         }
 
@@ -226,7 +232,7 @@ impl World {
 
             *self.entities.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
-                archetype: dst_id,
+                arch: dst_id,
             };
         }
 
@@ -234,10 +240,7 @@ impl World {
     }
 
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Option<T> {
-        let &EntityLocation {
-            archetype: src_id,
-            slot,
-        } = self.entities.get(id).unwrap();
+        let &EntityLocation { arch: src_id, slot } = self.entities.get(id).unwrap();
 
         let src = self.archetype(src_id);
 
@@ -293,7 +296,7 @@ impl World {
 
             *self.entities.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
-                archetype: dst_id,
+                arch: dst_id,
             };
 
             Some(val.cast::<T>().read())
@@ -308,7 +311,7 @@ impl World {
     ) -> Option<AtomicRef<T>> {
         let loc = self.entities.get(id)?;
 
-        self.archetypes.get(loc.archetype)?.get(loc.slot, component)
+        self.archetypes.get(loc.arch)?.get(loc.slot, component)
     }
 
     /// Randomly access an entity's component.
@@ -317,11 +320,17 @@ impl World {
         id: Entity,
         component: Component<T>,
     ) -> Option<AtomicRefMut<T>> {
-        let loc = self.entities.get(id)?;
+        let &EntityLocation { arch, slot } = self.entities.get(id)?;
 
-        self.archetypes
-            .get(loc.archetype)?
-            .get_mut(loc.slot, component)
+        let archetype = self.archetype(arch);
+
+        let change_tick = self.advance_change_tick();
+
+        archetype
+            .changes_mut(component.id())?
+            .set(Slice::single(slot), change_tick);
+
+        archetype.get_mut(slot, component)
     }
 
     /// Returns true if the entity has the specified component.
@@ -329,7 +338,7 @@ impl World {
     pub fn has<T: ComponentValue>(&self, id: Entity, component: Component<T>) -> bool {
         let loc = self.entities.get(id);
         if let Some(loc) = loc {
-            self.archetype(loc.archetype).has(component.id())
+            self.archetype(loc.arch).has(component.id())
         } else {
             false
         }

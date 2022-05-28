@@ -1,7 +1,4 @@
-use std::{
-    collections::BTreeSet,
-    ops::{Range, RangeInclusive},
-};
+use std::{collections::BTreeSet, ops::Range};
 
 use super::Slot;
 
@@ -13,16 +10,6 @@ pub struct Slice {
 }
 
 impl Slice {
-    // Convert the slice into a BTreeSet of entities.
-    // If using this in hot loops... don't
-    pub fn into_set(self) -> BTreeSet<Slot> {
-        BTreeSet::from_iter(self.start..self.end)
-    }
-
-    pub fn iter(&self) -> Range<Slot> {
-        self.start..self.end
-    }
-
     /// Creates a new slice of entity slots.
     #[inline]
     pub fn new(start: Slot, end: Slot) -> Self {
@@ -34,6 +21,10 @@ impl Slice {
         Self { start: 0, end: 0 }
     }
 
+    pub fn single(slot: Slot) -> Slice {
+        Self::new(slot, slot + 1)
+    }
+
     #[inline]
     pub fn len(&self) -> Slot {
         self.end.wrapping_sub(self.start)
@@ -42,6 +33,16 @@ impl Slice {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.end <= self.start
+    }
+
+    // Convert the slice into a BTreeSet of entities.
+    // If using this in hot loops... don't
+    pub fn into_set(self) -> BTreeSet<Slot> {
+        BTreeSet::from_iter(self.start..self.end)
+    }
+
+    pub fn iter(&self) -> Range<Slot> {
+        self.start..self.end
     }
 
     #[inline]

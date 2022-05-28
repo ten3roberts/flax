@@ -2,7 +2,7 @@ use std::{iter::FusedIterator, marker::PhantomData, slice::Iter};
 
 use crate::{
     archetype::{ArchetypeId, Slice, Slot},
-    All, Fetch, Filter, FilterIter, PreparedFetch, World,
+    Fetch, Filter, FilterIter, PreparedFetch, World,
 };
 
 /// Iterates over a chunk of entities, specified by a predicate.
@@ -85,29 +85,32 @@ where
     }
 }
 
-pub struct QueryIter<'a, Q>
+pub struct QueryIter<'a, Q, F>
 where
     Q: Fetch<'a>,
+    F: Filter<'a>,
 {
     new_tick: u32,
+    old_tick: u32,
     archetypes: Iter<'a, ArchetypeId>,
     world: &'a World,
-    /// The lifetime of chunk iter is promoted from <'a, 'q>, where 'q refers to
-    /// the `ArchetypeIter`. The archetype iter is held atleast as long as
-    /// chunkiter.
-    current: Option<ArchetypeIter<'a, Q, All>>,
+    current: Option<ArchetypeIter<'a, Q, F>>,
     fetch: &'a Q,
+    filter: &'a F,
 }
 
-impl<'a, Q> QueryIter<'a, Q>
+impl<'a, Q, F> QueryIter<'a, Q, F>
 where
     Q: Fetch<'a>,
+    F: Filter<'a>,
 {
     pub fn new(
         world: &'a World,
         archetypes: Iter<'a, ArchetypeId>,
         fetch: &'a Q,
         new_tick: u32,
+        old_tick: u32,
+        filter: &'a F,
     ) -> Self {
         Self {
             new_tick,
@@ -115,6 +118,8 @@ where
             world,
             current: None,
             fetch,
+            filter,
+            old_tick,
         }
     }
 
@@ -125,9 +130,10 @@ where
     }
 }
 
-impl<'a, Q> Iterator for QueryIter<'a, Q>
+impl<'a, Q, F> Iterator for QueryIter<'a, Q, F>
 where
     Q: Fetch<'a>,
+    F: Filter<'a>,
 {
     type Item = Q::Item;
 
@@ -143,16 +149,21 @@ where
             let arch = *self.archetypes.next()?;
             let arch = self.world.archetype(arch);
 
+            let chunks = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
+
             let fetch = self
                 .fetch
                 .prepare(arch)
                 .expect("Encountered non matched archetype");
-
-            let chunks = FilterIter::new(arch.slots(), All);
 
             self.current = Some(ArchetypeIter::new(fetch, self.new_tick, chunks));
         }
     }
 }
 
-impl<'a, Q> FusedIterator for QueryIter<'a, Q> where Q: Fetch<'a> {}
+impl<'a, Q, F> FusedIterator for QueryIter<'a, Q, F>
+where
+    Q: Fetch<'a>,
+    F: Filter<'a>,
+{
+}

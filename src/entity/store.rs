@@ -51,7 +51,7 @@ pub fn from_slot_gen(gen: u32) -> u16 {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EntityLocation {
-    pub(crate) archetype: ArchetypeId,
+    pub(crate) arch: ArchetypeId,
     pub(crate) slot: usize,
 }
 
