@@ -1,16 +1,5 @@
-use crate::{ChangedFilter, Component, ComponentValue};
+use crate::{Component, ComponentValue};
 
-pub trait FetchExt: Sized {
-    /// Transform this fetch into a change filtered fetch
-    fn changed(self) -> ChangedFilter<Self>;
-}
+pub trait FetchExt: Sized {}
 
-impl<T> FetchExt for Component<T>
-where
-    T: ComponentValue,
-{
-    /// Transform this fetch into a changed filter
-    fn changed(self) -> ChangedFilter<Self> {
-        ChangedFilter::new(self.id(), self)
-    }
-}
+impl<T> FetchExt for Component<T> where T: ComponentValue {}

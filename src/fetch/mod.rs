@@ -7,7 +7,7 @@ pub use filter::*;
 use atomic_refcell::AtomicRefMut;
 
 use crate::{
-    archetype::{Archetype, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
+    archetype::{Archetype, Change, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
     Component, ComponentValue,
 };
 
@@ -122,7 +122,7 @@ unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
 
     fn set_visited(&mut self, slots: Slice, change_tick: u32) {
         eprintln!("Setting changes for {slots:?}: {change_tick}");
-        self.changes.set(slots, change_tick);
+        self.changes.set(Change::modified(slots, change_tick));
     }
 }
 

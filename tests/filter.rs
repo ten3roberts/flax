@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flax::{component, EntityBuilder, FetchExt, Query, World};
+use flax::{component, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 component! {
@@ -55,4 +55,12 @@ fn filters() {
     eprintln!("Items: {items:?}");
 
     assert_eq!(items, &[&-3.0, &-4.0, &-5.0, &-6.0]);
+
+    others[3..5].iter().for_each(|id| {
+        let mut a = world.get_mut(*id, a()).unwrap();
+        *a = 2.0 * *a;
+    });
+
+    let items = query.iter(&world).collect_vec();
+    assert_eq!(items, &[&-6.0, &-8.0]);
 }

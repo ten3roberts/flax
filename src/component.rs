@@ -7,7 +7,9 @@ use std::{
     },
 };
 
-use crate::{archetype::ComponentInfo, entity::EntityIndex, Entity, Mutable, STATIC_NAMESPACE};
+use crate::{
+    archetype::ComponentInfo, entity::EntityIndex, ChangedFilter, Entity, Mutable, STATIC_NAMESPACE,
+};
 
 pub trait ComponentValue: Send + Sync + 'static {}
 pub type ComponentId = Entity;
@@ -94,6 +96,11 @@ impl<T: ComponentValue> Component<T> {
     /// Transform this into a mutable fetch
     pub fn mutable(self) -> Mutable<T> {
         Mutable(self)
+    }
+
+    /// Construct a fine grained change detection filter.
+    pub fn changed(self) -> ChangedFilter {
+        ChangedFilter::new(self.id())
     }
 
     /// Get the component's name.

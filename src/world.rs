@@ -7,7 +7,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, ComponentInfo, Slice},
+    archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice},
     entity::{EntityLocation, EntityStore},
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity,
 };
@@ -166,7 +166,7 @@ impl World {
 
         if let Some(mut val) = src.get_mut(slot, component) {
             src.changes_mut(component.id())?
-                .set(Slice::single(slot), change_tick);
+                .set(Change::modified(Slice::single(slot), change_tick));
 
             return Some(mem::replace(&mut *val, value));
         }
@@ -229,6 +229,11 @@ impl World {
                     .slot = slot;
             }
             eprintln!("New slot: {dst_slot}");
+
+            // src.changes_mut(component.id())?
+            //     .set(Change::removed(Slice::single(dst_slot), change_tick));
+            // dst.changes_mut(component.id())?
+            //     .set(Change::inserted(Slice::single(dst_slot), change_tick));
 
             *self.entities.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
@@ -328,7 +333,7 @@ impl World {
 
         archetype
             .changes_mut(component.id())?
-            .set(Slice::single(slot), change_tick);
+            .set(Change::modified(Slice::single(slot), change_tick));
 
         archetype.get_mut(slot, component)
     }

@@ -11,7 +11,81 @@ use super::{Slice, Slot};
 ///
 /// The changes are always stored in a non-overlapping ascending order.
 pub struct Changes {
-    inner: Vec<(Slice, u32)>,
+    inner: Vec<Change>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ChangeKind {
+    Modified,
+    Inserted,
+    Removed,
+}
+
+impl ChangeKind {
+    /// Returns `true` if the change kind is [`Remove`].
+    ///
+    /// [`Remove`]: ChangeKind::Remove
+    #[must_use]
+    pub fn is_removed(&self) -> bool {
+        matches!(self, Self::Removed)
+    }
+
+    /// Returns `true` if the change kind is [`Insert`].
+    ///
+    /// [`Insert`]: ChangeKind::Insert
+    #[must_use]
+    pub fn is_inserted(&self) -> bool {
+        matches!(self, Self::Inserted)
+    }
+
+    /// Returns `true` if the change kind is [`Change`].
+    ///
+    /// [`Change`]: ChangeKind::Change
+    #[must_use]
+    pub fn is_modified(&self) -> bool {
+        matches!(self, Self::Modified)
+    }
+
+    pub(crate) fn is_modified_or_inserted(&self) -> bool {
+        self.is_modified() || self.is_removed()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub struct Change {
+    pub slice: Slice,
+    pub tick: u32,
+    pub kind: ChangeKind,
+}
+
+impl Change {
+    pub fn new(slice: Slice, tick: u32, kind: ChangeKind) -> Self {
+        Self { slice, tick, kind }
+    }
+
+    pub fn modified(slice: Slice, tick: u32) -> Change {
+        Self {
+            slice,
+            tick,
+            kind: ChangeKind::Modified,
+        }
+    }
+
+    pub fn inserted(slice: Slice, tick: u32) -> Change {
+        Self {
+            slice,
+            tick,
+            kind: ChangeKind::Inserted,
+        }
+    }
+
+    pub fn removed(slice: Slice, tick: u32) -> Change {
+        Self {
+            slice,
+            tick,
+            kind: ChangeKind::Removed,
+        }
+    }
 }
 
 impl std::fmt::Debug for Changes {
@@ -25,48 +99,43 @@ impl Changes {
         Self::default()
     }
 
-    pub fn as_set(&self, tick: u32) -> BTreeSet<Slot> {
-        self.inner
-            .iter()
-            .filter(|(_, t)| *t > tick)
-            .flat_map(|(v, _)| v.iter())
+    pub fn as_set(&self, f: impl Fn(&Change) -> bool) -> BTreeSet<Slot> {
+        self.iter()
+            .filter_map(|v| if f(v) { Some(v.slice) } else { None })
+            .flatten()
             .collect()
     }
 
-    pub fn as_map(&self) -> BTreeMap<Slot, u32> {
+    pub fn as_map(&self) -> BTreeMap<Slot, (u32, ChangeKind)> {
         self.inner
             .iter()
-            .flat_map(|&(slice, tick)| slice.iter().map(move |v| (v, tick)))
+            .flat_map(|v| v.slice.iter().map(move |p| (p, (v.tick, v.kind))))
             .collect()
     }
 
-    pub fn set(&mut self, slots: Slice, change_tick: u32) -> &mut Self {
+    pub fn set(&mut self, change: Change) -> &mut Self {
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
 
-        eprintln!("Setting: {slots:?}");
-
-        self.inner.retain_mut(|(v, tick)| {
-            if *tick < change_tick {
-                if let Some(diff) = v.difference(&slots) {
-                    eprintln!("Reduced change slice {tick} from {v:?} to {diff:?}");
-                    *v = diff;
-                } else {
-                    eprintln!("No difference of {v:?} and {slots:?}");
+        self.inner.retain_mut(|v| {
+            if v.tick < change.tick && v.kind == change.kind {
+                if let Some(diff) = v.slice.difference(&change.slice) {
+                    v.slice = diff;
                 }
             }
-            if *tick == change_tick {
+
+            if v.tick == change.tick && v.kind == change.kind {
                 // Merge atop change of the same change
-                if let Some(u) = v.union(&slots) {
+                if let Some(u) = v.slice.union(&change.slice) {
                     joined = true;
-                    *v = u;
+                    v.slice = u;
                 }
             }
 
-            if v.is_empty() {
+            if v.slice.is_empty() {
                 false
-            } else if v.start < slots.start {
+            } else if v.slice.start < change.slice.start {
                 insert_point += 1;
                 true
             } else {
@@ -77,16 +146,14 @@ impl Changes {
 
         if !joined {
             eprintln!("Inserting {insert_point}");
-            self.inner.insert(insert_point, (slots, change_tick));
+            self.inner.insert(insert_point, change);
         }
-
-        eprintln!("{:?}", self.inner);
 
         assert_eq!(
             self.inner
                 .iter()
                 .copied()
-                .sorted_by_key(|v| v.0.start)
+                .sorted_by_key(|v| v.slice.start)
                 .collect_vec(),
             self.inner
         );
@@ -111,8 +178,42 @@ impl Changes {
         // }
     }
 
+    pub fn migrate_to(&mut self, slot: Slot, other: &mut Self) {
+        if let Some(removed) = self.remove(slot) {
+            other.set(removed);
+        }
+    }
+
+    pub fn remove(&mut self, slot: Slot) -> Option<Change> {
+        let slice = Slice::single(slot);
+        let mut result = Vec::new();
+
+        let removed = self
+            .inner
+            .drain(..)
+            .flat_map(|v| {
+                if let Some((l, _, r)) = v.slice.split_with(&slice) {
+                    if !l.is_empty() {
+                        result.push(Change::new(l, v.tick, v.kind));
+                    }
+                    if !r.is_empty() {
+                        result.push(Change::new(r, v.tick, v.kind));
+                    }
+
+                    Some(Change::new(slice, v.tick, v.kind))
+                } else {
+                    result.push(v);
+                    None
+                }
+            })
+            .last();
+
+        self.inner = result;
+        removed
+    }
+
     /// Returns the changes in the change list at a particular index.
-    pub fn get(&self, index: usize) -> Option<&(Slice, u32)> {
+    pub fn get(&self, index: usize) -> Option<&Change> {
         self.inner.get(index)
     }
 
@@ -121,8 +222,12 @@ impl Changes {
     }
 
     /// Iterate all changes in ascending order
-    pub fn iter(&self) -> std::slice::Iter<(Slice, u32)> {
+    pub fn iter(&self) -> std::slice::Iter<Change> {
         self.inner.iter()
+    }
+
+    pub(crate) fn as_changed_set(&self, tick: u32) -> BTreeSet<Slot> {
+        self.as_set(|v| v.kind.is_modified_or_inserted() && v.tick > tick)
     }
 }
 
@@ -135,44 +240,50 @@ mod tests {
     fn changes() {
         let mut changes = Changes::new();
 
-        changes.set(Slice::new(0, 5), 1);
+        changes.set(Change::modified(Slice::new(0, 5), 1));
 
-        changes.set(Slice::new(70, 92), 2);
-
-        assert_eq!(
-            changes.iter().copied().collect_vec(),
-            [(Slice::new(0, 5), 1), (Slice::new(70, 92), 2)]
-        );
-
-        changes.set(Slice::new(3, 5), 3);
+        changes.set(Change::modified(Slice::new(70, 92), 2));
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                (Slice::new(0, 3), 1),
-                (Slice::new(3, 5), 3),
-                (Slice::new(70, 92), 2),
+                Change::modified(Slice::new(0, 5), 1),
+                Change::modified(Slice::new(70, 92), 2)
+            ]
+        );
+
+        changes.set(Change::modified(Slice::new(3, 5), 3));
+
+        assert_eq!(
+            changes.iter().copied().collect_vec(),
+            [
+                Change::modified(Slice::new(0, 3), 1),
+                Change::modified(Slice::new(3, 5), 3),
+                Change::modified(Slice::new(70, 92), 2),
             ]
         );
 
         // Extend previous change
-        changes.set(Slice::new(4, 14), 3);
+        changes.set(Change::modified(Slice::new(4, 14), 3));
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                (Slice::new(0, 3), 1),
-                (Slice::new(3, 14), 3),
-                (Slice::new(70, 92), 2),
+                Change::modified(Slice::new(0, 3), 1),
+                Change::modified(Slice::new(3, 14), 3),
+                Change::modified(Slice::new(70, 92), 2),
             ]
         );
 
         // Overwrite almost all
-        changes.set(Slice::new(0, 89), 4);
+        changes.set(Change::modified(Slice::new(0, 89), 4));
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
-            [(Slice::new(0, 89), 4), (Slice::new(89, 92), 2),]
+            [
+                Change::modified(Slice::new(0, 89), 4),
+                Change::modified(Slice::new(89, 92), 2),
+            ]
         );
     }
 
@@ -183,12 +294,12 @@ mod tests {
         for i in 0..239 {
             let perm = (i * (i + 2)) % 300;
             // let perm = i;
-            changes.set(Slice::new(perm, perm), i as _);
+            changes.set(Change::modified(Slice::single(perm), i as _));
         }
 
-        changes.set(Slice::new(70, 249), 300);
-        changes.set(Slice::new(0, 89), 301);
-        changes.set(Slice::new(209, 300), 302);
+        changes.set(Change::modified(Slice::new(70, 249), 300));
+        changes.set(Change::modified(Slice::new(0, 89), 301));
+        changes.set(Change::modified(Slice::new(209, 300), 302));
 
         eprintln!("Changes: {changes:#?}");
     }
@@ -197,11 +308,43 @@ mod tests {
     fn adjacent() {
         let mut changes = Changes::new();
 
-        changes.set(Slice::new(0, 63), 1);
-        changes.set(Slice::new(63, 182), 1);
+        changes.set(Change::modified(Slice::new(0, 63), 1));
+        changes.set(Change::modified(Slice::new(63, 182), 1));
+
         assert_eq!(
             changes.iter().copied().collect_vec(),
-            [(Slice::new(0, 182), 1)]
+            [Change::modified(Slice::new(0, 182), 1)]
         );
+    }
+
+    #[test]
+    fn migrate() {
+        let mut changes_1 = Changes::new();
+        let mut changes_2 = Changes::new();
+
+        changes_1
+            .set(Change::modified(Slice::new(20, 48), 1))
+            .set(Change::modified(Slice::new(32, 98), 2));
+
+        assert_eq!(
+            changes_1.inner,
+            [
+                Change::modified(Slice::new(20, 32), 1),
+                Change::modified(Slice::new(32, 98), 2)
+            ]
+        );
+
+        changes_1.migrate_to(25, &mut changes_2);
+
+        assert_eq!(
+            changes_1.inner,
+            [
+                Change::modified(Slice::new(20, 25), 1),
+                Change::modified(Slice::new(26, 32), 1),
+                Change::modified(Slice::new(32, 98), 2)
+            ]
+        );
+
+        assert_eq!(changes_2.inner, [Change::modified(Slice::single(25), 1)])
     }
 }

@@ -1,7 +1,6 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
     collections::BTreeMap,
-    ops::Range,
     ptr::NonNull,
 };
 

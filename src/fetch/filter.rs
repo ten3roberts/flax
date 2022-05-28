@@ -4,7 +4,7 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Archetype, Changes, Slice},
-    ComponentId, Fetch,
+    ComponentId,
 };
 
 /// A filter over a query which will be prepared for an archetype, yielding
@@ -34,41 +34,21 @@ where
     }
 }
 
-pub struct ChangedFilter<F> {
+pub struct ChangedFilter {
     component: ComponentId,
-    fetch: F,
 }
 
-impl<F> ChangedFilter<F> {
-    pub fn new(component: ComponentId, fetch: F) -> Self {
-        Self { component, fetch }
+impl ChangedFilter {
+    pub fn new(component: ComponentId) -> Self {
+        Self { component }
     }
 }
 
-impl<'a, F> Filter<'a> for ChangedFilter<F> {
+impl<'a> Filter<'a> for ChangedFilter {
     type Prepared = PreparedChangeFilter<'a>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedChangeFilter::new(archetype, self.component, change_tick)
-    }
-}
-
-impl<'a, F> Fetch<'a> for ChangedFilter<F>
-where
-    F: Fetch<'a>,
-{
-    const MUTABLE: bool = F::MUTABLE;
-
-    type Item = F::Item;
-
-    type Prepared = F::Prepared;
-
-    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
-        self.fetch.prepare(archetype)
-    }
-
-    fn matches(&self, archetype: &'a Archetype) -> bool {
-        self.fetch.matches(archetype)
     }
 }
 
@@ -147,10 +127,10 @@ impl<'a> PreparedChangeFilter<'a> {
             Some(ref v) => Some(v),
             None => loop {
                 let v = self.changes.get(self.index);
-                if let Some(&(slice, tick)) = v {
+                if let Some(change) = v {
                     self.index += 1;
-                    if tick > self.tick {
-                        break Some(self.cur.get_or_insert(slice));
+                    if change.tick > self.tick && change.kind.is_modified_or_inserted() {
+                        break Some(self.cur.get_or_insert(change.slice));
                     }
                 } else {
                     // No more
@@ -308,18 +288,19 @@ mod tests {
     use atomic_refcell::AtomicRefCell;
     use itertools::Itertools;
 
+    use crate::archetype::Change;
+
     use super::*;
     #[test]
     fn filter() {
         let mut changes = Changes::new();
 
-        changes.set(Slice::new(40, 200), 1);
-        changes.set(Slice::new(70, 349), 2);
-
-        changes.set(Slice::new(560, 893), 5);
-        changes.set(Slice::new(39, 60), 6);
-        changes.set(Slice::new(784, 800), 7);
-        changes.set(Slice::new(945, 1139), 8);
+        changes.set(Change::modified(Slice::new(40, 200), 1));
+        changes.set(Change::modified(Slice::new(70, 349), 2));
+        changes.set(Change::modified(Slice::new(560, 893), 5));
+        changes.set(Change::modified(Slice::new(39, 60), 6));
+        changes.set(Change::inserted(Slice::new(784, 800), 7));
+        changes.set(Change::modified(Slice::new(945, 1139), 8));
 
         dbg!(&changes);
 
@@ -347,15 +328,14 @@ mod tests {
         let mut changes_1 = Changes::new();
         let mut changes_2 = Changes::new();
 
-        changes_1.set(Slice::new(40, 65), 2);
-        changes_1.set(Slice::new(59, 80), 3);
-        changes_1.set(Slice::new(90, 234), 3);
+        changes_1.set(Change::modified(Slice::new(40, 65), 2));
+        changes_1.set(Change::modified(Slice::new(59, 80), 3));
+        changes_1.set(Change::modified(Slice::new(90, 234), 3));
+        changes_2.set(Change::modified(Slice::new(50, 70), 3));
+        changes_2.set(Change::modified(Slice::new(99, 210), 4));
 
-        changes_2.set(Slice::new(50, 70), 3);
-        changes_2.set(Slice::new(99, 210), 4);
-
-        let a_map = changes_1.as_map();
-        let b_map = changes_2.as_map();
+        let a_map = changes_1.as_changed_set(1);
+        let b_map = changes_2.as_changed_set(2);
 
         eprintln!("Changes: \n  {changes_1:?}\n  {changes_2:?}");
         let changes_1 = AtomicRefCell::new(changes_1);
@@ -372,7 +352,7 @@ mod tests {
         // Use a brute force BTreeSet for solving it
         let chunks_set = slots
             .iter()
-            .filter(|v| *a_map.get(v).unwrap_or(&0) > 1 || *b_map.get(v).unwrap_or(&0) > 2)
+            .filter(|v| a_map.contains(v) || b_map.contains(v))
             .collect_vec();
 
         let chunks = FilterIter::new(slots, filter).flatten().collect_vec();
@@ -388,7 +368,7 @@ mod tests {
         // Use a brute force BTreeSet for solving it
         let chunks_set = slots
             .iter()
-            .filter(|v| *a_map.get(v).unwrap_or(&0) > 1 && *b_map.get(v).unwrap_or(&0) > 2)
+            .filter(|v| a_map.contains(v) && b_map.contains(v))
             .collect_vec();
 
         let chunks = FilterIter::new(slots, filter).flatten().collect_vec();
@@ -406,45 +386,44 @@ mod tests {
 
         let archetype = Archetype::new([a().info(), b().info(), c().info()]);
 
-        let filter = ChangedFilter::new(a().id(), ())
-            .and(ChangedFilter::new(b().id(), ()))
-            .or(ChangedFilter::new(c().id(), ()));
+        let filter = ChangedFilter::new(a().id())
+            .and(ChangedFilter::new(b().id()))
+            .or(ChangedFilter::new(c().id()));
 
         // Mock changes
         let a_map = archetype
             .changes_mut(a().id())
             .unwrap()
-            .set(Slice::new(9, 80), 2)
-            .set(Slice::new(65, 83), 4)
-            .as_map();
+            .set(Change::modified(Slice::new(9, 80), 2))
+            .set(Change::modified(Slice::new(65, 83), 4))
+            .as_changed_set(1);
 
         let b_map = archetype
             .changes_mut(b().id())
             .unwrap()
-            .set(Slice::new(16, 45), 2)
-            .set(Slice::new(68, 85), 2)
-            .as_map();
+            .set(Change::modified(Slice::new(16, 45), 2))
+            .set(Change::modified(Slice::new(68, 85), 2))
+            .as_changed_set(1);
 
         let c_map = archetype
             .changes_mut(c().id())
             .unwrap()
-            .set(Slice::new(96, 123), 3)
-            .as_map();
+            .set(Change::modified(Slice::new(96, 123), 3))
+            .as_changed_set(1);
 
         // Brute force
 
         let slots = Slice::new(0, 1000);
         let chunks_set = slots
             .iter()
-            .filter(|v| {
-                (*a_map.get(v).unwrap_or(&0) > 1 && *b_map.get(v).unwrap_or(&0) > 1)
-                    || (*c_map.get(v).unwrap_or(&0) > 1)
-            })
+            .filter(|v| (a_map.contains(v) && b_map.contains(v)) || (c_map.contains(v)))
             .collect_vec();
 
         let chunks = FilterIter::new(slots, filter.prepare(&archetype, 1))
             .inspect(|v| eprintln!("Changes: {v:?}"))
             .flatten()
             .collect_vec();
+
+        // assert_eq!(chunks, chunks_set);
     }
 }

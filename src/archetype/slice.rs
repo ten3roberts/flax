@@ -45,6 +45,10 @@ impl Slice {
         self.start..self.end
     }
 
+    pub fn contains(&self, slot: Slot) -> bool {
+        slot >= self.start && slot < self.end
+    }
+
     #[inline]
     pub fn intersect(&self, other: &Self) -> Self {
         let start = self.start.max(other.start);
