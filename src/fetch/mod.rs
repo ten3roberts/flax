@@ -8,7 +8,7 @@ use atomic_refcell::AtomicRefMut;
 
 use crate::{
     archetype::{Archetype, Change, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
-    Component, ComponentValue,
+    Component, ComponentValue, Entity,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,6 +123,37 @@ unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
     fn set_visited(&mut self, slots: Slice, change_tick: u32) {
         eprintln!("Setting changes for {slots:?}: {change_tick}");
         self.changes.set(Change::modified(slots, change_tick));
+    }
+}
+
+pub struct EntityFetch;
+pub struct PreparedEntities<'a> {
+    entities: &'a [Option<Entity>],
+}
+
+impl<'a> Fetch<'a> for EntityFetch {
+    const MUTABLE: bool = false;
+
+    type Item = Entity;
+
+    type Prepared = PreparedEntities<'a>;
+
+    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+        Some(PreparedEntities {
+            entities: archetype.entities(),
+        })
+    }
+
+    fn matches(&self, _: &'a Archetype) -> bool {
+        true
+    }
+}
+
+unsafe impl<'a> PreparedFetch<'a> for PreparedEntities<'a> {
+    type Item = Entity;
+
+    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
+        self.entities[slot].unwrap()
     }
 }
 

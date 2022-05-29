@@ -80,6 +80,29 @@ impl<'a> Filter<'a> for InsertedFilter {
     }
 }
 
+pub struct RemovedFilter {
+    component: ComponentId,
+}
+
+impl RemovedFilter {
+    pub fn new(component: ComponentId) -> Self {
+        Self { component }
+    }
+}
+
+impl<'a> Filter<'a> for RemovedFilter {
+    type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
+
+    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+        PreparedKindFilter::new(
+            archetype,
+            self.component,
+            change_tick,
+            ChangeKind::is_removed,
+        )
+    }
+}
+
 pub struct And<L, R> {
     left: L,
     right: R,

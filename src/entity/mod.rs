@@ -9,6 +9,8 @@ use std::sync::atomic::AtomicU32;
 pub use builder::*;
 pub use store::*;
 
+use crate::EntityFetch;
+
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 #[repr(transparent)]
 /// Represents an entity.
@@ -102,6 +104,11 @@ impl fmt::Display for Entity {
         let (index, generation, namespace) = self.into_parts();
         write!(f, "{namespace}:{index}:{generation}")
     }
+}
+
+/// Access the entity ids in a query
+pub fn entities() -> EntityFetch {
+    EntityFetch
 }
 
 #[cfg(test)]
