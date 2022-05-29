@@ -150,7 +150,7 @@ pub trait PreparedFilter {
 
 #[derive(Debug)]
 pub struct PreparedKindFilter<'a, F> {
-    changes: AtomicRef<'a, Changes>,
+    changes: Option<AtomicRef<'a, Changes>>,
     cur: Option<Slice>,
     // The current change group.
     // Starts at the end and decrements
@@ -164,11 +164,7 @@ where
     F: Fn(&ChangeKind) -> bool,
 {
     pub fn new(archetype: &'a Archetype, component: ComponentId, tick: u32, filter: F) -> Self {
-        let changes = archetype.changes(component).unwrap();
-        Self::from_borrow(changes, tick, filter)
-    }
-
-    pub(crate) fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32, filter: F) -> Self {
+        let changes = archetype.changes(component);
         Self {
             changes,
             cur: None,
@@ -178,21 +174,32 @@ where
         }
     }
 
-    pub fn current_slice(&mut self) -> Option<&Slice> {
-        match self.cur {
-            Some(ref v) => Some(v),
-            None => loop {
-                let v = self.changes.get(self.index);
+    pub(crate) fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32, filter: F) -> Self {
+        Self {
+            changes: Some(changes),
+            cur: None,
+            index: 0,
+            tick,
+            filter,
+        }
+    }
+
+    pub fn current_slice(&mut self) -> Option<Slice> {
+        match (self.cur, self.changes.as_mut()) {
+            (Some(v), _) => Some(v),
+            (None, Some(changes)) => loop {
+                let v = changes.get(self.index);
                 if let Some(change) = v {
                     self.index += 1;
                     if change.tick > self.tick && (self.filter)(&change.kind) {
-                        break Some(self.cur.get_or_insert(change.slice));
+                        break Some(*self.cur.get_or_insert(change.slice));
                     }
                 } else {
                     // No more
                     return None;
                 };
             },
+            _ => None,
         }
     }
 }
