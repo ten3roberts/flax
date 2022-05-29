@@ -21,7 +21,7 @@ jobs:
       with:
           toolchain: stable
           override: true
-          components: rustfmt, clippy
+          profile: minimal
           
     - name: Run tests
       uses: actions-rs/cargo@v1
