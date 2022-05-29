@@ -110,10 +110,7 @@ impl Archetype {
             std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), len)
         });
 
-        Some(StorageBorrowMut {
-            data,
-            id: component.id(),
-        })
+        Some(StorageBorrowMut { data })
     }
 
     pub fn init_changes(&mut self, component: ComponentId) -> &mut Changes {
@@ -149,10 +146,7 @@ impl Archetype {
             std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
         });
 
-        Some(StorageBorrow {
-            data,
-            id: component.id(),
-        })
+        Some(StorageBorrow { data })
     }
 
     pub(crate) fn storage_raw(&mut self, component: ComponentId) -> Option<&mut Storage> {
@@ -409,6 +403,12 @@ impl Archetype {
     pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
         self.storage.values().map(|v| &v.component)
     }
+
+    /// Access the entities in the archetype for each slot. Entity is None if
+    /// the slot is not occupied, only for the last slots.
+    pub fn entities(&self) -> &[Option<Entity>] {
+        self.entities.as_ref()
+    }
 }
 
 impl Drop for Archetype {
@@ -437,7 +437,6 @@ impl Drop for Archetype {
 /// Borrow of a single component
 pub struct StorageBorrow<'a, T> {
     data: AtomicRef<'a, [T]>,
-    id: ComponentId,
 }
 
 impl<'a, T> StorageBorrow<'a, T> {
@@ -450,7 +449,6 @@ impl<'a, T> StorageBorrow<'a, T> {
 
 pub struct StorageBorrowMut<'a, T> {
     data: AtomicRefMut<'a, [T]>,
-    id: ComponentId,
 }
 
 impl<'a, T> StorageBorrowMut<'a, T> {

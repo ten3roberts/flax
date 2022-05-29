@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flax::{component, EntityBuilder, Query, World};
+use flax::{component, entities, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 #[test]
@@ -30,7 +30,7 @@ fn query() {
         b: String,
     }
 
-    let mut query = Query::new(a());
+    let mut query = Query::new((entities(), a()));
     let mut world = World::new();
     query.iter(&world).for_each(|_| {});
 
@@ -46,12 +46,11 @@ fn query() {
 
     let items = query
         .iter(&world)
-        .inspect(|&&v| println!("{v}"))
-        .copied()
-        .sorted()
+        .inspect(|v| println!("{v:?}"))
+        .sorted_by_key(|(id, _)| *id)
         .collect_vec();
 
-    assert_eq!(items, [4, 8, 9])
+    assert_eq!(items, [(id1, &4), (id2, &9), (id3, &8)])
 }
 
 #[test]
