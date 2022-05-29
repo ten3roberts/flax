@@ -89,9 +89,10 @@ where
     /// Any change filters will yield the items changed between this and the
     /// previous query for the same query.
     ///
-    /// The first invocation will not yield any of the changed items.
+    /// As a result, the first invocation will yield all entities.
     pub fn iter<'a>(&'a mut self, world: &'a World) -> QueryIter<'a, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
+        dbg!(old_tick, new_tick);
         let (archetypes, fetch, filter) = self.get_archetypes(world);
 
         QueryIter::new(world, archetypes.iter(), fetch, new_tick, old_tick, filter)

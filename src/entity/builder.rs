@@ -30,6 +30,16 @@ impl EntityBuilder {
         self.set(component, Default::default())
     }
 
+    /// Return a mutable reference to the stored component.
+    pub fn get_mut<T: ComponentValue>(&mut self, component: Component<T>) -> Option<&mut T> {
+        self.buffer.get_mut(component)
+    }
+
+    /// Return a reference to the stored component.
+    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
+        self.buffer.get(component)
+    }
+
     /// Spawns the build entities into the world.
     ///
     /// Clears the builder and allows it to be used again, reusing the builder
