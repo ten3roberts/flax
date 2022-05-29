@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, ops::Range};
 
 use super::Slot;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 /// Represents a contiguous range of slots within and archetype
 pub struct Slice {
     pub start: Slot,
@@ -66,6 +66,10 @@ impl Slice {
         // 1..2 u 2..3
         if self.end >= other.start && self.start <= other.end {
             Some(Self::new(start, end))
+        } else if self.is_empty() {
+            Some(*other)
+        } else if other.is_empty() {
+            Some(*self)
         } else {
             None
         }

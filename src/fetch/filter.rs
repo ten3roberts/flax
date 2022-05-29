@@ -1,4 +1,7 @@
-use std::iter::FusedIterator;
+use std::{
+    iter::FusedIterator,
+    ops::{BitAnd, BitOr, Neg},
+};
 
 use atomic_refcell::AtomicRef;
 
@@ -7,6 +10,62 @@ use crate::{
     ComponentId,
 };
 
+macro_rules! gen_bitops {
+    ($ty:ident[$($p: tt),*]) => {
+        impl<R, $($p),*> std::ops::BitOr<R> for $ty<$($p),*>
+        where
+            Self: for<'x> Filter<'x>,
+            R: for<'x> Filter<'x>,
+        {
+            type Output = Or<Self, R>;
+
+            fn bitor(self, rhs: R) -> Self::Output {
+                self.or(rhs)
+            }
+        }
+
+        impl<'a, R, $($p),*> std::ops::BitAnd<R> for $ty<$($p),*>
+        where
+            Self: Filter<'a>,
+            R: Filter<'a>,
+        {
+            type Output = And<Self, R>;
+
+            fn bitand(self, rhs: R) -> Self::Output {
+                self.and(rhs)
+            }
+        }
+
+        impl<$($p),*> std::ops::Neg for $ty<$($p),*>
+        where
+            Self: for<'x> Filter<'x>
+        {
+            type Output = Not<Self>;
+
+            fn neg(self) -> Self::Output {
+                Not(self)
+            }
+        }
+    };
+
+
+    ($($ty:ident[$($p: tt),*];)*) => {
+        $(
+            gen_bitops!{ $ty[$($p),*] }
+        )*
+    }
+}
+
+gen_bitops! {
+    ModifiedFilter[];
+    InsertedFilter[];
+    RemovedFilter[];
+    And[A,B];
+    Or[A,B];
+    All[];
+    Nothing[];
+}
+
 /// A filter over a query which will be prepared for an archetype, yielding
 /// subsets of slots.
 pub trait Filter<'a>
@@ -14,6 +73,7 @@ where
     Self: Sized,
 {
     type Prepared: PreparedFilter;
+
     /// Prepare the filter for an archetype.
     /// `change_tick` refers to the last time this query was run. Useful for
     /// change detection.
@@ -108,6 +168,12 @@ pub struct And<L, R> {
     right: R,
 }
 
+impl<L, R> And<L, R> {
+    pub fn new(left: L, right: R) -> Self {
+        Self { left, right }
+    }
+}
+
 impl<'a, L, R> Filter<'a> for And<L, R>
 where
     L: Filter<'a>,
@@ -126,6 +192,12 @@ where
 pub struct Or<L, R> {
     left: L,
     right: R,
+}
+
+impl<L, R> Or<L, R> {
+    pub fn new(left: L, right: R) -> Self {
+        Self { left, right }
+    }
 }
 
 impl<'a, L, R> Filter<'a> for Or<L, R>
@@ -242,10 +314,10 @@ where
     R: PreparedFilter,
 {
     fn filter(&mut self, slots: Slice) -> Option<Slice> {
-        let l = self.left.filter(slots)?;
-        let r = self.right.filter(slots)?;
+        let l = self.left.filter(slots).unwrap_or_default();
+        let r = self.right.filter(slots).unwrap_or_default();
         let u = l.union(&r);
-        eprintln!("{l:?} u {r:?} = {u:?}");
+        eprintln!("l: {l:?} r: {r:?} u: {u:?}");
         match u {
             Some(v) => Some(v),
             None => {
@@ -255,6 +327,67 @@ where
                 Some(l)
             }
         }
+    }
+}
+
+pub struct Not<T>(T);
+
+impl<'a, T> Filter<'a> for Not<T>
+where
+    T: Filter<'a>,
+{
+    type Prepared = PreparedNot<T::Prepared>;
+
+    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+        PreparedNot(self.0.prepare(archetype, change_tick))
+    }
+}
+
+impl<'a, R, T> std::ops::BitOr<R> for Not<T>
+where
+    Self: for<'x> Filter<'x>,
+    R: for<'x> Filter<'x>,
+{
+    type Output = Or<Self, R>;
+
+    fn bitor(self, rhs: R) -> Self::Output {
+        Or::new(self, rhs)
+    }
+}
+
+impl<'a, R, T> std::ops::BitAnd<R> for Not<T>
+where
+    Self: Filter<'a>,
+    R: Filter<'a>,
+{
+    type Output = And<Self, R>;
+
+    fn bitand(self, rhs: R) -> Self::Output {
+        And::new(self, rhs)
+    }
+}
+
+impl<'a, T> Neg for Not<T>
+where
+    T: Filter<'a>,
+{
+    type Output = T;
+
+    fn neg(self) -> Self::Output {
+        self.0
+    }
+}
+
+pub struct PreparedNot<T>(T);
+
+impl<T> PreparedFilter for PreparedNot<T>
+where
+    T: PreparedFilter,
+{
+    fn filter(&mut self, slots: Slice) -> Option<Slice> {
+        let a = self.0.filter(slots).unwrap_or_default();
+
+        slots.difference(&a)
     }
 }
 
@@ -287,15 +420,29 @@ where
             // to the upper floor
             let max = l.start.max(r.start).min(slots.end);
 
-            eprintln!("Retrying with {max}");
             let slots = Slice::new(max, slots.end);
             let l = self.left.filter(slots)?;
             let r = self.right.filter(slots)?;
             Some(l.intersect(&r))
         } else {
-            eprintln!("{l:?} && {r:?} => {i:?}");
             Some(i)
         }
+    }
+}
+
+pub struct Nothing;
+
+impl<'a> Filter<'a> for Nothing {
+    type Prepared = Self;
+
+    fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
+        Nothing
+    }
+}
+
+impl PreparedFilter for Nothing {
+    fn filter(&mut self, _: Slice) -> Option<Slice> {
+        Some(Slice::empty())
     }
 }
 
@@ -472,9 +619,8 @@ mod tests {
 
         let archetype = Archetype::new([a().info(), b().info(), c().info()]);
 
-        let filter = ModifiedFilter::new(a().id())
-            .and(ModifiedFilter::new(b().id()))
-            .or(ModifiedFilter::new(c().id()));
+        let filter = ModifiedFilter::new(a().id()) & (ModifiedFilter::new(b().id()))
+            | (ModifiedFilter::new(c().id()));
 
         // Mock changes
         let a_map = archetype

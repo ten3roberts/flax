@@ -47,7 +47,7 @@ impl ChangeKind {
     }
 
     pub(crate) fn is_modified_or_inserted(&self) -> bool {
-        self.is_modified() || self.is_removed()
+        self.is_modified() || self.is_inserted()
     }
 }
 
@@ -145,7 +145,6 @@ impl Changes {
         });
 
         if !joined {
-            eprintln!("Inserting {insert_point}");
             self.inner.insert(insert_point, change);
         }
 
@@ -159,23 +158,6 @@ impl Changes {
         );
 
         self
-
-        // match self.inner.last_mut() {
-        //     Some((v, tick)) if *tick == change_tick => {
-        //         eprintln!("Attempting to unionize");
-        //         if let Some(u) = v.union(&slice) {
-        //             eprintln!("Union");
-        //             *v = u
-        //         } else {
-        //             eprintln!("No union, pushing new");
-        //             self.inner.push((slice, change_tick))
-        //         }
-        //     }
-        //     _ => {
-        //         eprintln!("Pushing new change for {change_tick}");
-        //         self.inner.push((slice, change_tick))
-        //     }
-        // }
     }
 
     pub fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {

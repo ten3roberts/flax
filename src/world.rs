@@ -28,8 +28,8 @@ impl World {
         Self {
             entities: EntityStore::new(1),
             archetypes,
-            change_tick: AtomicU32::default(),
-            archetype_gen: AtomicU32::default(),
+            change_tick: AtomicU32::new(0),
+            archetype_gen: AtomicU32::new(0),
             archetype_root: root,
         }
     }
@@ -122,7 +122,6 @@ impl World {
         let slot = arch.allocate(id);
 
         for component in components.components() {
-            eprintln!("Adding change for {component:#?} {slot} {change_tick}");
             arch.init_changes(component.id)
                 .set(Change::inserted(Slice::single(slot), change_tick));
         }
