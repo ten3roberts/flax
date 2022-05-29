@@ -3,7 +3,7 @@ use std::iter::FusedIterator;
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{Archetype, Changes, Slice},
+    archetype::{Archetype, ChangeKind, Changes, Slice},
     ComponentId,
 };
 
@@ -34,21 +34,49 @@ where
     }
 }
 
-pub struct ChangedFilter {
+pub struct ModifiedFilter {
     component: ComponentId,
 }
 
-impl ChangedFilter {
+impl ModifiedFilter {
     pub fn new(component: ComponentId) -> Self {
         Self { component }
     }
 }
 
-impl<'a> Filter<'a> for ChangedFilter {
-    type Prepared = PreparedChangeFilter<'a>;
+impl<'a> Filter<'a> for ModifiedFilter {
+    type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedChangeFilter::new(archetype, self.component, change_tick)
+        PreparedKindFilter::new(
+            archetype,
+            self.component,
+            change_tick,
+            ChangeKind::is_modified_or_inserted,
+        )
+    }
+}
+
+pub struct InsertedFilter {
+    component: ComponentId,
+}
+
+impl InsertedFilter {
+    pub fn new(component: ComponentId) -> Self {
+        Self { component }
+    }
+}
+
+impl<'a> Filter<'a> for InsertedFilter {
+    type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
+
+    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+        PreparedKindFilter::new(
+            archetype,
+            self.component,
+            change_tick,
+            ChangeKind::is_inserted,
+        )
     }
 }
 
@@ -98,27 +126,32 @@ pub trait PreparedFilter {
 }
 
 #[derive(Debug)]
-pub struct PreparedChangeFilter<'a> {
+pub struct PreparedKindFilter<'a, F> {
     changes: AtomicRef<'a, Changes>,
     cur: Option<Slice>,
     // The current change group.
     // Starts at the end and decrements
     index: usize,
     tick: u32,
+    filter: F,
 }
 
-impl<'a> PreparedChangeFilter<'a> {
-    pub fn new(archetype: &'a Archetype, component: ComponentId, tick: u32) -> Self {
+impl<'a, F> PreparedKindFilter<'a, F>
+where
+    F: Fn(&ChangeKind) -> bool,
+{
+    pub fn new(archetype: &'a Archetype, component: ComponentId, tick: u32, filter: F) -> Self {
         let changes = archetype.changes(component).unwrap();
-        Self::from_borrow(changes, tick)
+        Self::from_borrow(changes, tick, filter)
     }
 
-    pub(crate) fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32) -> Self {
+    pub(crate) fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32, filter: F) -> Self {
         Self {
             changes,
             cur: None,
             index: 0,
             tick,
+            filter,
         }
     }
 
@@ -129,7 +162,7 @@ impl<'a> PreparedChangeFilter<'a> {
                 let v = self.changes.get(self.index);
                 if let Some(change) = v {
                     self.index += 1;
-                    if change.tick > self.tick && change.kind.is_modified_or_inserted() {
+                    if change.tick > self.tick && (self.filter)(&change.kind) {
                         break Some(self.cur.get_or_insert(change.slice));
                     }
                 } else {
@@ -141,7 +174,10 @@ impl<'a> PreparedChangeFilter<'a> {
     }
 }
 
-impl<'a> PreparedFilter for PreparedChangeFilter<'a> {
+impl<'a, F> PreparedFilter for PreparedKindFilter<'a, F>
+where
+    F: Fn(&ChangeKind) -> bool,
+{
     fn filter(&mut self, slots: Slice) -> Option<Slice> {
         loop {
             let cur = self.current_slice()?;
@@ -306,7 +342,11 @@ mod tests {
 
         let changes = AtomicRefCell::new(changes);
 
-        let filter = PreparedChangeFilter::from_borrow(changes.borrow(), 2);
+        let filter = PreparedKindFilter::from_borrow(
+            changes.borrow(),
+            2,
+            ChangeKind::is_modified_or_inserted,
+        );
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -344,8 +384,16 @@ mod tests {
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedChangeFilter::from_borrow(changes_1.borrow(), 1);
-        let b = PreparedChangeFilter::from_borrow(changes_2.borrow(), 2);
+        let a = PreparedKindFilter::from_borrow(
+            changes_1.borrow(),
+            1,
+            ChangeKind::is_modified_or_inserted,
+        );
+        let b = PreparedKindFilter::from_borrow(
+            changes_2.borrow(),
+            2,
+            ChangeKind::is_modified_or_inserted,
+        );
 
         let filter = PreparedOr::new(a, b);
 
@@ -361,8 +409,16 @@ mod tests {
 
         // And
 
-        let a = PreparedChangeFilter::from_borrow(changes_1.borrow(), 1);
-        let b = PreparedChangeFilter::from_borrow(changes_2.borrow(), 2);
+        let a = PreparedKindFilter::from_borrow(
+            changes_1.borrow(),
+            1,
+            ChangeKind::is_modified_or_inserted,
+        );
+        let b = PreparedKindFilter::from_borrow(
+            changes_2.borrow(),
+            2,
+            ChangeKind::is_modified_or_inserted,
+        );
         let filter = PreparedAnd::new(a, b);
 
         // Use a brute force BTreeSet for solving it
@@ -386,9 +442,9 @@ mod tests {
 
         let archetype = Archetype::new([a().info(), b().info(), c().info()]);
 
-        let filter = ChangedFilter::new(a().id())
-            .and(ChangedFilter::new(b().id()))
-            .or(ChangedFilter::new(c().id()));
+        let filter = ModifiedFilter::new(a().id())
+            .and(ModifiedFilter::new(b().id()))
+            .or(ModifiedFilter::new(c().id()));
 
         // Mock changes
         let a_map = archetype

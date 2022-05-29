@@ -100,7 +100,6 @@ impl ComponentBuffer {
             // unoccupied, or the type is zero-sized
             unsafe {
                 let ptr = self.data.as_ptr().add(offset) as *mut T;
-                eprintln!("New alignt: {:#?}", component);
                 assert_eq!(self.data.as_ptr() as usize % layout.align(), 0);
                 assert_eq!(ptr as usize % layout.align(), 0);
                 std::ptr::write(ptr, value)

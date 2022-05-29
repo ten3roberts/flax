@@ -178,13 +178,14 @@ impl Changes {
         // }
     }
 
-    pub fn migrate_to(&mut self, slot: Slot, other: &mut Self) {
-        if let Some(removed) = self.remove(slot) {
+    pub fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
+        for mut removed in self.remove(src_slot) {
+            removed.slice = Slice::single(dst_slot);
             other.set(removed);
         }
     }
 
-    pub fn remove(&mut self, slot: Slot) -> Option<Change> {
+    pub fn remove(&mut self, slot: Slot) -> Vec<Change> {
         let slice = Slice::single(slot);
         let mut result = Vec::new();
 
@@ -206,7 +207,7 @@ impl Changes {
                     None
                 }
             })
-            .last();
+            .collect_vec();
 
         self.inner = result;
         removed
@@ -334,7 +335,7 @@ mod tests {
             ]
         );
 
-        changes_1.migrate_to(25, &mut changes_2);
+        changes_1.migrate_to(&mut changes_2, 25, 67);
 
         assert_eq!(
             changes_1.inner,
@@ -345,6 +346,6 @@ mod tests {
             ]
         );
 
-        assert_eq!(changes_2.inner, [Change::modified(Slice::single(25), 1)])
+        assert_eq!(changes_2.inner, [Change::modified(Slice::single(67), 1)])
     }
 }

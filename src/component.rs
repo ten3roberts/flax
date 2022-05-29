@@ -8,7 +8,8 @@ use std::{
 };
 
 use crate::{
-    archetype::ComponentInfo, entity::EntityIndex, ChangedFilter, Entity, Mutable, STATIC_NAMESPACE,
+    archetype::ComponentInfo, entity::EntityIndex, Entity, InsertedFilter, ModifiedFilter, Mutable,
+    STATIC_NAMESPACE,
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
@@ -99,8 +100,13 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Construct a fine grained change detection filter.
-    pub fn changed(self) -> ChangedFilter {
-        ChangedFilter::new(self.id())
+    pub fn modified(self) -> ModifiedFilter {
+        ModifiedFilter::new(self.id())
+    }
+
+    /// Construct a fine grained insert detection filter.
+    pub fn inserted(self) -> InsertedFilter {
+        InsertedFilter::new(self.id())
     }
 
     /// Get the component's name.
