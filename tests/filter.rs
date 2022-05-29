@@ -30,7 +30,7 @@ fn filters() {
         .map(|i| builder.set(a(), i as f32).spawn(&mut world))
         .collect_vec();
 
-    let mut query = Query::new(a()).filter(a().changed());
+    let mut query = Query::new(a()).filter(a().modified());
 
     let items = query.iter(&world).collect_vec();
 
@@ -58,9 +58,34 @@ fn filters() {
 
     others[3..5].iter().for_each(|id| {
         let mut a = world.get_mut(*id, a()).unwrap();
-        *a = 2.0 * *a;
+        *a = 10.0 * *a;
     });
 
     let items = query.iter(&world).collect_vec();
-    assert_eq!(items, &[&-6.0, &-8.0]);
+    assert_eq!(items, &[&-30.0, &-40.0]);
+
+    // Construct a new interted query
+
+    let mut query = Query::new(a()).filter(a().inserted());
+
+    let items = query
+        .iter(&world)
+        .copied()
+        .sorted_by_key(|v| (v * 256.0) as i64)
+        .collect_vec();
+
+    assert_eq!(
+        items,
+        &[-40.0, -30.0, -6.0, -5.0, 0.0, 1.0, 2.0, 7.0, 8.0, 9.0, 34.0]
+    );
+
+    world.set(id2, a(), 29.5);
+
+    let items = query
+        .iter(&world)
+        .copied()
+        .sorted_by_key(|v| (v * 256.0) as i64)
+        .collect_vec();
+
+    assert_eq!(items, &[29.5]);
 }

@@ -114,10 +114,26 @@ impl World {
     pub fn spawn_with(&mut self, components: &mut ComponentBuffer) -> Entity {
         let id = self.spawn();
 
+        let change_tick = self.advance_change_tick();
+
         let (archetype_id, arch) =
             self.fetch_archetype(self.archetype_root, components.components());
 
-        let slot = arch.insert(id, components);
+        let slot = arch.allocate(id);
+
+        for component in components.components() {
+            eprintln!("Adding change for {component:#?} {slot} {change_tick}");
+            arch.init_changes(component.id)
+                .set(Change::inserted(Slice::single(slot), change_tick));
+        }
+
+        unsafe {
+            for (component, src) in components.take_all() {
+                let storage = arch.storage_raw(component.id).unwrap();
+                std::ptr::copy_nonoverlapping(src, storage.at(slot), component.size());
+            }
+        }
+
         *self.entities.get_mut(id).unwrap() = EntityLocation {
             arch: archetype_id,
             slot,
@@ -230,10 +246,12 @@ impl World {
             }
             eprintln!("New slot: {dst_slot}");
 
-            // src.changes_mut(component.id())?
-            //     .set(Change::removed(Slice::single(dst_slot), change_tick));
-            // dst.changes_mut(component.id())?
-            //     .set(Change::inserted(Slice::single(dst_slot), change_tick));
+            // Migrate all changes
+            src.migrate_slot(dst, slot, dst_slot);
+
+            eprintln!("Adding inserted change");
+            dst.init_changes(component.id())
+                .set(Change::inserted(Slice::single(dst_slot), change_tick));
 
             *self.entities.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
@@ -298,6 +316,9 @@ impl World {
                     .expect("Invalid entity id")
                     .slot = slot;
             }
+
+            // Migrate all changes
+            // src.migrate_slot(dst, slot, dst_slot);
 
             *self.entities.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,

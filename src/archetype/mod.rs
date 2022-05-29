@@ -19,6 +19,7 @@ pub use slice::*;
 #[derive(Debug)]
 pub struct Archetype {
     storage: BTreeMap<Entity, Storage>,
+    changes: BTreeMap<ComponentId, AtomicRefCell<Changes>>,
     /// Slot to entity id
     entities: Box<[Option<Entity>]>,
     // Number of entities in the archetype
@@ -35,6 +36,7 @@ impl Archetype {
     pub fn empty() -> Self {
         Self {
             storage: BTreeMap::new(),
+            changes: BTreeMap::new(),
             len: 0,
             cap: 0,
             edges: BTreeMap::new(),
@@ -45,24 +47,27 @@ impl Archetype {
     /// Create a new archetype.
     /// Assumes `components` are sorted by id.
     pub fn new(components: impl IntoIterator<Item = ComponentInfo>) -> Self {
-        let storage = components
+        let (storage, changes) = components
             .into_iter()
             .map(|component| {
                 (
-                    component.id,
-                    Storage {
-                        data: AtomicRefCell::new(NonNull::dangling()),
-                        component,
-                        changes: AtomicRefCell::new(Changes::new()),
-                    },
+                    (
+                        component.id,
+                        Storage {
+                            data: AtomicRefCell::new(NonNull::dangling()),
+                            component,
+                        },
+                    ),
+                    (component.id, AtomicRefCell::new(Changes::new())),
                 )
             })
-            .collect();
+            .unzip();
 
         Self {
             len: 0,
             cap: 0,
             storage,
+            changes,
             edges: BTreeMap::new(),
             entities: Box::new([]),
         }
@@ -111,15 +116,27 @@ impl Archetype {
         })
     }
 
+    pub fn init_changes(&mut self, component: ComponentId) -> &mut Changes {
+        self.changes.entry(component).or_default().get_mut()
+    }
+
+    pub fn migrate_slot(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
+        for (&component, changes) in self.changes.iter_mut() {
+            let other = other.init_changes(component);
+            eprintln!("Migrated: {component}");
+            changes.get_mut().migrate_to(other, src_slot, dst_slot)
+        }
+    }
+
     /// Borrow the change list
     pub fn changes(&self, component: ComponentId) -> Option<AtomicRef<Changes>> {
-        let changes = self.storage.get(&component)?.changes.borrow();
+        let changes = self.changes.get(&component)?.borrow();
         Some(changes)
     }
 
     /// Borrow the change list mutably
     pub fn changes_mut(&self, component: ComponentId) -> Option<AtomicRefMut<Changes>> {
-        let changes = self.storage.get(&component)?.changes.borrow_mut();
+        let changes = self.changes.get(&component)?.borrow_mut();
         Some(changes)
     }
 
@@ -136,6 +153,10 @@ impl Archetype {
             data,
             id: component.id(),
         })
+    }
+
+    pub(crate) fn storage_raw(&mut self, component: ComponentId) -> Option<&mut Storage> {
+        self.storage.get_mut(&component)
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
@@ -178,7 +199,7 @@ impl Archetype {
     /// Returns the index of the entity
     /// Entity must not exist in archetype
     pub fn insert(&mut self, id: Entity, components: &mut ComponentBuffer) -> Slot {
-        let slot = unsafe { self.allocate(id) };
+        let slot = self.allocate(id);
         unsafe {
             for (component, src) in components.take_all() {
                 let storage = self.storage.get_mut(&component.id).unwrap();
@@ -197,7 +218,7 @@ impl Archetype {
     /// # Safety
     /// All components of slot are uninitialized. `pub_dyn` needs to be called for
     /// all components in archetype.
-    pub unsafe fn allocate(&mut self, id: Entity) -> Slot {
+    pub fn allocate(&mut self, id: Entity) -> Slot {
         self.reserve(1);
 
         let slot = self.len;
@@ -450,7 +471,6 @@ impl<'a, T> StorageBorrowMut<'a, T> {
 /// Holds components for a single type
 pub(crate) struct Storage {
     data: AtomicRefCell<NonNull<u8>>,
-    changes: AtomicRefCell<Changes>,
     component: ComponentInfo,
 }
 
@@ -484,7 +504,7 @@ impl ComponentInfo {
         }
     }
 
-    fn size(&self) -> usize {
+    pub(crate) fn size(&self) -> usize {
         self.layout.size()
     }
 }
