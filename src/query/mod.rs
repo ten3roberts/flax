@@ -86,6 +86,10 @@ where
     }
 
     /// Execute the query on the world.
+    /// Any change filters will yield the items changed between this and the
+    /// previous query for the same query.
+    ///
+    /// The first invocation will not yield any of the changed items.
     pub fn iter<'a>(&'a mut self, world: &'a World) -> QueryIter<'a, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
         let (archetypes, fetch, filter) = self.get_archetypes(world);

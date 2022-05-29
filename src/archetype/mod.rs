@@ -117,6 +117,13 @@ impl Archetype {
         self.changes.entry(component).or_default().get_mut()
     }
 
+    pub fn remove_slot_changes(&mut self, slot: Slot) {
+        for (&component, changes) in self.changes.iter_mut() {
+            eprintln!("Removed changes in component {component:?}");
+            changes.get_mut().remove(slot);
+        }
+    }
+
     pub fn migrate_slot(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
         for (&component, changes) in self.changes.iter_mut() {
             let other = other.init_changes(component);

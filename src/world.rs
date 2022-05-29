@@ -91,7 +91,7 @@ impl World {
             slot: 0,
         });
 
-        let slot = unsafe { self.archetype_mut(self.archetype_root).allocate(id) };
+        let slot = self.archetype_mut(self.archetype_root).allocate(id);
 
         // This is safe as `root` does not contain any components
         self.entities.get_mut(id).unwrap().slot = slot;
@@ -150,6 +150,7 @@ impl World {
 
         let src = self.archetype_mut(archetype);
         unsafe {
+            src.remove_slot_changes(slot);
             let swapped = src.take(slot, |c, p| (c.drop)(p));
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
@@ -249,7 +250,6 @@ impl World {
             // Migrate all changes
             src.migrate_slot(dst, slot, dst_slot);
 
-            eprintln!("Adding inserted change");
             dst.init_changes(component.id())
                 .set(Change::inserted(Slice::single(dst_slot), change_tick));
 
@@ -286,6 +286,8 @@ impl World {
             }
         };
 
+        let change_tick = self.advance_change_tick();
+
         unsafe {
             assert_ne!(src_id, dst_id);
             // Borrow disjoint
@@ -318,7 +320,9 @@ impl World {
             }
 
             // Migrate all changes
-            // src.migrate_slot(dst, slot, dst_slot);
+            src.migrate_slot(dst, slot, dst_slot);
+            dst.init_changes(component.id())
+                .set(Change::removed(Slice::single(dst_slot), change_tick));
 
             *self.entities.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flax::{component, EntityBuilder, Query, World};
+use flax::{component, entities, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 component! {
@@ -88,4 +88,15 @@ fn filters() {
         .collect_vec();
 
     assert_eq!(items, &[29.5]);
+
+    let mut query = Query::new(entities()).filter(a().removed());
+
+    let items = query.iter(&world).collect_vec();
+
+    assert_eq!(items, []);
+    world.remove(id2, a());
+
+    let items = query.iter(&world).collect_vec();
+
+    assert_eq!(items, [id2]);
 }
