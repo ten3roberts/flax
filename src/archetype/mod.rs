@@ -6,7 +6,7 @@ use std::{
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity, World};
+use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 
 pub type ArchetypeId = Entity;
 pub type Slot = usize;
@@ -427,7 +427,6 @@ impl Archetype {
         let storage = self.storage.get(&component).unwrap();
         let data = storage.data.borrow();
 
-        eprintln!("Visiting: {:?}", storage.component);
         // Type is guaranteed by archetype
         unsafe {
             visitor.visit(

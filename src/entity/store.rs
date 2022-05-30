@@ -1,4 +1,4 @@
-use crate::{archetype::ArchetypeId, Generation, Namespace};
+use crate::{archetype::ArchetypeId, Generation, Namespace, StrippedEntity};
 use std::{any::Any, iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
 
 use super::{Entity, EntityIndex};
@@ -151,6 +151,22 @@ impl<V> EntityStore<V> {
                 .val
                 .occupied
         })
+    }
+
+    #[inline]
+    pub fn reconstruct(&self, id: StrippedEntity) -> Option<(Entity, &V)> {
+        let ns = self.namespace;
+
+        assert_eq!(ns, id.namespace());
+
+        let slot = self.slot(id.index())?;
+
+        if slot.is_alive() {
+            let val = unsafe { &slot.val.occupied };
+            Some((id.reconstruct(from_slot_gen(slot.gen)), val))
+        } else {
+            None
+        }
     }
 
     #[inline]

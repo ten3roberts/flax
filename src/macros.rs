@@ -27,16 +27,24 @@ macro_rules! hash {
 /// ```rust
 /// use flax::component;
 /// component! {
-///     health: f32
+///     health: f32,
 /// }
 /// ```
 /// This will create a function `health()` which returns the component id.
 macro_rules! component {
-    ($name: ident: $ty: ty) => {
-        $crate::component! { pub $name: $ty }
+    ($vis: vis $name: ident( $obj: ident ): $ty: ty, $($rest:tt)*) => {
+        $crate::paste! {
+            #[allow(dead_code)]
+            static [<COMPONENT_ $name:snake:upper _ID>]: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            $vis fn $name($obj: $crate::Entity) -> $crate::Component<$ty> {
+                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name)).into_pair($obj)
+            }
+        }
+
+        $crate::component!{ $($rest)* }
     };
 
-    ($vis: vis $name: ident: $ty: ty) => {
+    ($vis: vis $name: ident: $ty: ty, $($rest:tt)*) => {
 
         $crate::paste! {
             #[allow(dead_code)]
@@ -45,10 +53,9 @@ macro_rules! component {
                 $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name))
             }
         }
+
+        $crate::component!{ $($rest)* }
     };
-    ($($name: ident: $ty: ty,)*) => {
-        $(
-        $crate::component!{ pub $name: $ty }
-    ) *
-    }
+
+    () => {}
 }
