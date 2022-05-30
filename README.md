@@ -1,4 +1,6 @@
-# Flax
+[![Workflow Status](https://github.com/ten3roberts/flax/workflows/main/badge.svg)](https://github.com/ten3roberts/flax/actions?query=workflow%3A%22main%22)
+
+# flax
 
 Flax is a performant and easy to use Entity Component System.
 
@@ -79,11 +81,11 @@ these cases and catches these bugs earlier.
 
 ## Motivation
 
-During development of a game in school I used the hecs ECS. It is an awesome
+During development of a game in school I used the `hecs` ECS. It is an awesome
 library, and the author [Ralith](https://github.com/Ralith) has been awesome in bringing some pull
 requests in.
 
-Despite this, I often made subtle bugs with *similar*. The game engine was
+Despite this, I often made subtle bugs with *similar* types. The game engine was
 cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
 coercions in order to coexist.
 
@@ -93,3 +95,5 @@ of ComponentBuffers and Archetypes.
 
 As such, there are tests covering most, if not all of the unsafe parts of the
 code, both directly through unit tests and indirectly using integration tests.
+
+License: MIT
