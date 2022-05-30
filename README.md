@@ -1,15 +1,20 @@
-[![Workflow Status](https://github.com/ten3roberts/flax/workflows/main/badge.svg)](https://github.com/ten3roberts/flax/actions?query=workflow%3A%22main%22)
+![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=flat-square)
 
-# flax
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ten3roberts/flax/main?style=flat-square)
+
+# Flax
+
+<!-- cargo-sync-readme start -->
 
 Flax is a performant and easy to use Entity Component System.
 
 The world is organized by simple identifiers known as an `Entity`, which can have any number of components attached to them.
 
-## Usage
+# Usage
 
 ```rust
   // Declare static components
+  use flax::*;
   component! {
     health: f32,
     regen: f32,
@@ -38,7 +43,7 @@ The world is organized by simple identifiers known as an `Entity`, which can hav
 
 ```
 
-## Comparison to other ECS
+# Comparison to other ECS
 
 Compared to other ecs implementations, a component is simply another `Entity`
 identifier to which data is attached. This means the same "type" can be added to
@@ -51,7 +56,7 @@ This leads to having to forward all trait implementations trough e.g
 
 This can lead to situations such as this:
 
-```rust
+```rust,ignore
 let vel = world.get::<Velocity>(entity);
 let mut pos = world.get_mut::<Position>(entity);
 let dt = 0.1;
@@ -61,7 +66,7 @@ let dt = 0.1;
 
 Instead of this:
 
-```rust
+```rust,ignore
 let vel = world.get(velocity(), entity);
 let mut pos = world.get_mut(position(), entity);
 let dt = 0.1;
@@ -79,7 +84,7 @@ which leads to subsequent systems not finding the `Type` on the entity.
 Having statically declared componenents makes the rust type system disallow
 these cases and catches these bugs earlier.
 
-## Motivation
+# Motivation
 
 During development of a game in school I used the `hecs` ECS. It is an awesome
 library, and the author [Ralith](https://github.com/Ralith) has been awesome in bringing some pull
@@ -89,11 +94,13 @@ Despite this, I often made subtle bugs with *similar* types. The game engine was
 cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
 coercions in order to coexist.
 
-## Unsafe
+# Unsafe
 This library makes use of unsafe for type erasure and the allocation in storage
 of ComponentBuffers and Archetypes.
 
 As such, there are tests covering most, if not all of the unsafe parts of the
 code, both directly through unit tests and indirectly using integration tests.
+
+<!-- cargo-sync-readme end -->
 
 License: MIT
