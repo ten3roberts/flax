@@ -117,6 +117,8 @@ impl ComponentBuffer {
     /// The returned pointer needs to be dropped manually.
     pub(crate) unsafe fn take_all(&mut self) -> IntoIter {
         let components = std::mem::take(&mut self.components);
+        self.end = 0;
+
         IntoIter {
             components: components.into_iter(),
             buffer: self,

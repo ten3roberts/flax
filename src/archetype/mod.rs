@@ -6,15 +6,18 @@ use std::{
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
+use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity, World};
 
 pub type ArchetypeId = Entity;
 pub type Slot = usize;
 
 mod changes;
 mod slice;
+mod visit;
+
 pub use changes::*;
 pub use slice::*;
+pub use visit::*;
 
 #[derive(Debug)]
 pub struct Archetype {
@@ -416,6 +419,27 @@ impl Archetype {
     pub fn entities(&self) -> &[Option<Entity>] {
         self.entities.as_ref()
     }
+
+    pub fn visit<C, V>(&self, component: ComponentId, visitor: &mut V, ctx: &mut C)
+    where
+        V: Visitor<C> + ComponentValue,
+    {
+        let storage = self.storage.get(&component).unwrap();
+        let data = storage.data.borrow();
+
+        eprintln!("Visiting: {:?}", storage.component);
+        // Type is guaranteed by archetype
+        unsafe {
+            visitor.visit(
+                ctx,
+                Visit {
+                    len: self.len,
+                    data: data.as_ptr(),
+                    component: storage.component,
+                },
+            );
+        }
+    }
 }
 
 impl Drop for Archetype {
@@ -494,6 +518,7 @@ impl Storage {
 pub struct ComponentInfo {
     pub(crate) layout: Layout,
     pub(crate) id: ComponentId,
+    pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
 }
 
@@ -506,11 +531,20 @@ impl ComponentInfo {
             drop: drop_ptr::<T>,
             layout: Layout::new::<T>(),
             id: component.id(),
+            name: component.name(),
         }
     }
 
     pub(crate) fn size(&self) -> usize {
         self.layout.size()
+    }
+
+    pub fn name(&self) -> &str {
+        self.name
+    }
+
+    pub fn id(&self) -> Entity {
+        self.id
     }
 }
 

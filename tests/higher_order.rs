@@ -1,6 +1,6 @@
-use std::ptr;
+use std::{fmt::format, ptr};
 
-use flax::{component, Component, ComponentId, ComponentValue, EntityBuilder, World};
+use flax::{component, Component, ComponentId, ComponentValue, DebugVisitor, EntityBuilder, World};
 
 /// Type erased clone
 pub struct Cloneable {
@@ -50,21 +50,37 @@ impl<const C: usize> Countdown<C> {
 
 component! {
     name: String,
+    health: f32,
     // Then shalt count to three, no more no less
     count: Countdown<3>,
     clone: Cloneable,
+    debug: DebugVisitor,
 }
 
 #[test]
-fn component_to_component() {
+fn visitors() {
     let mut world = World::new();
 
     let grenade = EntityBuilder::new()
         .set(name(), "Holy Hand Grenade of Antioch".to_string())
         .spawn(&mut world);
 
-    // Add the `clone` component to `name`
-    world.set(name(), clone(), Cloneable::new(name()));
+    let mut builder = EntityBuilder::new();
+    for i in 0..1024 {
+        let perm = ((i as f32 + 0.4) * (i as f32) * 6.0) % 100.0;
+        builder
+            .set(name(), format!("Clone#{i}"))
+            .set(health(), perm)
+            .spawn(&mut world);
+    }
 
-    panic!("At the disco")
+    // Add the `debug` component to `name`
+    world.set(name(), debug(), DebugVisitor::new(name()));
+    world.set(health(), debug(), DebugVisitor::new(health()));
+
+    let mut buf = String::new();
+
+    world.visit(debug(), &mut buf);
+
+    eprintln!("{buf}");
 }

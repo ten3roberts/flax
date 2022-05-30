@@ -103,8 +103,10 @@ pub mod fetch;
 mod query;
 mod world;
 
+// Required due to macro
 pub use paste::paste;
 
+pub use archetype::{Archetype, ArchetypeId, Change, ChangeKind, ComponentInfo, DebugVisitor};
 pub use buffer::*;
 pub use component::*;
 pub use entity::*;
