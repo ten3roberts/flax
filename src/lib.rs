@@ -6,6 +6,7 @@
 //!
 //! ```rust
 //!   // Declare static components
+//!   use flax::*;
 //!   component! {
 //!     health: f32,
 //!     regen: f32,
@@ -47,7 +48,7 @@
 //!
 //! This can lead to situations such as this:
 //!
-//! ```rust
+//! ```rust,ignore
 //! let vel = world.get::<Velocity>(entity);
 //! let mut pos = world.get_mut::<Position>(entity);
 //! let dt = 0.1;
@@ -57,7 +58,7 @@
 //!
 //! Instead of this:
 //!
-//! ```rust
+//! ```rust,ignore
 //! let vel = world.get(velocity(), entity);
 //! let mut pos = world.get_mut(position(), entity);
 //! let dt = 0.1;
