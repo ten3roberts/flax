@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flax::{component, entities, EntityBuilder, Filter, Query, World};
+use flax::{component, entities, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 component! {
@@ -107,35 +107,40 @@ fn filters() {
 fn combinations() {
     let mut world = World::new();
 
+    component! {
+        a: i32,
+    }
+
     let mut builder = EntityBuilder::new();
     let ids = (0..100)
         .map(|i| {
-            builder.set(a(), 4.5);
+            builder.set(a(), i as _);
 
             builder.set_default(b());
 
-            // if i % 3 == 0 {
-            //     builder.get_mut(b()).unwrap().push_str("Fizz");
-            // }
-            //
-            // if i % 5 == 0 {
-            //     builder.get_mut(b()).unwrap().push_str("Buzz");
-            // }
-            //
-            // if i % 2 == 0 {
-            //     builder.set(d(), "Foo");
-            // }
-            //
+            if i % 3 == 0 {
+                builder.get_mut(b()).unwrap().push_str("Fizz");
+            }
+
+            if i % 5 == 0 {
+                builder.get_mut(b()).unwrap().push_str("Buzz");
+            }
+
+            if i % 2 == 0 {
+                builder.set(d(), "Foo");
+            }
+
             builder.spawn(&mut world)
         })
         .collect_vec();
 
-    let mut query = Query::new(entities()).filter(a().modified().or(b().modified()));
+    let mut query = Query::new(entities()).filter(a().modified() | b().modified());
 
-    assert_eq!(query.iter(&world).collect_vec(), ids);
+    // eprintln!("Items: {:?}", query.iter(&world).sorted().collect_vec());
+    assert_eq!(query.iter(&world).sorted().collect_vec(), ids);
 
     for &id in &ids[50..67] {
-        *world.get_mut(id, a()).unwrap() *= -2.0;
+        *world.get_mut(id, a()).unwrap() *= -2;
     }
 
     let items = query.iter(&world).sorted().collect_vec();
@@ -146,7 +151,7 @@ fn combinations() {
     assert_eq!(items, []);
 
     for &id in &ids[20..43] {
-        *world.get_mut(id, a()).unwrap() *= -2.0;
+        *world.get_mut(id, a()).unwrap() *= -2;
     }
 
     for &id in &ids[40..89] {
