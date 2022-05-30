@@ -33,18 +33,22 @@ macro_rules! hash {
 /// This will create a function `health()` which returns the component id.
 macro_rules! component {
     ($name: ident: $ty: ty) => {
+        $crate::component! { pub $name: $ty }
+    };
+
+    ($vis: vis $name: ident: $ty: ty) => {
 
         $crate::paste! {
             #[allow(dead_code)]
             static [<COMPONENT_ $name:snake:upper _ID>]: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-            pub fn $name() -> $crate::Component<$ty> {
+            $vis fn $name() -> $crate::Component<$ty> {
                 $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name))
             }
         }
     };
     ($($name: ident: $ty: ty,)*) => {
         $(
-        $crate::component!{ $name: $ty }
+        $crate::component!{ pub $name: $ty }
     ) *
     }
 }

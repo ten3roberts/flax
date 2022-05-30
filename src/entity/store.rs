@@ -1,5 +1,5 @@
-use crate::{archetype::ArchetypeId, EntityNamespace, Generation};
-use std::{iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
+use crate::{archetype::ArchetypeId, Generation, Namespace};
+use std::{any::Any, iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
 
 use super::{Entity, EntityIndex};
 
@@ -58,15 +58,15 @@ pub struct EntityLocation {
 pub struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
     free_head: Option<NonZeroU32>,
-    namespace: EntityNamespace,
+    namespace: Namespace,
 }
 
 impl<V> EntityStore<V> {
-    pub fn new(namespace: EntityNamespace) -> Self {
+    pub fn new(namespace: Namespace) -> Self {
         Self::with_capacity(namespace, 0)
     }
 
-    pub fn with_capacity(namespace: EntityNamespace, cap: usize) -> Self {
+    pub fn with_capacity(namespace: Namespace, cap: usize) -> Self {
         Self {
             slots: Vec::with_capacity(cap),
             free_head: None,
@@ -77,6 +77,7 @@ impl<V> EntityStore<V> {
     pub fn spawn(&mut self, value: V) -> Entity {
         if let Some(index) = self.free_head.take() {
             let free = self.slot_mut(index).unwrap();
+            assert!(free.gen & 1 == 0);
             free.gen = free.gen | 1;
             let gen = from_slot_gen(free.gen);
 
@@ -134,7 +135,7 @@ impl<V> EntityStore<V> {
         Some(unsafe {
             &mut self
                 .slot_mut(id.index())
-                .filter(|v| ns == id.namespace() && v.gen == to_slot_gen(id.generation()))?
+                .filter(|v| ns == id.namespace() && (v.gen == to_slot_gen(id.generation())))?
                 .val
                 .occupied
         })
@@ -189,6 +190,47 @@ impl<V> EntityStore<V> {
             namespace: self.namespace,
         }
     }
+
+    pub(crate) fn spawn_at(&mut self, id: Entity, value: V) {
+        let ns = self.namespace;
+        assert_eq!(ns, id.namespace());
+
+        let index = id.index();
+
+        // Init slot
+        self.slots
+            .extend((self.slots.len()..index.get() as _).map(|_| Slot {
+                val: SlotValue {
+                    vacant: Vacant { next: None },
+                },
+                gen: 1,
+            }));
+
+        // Remove any occurence in the free list
+        let mut cur = self.free_head;
+        while let Some(current) = cur {
+            let slot = self.slot(current).expect("Invalid free list node");
+            let next = unsafe { slot.val.vacant.next };
+            if let Some(next) = next {
+                if next == index {
+                    let next_slot = self.slot(next).unwrap();
+                    // Oh no
+                    eprintln!("Found id in free list");
+                    self.slot_mut(current).unwrap().val.vacant.next =
+                        unsafe { next_slot.val.vacant.next };
+                }
+            }
+
+            cur = next
+        }
+
+        let slot = self.slot_mut(index).expect("Padded vector");
+        eprintln!("Init {id}");
+
+        slot.gen = to_slot_gen(id.generation());
+
+        slot.val.occupied = ManuallyDrop::new(value);
+    }
 }
 
 impl Default for EntityStore {
@@ -211,7 +253,7 @@ impl<V> Drop for EntityStore<V> {
 
 pub struct EntityStoreIter<'a, V> {
     iter: Enumerate<slice::Iter<'a, Slot<V>>>,
-    namespace: EntityNamespace,
+    namespace: Namespace,
 }
 
 impl<'a, V> Iterator for EntityStoreIter<'a, V> {

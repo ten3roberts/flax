@@ -1,5 +1,5 @@
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ten3roberts/flax/main?style=flat-square)
-![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=flat-square)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ten3roberts/flax/main?style=for-the-badge)
+![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=for-the-badge)
 
 # Flax
 

@@ -37,9 +37,9 @@ static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
 pub type Generation = u16;
 pub type EntityIndex = NonZeroU32;
-pub type EntityNamespace = u8;
+pub type Namespace = u8;
 
-pub const STATIC_NAMESPACE: EntityNamespace = 0;
+pub const STATIC_NAMESPACE: Namespace = 255;
 
 impl Entity {
     /// Generate a new static id
@@ -57,11 +57,11 @@ impl Entity {
         ((self.0.get() & GENERATION_MASK) >> 32) as Generation
     }
 
-    pub fn namespace(self) -> EntityNamespace {
+    pub fn namespace(self) -> Namespace {
         self.0.get() as u8
     }
 
-    pub fn into_parts(self) -> (EntityIndex, Generation, EntityNamespace) {
+    pub fn into_parts(self) -> (EntityIndex, Generation, Namespace) {
         let bits = self.0.get();
 
         (
@@ -71,7 +71,7 @@ impl Entity {
         )
     }
 
-    pub fn from_parts(index: EntityIndex, gen: Generation, namespace: EntityNamespace) -> Self {
+    pub fn from_parts(index: EntityIndex, gen: Generation, namespace: Namespace) -> Self {
         assert!(index.get() < (u32::MAX >> 1));
         let bits =
             (((index.get() as u64) << 8) & INDEX_MASK) | ((gen as u64) << 32) | (namespace as u64);
