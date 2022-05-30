@@ -65,6 +65,14 @@ impl<T: ComponentValue> Component<T> {
         }
     }
 
+    pub fn into_pair(self, object: Entity) -> Self {
+        Self {
+            id: Entity::pair(self.id, object),
+            name: self.name,
+            marker: PhantomData,
+        }
+    }
+
     pub fn static_init(id: &AtomicU32, name: &'static str) -> Self {
         let index = match id.fetch_update(Acquire, Relaxed, |v| {
             if v != 0 {

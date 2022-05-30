@@ -11,22 +11,33 @@ pub use store::*;
 
 use crate::EntityFetch;
 
-#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
-#[repr(transparent)]
 /// Represents an entity.
 /// An entity can either declare an identifier spawned into the world,
 /// a static entity or component, or a typed relation between two entities.
 ///
 /// # Structure
 
-/// | 16         | 24    | 8         |
-/// | Generation | Index | Namespace |
+/// | 16       | 16         | 24    | 8         |
+/// | Reserved | Generation | Index | Namespace |
 ///
 /// The Index is always NonZero.
 ///
 /// An entity id retains uniqueness if cast to a u32. To allow global static
 /// entities to coexist as the flags are kept.
+///
+/// Pairs
+/// An entity can be associated to another entity. In such a case, the upper
+/// bits store the associated entity.
+/// This means that the generation safeguard is removed. This is not problematic
+/// for storage as pair will be removed when the base is removed. Furthermore,
+/// pairs are often declared statically which means they can't be freed
+#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+#[repr(transparent)]
 pub struct Entity(NonZeroU64);
+/// Same as [crate::Entity] but without generation.
+#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+#[repr(transparent)]
+pub struct StrippedEntity(NonZeroU32);
 
 const INDEX_MASK: u64 = /*     */ 0x00000000FFFFFF00;
 const GENERATION_MASK: u64 = /**/ 0x0000FFFF00000000;
@@ -86,15 +97,50 @@ impl Entity {
     pub fn to_bits(&self) -> NonZeroU64 {
         self.0
     }
+
+    pub fn pair(subject: Entity, object: Entity) -> Self {
+        let a = subject.to_bits().get();
+        let b = object.to_bits().get();
+
+        Self(NonZeroU64::new((a & 0xFFFFFFFF) | (b << 32)).unwrap())
+    }
+
+    pub fn from_pair(self) -> (StrippedEntity, StrippedEntity) {
+        let bits = self.to_bits().get();
+        let subject = StrippedEntity(NonZeroU32::new(bits as u32).unwrap());
+        let object = StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap());
+
+        (subject, object)
+    }
+
+    pub fn strip_gen(self) -> StrippedEntity {
+        StrippedEntity(NonZeroU32::new(self.to_bits().get() as u32).unwrap())
+    }
+}
+
+impl StrippedEntity {
+    pub fn index(self) -> EntityIndex {
+        // Can only be constructed from parts
+        NonZeroU32::new(((self.0.get() & INDEX_MASK as u32) >> 8) as u32).unwrap()
+    }
+
+    pub fn namespace(self) -> Namespace {
+        self.0.get() as u8
+    }
+
+    /// Reconstruct a generationless entity with a generation
+    pub fn reconstruct(self, gen: Generation) -> Entity {
+        Entity(NonZeroU64::new((self.0.get() as u64) | ((gen as u64) << 32)).unwrap())
+    }
 }
 
 impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, generation, kind) = self.into_parts();
+        let (index, generation, namespace) = self.into_parts();
         f.debug_tuple("Entity")
             .field(&index)
             .field(&generation)
-            .field(&kind)
+            .field(&namespace)
             .finish()
     }
 }
@@ -103,6 +149,23 @@ impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (index, generation, namespace) = self.into_parts();
         write!(f, "{namespace}:{index}:{generation}")
+    }
+}
+
+impl fmt::Debug for StrippedEntity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let index = self.index();
+        let namespace = self.namespace();
+
+        f.debug_tuple("Entity").field(&index).field(&"_").finish()
+    }
+}
+
+impl fmt::Display for StrippedEntity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let index = self.index();
+        let namespace = self.namespace();
+        write!(f, "{namespace}:{index}:_")
     }
 }
 

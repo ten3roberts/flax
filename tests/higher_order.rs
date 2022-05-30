@@ -1,6 +1,9 @@
 use std::{fmt::format, ptr};
 
-use flax::{component, Component, ComponentId, ComponentValue, DebugVisitor, EntityBuilder, World};
+use flax::{
+    component, Component, ComponentId, ComponentValue, DebugVisitor, EntityBuilder, Query, World,
+};
+use itertools::Itertools;
 
 /// Type erased clone
 pub struct Cloneable {
@@ -49,16 +52,19 @@ impl<const C: usize> Countdown<C> {
 }
 
 component! {
-    name: String,
-    health: f32,
-    // Then shalt count to three, no more no less
-    count: Countdown<3>,
     clone: Cloneable,
     debug: DebugVisitor,
 }
 
 #[test]
 fn visitors() {
+    component! {
+        name: String,
+        health: f32,
+        // Then shalt count to three, no more no less
+        count: Countdown<3>,
+    }
+
     let mut world = World::new();
 
     let grenade = EntityBuilder::new()
@@ -66,7 +72,7 @@ fn visitors() {
         .spawn(&mut world);
 
     let mut builder = EntityBuilder::new();
-    for i in 0..1024 {
+    for i in 0..128 {
         let perm = ((i as f32 + 0.4) * (i as f32) * 6.0) % 100.0;
         builder
             .set(name(), format!("Clone#{i}"))
@@ -82,5 +88,83 @@ fn visitors() {
 
     world.visit(debug(), &mut buf);
 
+    eprintln!("{buf}");
+}
+
+#[test]
+fn relations() {
+    #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+    enum RelationKind {
+        Mom,
+        Dad,
+        Parent, // Not everything is binary
+    }
+
+    component! {
+        name: &'static str,
+        hobby: &'static str,
+        child_of(e): RelationKind,
+    }
+
+    let mut world = World::new();
+
+    world.set(name(), debug(), DebugVisitor::new(name()));
+
+    let parent = EntityBuilder::new()
+        .set(name(), "Jessica")
+        .set(hobby(), "Reading")
+        .spawn(&mut world);
+
+    world.set(
+        child_of(parent),
+        debug(),
+        DebugVisitor::new(child_of(parent)),
+    );
+
+    let parent2 = EntityBuilder::new()
+        .set(name(), "Jack")
+        .set(hobby(), "Crocheting")
+        .spawn(&mut world);
+
+    world.set(
+        child_of(parent2),
+        debug(),
+        DebugVisitor::new(child_of(parent2)),
+    );
+
+    world.set(hobby(), debug(), DebugVisitor::new(hobby()));
+
+    let child = EntityBuilder::new()
+        .set(name(), "John")
+        .set(hobby(), "Studying")
+        .set(child_of(parent), RelationKind::Mom)
+        .spawn(&mut world);
+
+    let child2 = EntityBuilder::new()
+        .set(name(), "Sally")
+        .set(hobby(), "Hockey")
+        .set(child_of(parent), RelationKind::Mom)
+        .spawn(&mut world);
+
+    let child3 = EntityBuilder::new()
+        .set(name(), "Reacher")
+        .set(hobby(), "Hockey")
+        .set(child_of(parent2), RelationKind::Dad)
+        .spawn(&mut world);
+
+    let mut query = Query::new((name(), child_of(parent)));
+
+    let items = query.iter(&world).sorted().collect_vec();
+
+    assert_eq!(
+        items,
+        [
+            (&"John", &RelationKind::Mom),
+            (&"Sally", &RelationKind::Mom)
+        ]
+    );
+
+    let mut buf = String::new();
+    world.visit(debug(), &mut buf);
     eprintln!("{buf}");
 }
