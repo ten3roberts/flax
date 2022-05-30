@@ -13,18 +13,23 @@ jobs:
   test:
 
     runs-on: ubuntu-latest
+    container:
+      image: xd009642/tarpaulin:develop-nightly
+      options: --security-opt seccomp=unconfined
 
     steps:
     - uses: actions/checkout@v2
     - name: Install stable
       uses: actions-rs/toolchain@v1
       with:
-          toolchain: stable
+          toolchain: nightly
           override: true
           profile: minimal
           
-    - name: Run tests
-      uses: actions-rs/cargo@v1
+    - name: Test code coverage
+      run: "cargo +nightly tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml"
+
+    - name: Upload to codecov.io
+      uses: codecov/codecov-action@v2
       with:
-        command: test
-        args: --all-features
+        fail_ci_if_error:     true
