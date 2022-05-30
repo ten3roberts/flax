@@ -1,7 +1,4 @@
-use std::{
-    iter::FusedIterator,
-    ops::{BitAnd, BitOr, Neg},
-};
+use std::{iter::FusedIterator, ops::Neg};
 
 use atomic_refcell::AtomicRef;
 
@@ -217,7 +214,7 @@ where
 
 pub trait PreparedFilter {
     /// Filters a slice of entity slots and returns a subset of the slice
-    fn filter(&mut self, slots: Slice) -> Option<Slice>;
+    fn filter(&mut self, slots: Slice) -> Slice;
 }
 
 #[derive(Debug)]
@@ -246,7 +243,8 @@ where
         }
     }
 
-    pub(crate) fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32, filter: F) -> Self {
+    #[cfg(test)]
+    fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32, filter: F) -> Self {
         Self {
             changes: Some(changes),
             cur: None,
@@ -280,9 +278,12 @@ impl<'a, F> PreparedFilter for PreparedKindFilter<'a, F>
 where
     F: Fn(&ChangeKind) -> bool,
 {
-    fn filter(&mut self, slots: Slice) -> Option<Slice> {
+    fn filter(&mut self, slots: Slice) -> Slice {
         loop {
-            let cur = self.current_slice()?;
+            let cur = match self.current_slice() {
+                Some(v) => v,
+                None => return Slice::empty(),
+            };
 
             let intersect = cur.intersect(&slots);
             // Try again with the next change group
@@ -290,7 +291,7 @@ where
                 self.cur = None;
                 continue;
             } else {
-                return Some(intersect);
+                return intersect;
             }
         }
     }
@@ -313,18 +314,18 @@ where
     L: PreparedFilter,
     R: PreparedFilter,
 {
-    fn filter(&mut self, slots: Slice) -> Option<Slice> {
-        let l = self.left.filter(slots).unwrap_or_default();
-        let r = self.right.filter(slots).unwrap_or_default();
+    fn filter(&mut self, slots: Slice) -> Slice {
+        let l = self.left.filter(slots);
+        let r = self.right.filter(slots);
         let u = l.union(&r);
         eprintln!("l: {l:?} r: {r:?} u: {u:?}");
         match u {
-            Some(v) => Some(v),
+            Some(v) => v,
             None => {
                 // The slices where not contiguous
                 // Return the left half for this run.
                 // The right will be kept
-                Some(l)
+                l
             }
         }
     }
@@ -384,10 +385,10 @@ impl<T> PreparedFilter for PreparedNot<T>
 where
     T: PreparedFilter,
 {
-    fn filter(&mut self, slots: Slice) -> Option<Slice> {
-        let a = self.0.filter(slots).unwrap_or_default();
+    fn filter(&mut self, slots: Slice) -> Slice {
+        let a = self.0.filter(slots);
 
-        slots.difference(&a)
+        slots.difference(&a).unwrap()
     }
 }
 
@@ -408,9 +409,9 @@ where
     L: PreparedFilter,
     R: PreparedFilter,
 {
-    fn filter(&mut self, slots: Slice) -> Option<Slice> {
-        let l = self.left.filter(slots)?;
-        let r = self.right.filter(slots)?;
+    fn filter(&mut self, slots: Slice) -> Slice {
+        let l = self.left.filter(slots);
+        let r = self.right.filter(slots);
 
         let i = l.intersect(&r);
         if i.is_empty() {
@@ -421,11 +422,11 @@ where
             let max = l.start.max(r.start).min(slots.end);
 
             let slots = Slice::new(max, slots.end);
-            let l = self.left.filter(slots)?;
-            let r = self.right.filter(slots)?;
-            Some(l.intersect(&r))
+            let l = self.left.filter(slots);
+            let r = self.right.filter(slots);
+            l.intersect(&r)
         } else {
-            Some(i)
+            i
         }
     }
 }
@@ -433,32 +434,20 @@ where
 pub struct Nothing;
 
 impl<'a> Filter<'a> for Nothing {
-    type Prepared = Self;
+    type Prepared = BooleanFilter;
 
     fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
-        Nothing
-    }
-}
-
-impl PreparedFilter for Nothing {
-    fn filter(&mut self, _: Slice) -> Option<Slice> {
-        Some(Slice::empty())
+        BooleanFilter(false)
     }
 }
 
 pub struct All;
 
 impl<'a> Filter<'a> for All {
-    type Prepared = Self;
+    type Prepared = BooleanFilter;
 
     fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
-        All
-    }
-}
-
-impl PreparedFilter for All {
-    fn filter(&mut self, slots: Slice) -> Option<Slice> {
-        Some(slots)
+        BooleanFilter(true)
     }
 }
 
@@ -477,7 +466,8 @@ impl<F: PreparedFilter> Iterator for FilterIter<F> {
     type Item = Slice;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let cur = self.filter.filter(self.slots)?;
+        eprintln!("Here");
+        let cur = self.filter.filter(self.slots);
 
         if cur.is_empty() {
             None
@@ -494,6 +484,54 @@ impl<F: PreparedFilter> Iterator for FilterIter<F> {
 }
 
 impl<F: PreparedFilter> FusedIterator for FilterIter<F> {}
+
+pub struct With {
+    component: ComponentId,
+}
+
+impl With {
+    pub fn new(component: ComponentId) -> Self {
+        Self { component }
+    }
+}
+
+impl<'a> Filter<'a> for With {
+    type Prepared = BooleanFilter;
+
+    fn prepare(&self, archetype: &'a Archetype, _: u32) -> Self::Prepared {
+        BooleanFilter(archetype.has(self.component))
+    }
+}
+
+pub struct Without {
+    component: ComponentId,
+}
+
+impl Without {
+    pub fn new(component: ComponentId) -> Self {
+        Self { component }
+    }
+}
+
+impl<'a> Filter<'a> for Without {
+    type Prepared = BooleanFilter;
+
+    fn prepare(&self, archetype: &'a Archetype, _: u32) -> Self::Prepared {
+        BooleanFilter(!archetype.has(self.component))
+    }
+}
+
+pub struct BooleanFilter(bool);
+
+impl PreparedFilter for BooleanFilter {
+    fn filter(&mut self, slots: Slice) -> Slice {
+        if self.0 {
+            slots
+        } else {
+            Slice::empty()
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -514,8 +552,6 @@ mod tests {
         changes.set(Change::modified(Slice::new(39, 60), 6));
         changes.set(Change::inserted(Slice::new(784, 800), 7));
         changes.set(Change::modified(Slice::new(945, 1139), 8));
-
-        dbg!(&changes);
 
         let changes = AtomicRefCell::new(changes);
 
