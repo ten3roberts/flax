@@ -8,7 +8,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice},
+    archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, Visitor},
     entity::{EntityLocation, EntityStore},
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity, Namespace,
 };
@@ -437,6 +437,21 @@ impl World {
     /// Increases the change tick and returns the new one
     pub fn advance_change_tick(&self) -> u32 {
         self.change_tick.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    /// Visit all components which have the visitor components and use the
+    /// associated visitor for each slot
+    pub fn visit<C, V>(&self, visitor: Component<V>, ctx: &mut C)
+    where
+        V: Visitor<C> + ComponentValue,
+    {
+        for (_, arch) in self.archetypes.iter() {
+            for component in arch.components() {
+                if let Some(mut v) = self.get_mut(component.id(), visitor) {
+                    arch.visit(component.id(), &mut *v, ctx);
+                }
+            }
+        }
     }
 }
 
