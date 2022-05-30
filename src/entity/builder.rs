@@ -1,14 +1,21 @@
-use crate::{Component, ComponentBuffer, ComponentValue, Entity, World};
+use crate::{Component, ComponentBuffer, ComponentValue, Entity, Namespace, World};
 
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
+    namespace: Namespace,
 }
 
 impl EntityBuilder {
     pub fn new() -> Self {
         Self {
             buffer: ComponentBuffer::new(),
+            namespace: 0,
         }
+    }
+
+    pub fn with_namespace(&mut self, namespace: Namespace) -> &mut Self {
+        self.namespace = namespace;
+        self
     }
 
     /// Sets the component of the entity.
@@ -45,6 +52,12 @@ impl EntityBuilder {
     /// Clears the builder and allows it to be used again, reusing the builder
     /// will reuse the inner storage, even for different components.
     pub fn spawn(&mut self, world: &mut World) -> Entity {
-        world.spawn_with(&mut self.buffer)
+        world.spawn_with(self.namespace, &mut self.buffer)
+    }
+}
+
+impl Default for EntityBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -78,7 +78,7 @@ impl<T: ComponentValue> Component<T> {
         };
 
         Self::new(
-            Entity::from_parts(EntityIndex::new(index).unwrap(), 0, STATIC_NAMESPACE),
+            Entity::from_parts(EntityIndex::new(index).unwrap(), 1, STATIC_NAMESPACE),
             name,
         )
     }
@@ -129,6 +129,12 @@ impl<T: ComponentValue> Component<T> {
     #[inline(always)]
     pub fn name(&self) -> &'static str {
         self.name
+    }
+}
+
+impl<T: ComponentValue> Into<Entity> for Component<T> {
+    fn into(self) -> Entity {
+        self.id()
     }
 }
 
