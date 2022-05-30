@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     archetype::ComponentInfo, entity::EntityIndex, Entity, InsertedFilter, ModifiedFilter, Mutable,
-    RemovedFilter, STATIC_NAMESPACE,
+    RemovedFilter, With, Without, STATIC_NAMESPACE,
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
@@ -112,6 +112,16 @@ impl<T: ComponentValue> Component<T> {
     /// Construct a fine grained component remove detection filter.
     pub fn removed(self) -> RemovedFilter {
         RemovedFilter::new(self.id())
+    }
+
+    /// Construct a new filter yielding entities without this component.
+    pub fn without(self) -> Without {
+        Without::new(self.id())
+    }
+
+    /// Construct a new filter yielding entities with this component.
+    pub fn with(self) -> With {
+        With::new(self.id())
     }
 
     /// Get the component's name.
