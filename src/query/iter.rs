@@ -7,25 +7,23 @@ use crate::{
 
 /// Iterates over a chunk of entities, specified by a predicate.
 /// In essence, this is the unflattened version of [crate::QueryIter].
-pub struct ChunkIter<'a, Q: Fetch<'a>> {
+pub struct ChunkIter {
     pos: Slot,
     end: Slot,
-    _marker: PhantomData<&'a Q>,
 }
 
-impl<'a, Q> ChunkIter<'a, Q>
-where
-    Q: Fetch<'a>,
-{
+impl ChunkIter {
     pub fn new(slice: Slice) -> Self {
         Self {
             pos: slice.start,
             end: slice.end,
-            _marker: PhantomData,
         }
     }
 
-    fn next(&mut self, fetch: &mut Q::Prepared) -> Option<Q::Item> {
+    fn next<'a, F>(&mut self, fetch: F) -> Option<F::Item>
+    where
+        F: PreparedFetch<'a>,
+    {
         if self.pos == self.end {
             None
         } else {
@@ -46,7 +44,7 @@ pub struct ArchetypeIter<'a, Q: Fetch<'a>, F: Filter<'a>> {
     /// This field will never change, as such it is safe to hand out references
     /// to this fetch as long as self is valid.
     fetch: Q::Prepared,
-    current_chunk: Option<ChunkIter<'a, Q>>,
+    current_chunk: Option<ChunkIter>,
     chunks: FilterIter<F::Prepared>,
     new_tick: u32,
 }
@@ -65,13 +63,16 @@ impl<'a, Q: Fetch<'a>, F: Filter<'a>> ArchetypeIter<'a, Q, F> {
 impl<'a, 'q, Q, F> ArchetypeIter<'a, Q, F>
 where
     F: Filter<'a>,
+    for<'x> &'x mut <Q as Fetch<'a>>::Prepared: PreparedFetch<'a, Item = Q::Item>,
     Q: Fetch<'a>,
 {
-    fn next(&mut self) -> Option<Q::Item> {
+    fn next(&'a mut self) -> Option<Q::Item> {
         loop {
-            if let Some(ref mut chunk) = self.current_chunk {
-                if let Some(item) = chunk.next(&mut self.fetch) {
-                    return Some(item);
+            {
+                if let Some(ref mut chunk) = self.current_chunk {
+                    if let Some(item) = chunk.next(&mut self.fetch) {
+                        return Some(item);
+                    }
                 }
             }
 
@@ -133,6 +134,7 @@ where
 impl<'a, Q, F> Iterator for QueryIter<'a, Q, F>
 where
     Q: Fetch<'a>,
+    // for<'x> &'x mut <Q as Fetch<'a>>::Prepared: PreparedFetch<'a, Item = Q::Item>,
     F: Filter<'a>,
 {
     type Item = Q::Item;
@@ -140,9 +142,9 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(ref mut arch) = self.current {
-                if let Some(item) = arch.next() {
-                    return Some(item);
-                }
+                // if let Some(item) = arch.next() {
+                //     return Some(item);
+                // }
             }
 
             // Get the next archetype
@@ -153,17 +155,10 @@ where
 
             let fetch = self
                 .fetch
-                .prepare(arch)
+                .prepare(self.world, arch)
                 .expect("Encountered non matched archetype");
 
             self.current = Some(ArchetypeIter::new(fetch, self.new_tick, chunks));
         }
     }
-}
-
-impl<'a, Q, F> FusedIterator for QueryIter<'a, Q, F>
-where
-    Q: Fetch<'a>,
-    F: Filter<'a>,
-{
 }

@@ -8,7 +8,7 @@ pub use filter::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    Entity,
+    Entity, World,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,15 +24,18 @@ pub trait Fetch<'a> {
     const MUTABLE: bool;
 
     type Item;
-    type Prepared: PreparedFetch<'a, Item = Self::Item>;
+    type Prepared;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
-    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared>;
-    fn matches(&self, archetype: &'a Archetype) -> bool;
+    fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared>;
+    fn matches(&self, world: &'a World, archetype: &'a Archetype) -> bool;
 }
 
 /// A preborrowed fetch
-pub unsafe trait PreparedFetch<'a> {
+pub unsafe trait PreparedFetch<'a>
+where
+    Self: Sized,
+{
     type Item;
     /// Fetch the item from entity at the slot in the prepared storage.
     /// # Safety
@@ -40,12 +43,12 @@ pub unsafe trait PreparedFetch<'a> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item;
+    unsafe fn fetch(self, slot: Slot) -> Self::Item;
 
     // Do something for a a slice of entity slots which have been visited, such
     // as updating change tracking for mutable queries. The current change tick
     // is passed.
-    fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
+    fn set_visited(self, _slots: Slice, _change_tick: u32) {}
 }
 
 pub struct EntityFetch;
@@ -60,21 +63,21 @@ impl<'a> Fetch<'a> for EntityFetch {
 
     type Prepared = PreparedEntities<'a>;
 
-    fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+    fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
         Some(PreparedEntities {
             entities: archetype.entities(),
         })
     }
 
-    fn matches(&self, _: &'a Archetype) -> bool {
+    fn matches(&self, world: &'a World, _: &'a Archetype) -> bool {
         true
     }
 }
 
-unsafe impl<'a> PreparedFetch<'a> for PreparedEntities<'a> {
+unsafe impl<'a, 'b> PreparedFetch<'a> for &'b mut PreparedEntities<'a> {
     type Item = Entity;
 
-    unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(self, slot: Slot) -> Self::Item {
         self.entities[slot].unwrap()
     }
 }
@@ -82,36 +85,36 @@ unsafe impl<'a> PreparedFetch<'a> for PreparedEntities<'a> {
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<'a, $($ty, )*> Fetch<'a> for ($($ty,)*)
+        impl<'a, 'b, $($ty, )*> Fetch<'a> for ($($ty,)*)
             where $($ty: Fetch<'a>,)*
         {
-            const MUTABLE: bool = $(<$ty as Fetch<'a>>::MUTABLE )|*;
-            type Item = ($(<$ty as Fetch<'a>>::Item,)*);
-            type Prepared = ($(<$ty as Fetch<'a>>::Prepared,)*);
+            const MUTABLE: bool =  $(<$ty as Fetch<'a>>::MUTABLE )|*;
+            type Item           = ($(<$ty as Fetch<'a>>::Item,)*);
+            type Prepared       = ($(<$ty as Fetch<'a>>::Prepared,)*);
 
-            fn prepare(&self, archetype: &'a Archetype) -> Option<Self::Prepared> {
+            fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
                 Some(($(
-                    (self.$idx).prepare(archetype)?,
+                    (self.$idx).prepare(world, archetype)?,
                 )*))
             }
 
-            fn matches(&self, archetype: &'a Archetype) -> bool {
-                $((self.$idx).matches(archetype)) && *
+            fn matches(&self, world: &'a World, archetype: &'a Archetype) -> bool {
+                $((self.$idx).matches(world, archetype)) && *
             }
         }
 
-        unsafe impl<'a, $($ty, )*> PreparedFetch<'a> for ($($ty,)*)
-            where $($ty: PreparedFetch<'a>,)*
+        unsafe impl<'a, 'b, $($ty, )*> PreparedFetch<'a> for &'b mut ($($ty,)*)
+            where $(&'b mut $ty: PreparedFetch<'a>,)*
         {
-            type Item = ($(<$ty as PreparedFetch<'a>>::Item,)*);
+            type Item = ($(<&'b mut $ty as PreparedFetch<'a>>::Item,)*);
 
-            unsafe fn fetch(&mut self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)
             }
 
-            fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+            fn set_visited(self, slots: Slice, change_tick: u32) {
                 $((self.$idx).set_visited(slots, change_tick);)*
             }
         }

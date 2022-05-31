@@ -453,6 +453,12 @@ impl World {
             }
         }
     }
+
+    pub(crate) fn reconstruct(&self, id: crate::StrippedEntity) -> Option<Entity> {
+        let ns = self.get_namespace(id.namespace())?;
+
+        ns.reconstruct(id).map(|v| v.0)
+    }
 }
 
 impl Default for World {
