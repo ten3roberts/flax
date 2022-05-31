@@ -1,4 +1,4 @@
-use std::{iter::FusedIterator, marker::PhantomData, slice::Iter};
+use std::{iter::FusedIterator, slice::Iter};
 
 use crate::{
     archetype::{ArchetypeId, Slice, Slot},
@@ -20,9 +20,10 @@ impl ChunkIter {
         }
     }
 
-    fn next<'a, F>(&mut self, fetch: F) -> Option<F::Item>
+    fn next<'a, 'b, F>(&mut self, fetch: &'b mut F) -> Option<F::Item>
     where
-        F: PreparedFetch<'a>,
+        F: PreparedFetch<'a, 'b>,
+        F::Item: 'b,
     {
         if self.pos == self.end {
             None
@@ -60,19 +61,18 @@ impl<'a, Q: Fetch<'a>, F: Filter<'a>> ArchetypeIter<'a, Q, F> {
     }
 }
 
-impl<'a, 'q, Q, F> ArchetypeIter<'a, Q, F>
+impl<'a, Q, F> ArchetypeIter<'a, Q, F>
 where
     F: Filter<'a>,
-    for<'x> &'x mut <Q as Fetch<'a>>::Prepared: PreparedFetch<'a, Item = Q::Item>,
     Q: Fetch<'a>,
+    Q::Prepared: for<'x> PreparedFetch<'a, 'x>,
 {
-    fn next(&'a mut self) -> Option<Q::Item> {
+    fn next(&mut self) -> Option<Q::Item> {
         loop {
-            {
-                if let Some(ref mut chunk) = self.current_chunk {
-                    if let Some(item) = chunk.next(&mut self.fetch) {
-                        return Some(item);
-                    }
+            if let Some(ref mut chunk) = self.current_chunk {
+                let item = chunk.next(&mut self.fetch);
+                if let Some(item) = item {
+                    return Some(item);
                 }
             }
 
@@ -142,9 +142,9 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(ref mut arch) = self.current {
-                // if let Some(item) = arch.next() {
-                //     return Some(item);
-                // }
+                if let Some(item) = arch.next() {
+                    return Some(item);
+                }
             }
 
             // Get the next archetype

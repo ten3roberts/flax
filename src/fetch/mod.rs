@@ -24,7 +24,7 @@ pub trait Fetch<'a> {
     const MUTABLE: bool;
 
     type Item;
-    type Prepared;
+    type Prepared: for<'x> PreparedFetch<'a, 'x, Item = Self::Item>;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
     fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared>;
@@ -32,7 +32,7 @@ pub trait Fetch<'a> {
 }
 
 /// A preborrowed fetch
-pub unsafe trait PreparedFetch<'a>
+pub unsafe trait PreparedFetch<'a, 'b>
 where
     Self: Sized,
 {
@@ -43,12 +43,12 @@ where
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(self, slot: Slot) -> Self::Item;
+    unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item;
 
     // Do something for a a slice of entity slots which have been visited, such
     // as updating change tracking for mutable queries. The current change tick
     // is passed.
-    fn set_visited(self, _slots: Slice, _change_tick: u32) {}
+    fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
 }
 
 pub struct EntityFetch;
@@ -74,10 +74,10 @@ impl<'a> Fetch<'a> for EntityFetch {
     }
 }
 
-unsafe impl<'a, 'b> PreparedFetch<'a> for &'b mut PreparedEntities<'a> {
+unsafe impl<'a, 'b> PreparedFetch<'a, 'b> for PreparedEntities<'a> {
     type Item = Entity;
 
-    unsafe fn fetch(self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item {
         self.entities[slot].unwrap()
     }
 }
@@ -103,18 +103,18 @@ macro_rules! tuple_impl {
             }
         }
 
-        unsafe impl<'a, 'b, $($ty, )*> PreparedFetch<'a> for &'b mut ($($ty,)*)
-            where $(&'b mut $ty: PreparedFetch<'a>,)*
+        unsafe impl<'a, 'b, $($ty, )*> PreparedFetch<'a, 'b> for ($($ty,)*)
+            where $($ty: PreparedFetch<'a, 'b>,)*
         {
-            type Item = ($(<&'b mut $ty as PreparedFetch<'a>>::Item,)*);
+            type Item = ($(<$ty as PreparedFetch<'a, 'b>>::Item,)*);
 
-            unsafe fn fetch(self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)
             }
 
-            fn set_visited(self, slots: Slice, change_tick: u32) {
+            fn set_visited(&mut self, slots: Slice, change_tick: u32) {
                 $((self.$idx).set_visited(slots, change_tick);)*
             }
         }

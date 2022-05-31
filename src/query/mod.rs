@@ -51,8 +51,6 @@ impl<Q, F> Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
-    for<'x, 'y> &'x mut <Q as Fetch<'y>>::Prepared:
-        PreparedFetch<'y, Item = <Q as Fetch<'y>>::Item>,
 {
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
@@ -125,14 +123,12 @@ where
         // Aliasing is guaranteed due to fetch being prepared and alive for this
         // instance only. The lock is held and causes fetches for the same
         // archetype to fail
-        // let item = unsafe { fetch.fetch(slot) };
+        let item = unsafe { fetch.fetch(slot) };
 
-        todo!();
-
-        // Some(QueryBorrow {
-        //     item,
-        //     _fetch: fetch,
-        // })
+        Some(QueryBorrow {
+            item,
+            _fetch: fetch,
+        })
     }
 
     fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q, &F) {
