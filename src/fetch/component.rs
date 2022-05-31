@@ -16,10 +16,10 @@ pub struct PreparedComponent<'a, T> {
     borrow: StorageBorrow<'a, T>,
 }
 
-unsafe impl<'a, 'b, T> PreparedFetch<'a> for &'b mut PreparedComponent<'a, T> {
+unsafe impl<'a, 'b, T> PreparedFetch<'a, 'b> for PreparedComponent<'a, T> {
     type Item = &'a T;
 
-    unsafe fn fetch(self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         &*(self.borrow.at(slot) as *const T)
     }
@@ -35,7 +35,7 @@ where
 
     type Prepared = PreparedComponent<'a, T>;
 
-    fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
+    fn prepare(&self, _: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
         let borrow = archetype.storage(*self)?;
         Some(PreparedComponent { borrow })
     }
@@ -69,17 +69,17 @@ where
     }
 }
 
-unsafe impl<'a, 'b, T: 'a> PreparedFetch<'a> for &'b mut PreparedComponentMut<'a, T> {
+unsafe impl<'a, 'b, T: 'a> PreparedFetch<'a, 'b> for PreparedComponentMut<'a, T> {
     type Item = &'a mut T;
 
-    unsafe fn fetch(self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
         &mut *(self.borrow.at(slot) as *const T as *mut T)
     }
 
-    fn set_visited(self, slots: Slice, change_tick: u32) {
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
         eprintln!("Setting changes for {slots:?}: {change_tick}");
         self.changes.set(Change::modified(slots, change_tick));
     }
