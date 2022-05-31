@@ -159,6 +159,20 @@ impl Archetype {
         Some(StorageBorrow { data })
     }
 
+    pub(crate) fn storage_dyn<T: ComponentValue>(
+        &self,
+        id: ComponentId,
+    ) -> Option<StorageBorrow<T>> {
+        let storage = self.storage.get(&id)?;
+        // Type is guaranteed by `map`
+        let data = storage.data.borrow();
+        let data = AtomicRef::map(data, |v| unsafe {
+            std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
+        });
+
+        Some(StorageBorrow { data })
+    }
+
     pub(crate) fn storage_raw(&mut self, component: ComponentId) -> Option<&mut Storage> {
         self.storage.get_mut(&component)
     }

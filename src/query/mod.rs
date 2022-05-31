@@ -51,6 +51,8 @@ impl<Q, F> Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
+    for<'x, 'y> &'x mut <Q as Fetch<'y>>::Prepared:
+        PreparedFetch<'y, Item = <Q as Fetch<'y>>::Item>,
 {
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
@@ -100,11 +102,7 @@ where
 
     /// Execute the query for a single entity.
     /// A mutable query will advance the global change tick of the world.
-    pub fn get<'a>(
-        &'a self,
-        entity: Entity,
-        world: &'a World,
-    ) -> Option<QueryBorrow<'a, <Q as Fetch<'_>>::Prepared>> {
+    pub fn get<'a>(&'a self, entity: Entity, world: &'a World) -> Option<QueryBorrow<'a, Q>> {
         let &EntityLocation {
             arch: archetype,
             slot,
@@ -112,7 +110,7 @@ where
 
         let archetype = world.archetype(archetype);
 
-        let mut fetch = self.fetch.prepare(archetype)?;
+        let mut fetch = self.fetch.prepare(world, archetype)?;
 
         // It is only necessary to acquire a new change tick if the query will
         // change anything
@@ -127,12 +125,14 @@ where
         // Aliasing is guaranteed due to fetch being prepared and alive for this
         // instance only. The lock is held and causes fetches for the same
         // archetype to fail
-        let item = unsafe { fetch.fetch(slot) };
+        // let item = unsafe { fetch.fetch(slot) };
 
-        Some(QueryBorrow {
-            item,
-            _fetch: fetch,
-        })
+        todo!();
+
+        // Some(QueryBorrow {
+        //     item,
+        //     _fetch: fetch,
+        // })
     }
 
     fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q, &F) {
@@ -141,7 +141,7 @@ where
             self.archetypes.clear();
             self.archetypes
                 .extend(world.archetypes().filter_map(|(id, arch)| {
-                    if fetch.matches(arch) {
+                    if fetch.matches(world, arch) {
                         Some(id)
                     } else {
                         None
@@ -152,13 +152,13 @@ where
         (&self.archetypes, fetch, &self.filter)
     }
 }
-pub struct QueryBorrow<'a, F: PreparedFetch<'a>> {
+pub struct QueryBorrow<'a, F: Fetch<'a>> {
     item: F::Item,
     /// Ensures the borrow is not freed
-    _fetch: F,
+    _fetch: F::Prepared,
 }
 
-impl<'a, F: PreparedFetch<'a>> Deref for QueryBorrow<'a, F> {
+impl<'a, F: Fetch<'a>> Deref for QueryBorrow<'a, F> {
     type Target = F::Item;
 
     fn deref(&self) -> &Self::Target {
@@ -166,7 +166,7 @@ impl<'a, F: PreparedFetch<'a>> Deref for QueryBorrow<'a, F> {
     }
 }
 
-impl<'a, F: PreparedFetch<'a>> DerefMut for QueryBorrow<'a, F> {
+impl<'a, F: Fetch<'a>> DerefMut for QueryBorrow<'a, F> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.item
     }

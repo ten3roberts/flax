@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicU32;
 pub use builder::*;
 pub use store::*;
 
-use crate::EntityFetch;
+use crate::{component, EntityFetch};
 
 /// Represents an entity.
 /// An entity can either declare an identifier spawned into the world,
@@ -39,8 +39,8 @@ pub struct Entity(NonZeroU64);
 #[repr(transparent)]
 pub struct StrippedEntity(NonZeroU32);
 
-const INDEX_MASK: u64 = /*     */ 0x00000000FFFFFF00;
-const GENERATION_MASK: u64 = /**/ 0x0000FFFF00000000;
+const INDEX_MASK: u64 = /*      */ 0x00000000FFFFFF00;
+const GENERATION_MASK: u64 = /* */ 0x0000FFFF00000000;
 // A simple u8 cast will suffice
 const _NAMESPACE_MASK: u64 = /* */ 0x00000000000000FF;
 
@@ -51,6 +51,11 @@ pub type EntityIndex = NonZeroU32;
 pub type Namespace = u8;
 
 pub const STATIC_NAMESPACE: Namespace = 255;
+
+component! {
+    /// The object for a pair component which will match anything.
+    pub wildcard: (),
+}
 
 impl Entity {
     /// Generate a new static id
@@ -105,7 +110,7 @@ impl Entity {
         Self(NonZeroU64::new((a & 0xFFFFFFFF) | (b << 32)).unwrap())
     }
 
-    pub fn from_pair(self) -> (StrippedEntity, StrippedEntity) {
+    pub fn into_pair(self) -> (StrippedEntity, StrippedEntity) {
         let bits = self.to_bits().get();
         let subject = StrippedEntity(NonZeroU32::new(bits as u32).unwrap());
         let object = StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap());
