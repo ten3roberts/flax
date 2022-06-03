@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     archetype::ComponentInfo, entity::EntityIndex, Entity, InsertedFilter, ModifiedFilter, Mutable,
-    RemovedFilter, With, Without, STATIC_NAMESPACE,
+    Relation, RemovedFilter, With, Without, STATIC_NAMESPACE,
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
@@ -130,6 +130,14 @@ impl<T: ComponentValue> Component<T> {
     /// Construct a new filter yielding entities with this component.
     pub fn with(self) -> With {
         With::new(self.id())
+    }
+
+    /// Construct a fetch which will visit the `index` relation of this
+    /// component type.
+    /// The index is used since there may be multiple distinct relations of the
+    /// same component types
+    pub fn relation(self, index: usize) -> Relation<T> {
+        Relation::new(self, index)
     }
 
     /// Get the component's name.

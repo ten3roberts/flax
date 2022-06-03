@@ -148,14 +148,14 @@ where
         (&self.archetypes, fetch, &self.filter)
     }
 }
-pub struct QueryBorrow<'a, F: Fetch<'a>> {
-    item: F::Item,
+pub struct QueryBorrow<'a, Q: Fetch<'a>> {
+    item: Q::Item,
     /// Ensures the borrow is not freed
-    _fetch: F::Prepared,
+    _fetch: Q::Prepared,
 }
 
-impl<'a, F: Fetch<'a>> Deref for QueryBorrow<'a, F> {
-    type Target = F::Item;
+impl<'a, Q: Fetch<'a>> Deref for QueryBorrow<'a, Q> {
+    type Target = Q::Item;
 
     fn deref(&self) -> &Self::Target {
         &self.item

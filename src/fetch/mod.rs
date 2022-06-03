@@ -24,7 +24,7 @@ pub trait Fetch<'a> {
     const MUTABLE: bool;
 
     type Item;
-    type Prepared: for<'x> PreparedFetch<'a, 'x, Item = Self::Item>;
+    type Prepared: PreparedFetch<'a, Item = Self::Item>;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
     fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared>;
@@ -32,7 +32,7 @@ pub trait Fetch<'a> {
 }
 
 /// A preborrowed fetch
-pub unsafe trait PreparedFetch<'a, 'b>
+pub unsafe trait PreparedFetch<'a>
 where
     Self: Sized,
 {
@@ -43,7 +43,7 @@ where
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item;
+    unsafe fn fetch(&self, slot: Slot) -> Self::Item;
 
     // Do something for a a slice of entity slots which have been visited, such
     // as updating change tracking for mutable queries. The current change tick
@@ -74,10 +74,10 @@ impl<'a> Fetch<'a> for EntityFetch {
     }
 }
 
-unsafe impl<'a, 'b> PreparedFetch<'a, 'b> for PreparedEntities<'a> {
+unsafe impl<'a> PreparedFetch<'a> for PreparedEntities<'a> {
     type Item = Entity;
 
-    unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&self, slot: Slot) -> Self::Item {
         self.entities[slot].unwrap()
     }
 }
@@ -88,9 +88,9 @@ macro_rules! tuple_impl {
         impl<'a, 'b, $($ty, )*> Fetch<'a> for ($($ty,)*)
             where $($ty: Fetch<'a>,)*
         {
-            const MUTABLE: bool =  $(<$ty as Fetch<'a>>::MUTABLE )|*;
-            type Item           = ($(<$ty as Fetch<'a>>::Item,)*);
-            type Prepared       = ($(<$ty as Fetch<'a>>::Prepared,)*);
+            const MUTABLE: bool =  $($ty::MUTABLE )|*;
+            type Item           = ($(<$ty::Prepared as PreparedFetch<'a>>::Item,)*);
+            type Prepared       = ($($ty::Prepared,)*);
 
             fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
                 Some(($(
@@ -103,12 +103,12 @@ macro_rules! tuple_impl {
             }
         }
 
-        unsafe impl<'a, 'b, $($ty, )*> PreparedFetch<'a, 'b> for ($($ty,)*)
-            where $($ty: PreparedFetch<'a, 'b>,)*
+        unsafe impl<'a, 'b, $($ty, )*> PreparedFetch<'a> for ($($ty,)*)
+            where $($ty: PreparedFetch<'a>,)*
         {
-            type Item = ($(<$ty as PreparedFetch<'a, 'b>>::Item,)*);
+            type Item = ($(<$ty as PreparedFetch<'a>>::Item,)*);
 
-            unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(&self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)

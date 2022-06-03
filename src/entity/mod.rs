@@ -162,7 +162,11 @@ impl fmt::Debug for StrippedEntity {
         let index = self.index();
         let namespace = self.namespace();
 
-        f.debug_tuple("Entity").field(&index).field(&"_").finish()
+        f.debug_tuple("StrippedEntity")
+            .field(&namespace)
+            .field(&index)
+            .field(&"_")
+            .finish()
     }
 }
 

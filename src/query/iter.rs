@@ -20,10 +20,9 @@ impl ChunkIter {
         }
     }
 
-    fn next<'a, 'b, F>(&mut self, fetch: &'b mut F) -> Option<F::Item>
+    fn next<'a, F>(&mut self, fetch: &mut F) -> Option<F::Item>
     where
-        F: PreparedFetch<'a, 'b>,
-        F::Item: 'b,
+        F: PreparedFetch<'a>,
     {
         if self.pos == self.end {
             None
@@ -61,13 +60,12 @@ impl<'a, Q: Fetch<'a>, F: Filter<'a>> ArchetypeIter<'a, Q, F> {
     }
 }
 
-impl<'a, Q, F> ArchetypeIter<'a, Q, F>
+impl<'a, 'b, Q, F> ArchetypeIter<'a, Q, F>
 where
     F: Filter<'a>,
     Q: Fetch<'a>,
-    Q::Prepared: for<'x> PreparedFetch<'a, 'x>,
 {
-    fn next(&mut self) -> Option<Q::Item> {
+    fn next(&'b mut self) -> Option<Q::Item> {
         loop {
             if let Some(ref mut chunk) = self.current_chunk {
                 let item = chunk.next(&mut self.fetch);
@@ -161,4 +159,11 @@ where
             self.current = Some(ArchetypeIter::new(fetch, self.new_tick, chunks));
         }
     }
+}
+
+impl<'a, Q, F> FusedIterator for QueryIter<'a, Q, F>
+where
+    Q: Fetch<'a>,
+    F: Filter<'a>,
+{
 }

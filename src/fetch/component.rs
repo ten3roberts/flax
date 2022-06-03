@@ -1,3 +1,5 @@
+use core::slice;
+
 use atomic_refcell::AtomicRefMut;
 
 use crate::{
@@ -16,16 +18,16 @@ pub struct PreparedComponent<'a, T> {
     borrow: StorageBorrow<'a, T>,
 }
 
-unsafe impl<'a, 'b, T> PreparedFetch<'a, 'b> for PreparedComponent<'a, T> {
+unsafe impl<'a, T> PreparedFetch<'a> for PreparedComponent<'a, T> {
     type Item = &'a T;
 
-    unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         &*(self.borrow.at(slot) as *const T)
     }
 }
 
-impl<'a, T> Fetch<'a> for Component<T>
+impl<'a, 'b, T> Fetch<'a> for Component<T>
 where
     T: ComponentValue,
 {
@@ -47,7 +49,7 @@ where
 
 pub struct Mutable<T>(pub(crate) Component<T>);
 
-impl<'a, T> Fetch<'a> for Mutable<T>
+impl<'a, 'b, T> Fetch<'a> for Mutable<T>
 where
     T: ComponentValue,
 {
@@ -69,10 +71,10 @@ where
     }
 }
 
-unsafe impl<'a, 'b, T: 'a> PreparedFetch<'a, 'b> for PreparedComponentMut<'a, T> {
+unsafe impl<'a, T: 'a> PreparedFetch<'a> for PreparedComponentMut<'a, T> {
     type Item = &'a mut T;
 
-    unsafe fn fetch(&'b mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
@@ -85,26 +87,36 @@ unsafe impl<'a, 'b, T: 'a> PreparedFetch<'a, 'b> for PreparedComponentMut<'a, T>
     }
 }
 
-/* /// Similar to a component fetch, with the difference that it also yields the
+/// Similar to a component fetch, with the difference that it also yields the
 /// object entity.
-pub struct Pair<T>(pub(crate) Component<T>);
+pub struct Relation<T> {
+    component: Component<T>,
+    index: usize,
+}
 
-impl<'a, 'p, T> Fetch<'a> for &'p Pair<T>
+impl<T> Relation<T> {
+    pub fn new(component: Component<T>, index: usize) -> Self {
+        Self { component, index }
+    }
+}
+
+impl<'a, T> Fetch<'a> for Relation<T>
 where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
 
-    type Item = PairMatchIter<'a, T>;
+    type Item = (Entity, &'a T);
 
     type Prepared = PreparedPair<'a, T>;
 
     fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
-        let (sub, obj) = self.0.id().into_pair();
+        let (sub, obj) = self.component.id().into_pair();
         if obj == wildcard().id().strip_gen() {
-            let borrow = archetype
+            let (obj, borrow) = archetype
                 .components()
                 .filter(|v| v.id().strip_gen() == sub)
+                .skip(self.index)
                 .map(|v| {
                     let (sub1, obj) = v.id().into_pair();
                     assert_eq!(sub1, sub);
@@ -112,44 +124,44 @@ where
                     let obj = world.reconstruct(obj).unwrap();
                     (obj, borrow)
                 })
-                .collect();
+                .next()?;
 
-            Some(PreparedPair { borrow })
+            Some(PreparedPair { borrow, obj })
         } else {
             todo!()
         }
     }
 
-    fn matches(&self, world: &'a World, archetype: &'a Archetype) -> bool {
-        let (sub, obj) = self.0.id().into_pair();
+    fn matches(&self, _: &'a World, archetype: &'a Archetype) -> bool {
+        let (sub, obj) = self.component.id().into_pair();
         if obj == wildcard().id().strip_gen() {
             archetype
                 .components()
-                .find(|component| component.id().strip_gen() == sub);
-
-            false
+                .filter(|component| component.id().strip_gen() == sub)
+                .skip(self.index)
+                .next()
+                .is_some()
         } else {
-            archetype.has(self.0.id())
+            archetype.has(self.component.id())
         }
     }
 }
 
 pub struct PreparedPair<'a, T> {
-    borrow: SmallVec<[(Entity, StorageBorrow<'a, T>); 4]>,
+    borrow: StorageBorrow<'a, T>,
+    obj: Entity,
 }
 
 unsafe impl<'a, T> PreparedFetch<'a> for PreparedPair<'a, T>
 where
     T: ComponentValue,
 {
-    type Item = PairMatchIter<'a, T>;
+    type Item = (Entity, &'a T);
 
-    unsafe fn fetch(&'a mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&self, slot: Slot) -> Self::Item {
         // Perform a reborrow
-        PairMatchIter {
-            borrow: self.borrow.iter(),
-            slot,
-        }
+        let item = &*(self.borrow.at(slot) as *const T);
+        (self.obj, item)
     }
 }
 
@@ -166,4 +178,4 @@ impl<'a, T> Iterator for PairMatchIter<'a, T> {
         let item = unsafe { &*(borrow.at(self.slot) as *const T) };
         Some((*id, item))
     }
-} */
+}
