@@ -1,7 +1,8 @@
 use std::{fmt::format, ptr};
 
 use flax::{
-    component, Component, ComponentId, ComponentValue, DebugVisitor, EntityBuilder, Query, World,
+    component, wildcard, Component, ComponentId, ComponentValue, DebugVisitor, EntityBuilder,
+    Query, World,
 };
 use itertools::Itertools;
 
@@ -167,4 +168,24 @@ fn relations() {
     let mut buf = String::new();
     world.visit(debug(), &mut buf);
     eprintln!("{buf}");
+
+    // Visit the first parent of the children
+    {
+        let wild = child_of(wildcard().id()).id().into_pair();
+        let wildcard = wildcard().id().strip_gen();
+
+        dbg!(wild, wildcard);
+    }
+    let mut query = Query::new((name(), child_of(wildcard().id()).relation(0)));
+
+    let items = query.iter(&world).sorted().collect_vec();
+
+    assert_eq!(
+        items,
+        [
+            (&"John", (parent, &RelationKind::Mom)),
+            (&"Reacher", (parent2, &RelationKind::Dad)),
+            (&"Sally", (parent, &RelationKind::Mom))
+        ]
+    )
 }
