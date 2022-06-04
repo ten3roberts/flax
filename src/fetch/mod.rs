@@ -20,19 +20,18 @@ pub struct PrepareInfo {
 }
 
 /// Describes a type which can fetch itself from an archetype
-pub trait Fetch<'a> {
+pub trait Fetch<'w> {
     const MUTABLE: bool;
 
-    type Item;
-    type Prepared: PreparedFetch<'a, Item = Self::Item>;
+    type Prepared;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
-    fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared>;
-    fn matches(&self, world: &'a World, archetype: &'a Archetype) -> bool;
+    fn prepare(&self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
+    fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool;
 }
 
 /// A preborrowed fetch
-pub unsafe trait PreparedFetch<'a>
+pub unsafe trait PreparedFetch
 where
     Self: Sized,
 {
@@ -43,7 +42,7 @@ where
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&self, slot: Slot) -> Self::Item;
+    unsafe fn fetch(self, slot: Slot) -> Self::Item;
 
     // Do something for a a slice of entity slots which have been visited, such
     // as updating change tracking for mutable queries. The current change tick
@@ -59,8 +58,6 @@ pub struct PreparedEntities<'a> {
 impl<'a> Fetch<'a> for EntityFetch {
     const MUTABLE: bool = false;
 
-    type Item = Entity;
-
     type Prepared = PreparedEntities<'a>;
 
     fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
@@ -74,10 +71,10 @@ impl<'a> Fetch<'a> for EntityFetch {
     }
 }
 
-unsafe impl<'a> PreparedFetch<'a> for PreparedEntities<'a> {
+unsafe impl<'w> PreparedFetch for &PreparedEntities<'w> {
     type Item = Entity;
 
-    unsafe fn fetch(&self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(self, slot: Slot) -> Self::Item {
         self.entities[slot].unwrap()
     }
 }
@@ -89,7 +86,6 @@ macro_rules! tuple_impl {
             where $($ty: Fetch<'a>,)*
         {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
-            type Item           = ($(<$ty::Prepared as PreparedFetch<'a>>::Item,)*);
             type Prepared       = ($($ty::Prepared,)*);
 
             fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
@@ -103,12 +99,12 @@ macro_rules! tuple_impl {
             }
         }
 
-        unsafe impl<'a, 'b, $($ty, )*> PreparedFetch<'a> for ($($ty,)*)
-            where $($ty: PreparedFetch<'a>,)*
+        unsafe impl<'a, $($ty, )*> PreparedFetch for &'a ($($ty,)*)
+            where $(&'a $ty: PreparedFetch,)*
         {
-            type Item = ($(<$ty as PreparedFetch<'a>>::Item,)*);
+            type Item = ($(<&'a $ty as PreparedFetch>::Item,)*);
 
-            unsafe fn fetch(&self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(&'a self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)
@@ -121,12 +117,12 @@ macro_rules! tuple_impl {
     };
 }
 
-tuple_impl! { 0 => A }
-tuple_impl! { 0 => A, 1 => B }
-tuple_impl! { 0 => A, 1 => B, 2 => C }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
+// tuple_impl! { 0 => A }
+// tuple_impl! { 0 => A, 1 => B }
+// tuple_impl! { 0 => A, 1 => B, 2 => C }
+// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
+// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
+// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
+// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
+// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
+// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
