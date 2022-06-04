@@ -50,6 +50,7 @@ where
 impl<Q, F> Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
+    for<'x, 'y> &'x <Q as Fetch<'y>>::Prepared: PreparedFetch,
     F: for<'x> Filter<'x>,
 {
     /// Adds a new filter to the query.
@@ -98,39 +99,6 @@ where
         QueryIter::new(world, archetypes.iter(), fetch, new_tick, old_tick, filter)
     }
 
-    /// Execute the query for a single entity.
-    /// A mutable query will advance the global change tick of the world.
-    pub fn get<'a>(&'a self, entity: Entity, world: &'a World) -> Option<QueryBorrow<'a, Q>> {
-        let &EntityLocation {
-            arch: archetype,
-            slot,
-        } = world.location(entity)?;
-
-        let archetype = world.archetype(archetype);
-
-        let mut fetch = self.fetch.prepare(world, archetype)?;
-
-        // It is only necessary to acquire a new change tick if the query will
-        // change anything
-        let new_tick = if Q::MUTABLE {
-            world.advance_change_tick()
-        } else {
-            world.change_tick()
-        };
-
-        fetch.set_visited(Slice::new(slot, slot), new_tick);
-
-        // Aliasing is guaranteed due to fetch being prepared and alive for this
-        // instance only. The lock is held and causes fetches for the same
-        // archetype to fail
-        let item = unsafe { fetch.fetch(slot) };
-
-        Some(QueryBorrow {
-            item,
-            _fetch: fetch,
-        })
-    }
-
     fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q, &F) {
         let fetch = &self.fetch;
         if world.archetype_gen() > self.archetype_gen {
@@ -146,24 +114,5 @@ where
         }
 
         (&self.archetypes, fetch, &self.filter)
-    }
-}
-pub struct QueryBorrow<'a, Q: Fetch<'a>> {
-    item: Q::Item,
-    /// Ensures the borrow is not freed
-    _fetch: Q::Prepared,
-}
-
-impl<'a, Q: Fetch<'a>> Deref for QueryBorrow<'a, Q> {
-    type Target = Q::Item;
-
-    fn deref(&self) -> &Self::Target {
-        &self.item
-    }
-}
-
-impl<'a, F: Fetch<'a>> DerefMut for QueryBorrow<'a, F> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.item
     }
 }
