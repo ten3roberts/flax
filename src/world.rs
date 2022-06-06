@@ -282,7 +282,8 @@ impl World {
             let slot = dst.allocate(id);
 
             unsafe {
-                dst.put_dyn(slot, &component_info, &mut value as *mut T as *mut u8);
+                dst.put_dyn(slot, &component_info, &mut value as *mut T as *mut u8)
+                    .unwrap();
 
                 std::mem::forget(value);
                 assert_eq!(dst.entity(slot), Some(id));
@@ -608,7 +609,7 @@ mod tests {
         // // Remove id
 
         let mut query = Query::new((a(), c()));
-        let items = query.iter(&world).sorted().collect_vec();
+        let items = query.as_vec::<(i32, String)>(&world);
 
         assert_eq!(items, [(&6, &"Bar".to_string())]);
     }

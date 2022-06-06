@@ -462,7 +462,10 @@ impl<F> FilterIter<F> {
     }
 }
 
-impl<F: PreparedFilter> Iterator for FilterIter<F> {
+impl<F> Iterator for FilterIter<F>
+where
+    F: PreparedFilter,
+{
     type Item = Slice;
 
     fn next(&mut self) -> Option<Self::Item> {

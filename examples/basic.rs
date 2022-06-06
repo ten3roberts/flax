@@ -21,6 +21,9 @@ fn main() {
         .set_default(items())
         .spawn(&mut world);
 
+    let mut query = Query::new(health());
+    for health in query.iter(&world) {}
+
     let mut query = Query::new((health().mutable(), regen()));
 
     // Apply health regen for all match entites

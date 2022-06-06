@@ -23,7 +23,7 @@ pub struct PrepareInfo {
 pub trait Fetch<'w> {
     const MUTABLE: bool;
 
-    type Prepared;
+    type Prepared: for<'x> PreparedFetch<'x>;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
     fn prepare(&self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
@@ -31,7 +31,7 @@ pub trait Fetch<'w> {
 }
 
 /// A preborrowed fetch
-pub unsafe trait PreparedFetch
+pub trait PreparedFetch<'q>
 where
     Self: Sized,
 {
@@ -42,7 +42,7 @@ where
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(self, slot: Slot) -> Self::Item;
+    fn fetch(&'q self, slot: Slot) -> Self::Item;
 
     // Do something for a a slice of entity slots which have been visited, such
     // as updating change tracking for mutable queries. The current change tick
@@ -55,26 +55,26 @@ pub struct PreparedEntities<'a> {
     entities: &'a [Option<Entity>],
 }
 
-impl<'a> Fetch<'a> for EntityFetch {
+impl<'w> Fetch<'w> for EntityFetch {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedEntities<'a>;
+    type Prepared = PreparedEntities<'w>;
 
-    fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
+    fn prepare(&self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
         Some(PreparedEntities {
             entities: archetype.entities(),
         })
     }
 
-    fn matches(&self, world: &'a World, _: &'a Archetype) -> bool {
+    fn matches(&self, world: &'w World, _: &'w Archetype) -> bool {
         true
     }
 }
 
-unsafe impl<'w> PreparedFetch for &PreparedEntities<'w> {
+impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
     type Item = Entity;
 
-    unsafe fn fetch(self, slot: Slot) -> Self::Item {
+    fn fetch(&'q self, slot: Slot) -> Self::Item {
         self.entities[slot].unwrap()
     }
 }
@@ -82,29 +82,29 @@ unsafe impl<'w> PreparedFetch for &PreparedEntities<'w> {
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<'a, 'b, $($ty, )*> Fetch<'a> for ($($ty,)*)
-            where $($ty: Fetch<'a>,)*
+        impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
+            where $($ty: Fetch<'w>,)*
         {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
             type Prepared       = ($($ty::Prepared,)*);
 
-            fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
+            fn prepare(&self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
                 Some(($(
                     (self.$idx).prepare(world, archetype)?,
                 )*))
             }
 
-            fn matches(&self, world: &'a World, archetype: &'a Archetype) -> bool {
+            fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool {
                 $((self.$idx).matches(world, archetype)) && *
             }
         }
 
-        unsafe impl<'a, $($ty, )*> PreparedFetch for &'a ($($ty,)*)
-            where $(&'a $ty: PreparedFetch,)*
+        impl<'q, $($ty, )*> PreparedFetch<'q> for ($($ty,)*)
+            where $($ty: PreparedFetch<'q>,)*
         {
-            type Item = ($(<&'a $ty as PreparedFetch>::Item,)*);
+            type Item = ($(<$ty as PreparedFetch<'q>>::Item,)*);
 
-            unsafe fn fetch(&'a self, slot: Slot) -> Self::Item {
+            fn fetch(&'q self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)
@@ -117,12 +117,12 @@ macro_rules! tuple_impl {
     };
 }
 
-// tuple_impl! { 0 => A }
-// tuple_impl! { 0 => A, 1 => B }
-// tuple_impl! { 0 => A, 1 => B, 2 => C }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
+tuple_impl! { 0 => A }
+tuple_impl! { 0 => A, 1 => B }
+tuple_impl! { 0 => A, 1 => B, 2 => C }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
