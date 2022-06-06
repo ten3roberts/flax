@@ -1,16 +1,13 @@
 mod iter;
 mod view;
 
-use iter::QueryIter;
+use std::num::ParseFloatError;
 
-use std::ops::{Deref, DerefMut};
+use itertools::Itertools;
 
-use crate::{
-    archetype::{ArchetypeId, Slice},
-    entity::EntityLocation,
-    fetch::{Fetch, PreparedFetch},
-    All, And, Entity, Filter, World,
-};
+use crate::{archetype::ArchetypeId, fetch::Fetch, All, And, Filter, PreparedFetch, World};
+
+use self::iter::PreparedQuery;
 
 /// Represents a query and state for a given world.
 /// The archetypes to visit is cached in the query which means it is more
@@ -28,10 +25,7 @@ pub struct Query<Q, F> {
     fetch: Q,
 }
 
-impl<Q> Query<Q, All>
-where
-    Q: for<'x> Fetch<'x>,
-{
+impl<Q> Query<Q, All> {
     /// Construct a new query which will fetch all items in the given query.
 
     /// The query can be either a singular component, a tuple of components, or
@@ -50,7 +44,6 @@ where
 impl<Q, F> Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    for<'x, 'y> &'x <Q as Fetch<'y>>::Prepared: PreparedFetch,
     F: for<'x> Filter<'x>,
 {
     /// Adds a new filter to the query.
@@ -67,7 +60,7 @@ where
 
     /// Prepare the next change tick and return the old one for the last time
     /// the query ran
-    fn prepare_tick(&mut self, world: &World) -> (u32, u32) {
+    fn prepare_tick<'w>(&mut self, world: &'w World) -> (u32, u32) {
         // The tick of the last iteration
         let old_tick = self.change_tick;
 
@@ -91,21 +84,36 @@ where
     /// previous query for the same query.
     ///
     /// As a result, the first invocation will yield all entities.
-    pub fn iter<'a>(&'a mut self, world: &'a World) -> QueryIter<'a, Q, F> {
+    pub fn iter<'q>(&'q mut self, world: &'q World) -> PreparedQuery<'q, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
         dbg!(old_tick, new_tick);
         let (archetypes, fetch, filter) = self.get_archetypes(world);
 
-        QueryIter::new(world, archetypes.iter(), fetch, new_tick, old_tick, filter)
+        PreparedQuery::new(
+            world,
+            archetypes.into_iter().copied(),
+            fetch,
+            filter,
+            old_tick,
+            new_tick,
+        )
     }
 
-    fn get_archetypes(&mut self, world: &World) -> (&[ArchetypeId], &Q, &F) {
-        let fetch = &self.fetch;
+    pub fn as_vec<'w, C>(&'w mut self, world: &'w World) -> Vec<C>
+    where
+        for<'x> <<Q as Fetch<'w>>::Prepared as PreparedFetch<'x>>::Item: ToOwned<Owned = C>,
+    {
+        let mut prepared = self.iter(world);
+        let prepared = &mut prepared;
+        prepared.into_iter().map(|v| v.to_owned()).collect_vec()
+    }
+
+    fn get_archetypes<'w>(&mut self, world: &'w World) -> (&[ArchetypeId], &Q, &F) {
         if world.archetype_gen() > self.archetype_gen {
             self.archetypes.clear();
             self.archetypes
                 .extend(world.archetypes().filter_map(|(id, arch)| {
-                    if fetch.matches(world, arch) {
+                    if self.fetch.matches(world, arch) {
                         Some(id)
                     } else {
                         None
@@ -113,6 +121,8 @@ where
                 }))
         }
 
-        (&self.archetypes, fetch, &self.filter)
+        // Prepare the query
+
+        (&self.archetypes, &self.fetch, &self.filter)
     }
 }
