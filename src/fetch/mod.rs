@@ -1,10 +1,12 @@
 mod component;
 mod ext;
 mod filter;
+mod util;
 
 pub use component::*;
 pub use ext::*;
 pub use filter::*;
+pub use util::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
@@ -35,14 +37,14 @@ pub trait PreparedFetch<'q>
 where
     Self: Sized,
 {
-    type Item;
+    type Item: Sized;
     /// Fetch the item from entity at the slot in the prepared storage.
     /// # Safety
     /// Must return non-aliased references to the underlying borrow of the
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    fn fetch(&'q self, slot: Slot) -> Self::Item;
+    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item;
 
     // Do something for a a slice of entity slots which have been visited, such
     // as updating change tracking for mutable queries. The current change tick
@@ -60,13 +62,13 @@ impl<'w> Fetch<'w> for EntityFetch {
 
     type Prepared = PreparedEntities<'w>;
 
-    fn prepare(&self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
+    fn prepare(&self, _: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
         Some(PreparedEntities {
             entities: archetype.entities(),
         })
     }
 
-    fn matches(&self, world: &'w World, _: &'w Archetype) -> bool {
+    fn matches(&self, _: &'w World, _: &'w Archetype) -> bool {
         true
     }
 }
@@ -74,7 +76,7 @@ impl<'w> Fetch<'w> for EntityFetch {
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
     type Item = Entity;
 
-    fn fetch(&'q self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
         self.entities[slot].unwrap()
     }
 }
@@ -104,7 +106,7 @@ macro_rules! tuple_impl {
         {
             type Item = ($(<$ty as PreparedFetch<'q>>::Item,)*);
 
-            fn fetch(&'q self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)

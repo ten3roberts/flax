@@ -1,11 +1,11 @@
-use core::slice;
-
-use smallvec::SmallVec;
+use std::slice::Iter;
 
 use crate::{
-    archetype::{ArchetypeId, Slice, Slot},
-    Archetype, Fetch, Filter, FilterIter, PreparedFetch, PreparedFilter, World,
+    archetype::{Slice, Slot},
+    Fetch, Filter, FilterIter, PreparedFetch, PreparedFilter,
 };
+
+use super::prepared::{PreparedArchetype, PreparedQuery};
 
 /// Iterates over a chunk of entities, specified by a predicate.
 /// In essence, this is the unflattened version of [crate::QueryIter].
@@ -254,106 +254,32 @@ where
     }
 }
 
-struct PreparedState<'w, Q>
-where
-    Q: Fetch<'w>,
-{
-    current: Option<Q::Prepared>,
-    archetypes: slice::Iter<'w, ArchetypeId>,
-}
-
-/// A lazily prepared query which borrows and hands out chunk iterators for
-/// each archetype matched.
-pub struct PreparedQuery<'w, Q, F>
-where
-    Q: Fetch<'w>,
-    F: Filter<'w>,
-{
-    state: SmallVec<[(&'w Archetype, Q::Prepared); 8]>,
-    filter: &'w F,
-    old_tick: u32,
-    new_tick: u32,
-}
-
-impl<'w, 'q, Q, F> IntoIterator for &'q mut PreparedQuery<'w, Q, F>
-where
-    Q: Fetch<'w>,
-    F: Filter<'w>,
-{
-    type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
-
-    type IntoIter = QueryIter<'w, 'q, Q, F>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        QueryIter {
-            prepared: self,
-            current: None,
-            index: 0,
-        }
-    }
-}
-
-impl<'w, Q, F> PreparedQuery<'w, Q, F>
-where
-    Q: Fetch<'w>,
-    F: Filter<'w>,
-{
-    pub fn new(
-        world: &'w World,
-        archetypes: impl Iterator<Item = ArchetypeId>,
-        fetch: &Q,
-        filter: &'w F,
-        old_tick: u32,
-        new_tick: u32,
-    ) -> Self {
-        let state = archetypes
-            .map(|arch| {
-                let arch = world.archetype(arch);
-                (
-                    arch,
-                    fetch
-                        .prepare(world, arch)
-                        .expect("Attempt to prepare unmatched query"),
-                )
-            })
-            .collect();
-
-        Self {
-            state,
-            filter,
-            old_tick,
-            new_tick,
-        }
-    }
-}
-
-impl<'w, Q, F> PreparedQuery<'w, Q, F>
-where
-    Q: Fetch<'w>,
-    F: Filter<'w>,
-{
-    fn step(&self, current: usize) -> Option<Chunks<'_, Q::Prepared, F::Prepared>> {
-        let (arch, fetch) = self.state.get(current)?;
-
-        let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
-
-        Some(Chunks {
-            fetch,
-            filter,
-            new_tick: self.new_tick,
-            chunk: Default::default(),
-        })
-    }
-}
-
 pub struct QueryIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
     F: Filter<'w>,
 {
-    prepared: &'q PreparedQuery<'w, Q, F>,
+    state: &'q PreparedQuery<'w, Q, F>,
+    archetypes: Iter<'q, PreparedArchetype<'w, Q::Prepared>>,
     current: Option<Chunks<'q, Q::Prepared, F::Prepared>>,
-    index: usize,
+}
+
+impl<'w, 'q, Q, F> QueryIter<'w, 'q, Q, F>
+where
+    Q: Fetch<'w>,
+    F: Filter<'w>,
+    'w: 'q,
+{
+    pub fn new(
+        state: &'q PreparedQuery<'w, Q, F>,
+        archetypes: Iter<'q, PreparedArchetype<'w, Q::Prepared>>,
+    ) -> Self {
+        Self {
+            state,
+            archetypes,
+            current: None,
+        }
+    }
 }
 
 impl<'w, 'q, Q, F> Iterator for QueryIter<'w, 'q, Q, F>
@@ -371,8 +297,18 @@ where
                 }
             }
 
-            let chunk = self.prepared.step(self.index)?;
-            self.index += 1;
+            let PreparedArchetype { arch, fetch, .. } = self.archetypes.next()?;
+            let filter = FilterIter::new(
+                arch.slots(),
+                self.state.filter.prepare(arch, self.state.old_tick),
+            );
+
+            let chunk = Chunks {
+                fetch,
+                filter,
+                new_tick: self.state.new_tick,
+                chunk: Default::default(),
+            };
 
             self.current = Some(chunk);
         }

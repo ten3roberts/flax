@@ -103,7 +103,7 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Transform this into a mutable fetch
-    pub fn mutable(self) -> Mutable<T> {
+    pub fn as_mut(self) -> Mutable<T> {
         Mutable(self)
     }
 
