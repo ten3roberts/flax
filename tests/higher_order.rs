@@ -1,8 +1,8 @@
-use std::{fmt::format, ptr};
+use std::ptr;
 
 use flax::{
     component, wildcard, Component, ComponentId, ComponentValue, DebugVisitor, EntityBuilder,
-    Query, World,
+    OwnedTuple, Query, World,
 };
 use itertools::Itertools;
 
@@ -155,14 +155,16 @@ fn relations() {
 
     let mut query = Query::new((name(), child_of(parent)));
 
-    let items = query.iter(&world).sorted().collect_vec();
+    let items = query
+        .prepare(&world)
+        .iter()
+        .map(OwnedTuple::owned)
+        .sorted()
+        .collect_vec();
 
     assert_eq!(
         items,
-        [
-            (&"John", &RelationKind::Mom),
-            (&"Sally", &RelationKind::Mom)
-        ]
+        [("John", RelationKind::Mom), ("Sally", RelationKind::Mom)]
     );
 
     let mut buf = String::new();
@@ -177,8 +179,9 @@ fn relations() {
         dbg!(wild, wildcard);
     }
     let mut query = Query::new((name(), child_of(wildcard().id()).relation(0)));
+    let mut query = query.prepare(&world);
 
-    let items = query.iter(&world).sorted().collect_vec();
+    let items = query.iter().sorted().collect_vec();
 
     assert_eq!(
         items,

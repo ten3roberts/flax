@@ -1,13 +1,14 @@
 mod iter;
+mod prepared;
 mod view;
-
-use std::num::ParseFloatError;
 
 use itertools::Itertools;
 
-use crate::{archetype::ArchetypeId, fetch::Fetch, All, And, Filter, PreparedFetch, World};
+use crate::{
+    archetype::ArchetypeId, fetch::Fetch, All, And, Filter, OwnedTuple, PreparedFetch, World,
+};
 
-use self::iter::PreparedQuery;
+use self::prepared::PreparedQuery;
 
 /// Represents a query and state for a given world.
 /// The archetypes to visit is cached in the query which means it is more
@@ -84,28 +85,22 @@ where
     /// previous query for the same query.
     ///
     /// As a result, the first invocation will yield all entities.
-    pub fn iter<'q>(&'q mut self, world: &'q World) -> PreparedQuery<'q, Q, F> {
+    pub fn prepare<'w>(&'w mut self, world: &'w World) -> PreparedQuery<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
         dbg!(old_tick, new_tick);
         let (archetypes, fetch, filter) = self.get_archetypes(world);
 
-        PreparedQuery::new(
-            world,
-            archetypes.into_iter().copied(),
-            fetch,
-            filter,
-            old_tick,
-            new_tick,
-        )
+        PreparedQuery::new(world, archetypes, fetch, filter, old_tick, new_tick)
     }
 
+    /// Gathers all elements in the query as a Vec of owned values.
     pub fn as_vec<'w, C>(&'w mut self, world: &'w World) -> Vec<C>
     where
-        for<'x> <<Q as Fetch<'w>>::Prepared as PreparedFetch<'x>>::Item: ToOwned<Owned = C>,
+        for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Item: OwnedTuple<Owned = C>,
     {
-        let mut prepared = self.iter(world);
-        let prepared = &mut prepared;
-        prepared.into_iter().map(|v| v.to_owned()).collect_vec()
+        let mut prepared = self.prepare(world);
+        let items = prepared.iter().map(|v| v.owned()).collect_vec();
+        items
     }
 
     fn get_archetypes<'w>(&mut self, world: &'w World) -> (&[ArchetypeId], &Q, &F) {

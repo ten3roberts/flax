@@ -33,7 +33,7 @@ fn filters() {
 
     let mut query = Query::new(a()).filter(a().modified());
 
-    let items = query.iter(&world).collect_vec();
+    let items = query.as_vec(&world);
 
     // All changed entities
     assert_eq!(items.len(), 11);
@@ -43,36 +43,37 @@ fn filters() {
 
     eprintln!("Current change: {}", world.change_tick());
 
-    let items = query.iter(&world).collect_vec();
+    let items = query.as_vec(&world);
 
-    assert_eq!(items, &[&34.0]);
+    assert_eq!(items, &[34.0]);
 
     others[3..7].iter().for_each(|id| {
         let mut a = world.get_mut(*id, a()).unwrap();
         *a = -*a;
     });
 
-    let items = query.iter(&world).collect_vec();
+    let items = query.as_vec(&world);
 
     eprintln!("Items: {items:?}");
 
-    assert_eq!(items, &[&-3.0, &-4.0, &-5.0, &-6.0]);
+    assert_eq!(items, &[-3.0, -4.0, -5.0, -6.0]);
 
     others[3..5].iter().for_each(|id| {
         let mut a = world.get_mut(*id, a()).unwrap();
         *a = 10.0 * *a;
     });
 
-    let items = query.iter(&world).collect_vec();
-    assert_eq!(items, &[&-30.0, &-40.0]);
+    let items = query.as_vec(&world);
+    assert_eq!(items, &[-30.0, -40.0]);
 
     // Construct a new interted query
 
     let mut query = Query::new(a()).filter(a().inserted());
 
     let items = query
-        .iter(&world)
-        .copied()
+        .prepare(&world)
+        .iter()
+        .map(|v| v.clone())
         .sorted_by_key(|v| (v * 256.0) as i64)
         .collect_vec();
 
@@ -84,8 +85,8 @@ fn filters() {
     world.set(id2, a(), 29.5);
 
     let items = query
-        .iter(&world)
-        .copied()
+        .as_vec(&world)
+        .into_iter()
         .sorted_by_key(|v| (v * 256.0) as i64)
         .collect_vec();
 
@@ -93,12 +94,12 @@ fn filters() {
 
     let mut query = Query::new(entities()).filter(a().removed());
 
-    let items = query.iter(&world).collect_vec();
+    let items = query.prepare(&world).iter().collect_vec();
 
     assert_eq!(items, []);
     world.remove(id2, a());
 
-    let items = query.iter(&world).collect_vec();
+    let items = query.prepare(&world).iter().collect_vec();
 
     assert_eq!(items, [id2]);
 }
@@ -137,17 +138,17 @@ fn combinations() {
     let mut query = Query::new(entities()).filter(a().modified() | b().modified());
 
     // eprintln!("Items: {:?}", query.iter(&world).sorted().collect_vec());
-    assert_eq!(query.iter(&world).sorted().collect_vec(), ids);
+    assert_eq!(query.prepare(&world).iter().sorted().collect_vec(), ids);
 
     for &id in &ids[50..67] {
         *world.get_mut(id, a()).unwrap() *= -2;
     }
 
-    let items = query.iter(&world).sorted().collect_vec();
+    let items = query.prepare(&world).iter().sorted().collect_vec();
     eprintln!("Items: {items:?}");
 
     assert_eq!(items, ids[50..67]);
-    let items = query.iter(&world).sorted().collect_vec();
+    let items = query.prepare(&world).iter().sorted().collect_vec();
     assert_eq!(items, []);
 
     for &id in &ids[20..43] {
@@ -158,7 +159,7 @@ fn combinations() {
         world.get_mut(id, b()).unwrap().push_str("...");
     }
 
-    let items = query.iter(&world).sorted().collect_vec();
+    let items = query.prepare(&world).iter().sorted().collect_vec();
 
     assert_eq!(items, ids[20..89]);
 }

@@ -21,7 +21,7 @@ pub struct PreparedComponent<'a, T> {
 impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
     type Item = &'q T;
 
-    fn fetch(&'q self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
         self.borrow.at(slot)
     }
 }
@@ -69,7 +69,7 @@ where
 impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
     type Item = &'q mut T;
 
-    fn fetch(&'q self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
@@ -152,7 +152,7 @@ where
 {
     type Item = (Entity, &'q T);
 
-    fn fetch(&'q self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         let item = self.borrow.at(slot);
         (self.obj, item)

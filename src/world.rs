@@ -609,8 +609,8 @@ mod tests {
         // // Remove id
 
         let mut query = Query::new((a(), c()));
-        let items = query.as_vec::<(i32, String)>(&world);
+        let items = query.as_vec(&world);
 
-        assert_eq!(items, [(&6, &"Bar".to_string())]);
+        assert_eq!(items, [(6, "Bar".to_string())]);
     }
 }

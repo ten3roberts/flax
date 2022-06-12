@@ -26,10 +26,10 @@
 //!       .set_default(items())
 //!       .spawn(&mut world);
 //!
-//!   let mut query = Query::new((health().mutable(), regen()));
+//!   let mut query = Query::new((health().as_mut(), regen()));
 //!
 //!   // Apply health regen for all match entites
-//!   for (health, regen) in query.iter(&world) {
+//!   for (health, regen) in &mut query.prepare(&world) {
 //!       *health = (*health + regen).min(100.0);
 //!   }
 //!

@@ -32,7 +32,7 @@ fn query() {
 
     let mut query = Query::new((entities(), a()));
     let mut world = World::new();
-    query.iter(&world).for_each(|_| {});
+    query.prepare(&world).iter().for_each(|_| {});
 
     let id1 = world.spawn();
     let id2 = world.spawn();
@@ -45,12 +45,14 @@ fn query() {
     world.set(id3, b(), "foo".to_string());
 
     let items = query
-        .iter(&world)
+        .prepare(&world)
+        .iter()
+        .map(|(a, b)| (a, *b))
         .inspect(|v| println!("{v:?}"))
         .sorted_by_key(|(id, _)| *id)
         .collect_vec();
 
-    assert_eq!(items, [(id1, &4), (id2, &9), (id3, &8)])
+    assert_eq!(items, [(id1, 4), (id2, 9), (id3, 8)])
 }
 
 #[test]
@@ -85,7 +87,8 @@ fn builder() {
         .spawn(&mut world);
 
     let mut query = Query::new((a(), c()));
-    let components = query.iter(&world).sorted().collect_vec();
+    let mut query = query.prepare(&world);
+    let components = query.iter().sorted().collect_vec();
 
     assert_eq!(
         components,
@@ -96,14 +99,13 @@ fn builder() {
         ]
     );
 
-    assert_eq!(
-        Some(&(&5, &"Foo".to_string())),
-        query.get(id, &world).as_deref()
-    );
+    assert_eq!(Some((&5, &"Foo".to_string())), query.get(id));
+    drop(query);
 
     {
-        let query = Query::new((a(), c().mutable()));
-        let mut items = query.get(id, &world).unwrap();
+        let mut query = Query::new((a(), c().as_mut()));
+        let mut prepared = query.prepare(&world);
+        let items = prepared.get(id).unwrap();
         *items.1 = items.1.repeat(*items.0);
     }
 
@@ -141,7 +143,8 @@ fn tags() {
         .collect_vec();
 
     let mut query = Query::new(health());
-    let items = query.iter(&world).sorted().collect_vec();
+    let mut query = query.prepare(&world);
+    let items = query.into_iter().sorted().collect_vec();
 
     let expected = (&[50; 16]).iter().chain(&[100]).collect_vec();
     assert_eq!(items, expected);
