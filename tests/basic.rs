@@ -125,14 +125,14 @@ fn tags() {
     }
 
     let mut world = World::new();
-    let player = EntityBuilder::new()
+    let _player = EntityBuilder::new()
         .set(health(), 100)
         .set(alive(), true)
         .tag(player())
         .set(pos(), (4.5, 3.4))
         .spawn(&mut world);
 
-    let enemies = (0..16)
+    let _enemies = (0..16)
         .map(|i| {
             EntityBuilder::new()
                 .set(health(), 50)
@@ -148,4 +148,47 @@ fn tags() {
 
     let expected = (&[50; 16]).iter().chain(&[100]).collect_vec();
     assert_eq!(items, expected);
+}
+
+#[test]
+fn query_view() {
+    component! {
+        name: String,
+        vel: f32,
+        pos: f32,
+    }
+    let mut world = World::new();
+    let mut builder = EntityBuilder::new();
+    let entities = (0..10)
+        .map(|i| {
+            builder
+                .set(name(), format!("entity_{i}"))
+                .set(vel(), (i as f32) * 0.1)
+                .set_default(pos())
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let mut query = Query::new((pos().as_mut(), vel()));
+    let mut prepared = query.prepare(&world);
+
+    // Perform integration
+    for (pos, vel) in &mut prepared {
+        *pos += vel * 1.0;
+    }
+
+    // Random fetch
+    assert_eq!(prepared.get(entities[3]), Some((&mut 0.3, &0.3)));
+    assert_eq!(prepared.get(entities[7]), Some((&mut 0.7, &0.7)));
+
+    // Disjoint
+    assert_eq!(
+        prepared.get_disjoint([entities[2], entities[8], entities[4]]),
+        Some([(&mut 0.2, &0.2), (&mut 0.8, &0.8), (&mut 0.4, &0.4)])
+    );
+
+    assert_eq!(
+        prepared.get_disjoint([entities[2], entities[8], entities[2]]),
+        None
+    );
 }
