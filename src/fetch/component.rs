@@ -42,6 +42,18 @@ where
     fn matches(&self, _: &'w World, archetype: &'w Archetype) -> bool {
         archetype.has(self.id())
     }
+
+    fn describe(&self) -> String {
+        self.name().to_string()
+    }
+
+    fn difference(&self, archetype: &Archetype) -> Vec<String> {
+        if archetype.has(self.id()) {
+            vec![]
+        } else {
+            vec![self.name().to_string()]
+        }
+    }
 }
 
 pub struct Mutable<T>(pub(crate) Component<T>);
@@ -63,6 +75,17 @@ where
 
     fn matches(&self, _: &'w World, archetype: &'w Archetype) -> bool {
         archetype.has(self.0.id())
+    }
+    fn describe(&self) -> String {
+        format!("mut {}", self.0.name())
+    }
+
+    fn difference(&self, archetype: &Archetype) -> Vec<String> {
+        if archetype.has(self.0.id()) {
+            vec![]
+        } else {
+            vec![self.0.name().to_string()]
+        }
     }
 }
 
@@ -137,6 +160,31 @@ where
                 .is_some()
         } else {
             archetype.has(self.component.id())
+        }
+    }
+
+    fn describe(&self) -> String {
+        format!("relation({})[{}]", self.component.name(), self.index)
+    }
+
+    fn difference(&self, archetype: &Archetype) -> Vec<String> {
+        let (sub, obj) = self.component.id().into_pair();
+        if obj == wildcard().id().strip_gen() {
+            if archetype
+                .components()
+                .filter(|component| component.id().strip_gen() == sub)
+                .skip(self.index)
+                .next()
+                .is_some()
+            {
+                vec![]
+            } else {
+                vec![self.component.name().to_string()]
+            }
+        } else if archetype.has(self.component.id()) {
+            vec![]
+        } else {
+            vec![self.component.name().to_string()]
         }
     }
 }
