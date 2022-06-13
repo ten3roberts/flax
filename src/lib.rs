@@ -99,6 +99,7 @@ mod entity;
 pub mod macros;
 mod buffer;
 mod entity_builder;
+pub mod error;
 pub mod fetch;
 mod query;
 mod world;
@@ -113,3 +114,5 @@ pub use entity::*;
 pub use fetch::*;
 pub use query::*;
 pub use world::*;
+
+pub use error::Error;

@@ -10,7 +10,7 @@ pub use util::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    Entity, World,
+    ComponentInfo, Entity, World,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +30,9 @@ pub trait Fetch<'w> {
     /// If Self::matches true, this needs to return Some
     fn prepare(&self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
     fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool;
+    fn describe(&self) -> String;
+    /// Returns the required elements in self which are not in archetype
+    fn difference(&self, archetype: &Archetype) -> Vec<String>;
 }
 
 /// A preborrowed fetch
@@ -71,6 +74,14 @@ impl<'w> Fetch<'w> for EntityFetch {
     fn matches(&self, _: &'w World, _: &'w Archetype) -> bool {
         true
     }
+
+    fn describe(&self) -> String {
+        "entities".to_string()
+    }
+
+    fn difference(&self, archetype: &Archetype) -> Vec<String> {
+        vec![]
+    }
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
@@ -99,6 +110,21 @@ macro_rules! tuple_impl {
             fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool {
                 $((self.$idx).matches(world, archetype)) && *
             }
+
+            fn describe(&self) -> String {
+            [
+                    "(".to_string(),
+                $(
+                    (self.$idx).describe()
+                ),*,
+                    "(".to_string()
+                ].join(", ")
+            }
+
+            fn difference(&self, archetype: &Archetype) -> Vec<String> {
+                [$((self.$idx).difference(archetype)),*].concat()
+            }
+
         }
 
         impl<'q, $($ty, )*> PreparedFetch<'q> for ($($ty,)*)

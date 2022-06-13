@@ -5,8 +5,9 @@ use smallvec::SmallVec;
 
 use crate::{
     archetype::{Slice, Slot},
-    Archetype, ArchetypeId, Entity, EntityLocation, Fetch, Filter, FilterIter, PreparedFetch,
-    PreparedFilter, World,
+    error::Result,
+    Archetype, ArchetypeId, Entity, EntityLocation, Error, Fetch, Filter, FilterIter,
+    PreparedFetch, PreparedFilter, World,
 };
 
 use super::iter::QueryIter;
@@ -122,12 +123,12 @@ where
     pub fn get_disjoint<'q, const C: usize>(
         &'q mut self,
         ids: [Entity; C],
-    ) -> Option<[<Q::Prepared as PreparedFetch>::Item; C]> {
+    ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]> {
         let mut sorted = ids;
         sorted.sort();
         if sorted.windows(C).any(|v| v[0] == v[1]) {
             // Not disjoint
-            return None;
+            return Err(Error::Disjoint(ids.to_vec()));
         }
 
         // Prepare all
@@ -136,7 +137,13 @@ where
         for i in 0..C {
             let id = ids[i];
             let &EntityLocation { arch, slot } = self.world.location(id)?;
-            idxs[i] = (self.prepare(arch)?, slot);
+            idxs[i] = (
+                self.prepare(arch).ok_or_else(|| {
+                    let arch = self.world.archetype(arch);
+                    Error::UnmatchedFetch(id, self.fetch.describe(), self.fetch.difference(arch))
+                })?,
+                slot,
+            );
         }
 
         // Fetch all
@@ -147,20 +154,23 @@ where
             items[i] = unsafe { self.prepared[idx].fetch.fetch(slot) };
         }
 
-        Some(items)
+        Ok(items)
     }
 
     /// Get the fetch items for an entity.
     /// **Note**: Filters are ignored.
-    pub fn get(&mut self, id: Entity) -> Option<<Q::Prepared as PreparedFetch>::Item> {
+    pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
         let &EntityLocation { arch, slot } = self.world.location(id)?;
 
-        let idx = self.prepare(arch)?;
+        let idx = self.prepare(arch).ok_or_else(|| {
+            let arch = self.world.archetype(arch);
+            Error::UnmatchedFetch(id, self.fetch.describe(), self.fetch.difference(arch))
+        })?;
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
         let p = &self.prepared[idx];
         let item = unsafe { p.fetch.fetch(slot) };
 
-        Some(item)
+        Ok(item)
     }
 }

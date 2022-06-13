@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flax::{component, entities, EntityBuilder, Query, World};
+use flax::{component, entities, EntityBuilder, Error, Query, World};
 use itertools::Itertools;
 
 #[test]
@@ -19,7 +19,7 @@ fn creation() {
     world.set(id, zst(), ());
 
     assert!(world.is_alive(id));
-    world.despawn(id);
+    world.despawn(id).unwrap();
     assert!(!world.is_alive(id));
 }
 
@@ -81,7 +81,7 @@ fn builder() {
         .set(b(), shared.clone())
         .spawn(&mut world);
 
-    let id2 = EntityBuilder::new()
+    EntityBuilder::new()
         .set(a(), 9)
         .set(c(), "Bar".to_string())
         .spawn(&mut world);
@@ -99,7 +99,7 @@ fn builder() {
         ]
     );
 
-    assert_eq!(Some((&5, &"Foo".to_string())), query.get(id));
+    assert_eq!(Ok((&5, &"Foo".to_string())), query.get(id));
     drop(query);
 
     {
@@ -111,7 +111,7 @@ fn builder() {
 
     assert_eq!(
         world.get(id, c()).as_deref(),
-        Some(&"FooFooFooFooFoo".to_string())
+        Ok(&"FooFooFooFooFoo".to_string())
     );
 }
 
@@ -178,17 +178,17 @@ fn query_view() {
     }
 
     // Random fetch
-    assert_eq!(prepared.get(entities[3]), Some((&mut 0.3, &0.3)));
-    assert_eq!(prepared.get(entities[7]), Some((&mut 0.7, &0.7)));
+    assert_eq!(prepared.get(entities[3]), Ok((&mut 0.3, &0.3)));
+    assert_eq!(prepared.get(entities[7]), Ok((&mut 0.7, &0.7)));
 
     // Disjoint
     assert_eq!(
         prepared.get_disjoint([entities[2], entities[8], entities[4]]),
-        Some([(&mut 0.2, &0.2), (&mut 0.8, &0.8), (&mut 0.4, &0.4)])
+        Ok([(&mut 0.2, &0.2), (&mut 0.8, &0.8), (&mut 0.4, &0.4)])
     );
 
     assert_eq!(
         prepared.get_disjoint([entities[2], entities[8], entities[2]]),
-        None
+        Err(Error::Disjoint(vec![entities[2], entities[8], entities[2]]))
     );
 }

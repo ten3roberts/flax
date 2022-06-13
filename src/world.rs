@@ -10,7 +10,8 @@ use itertools::Itertools;
 use crate::{
     archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, Visitor},
     entity::{EntityLocation, EntityStore},
-    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, Namespace,
+    error::Result,
+    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, Error, Namespace,
 };
 
 pub struct World {
@@ -35,8 +36,10 @@ impl World {
         }
     }
 
-    pub fn get_namespace(&self, namespace: Namespace) -> Option<&EntityStore> {
-        self.entities.get(&namespace)
+    pub fn get_namespace(&self, namespace: Namespace) -> Result<&EntityStore> {
+        self.entities
+            .get(&namespace)
+            .ok_or(Error::NoSuchNamespace(namespace))
     }
 
     pub fn init_namespace(&mut self, namespace: Namespace) -> &mut EntityStore {
@@ -155,7 +158,7 @@ impl World {
         id
     }
 
-    pub fn despawn(&mut self, id: Entity) -> Option<()> {
+    pub fn despawn(&mut self, id: Entity) -> Result<()> {
         let &EntityLocation {
             arch: archetype,
             slot,
@@ -175,7 +178,7 @@ impl World {
             ns.despawn(id);
         }
 
-        Some(())
+        Ok(())
     }
 
     pub fn set<T: ComponentValue>(
@@ -185,8 +188,6 @@ impl World {
         mut value: T,
     ) -> Option<T> {
         let id = id.into();
-        let archetype_root = self.archetype_root;
-
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
@@ -299,14 +300,14 @@ impl World {
         }
     }
 
-    pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Option<T> {
+    pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Result<T> {
         let ns = self.init_namespace(id.namespace());
         let &EntityLocation { arch: src_id, slot } = ns.get(id).unwrap();
 
         let src = self.archetype(src_id);
 
         if !src.has(component.id()) {
-            return None;
+            return Err(Error::MissingComponent(id, component.name()));
         }
 
         let dst_id = match src.edge_to(component.id()) {
@@ -366,7 +367,7 @@ impl World {
                 arch: dst_id,
             };
 
-            Some(val.cast::<T>().read())
+            Ok(val.cast::<T>().read())
         }
     }
 
@@ -375,10 +376,12 @@ impl World {
         &self,
         id: Entity,
         component: Component<T>,
-    ) -> Option<AtomicRef<T>> {
-        let loc = self.get_namespace(id.namespace())?.get(id)?;
+    ) -> Result<AtomicRef<T>> {
+        let loc = self.location(id)?;
 
-        self.archetypes.get(loc.arch)?.get(loc.slot, component)
+        self.archetype(loc.arch)
+            .get(loc.slot, component)
+            .ok_or_else(|| Error::MissingComponent(id, component.name()))
     }
 
     /// Randomly access an entity's component.
@@ -386,25 +389,30 @@ impl World {
         &self,
         id: Entity,
         component: Component<T>,
-    ) -> Option<AtomicRefMut<T>> {
-        let &EntityLocation { arch, slot } = self.get_namespace(id.namespace())?.get(id)?;
+    ) -> Result<AtomicRefMut<T>> {
+        let &EntityLocation { arch, slot } = self
+            .get_namespace(id.namespace())?
+            .get(id)
+            .ok_or(Error::NoSuchEntity(id))?;
 
         let archetype = self.archetype(arch);
 
         let change_tick = self.advance_change_tick();
 
         archetype
-            .changes_mut(component.id())?
+            .changes_mut(component.id())
+            .expect("Change list is empty")
             .set(Change::modified(Slice::single(slot), change_tick));
 
-        archetype.get_mut(slot, component)
+        archetype
+            .get_mut(slot, component)
+            .ok_or_else(|| Error::MissingComponent(id, component.name()))
     }
 
     /// Returns true if the entity has the specified component.
     /// Returns false if
     pub fn has<T: ComponentValue>(&self, id: Entity, component: Component<T>) -> bool {
-        let loc = self.get_namespace(id.namespace()).and_then(|v| v.get(id));
-        if let Some(loc) = loc {
+        if let Ok(loc) = self.location(id) {
             self.archetype(loc.arch).has(component.id())
         } else {
             false
@@ -413,15 +421,19 @@ impl World {
 
     /// Returns true if the entity is still alive
     pub fn is_alive(&self, id: Entity) -> bool {
-        self.get_namespace(id.namespace()).map(|v| v.is_alive(id)) == Some(true)
+        self.get_namespace(id.namespace())
+            .map(|v| v.is_alive(id))
+            .unwrap_or(false)
     }
 
     pub(crate) fn archetypes(&self) -> impl Iterator<Item = (ArchetypeId, &Archetype)> {
         self.archetypes.iter()
     }
 
-    pub(crate) fn location(&self, id: Entity) -> Option<&EntityLocation> {
-        self.get_namespace(id.namespace())?.get(id)
+    pub(crate) fn location(&self, id: Entity) -> Result<&EntityLocation> {
+        self.get_namespace(id.namespace())?
+            .get(id)
+            .ok_or(Error::NoSuchEntity(id))
     }
 
     /// Get a reference to the world's archetype generation
@@ -448,7 +460,7 @@ impl World {
     {
         for (_, arch) in self.archetypes.iter() {
             for component in arch.components() {
-                if let Some(mut v) = self.get_mut(component.id(), visitor) {
+                if let Ok(mut v) = self.get_mut(component.id(), visitor) {
                     arch.visit(component.id(), &mut *v, ctx);
                 }
             }
@@ -456,7 +468,7 @@ impl World {
     }
 
     pub(crate) fn reconstruct(&self, id: crate::StrippedEntity) -> Option<Entity> {
-        let ns = self.get_namespace(id.namespace())?;
+        let ns = self.get_namespace(id.namespace()).ok()?;
 
         ns.reconstruct(id).map(|v| v.0)
     }
@@ -513,8 +525,11 @@ mod tests {
         world.set(id, a(), 65);
         let shared = Arc::new("Foo".to_string());
 
-        assert_eq!(world.get(id, a()).as_deref(), Some(&65));
-        assert_eq!(world.get(id, b()).as_deref(), None);
+        assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
+        assert_eq!(
+            world.get(id, b()).as_deref(),
+            Err(&Error::MissingComponent(id, "b"))
+        );
         assert_eq!(world.has(id, c()), false);
 
         let id2 = world.spawn();
@@ -524,15 +539,19 @@ mod tests {
 
         eprintln!("a: {}, b: {}, c: {}, id: {}", a(), a(), c(), id);
 
-        assert_eq!(world.get(id, a()).as_deref(), Some(&65));
-        assert_eq!(world.get(id, b()).as_deref(), None);
+        assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
+        assert_eq!(
+            world.get(id, b()).as_deref(),
+            Err(&Error::MissingComponent(id, "b"))
+        );
+
         assert_eq!(world.has(id, c()), false);
-        assert_eq!(world.get(id2, a()).as_deref(), Some(&7));
-        assert_eq!(world.get(id2, c()).as_deref(), Some(&"Foo".to_string()));
+        assert_eq!(world.get(id2, a()).as_deref(), Ok(&7));
+        assert_eq!(world.get(id2, c()).as_deref(), Ok(&"Foo".to_string()));
         world.set(id, e(), shared.clone());
         assert_eq!(
             world.get(id, e()).as_deref().map(|v| &**v),
-            Some(&"Foo".to_string())
+            Ok(&"Foo".to_string())
         );
 
         assert_eq!(Arc::strong_count(&shared), 2);
@@ -560,9 +579,9 @@ mod tests {
 
         assert_eq!(*id_a, 40);
 
-        // Borrow another component on an entity with a mutably borrowed
+        // Borrow another component on an entity with a mutable borrowed
         // **other** component.
-        assert_eq!(world.get(id2, a()).as_deref(), None);
+        assert_eq!(world.get(id2, a()).as_deref().ok(), None);
     }
 
     #[test]
@@ -584,25 +603,28 @@ mod tests {
             .set(e(), shared.clone())
             .spawn(&mut world);
 
-        assert_eq!(world.get(id, b()).as_deref(), Some(&0.3));
-        assert_eq!(world.get(id, e()).as_deref(), Some(&shared));
+        assert_eq!(world.get(id, b()).as_deref(), Ok(&0.3));
+        assert_eq!(world.get(id, e()).as_deref(), Ok(&shared));
 
-        assert_eq!(world.remove(id, e()).as_ref(), Some(&shared));
+        assert_eq!(world.remove(id, e()).as_ref(), Ok(&shared));
 
-        assert_eq!(world.get(id, a()).as_deref(), Some(&9));
-        assert_eq!(world.get(id, c()).as_deref(), Some(&"Foo".to_string()));
-        assert_eq!(world.get(id, e()).as_deref(), None);
+        assert_eq!(world.get(id, a()).as_deref(), Ok(&9));
+        assert_eq!(world.get(id, c()).as_deref(), Ok(&"Foo".to_string()));
+        assert_eq!(
+            world.get(id, e()).as_deref(),
+            Err(&Error::MissingComponent(id, "e"))
+        );
 
         world.despawn(id).unwrap();
 
-        assert_eq!(world.get(id, a()).as_deref(), None);
-        assert_eq!(world.get(id, c()).as_deref(), None);
-        assert_eq!(world.get(id, e()).as_deref(), None);
+        assert_eq!(world.get(id, a()).as_deref(), Err(&Error::NoSuchEntity(id)));
+        assert_eq!(world.get(id, c()).as_deref(), Err(&Error::NoSuchEntity(id)));
+        assert_eq!(world.get(id, e()).as_deref(), Err(&Error::NoSuchEntity(id)));
 
-        assert_eq!(world.get(id2, e()).as_deref(), Some(&shared));
-        assert_eq!(world.get(id2, c()).as_deref(), Some(&"Bar".to_string()));
+        assert_eq!(world.get(id2, e()).as_deref(), Ok(&shared));
+        assert_eq!(world.get(id2, c()).as_deref(), Ok(&"Bar".to_string()));
 
-        assert_eq!(world.get(id, e()).as_deref(), None);
+        assert_eq!(world.get(id, e()).as_deref(), Err(&Error::NoSuchEntity(id)));
 
         assert_eq!(Arc::strong_count(&shared), 2);
 
