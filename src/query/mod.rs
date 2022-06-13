@@ -80,11 +80,17 @@ where
         (old_tick, new_tick)
     }
 
-    /// Execute the query on the world.
-    /// Any change filters will yield the items changed between this and the
-    /// previous query for the same query.
+    /// Prepare the query upon the world.
     ///
-    /// As a result, the first invocation will yield all entities.
+    /// Allows for both random access and efficient iteration.
+    /// See: [`PreparedQuery::get`] and [`PreparedQuery::iter`]
+    ///
+    /// The returned value holds the borrows of the query fetch. As such, all
+    /// references from iteration or using [`PreparedQuery::get`] will have a
+    /// lifetime of the [`PreparedQuery`].
+    ///
+    /// This is because iterators can not yield references to internal state as
+    /// all items returned by the iterator need to coexist.
     pub fn prepare<'w>(&'w mut self, world: &'w World) -> PreparedQuery<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
         dbg!(old_tick, new_tick);
