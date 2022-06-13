@@ -91,6 +91,9 @@ where
     ///
     /// This is because iterators can not yield references to internal state as
     /// all items returned by the iterator need to coexist.
+    ///
+    /// It is safe to use the same prepared query for both iteration and random
+    /// access, Rust's borrow rules will ensure aliasing rules.
     pub fn prepare<'w>(&'w mut self, world: &'w World) -> PreparedQuery<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
         dbg!(old_tick, new_tick);
