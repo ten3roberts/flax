@@ -31,9 +31,6 @@ where
     pub(crate) filter: &'w F,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
-    // Iter part
-    current: Option<Chunks<F::Prepared>>,
-    index: usize,
 }
 
 impl<'w, 'q, Q, F> IntoIterator for &'q mut PreparedQuery<'w, Q, F>
@@ -89,8 +86,6 @@ where
             world,
             archetypes,
             fetch,
-            current: None,
-            index: 0,
         }
     }
 
@@ -167,64 +162,5 @@ where
         let item = unsafe { p.fetch.fetch(slot) };
 
         Some(item)
-    }
-}
-
-/// An iterator over a single archetype which returns chunks.
-/// The chunk size is determined by the largest continuous matched entities for
-/// filters.
-pub struct Chunks<F> {
-    filter: FilterIter<F>,
-    chunk: ChunkIter,
-    new_tick: u32,
-}
-
-impl<F> Chunks<F>
-where
-    F: PreparedFilter,
-{
-    fn next<'q, Q>(&'q mut self, fetch: &'q Q) -> Option<Q::Item>
-    where
-        Q: PreparedFetch<'q>,
-    {
-        loop {
-            if let Some(item) = self.chunk.next(fetch) {
-                return Some(item);
-            }
-
-            let chunk = ChunkIter::new(self.filter.next()?);
-
-            self.chunk = chunk;
-        }
-    }
-}
-
-/// Iterates over a chunk of entities, specified by a predicate.
-/// In essence, this is the unflattened version of [crate::QueryIter].
-#[derive(Default)]
-struct ChunkIter {
-    pos: Slot,
-    end: Slot,
-}
-
-impl ChunkIter {
-    pub fn new(slice: Slice) -> Self {
-        Self {
-            pos: slice.start,
-            end: slice.end,
-        }
-    }
-
-    fn next<'q, Q>(&mut self, fetch: &'q Q) -> Option<Q::Item>
-    where
-        Q: PreparedFetch<'q>,
-    {
-        if self.pos == self.end {
-            None
-        } else {
-            let item = unsafe { fetch.fetch(self.pos) };
-            self.pos += 1;
-            Some(item)
-        }
     }
 }
