@@ -45,11 +45,11 @@ impl<Q> Query<Q, All> {
 impl<Q, F> Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x, 'y> Filter<'x, 'y>,
 {
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<'a, G: Filter<'a>>(self, filter: G) -> Query<Q, And<F, G>> {
+    pub fn filter<'w, G: for<'x> Filter<'x, 'w>>(self, filter: G) -> Query<Q, And<F, G>> {
         Query {
             filter: self.filter.and(filter),
             archetypes: Vec::new(),

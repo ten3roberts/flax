@@ -99,7 +99,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
         unsafe { &mut *(self.borrow.at(slot) as *const T as *mut T) }
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+    unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {
         eprintln!("Setting changes for {slots:?}: {change_tick}");
         // TODO
         // self.changes.set(Change::modified(slots, change_tick));

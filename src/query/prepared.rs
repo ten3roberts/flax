@@ -23,7 +23,6 @@ pub struct PreparedArchetype<'w, Q> {
 pub struct PreparedQuery<'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'w>,
 {
     pub(crate) prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared>; 8]>,
     pub(crate) world: &'w World,
@@ -37,7 +36,7 @@ where
 impl<'w, 'q, Q, F> IntoIterator for &'q mut PreparedQuery<'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'w>,
+    F: Filter<'q, 'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -62,14 +61,20 @@ where
             })
             .collect();
 
-        QueryIter::new(self, self.prepared.iter())
+        QueryIter {
+            old_tick: self.old_tick,
+            new_tick: self.new_tick,
+            filter: self.filter,
+            archetypes: self.prepared.iter_mut(),
+            current: None,
+        }
     }
 }
 
 impl<'w, Q, F> PreparedQuery<'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'w>,
+    F: for<'x> Filter<'x, 'w>,
 {
     pub fn new(
         world: &'w World,

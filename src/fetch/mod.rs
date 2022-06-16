@@ -1,16 +1,14 @@
 mod component;
 mod ext;
-mod filter;
 mod util;
 
 pub use component::*;
 pub use ext::*;
-pub use filter::*;
 pub use util::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    ComponentInfo, Entity, World,
+    Entity, World,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +50,13 @@ where
     // Do something for a a slice of entity slots which have been visited, such
     // as updating change tracking for mutable queries. The current change tick
     // is passed.
-    fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
+    //
+    // # Safety
+    // The function can not modify any data which is returned by fetch.
+    // References to `Self::Item` are still alive when this function is called.
+    // As such, only disjoint data such as a separate Change borrow can be
+    // accessed
+    unsafe fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
 }
 
 pub struct EntityFetch;
@@ -79,7 +83,7 @@ impl<'w> Fetch<'w> for EntityFetch {
         "entities".to_string()
     }
 
-    fn difference(&self, archetype: &Archetype) -> Vec<String> {
+    fn difference(&self, _: &Archetype) -> Vec<String> {
         vec![]
     }
 }
@@ -138,7 +142,7 @@ macro_rules! tuple_impl {
                 )*)
             }
 
-            fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+            unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {
                 $((self.$idx).set_visited(slots, change_tick);)*
             }
         }
