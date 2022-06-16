@@ -9,6 +9,8 @@ use crate::{
     ComponentId,
 };
 
+pub use cmp::*;
+
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
         impl<R, $($p),*> std::ops::BitOr<R> for $ty<$($p),*>
@@ -700,4 +702,3 @@ mod tests {
         // assert_eq!(chunks, chunks_set);
     }
 }
-
