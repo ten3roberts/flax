@@ -101,6 +101,7 @@ mod buffer;
 mod entity_builder;
 pub mod error;
 pub mod fetch;
+mod filter;
 mod query;
 mod world;
 
@@ -112,6 +113,7 @@ pub use buffer::*;
 pub use component::*;
 pub use entity::*;
 pub use fetch::*;
+pub use filter::*;
 pub use query::*;
 pub use world::*;
 

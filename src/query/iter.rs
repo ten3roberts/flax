@@ -1,4 +1,4 @@
-use std::slice::Iter;
+use std::slice::IterMut;
 
 use crate::{
     archetype::{Slice, Slot},
@@ -23,7 +23,7 @@ impl ChunkIter {
         }
     }
 
-    fn next<'q, Q>(&mut self, fetch: &'q Q) -> Option<Q::Item>
+    fn next<'c, 'q, Q>(&'c mut self, fetch: &'q Q) -> Option<Q::Item>
     where
         Q: PreparedFetch<'q>,
     {
@@ -228,7 +228,7 @@ where
 /// The chunk size is determined by the largest continuous matched entities for
 /// filters.
 pub struct Chunks<'q, Q, F> {
-    fetch: &'q Q,
+    fetch: &'q mut Q,
     filter: FilterIter<F>,
     chunk: ChunkIter,
     new_tick: u32,
@@ -243,11 +243,18 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(item) = self.chunk.next(self.fetch) {
+            // Fetch will never change and all calls are disjoint
+            let fetch = unsafe { &*(self.fetch as *mut Q as *const Q) };
+            if let Some(item) = self.chunk.next(fetch) {
                 return Some(item);
             }
 
-            let chunk = ChunkIter::new(self.filter.next()?);
+            // Get the next chunk
+            let chunk = self.filter.next()?;
+
+            // Set the chunk as visited
+            unsafe { self.fetch.set_visited(chunk, self.new_tick) }
+            let chunk = ChunkIter::new(chunk);
 
             self.chunk = chunk;
         }
@@ -257,35 +264,27 @@ where
 pub struct QueryIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'w>,
+    F: Filter<'q, 'w>,
 {
-    state: &'q PreparedQuery<'w, Q, F>,
-    archetypes: Iter<'q, PreparedArchetype<'w, Q::Prepared>>,
-    current: Option<Chunks<'q, Q::Prepared, F::Prepared>>,
+    pub(crate) old_tick: u32,
+    pub(crate) new_tick: u32,
+    pub(crate) filter: &'q F,
+    pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
+    pub(crate) current: Option<Chunks<'q, Q::Prepared, F::Prepared>>,
 }
 
 impl<'w, 'q, Q, F> QueryIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'w>,
+    F: Filter<'q, 'w>,
     'w: 'q,
 {
-    pub fn new(
-        state: &'q PreparedQuery<'w, Q, F>,
-        archetypes: Iter<'q, PreparedArchetype<'w, Q::Prepared>>,
-    ) -> Self {
-        Self {
-            state,
-            archetypes,
-            current: None,
-        }
-    }
 }
 
 impl<'w, 'q, Q, F> Iterator for QueryIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'w>,
+    F: Filter<'q, 'w>,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
@@ -298,15 +297,12 @@ where
             }
 
             let PreparedArchetype { arch, fetch, .. } = self.archetypes.next()?;
-            let filter = FilterIter::new(
-                arch.slots(),
-                self.state.filter.prepare(arch, self.state.old_tick),
-            );
+            let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
 
             let chunk = Chunks {
                 fetch,
                 filter,
-                new_tick: self.state.new_tick,
+                new_tick: self.new_tick,
                 chunk: Default::default(),
             };
 

@@ -1,3 +1,5 @@
+mod cmp;
+
 use std::{iter::FusedIterator, ops::Neg};
 
 use atomic_refcell::AtomicRef;
@@ -11,8 +13,8 @@ macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
         impl<R, $($p),*> std::ops::BitOr<R> for $ty<$($p),*>
         where
-            Self: for<'x> Filter<'x>,
-            R: for<'x> Filter<'x>,
+            Self: for<'x, 'y> Filter<'x, 'y>,
+            R: for<'x,'y> Filter<'x, 'y>,
         {
             type Output = Or<Self, R>;
 
@@ -23,8 +25,8 @@ macro_rules! gen_bitops {
 
         impl<'a, R, $($p),*> std::ops::BitAnd<R> for $ty<$($p),*>
         where
-            Self: Filter<'a>,
-            R: Filter<'a>,
+            Self: for<'x, 'y> Filter<'x, 'y>,
+            R: for<'x,'y> Filter<'x, 'y>,
         {
             type Output = And<Self, R>;
 
@@ -35,7 +37,7 @@ macro_rules! gen_bitops {
 
         impl<$($p),*> std::ops::Neg for $ty<$($p),*>
         where
-            Self: for<'x> Filter<'x>
+            Self: for<'x, 'y> Filter<'x, 'y>
         {
             type Output = Not<Self>;
 
@@ -65,7 +67,7 @@ gen_bitops! {
 
 /// A filter over a query which will be prepared for an archetype, yielding
 /// subsets of slots.
-pub trait Filter<'a>
+pub trait Filter<'this, 'a>
 where
     Self: Sized,
 {
@@ -74,16 +76,16 @@ where
     /// Prepare the filter for an archetype.
     /// `change_tick` refers to the last time this query was run. Useful for
     /// change detection.
-    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared;
+    fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared;
 
-    fn or<F: Filter<'a>>(self, other: F) -> Or<Self, F> {
+    fn or<F: for<'x> Filter<'x, 'a>>(self, other: F) -> Or<Self, F> {
         Or {
             left: self,
             right: other,
         }
     }
 
-    fn and<F: Filter<'a>>(self, other: F) -> And<Self, F> {
+    fn and<F: for<'x> Filter<'x, 'a>>(self, other: F) -> And<Self, F> {
         And {
             left: self,
             right: other,
@@ -101,7 +103,7 @@ impl ModifiedFilter {
     }
 }
 
-impl<'a> Filter<'a> for ModifiedFilter {
+impl<'this, 'a> Filter<'this, 'a> for ModifiedFilter {
     type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
@@ -124,7 +126,7 @@ impl InsertedFilter {
     }
 }
 
-impl<'a> Filter<'a> for InsertedFilter {
+impl<'this, 'a> Filter<'this, 'a> for InsertedFilter {
     type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
@@ -147,7 +149,7 @@ impl RemovedFilter {
     }
 }
 
-impl<'a> Filter<'a> for RemovedFilter {
+impl<'this, 'a> Filter<'this, 'a> for RemovedFilter {
     type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
@@ -171,14 +173,14 @@ impl<L, R> And<L, R> {
     }
 }
 
-impl<'a, L, R> Filter<'a> for And<L, R>
+impl<'this, 'a, L, R> Filter<'this, 'a> for And<L, R>
 where
-    L: Filter<'a>,
-    R: Filter<'a>,
+    L: Filter<'this, 'a>,
+    R: Filter<'this, 'a>,
 {
     type Prepared = PreparedAnd<L::Prepared, R::Prepared>;
 
-    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedAnd {
             left: self.left.prepare(archetype, change_tick),
             right: self.right.prepare(archetype, change_tick),
@@ -197,14 +199,14 @@ impl<L, R> Or<L, R> {
     }
 }
 
-impl<'a, L, R> Filter<'a> for Or<L, R>
+impl<'this, 'a, L, R> Filter<'this, 'a> for Or<L, R>
 where
-    L: Filter<'a>,
-    R: Filter<'a>,
+    L: Filter<'this, 'a>,
+    R: Filter<'this, 'a>,
 {
     type Prepared = PreparedOr<L::Prepared, R::Prepared>;
 
-    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedOr {
             left: self.left.prepare(archetype, change_tick),
             right: self.right.prepare(archetype, change_tick),
@@ -333,21 +335,21 @@ where
 
 pub struct Not<T>(T);
 
-impl<'a, T> Filter<'a> for Not<T>
+impl<'this, 'a, T> Filter<'this, 'a> for Not<T>
 where
-    T: Filter<'a>,
+    T: Filter<'this, 'a>,
 {
     type Prepared = PreparedNot<T::Prepared>;
 
-    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedNot(self.0.prepare(archetype, change_tick))
     }
 }
 
-impl<'a, R, T> std::ops::BitOr<R> for Not<T>
+impl<R, T> std::ops::BitOr<R> for Not<T>
 where
-    Self: for<'x> Filter<'x>,
-    R: for<'x> Filter<'x>,
+    Self: for<'x, 'y> Filter<'x, 'y>,
+    R: for<'x, 'y> Filter<'x, 'y>,
 {
     type Output = Or<Self, R>;
 
@@ -356,10 +358,10 @@ where
     }
 }
 
-impl<'a, R, T> std::ops::BitAnd<R> for Not<T>
+impl<R, T> std::ops::BitAnd<R> for Not<T>
 where
-    Self: Filter<'a>,
-    R: Filter<'a>,
+    Self: for<'x, 'y> Filter<'x, 'y>,
+    R: for<'x, 'y> Filter<'x, 'y>,
 {
     type Output = And<Self, R>;
 
@@ -370,7 +372,7 @@ where
 
 impl<'a, T> Neg for Not<T>
 where
-    T: Filter<'a>,
+    T: for<'x, 'y> Filter<'x, 'y>,
 {
     type Output = T;
 
@@ -433,17 +435,17 @@ where
 
 pub struct Nothing;
 
-impl<'a> Filter<'a> for Nothing {
+impl<'this, 'a> Filter<'this, 'a> for Nothing {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&'this self, _: &'a Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(false)
     }
 }
 
 pub struct All;
 
-impl<'a> Filter<'a> for All {
+impl<'this, 'a> Filter<'this, 'a> for All {
     type Prepared = BooleanFilter;
 
     fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
@@ -498,7 +500,7 @@ impl With {
     }
 }
 
-impl<'a> Filter<'a> for With {
+impl<'this, 'a> Filter<'this, 'a> for With {
     type Prepared = BooleanFilter;
 
     fn prepare(&self, archetype: &'a Archetype, _: u32) -> Self::Prepared {
@@ -516,7 +518,7 @@ impl Without {
     }
 }
 
-impl<'a> Filter<'a> for Without {
+impl<'this, 'a> Filter<'this, 'a> for Without {
     type Prepared = BooleanFilter;
 
     fn prepare(&self, archetype: &'a Archetype, _: u32) -> Self::Prepared {
@@ -698,3 +700,4 @@ mod tests {
         // assert_eq!(chunks, chunks_set);
     }
 }
+
