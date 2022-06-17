@@ -42,6 +42,10 @@ fn query_change() {
 
     // Only those strong enough shall move
     let mut move_alive = Query::new((name(), pos().as_mut())).filter(health().gt(40.0));
+    let mut consumer = Query::new((name(), pos(), distance().as_mut())).filter(pos().modified());
+
+    // Ignore spawn changes to only capture `move_alive`
+    consumer.ignore_changes(&world);
 
     let moved = move_alive
         .prepare(&world)
@@ -56,7 +60,17 @@ fn query_change() {
 
     assert_eq!(moved, ["A", "B", "D"]);
 
-    let consumer = Query::new((name(), pos(), distance().as_mut())).filter(pos().modified());
+    dbg!(world.change_tick(), &consumer);
 
+    let consumed = consumer
+        .prepare(&world)
+        .iter()
+        .map(|(name, pos, distance)| {
+            *distance = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+            name.to_string()
+        })
+        .collect_vec();
+
+    assert_eq!(consumed, ["A", "B", "D"]);
     // Everything which is alive will move a bit
 }

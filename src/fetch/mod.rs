@@ -59,6 +59,7 @@ where
     unsafe fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
 }
 
+#[derive(Debug, Clone)]
 pub struct EntityFetch;
 pub struct PreparedEntities<'a> {
     entities: &'a [Option<Entity>],

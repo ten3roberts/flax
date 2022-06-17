@@ -4,7 +4,7 @@ use atomic_refcell::AtomicRefMut;
 
 use crate::{
     archetype::{Archetype, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
-    wildcard, Component, ComponentValue,
+    wildcard, Change, Component, ComponentValue,
 };
 
 use super::*;
@@ -56,7 +56,8 @@ where
     }
 }
 
-pub struct Mutable<T>(pub(crate) Component<T>);
+#[derive(Debug, Clone)]
+pub struct Mutable<T: ComponentValue>(pub(crate) Component<T>);
 
 impl<'w, 'b, T> Fetch<'w> for Mutable<T>
 where
@@ -96,24 +97,23 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
-        unsafe { &mut *(self.borrow.at(slot) as *const T as *mut T) }
+        &mut *(self.borrow.at(slot) as *const T as *mut T)
     }
 
     unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        eprintln!("Setting changes for {slots:?}: {change_tick}");
-        // TODO
-        // self.changes.set(Change::modified(slots, change_tick));
+        self.changes.set(Change::modified(slots, change_tick));
     }
 }
 
 /// Similar to a component fetch, with the difference that it also yields the
 /// object entity.
-pub struct Relation<T> {
+#[derive(Debug, Clone)]
+pub struct Relation<T: ComponentValue> {
     component: Component<T>,
     index: usize,
 }
 
-impl<T> Relation<T> {
+impl<T: ComponentValue> Relation<T> {
     pub fn new(component: Component<T>, index: usize) -> Self {
         Self { component, index }
     }
