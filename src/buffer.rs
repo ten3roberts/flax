@@ -13,7 +13,8 @@ type Offset = usize;
 #[derive(Debug)]
 pub struct ComponentBuffer {
     /// Stores ComponentId => offset into data
-    components: BTreeMap<ComponentId, (Offset, ComponentInfo)>,
+    components: BTreeMap<(u32, ComponentId), (Offset, ComponentInfo)>,
+    top_index: u32,
     layout: Layout,
     data: NonNull<u8>,
     end: usize, // Number of meaningful bytes
@@ -26,17 +27,22 @@ impl ComponentBuffer {
             data: NonNull::dangling(),
             end: 0,
             layout: Layout::from_size_align(0, 8).unwrap(),
+            top_index: 0,
         }
     }
 
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Option<&mut T> {
-        let &(offset, _) = self.components.get(&component.id())?;
+    pub fn get_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+        index: u32,
+    ) -> Option<&mut T> {
+        let &(offset, _) = self.components.get(&(index, component.id()))?;
 
         Some(unsafe { &mut *self.data.as_ptr().offset(offset as _).cast() })
     }
 
-    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
-        let &(offset, _) = self.components.get(&component.id())?;
+    pub fn get<T: ComponentValue>(&self, component: Component<T>, index: u32) -> Option<&T> {
+        let &(offset, _) = self.components.get(&(index, component.id()))?;
 
         Some(unsafe { &*self.data.as_ptr().offset(offset as _).cast() })
     }
@@ -55,14 +61,14 @@ impl ComponentBuffer {
     ///
     /// The callee is responsible for dropping. This creates a whole in the
     /// buffer. As such, the buffer should be cleared to free up space.
-    pub unsafe fn take_dyn(&mut self, component: &ComponentInfo) -> Option<*mut u8> {
-        let (offset, info) = self.components.remove(&component.id)?;
+    pub unsafe fn take_dyn(&mut self, component: &ComponentInfo, index: u32) -> Option<*mut u8> {
+        let (offset, info) = self.components.remove(&(index, component.id))?;
         assert_eq!(&info, component);
         Some(self.data.as_ptr().offset(offset as _))
     }
 
-    pub fn insert<T: ComponentValue>(&mut self, component: Component<T>, value: T) {
-        if let Some(&(offset, _)) = self.components.get(&component.id()) {
+    pub fn insert<T: ComponentValue>(&mut self, component: Component<T>, index: u32, value: T) {
+        if let Some(&(offset, _)) = self.components.get(&(index, component.id())) {
             unsafe {
                 let ptr = self.data.as_ptr().offset(offset as _) as *mut T;
                 *ptr = value;
@@ -105,8 +111,10 @@ impl ComponentBuffer {
                 std::ptr::write(ptr, value)
             }
             assert_eq!(
-                self.components
-                    .insert(component.id(), (offset, ComponentInfo::of(component))),
+                self.components.insert(
+                    (index, component.id()),
+                    (offset, ComponentInfo::of(component))
+                ),
                 None
             );
             self.end = new_len;
@@ -132,7 +140,7 @@ impl ComponentBuffer {
 
 pub struct IntoIter<'a> {
     buffer: &'a mut ComponentBuffer,
-    components: btree_map::IntoIter<ComponentId, (Offset, ComponentInfo)>,
+    components: btree_map::IntoIter<(u32, ComponentId), (Offset, ComponentInfo)>,
 }
 
 impl<'a> Iterator for IntoIter<'a> {
