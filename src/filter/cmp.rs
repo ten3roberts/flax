@@ -133,15 +133,23 @@ where
         };
 
         // How many entities yielded true
+        let mut start = slots.start;
         let count = slots
             .iter()
-            .skip_while(|slot| !cmp(slot))
+            .skip_while(|slot| {
+                if !cmp(slot) {
+                    start += 1;
+                    true
+                } else {
+                    false
+                }
+            })
             .take_while(cmp)
             .count();
 
         let res = Slice {
-            start: slots.start,
-            end: slots.start + count,
+            start,
+            end: start + count,
         };
 
         eprintln!("Original: {slots:?} ==> {res:?}");

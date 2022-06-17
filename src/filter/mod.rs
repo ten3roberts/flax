@@ -95,6 +95,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ModifiedFilter {
     component: ComponentId,
 }
@@ -118,6 +119,7 @@ impl<'this, 'a> Filter<'this, 'a> for ModifiedFilter {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct InsertedFilter {
     component: ComponentId,
 }
@@ -141,6 +143,7 @@ impl<'this, 'a> Filter<'this, 'a> for InsertedFilter {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct RemovedFilter {
     component: ComponentId,
 }
@@ -164,6 +167,7 @@ impl<'this, 'a> Filter<'this, 'a> for RemovedFilter {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct And<L, R> {
     left: L,
     right: R,
@@ -190,6 +194,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Or<L, R> {
     left: L,
     right: R,
@@ -335,6 +340,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Not<T>(T);
 
 impl<'this, 'a, T> Filter<'this, 'a> for Not<T>
@@ -435,6 +441,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Nothing;
 
 impl<'this, 'a> Filter<'this, 'a> for Nothing {
@@ -445,6 +452,7 @@ impl<'this, 'a> Filter<'this, 'a> for Nothing {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct All;
 
 impl<'this, 'a> Filter<'this, 'a> for All {
@@ -455,6 +463,7 @@ impl<'this, 'a> Filter<'this, 'a> for All {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct FilterIter<F> {
     slots: Slice,
     filter: F,
