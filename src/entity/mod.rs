@@ -31,7 +31,7 @@ use crate::{component, EntityFetch};
 /// This means that the generation safeguard is removed. This is not problematic
 /// for storage as pair will be removed when the base is removed. Furthermore,
 /// pairs are often declared statically which means they can't be freed
-#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(PartialOrd, Clone, Copy, PartialEq, Eq, Ord, Hash)]
 #[repr(transparent)]
 pub struct Entity(NonZeroU64);
 /// Same as [crate::Entity] but without generation.
