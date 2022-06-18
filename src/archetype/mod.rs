@@ -195,6 +195,19 @@ impl Archetype {
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
+    pub fn get_dyn(&mut self, slot: Slot, component: ComponentId) -> Option<*mut u8> {
+        let storage = self.storage.get_mut(&component)?;
+        let info = &storage.component;
+
+        if slot < self.len {
+            let data = storage.data.get_mut();
+            unsafe { Some(data.as_ptr().add(slot * info.size())) }
+        } else {
+            None
+        }
+    }
+
+    /// Get a component from the entity at `slot`. Assumes slot is valid.
     pub fn get<T: ComponentValue>(
         &self,
         slot: Slot,
@@ -517,13 +530,17 @@ pub(crate) struct Storage {
 }
 
 impl Storage {
-    /// # Panics
-    /// If the entity does not exist in the storage
+    // # Safety
+    // slot must be within range
     pub(crate) unsafe fn at(&mut self, slot: Slot) -> *mut u8 {
         self.data
             .get_mut()
             .as_ptr()
             .add(self.component.size() * slot)
+    }
+
+    pub(crate) fn component(&self) -> ComponentInfo {
+        self.component
     }
 }
 
@@ -533,6 +550,18 @@ pub struct ComponentInfo {
     pub(crate) id: ComponentId,
     pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
+}
+
+impl PartialOrd for ComponentInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+
+impl Ord for ComponentInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
 }
 
 impl ComponentInfo {

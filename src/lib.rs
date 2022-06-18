@@ -98,6 +98,7 @@ mod entity;
 #[macro_use]
 pub mod macros;
 mod buffer;
+mod commandbuffer;
 mod entity_builder;
 pub mod error;
 pub mod fetch;

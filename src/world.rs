@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    mem,
+    mem, ptr,
     sync::atomic::{AtomicU32, Ordering},
 };
 
@@ -12,6 +12,7 @@ use crate::{
     entity::{EntityLocation, EntityStore},
     error::Result,
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity, Error, Namespace,
+    STATIC_NAMESPACE,
 };
 
 pub struct World {
@@ -158,6 +159,92 @@ impl World {
         id
     }
 
+    pub fn set_with(
+        &mut self,
+        id: impl Into<Entity>,
+        components: impl IntoIterator<Item = (ComponentInfo, *mut u8)>,
+    ) -> Result<()> {
+        let id: Entity = id.into();
+        let change_tick = self.advance_change_tick();
+
+        let ns = self.init_namespace(id.namespace());
+
+        let &EntityLocation { arch, slot } = self.location(id)?;
+
+        let mut new_data = Vec::new();
+        let mut new_components = Vec::new();
+
+        let src_id = arch;
+        let src = self.archetype_mut(arch);
+        for (component, data) in components {
+            if let Some(old) = src.get_dyn(slot, component.id) {
+                // Drop old
+                unsafe {
+                    (component.drop)(old);
+                    ptr::copy_nonoverlapping(data, old, component.size());
+                }
+
+                src.changes_mut(component.id())
+                    .unwrap()
+                    .set(Change::modified(Slice::single(slot), change_tick));
+            } else {
+                // Component does not exist yet, so defer a move
+
+                // Data will have a lifetime of `components`.
+                new_data.push((component, data));
+                new_components.push(component);
+            }
+        }
+
+        if !new_data.is_empty() {
+            new_components.extend(src.components().copied());
+
+            // Make sure everything is in its order
+            new_components.sort_unstable();
+
+            let components = new_components;
+
+            let (dst_id, _) = self.fetch_archetype(self.archetype_root, components.iter());
+
+            unsafe {
+                // Borrow disjoint
+                let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
+
+                let (dst_slot, swapped) =
+                    src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
+
+                // Insert the missing components
+                for (component, data) in new_data {
+                    dst.put_dyn(dst_slot, &component, data)
+                        .expect("Insert should not fail");
+
+                    dst.init_changes(component.id())
+                        .set(Change::inserted(Slice::single(dst_slot), change_tick));
+                }
+
+                assert_eq!(dst.entity(dst_slot), Some(id));
+
+                // Migrate all changes
+                src.migrate_slot(dst, slot, dst_slot);
+
+                let ns = self.init_namespace(id.namespace());
+                if let Some(swapped) = swapped {
+                    // The last entity in src was moved into the slot occupied by id
+                    eprintln!("Relocating entity");
+                    ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+                }
+                eprintln!("New slot: {dst_slot}");
+
+                *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
+                    slot: dst_slot,
+                    arch: dst_id,
+                };
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
         let &EntityLocation {
             arch: archetype,
@@ -277,7 +364,8 @@ impl World {
                 };
                 None
             }
-        } else {
+        } else if id.namespace() == STATIC_NAMESPACE {
+            // Handle static components which may not be registered in world
             let (dst_id, dst) = self.fetch_archetype(self.archetype_root, [&component_info]);
 
             let slot = dst.allocate(id);
@@ -297,6 +385,8 @@ impl World {
 
                 None
             }
+        } else {
+            todo!()
         }
     }
 
