@@ -1,4 +1,7 @@
-use crate::{archetype::ArchetypeId, Generation, Namespace, StrippedEntity};
+use crate::{
+    archetype::ArchetypeId, error::Result, Error, Generation, Namespace, StrippedEntity,
+    STATIC_NAMESPACE,
+};
 use std::{any::Any, iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
 
 use super::{Entity, EntityIndex};
@@ -178,11 +181,12 @@ impl<V> EntityStore<V> {
             .is_some()
     }
 
-    pub fn despawn(&mut self, id: Entity) {
-        assert!(self.is_alive(id));
+    pub fn despawn(&mut self, id: Entity) -> Result<()> {
+        if !self.is_alive(id) {
+            return Err(Error::NoSuchEntity(id));
+        }
 
         let index = id.index();
-        let gen = id.generation();
 
         let next = self.free_head.take();
         eprintln!("Removing index: {index}");
@@ -198,6 +202,8 @@ impl<V> EntityStore<V> {
         slot.val.vacant = Vacant { next };
 
         self.free_head = Some(index);
+
+        Ok(())
     }
 
     pub fn iter(&self) -> EntityStoreIter<V> {
@@ -207,7 +213,9 @@ impl<V> EntityStore<V> {
         }
     }
 
-    pub(crate) fn spawn_at(&mut self, id: Entity, value: V) {
+    /// Spawns an entity at the provided id.
+    /// Any entity with the same index as id will be despawned
+    pub(crate) fn spawn_at(&mut self, id: Entity, value: V) -> &V {
         let ns = self.namespace;
         assert_eq!(ns, id.namespace());
 
@@ -246,6 +254,8 @@ impl<V> EntityStore<V> {
         slot.gen = to_slot_gen(id.generation());
 
         slot.val.occupied = ManuallyDrop::new(value);
+
+        unsafe { &slot.val.occupied }
     }
 }
 
