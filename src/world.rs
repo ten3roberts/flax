@@ -116,6 +116,21 @@ impl World {
         id
     }
 
+    pub fn spawn_at(&mut self, id: Entity) -> EntityLocation {
+        let namespace = id.namespace();
+        let ns = self.init_namespace(namespace);
+
+        if let Some(location) = ns.get(id) {
+            *location
+        } else {
+            let root = self.archetype_root;
+            let slot = self.archetype_mut(root).allocate(id);
+            let location = EntityLocation { arch: root, slot };
+
+            *self.init_namespace(namespace).spawn_at(id, location)
+        }
+    }
+
     /// Access an archetype by id
     pub fn archetype(&self, id: ArchetypeId) -> &Archetype {
         &self.archetypes.get(id).unwrap()
@@ -166,8 +181,6 @@ impl World {
     ) -> Result<()> {
         let id: Entity = id.into();
         let change_tick = self.advance_change_tick();
-
-        let ns = self.init_namespace(id.namespace());
 
         let &EntityLocation { arch, slot } = self.location(id)?;
 
@@ -273,121 +286,122 @@ impl World {
         id: impl Into<Entity>,
         component: Component<T>,
         mut value: T,
-    ) -> Option<T> {
+    ) -> Result<Option<T>> {
         let id = id.into();
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
-        let ns = self.init_namespace(id.namespace());
+        let EntityLocation { arch: src_id, slot } = self.init_location(id)?;
 
         let component_info = component.info();
 
-        let loc = ns.get(id);
+        // if let Some(&EntityLocation { arch: src_id, slot }) = loc {
+        let src = self.archetype(src_id);
 
-        if let Some(&EntityLocation { arch: src_id, slot }) = loc {
-            let src = self.archetype(src_id);
+        if let Some(mut val) = src.get_mut(slot, component) {
+            src.changes_mut(component.id())
+                .expect("Missing change list")
+                .set(Change::modified(Slice::single(slot), change_tick));
 
-            if let Some(mut val) = src.get_mut(slot, component) {
-                src.changes_mut(component.id())?
-                    .set(Change::modified(Slice::single(slot), change_tick));
-
-                return Some(mem::replace(&mut *val, value));
-            }
-
-            let dst_id = match src.edge_to(component.id()) {
-                Some(dst) => dst,
-                None => {
-                    let pivot = src
-                        .components()
-                        .take_while(|v| v.id < component.id())
-                        .count();
-
-                    // Split the components
-                    // A B C [new] D E F
-                    let left = src.components().take(pivot).copied();
-                    let right = src.components().skip(pivot).copied();
-
-                    let components: Vec<_> = left.chain([component_info]).chain(right).collect();
-
-                    // assert in order
-
-                    {
-                        assert!(components
-                            .iter()
-                            .sorted_by_key(|v| v.id)
-                            .eq(components.iter()));
-                    }
-
-                    let (dst_id, _) = self.fetch_archetype(self.archetype_root, &components);
-
-                    dst_id
-                }
-            };
-
-            unsafe {
-                assert_ne!(src_id, dst_id);
-                // Borrow disjoint
-                let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
-
-                let (dst_slot, swapped) =
-                    src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
-
-                // Add a quick edge to refer to later
-                src.add_edge_to(dst, dst_id, src_id, component.id());
-
-                // Insert the missing component
-                dst.put_dyn(dst_slot, &component_info, &mut value as *mut T as *mut u8)
-                    .expect("Insert should not fail");
-
-                // And don't forget to forget to drop it
-                std::mem::forget(value);
-
-                assert_eq!(dst.entity(dst_slot), Some(id));
-
-                // Migrate all changes
-                src.migrate_slot(dst, slot, dst_slot);
-
-                dst.init_changes(component.id())
-                    .set(Change::inserted(Slice::single(dst_slot), change_tick));
-
-                let ns = self.init_namespace(id.namespace());
-                if let Some(swapped) = swapped {
-                    // The last entity in src was moved into the slot occupied by id
-                    eprintln!("Relocating entity");
-                    ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
-                }
-                eprintln!("New slot: {dst_slot}");
-
-                *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
-                    slot: dst_slot,
-                    arch: dst_id,
-                };
-                None
-            }
-        } else if id.namespace() == STATIC_NAMESPACE {
-            // Handle static components which may not be registered in world
-            let (dst_id, dst) = self.fetch_archetype(self.archetype_root, [&component_info]);
-
-            let slot = dst.allocate(id);
-
-            unsafe {
-                dst.put_dyn(slot, &component_info, &mut value as *mut T as *mut u8)
-                    .unwrap();
-
-                std::mem::forget(value);
-                assert_eq!(dst.entity(slot), Some(id));
-                dst.init_changes(component.id())
-                    .set(Change::inserted(Slice::single(slot), change_tick));
-
-                let ns = self.init_namespace(id.namespace());
-
-                ns.spawn_at(id, EntityLocation { slot, arch: dst_id });
-
-                None
-            }
-        } else {
-            todo!()
+            return Ok(Some(mem::replace(&mut *val, value)));
         }
+
+        // Pick up the entity and move it to the destination archetype
+        let dst_id = match src.edge_to(component.id()) {
+            Some(dst) => dst,
+            None => {
+                let pivot = src
+                    .components()
+                    .take_while(|v| v.id < component.id())
+                    .count();
+
+                // Split the components
+                // A B C [new] D E F
+                let left = src.components().take(pivot).copied();
+                let right = src.components().skip(pivot).copied();
+
+                let components: Vec<_> = left.chain([component_info]).chain(right).collect();
+
+                // assert in order
+
+                {
+                    assert!(components
+                        .iter()
+                        .sorted_by_key(|v| v.id)
+                        .eq(components.iter()));
+                }
+
+                let (dst_id, _) = self.fetch_archetype(self.archetype_root, &components);
+
+                dst_id
+            }
+        };
+
+        unsafe {
+            assert_ne!(src_id, dst_id);
+            // Borrow disjoint
+            let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
+
+            let (dst_slot, swapped) =
+                src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
+
+            // Add a quick edge to refer to later
+            src.add_edge_to(dst, dst_id, src_id, component.id());
+
+            // Insert the missing component
+            dst.put_dyn(dst_slot, &component_info, &mut value as *mut T as *mut u8)
+                .expect("Insert should not fail");
+
+            // And don't forget to forget to drop it
+            std::mem::forget(value);
+
+            assert_eq!(dst.entity(dst_slot), Some(id));
+
+            // Migrate all changes
+            src.migrate_slot(dst, slot, dst_slot);
+
+            dst.init_changes(component.id())
+                .set(Change::inserted(Slice::single(dst_slot), change_tick));
+
+            let ns = self.init_namespace(id.namespace());
+            if let Some(swapped) = swapped {
+                // The last entity in src was moved into the slot occupied by id
+                eprintln!("Relocating entity");
+                ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+            }
+            eprintln!("New slot: {dst_slot}");
+
+            *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
+                slot: dst_slot,
+                arch: dst_id,
+            };
+        }
+        Ok(None)
+
+        // } else if id.namespace() == STATIC_NAMESPACE {
+        //     // Handle static components which may not be registered in world
+        //     let (dst_id, dst) = self.fetch_archetype(self.archetype_root, [&component_info]);
+        //
+        //     let slot = dst.allocate(id);
+        //
+        //     unsafe {
+        //         dst.put_dyn(slot, &component_info, &mut value as *mut T as *mut u8)
+        //             .unwrap();
+        //
+        //         std::mem::forget(value);
+        //         assert_eq!(dst.entity(slot), Some(id));
+        //         dst.init_changes(component.id())
+        //             .set(Change::inserted(Slice::single(slot), change_tick));
+        //
+        //         let ns = self.init_namespace(id.namespace());
+        //
+        //         ns.spawn_at(id, EntityLocation { slot, arch: dst_id });
+        //
+        //         None
+        //     }
+        // } else {
+        //     todo!()
+        // }
     }
 
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Result<T> {
@@ -518,6 +532,27 @@ impl World {
 
     pub(crate) fn archetypes(&self) -> impl Iterator<Item = (ArchetypeId, &Archetype)> {
         self.archetypes.iter()
+    }
+
+    /// Returns the location of an entity, or spawns if it is in the static
+    /// namespace.
+    ///
+    /// This is often the case when setting components to components.
+    ///
+    /// If the entity is not found and is not in the static namespace an error
+    /// will be returned.
+    pub(crate) fn init_location(&mut self, id: Entity) -> Result<EntityLocation> {
+        self.init_namespace(id.namespace())
+            .get(id)
+            .ok_or(Error::NoSuchEntity(id))
+            .copied()
+            .or_else(|e| {
+                if id.namespace() == STATIC_NAMESPACE {
+                    Ok(self.spawn_at(id))
+                } else {
+                    Err(e)
+                }
+            })
     }
 
     pub(crate) fn location(&self, id: Entity) -> Result<&EntityLocation> {

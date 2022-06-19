@@ -7,7 +7,11 @@ use std::{
     process::id,
 };
 
-use crate::{BufferStorage, Component, ComponentId, ComponentValue, Entity, Error, World};
+use itertools::Itertools;
+
+use crate::{
+    BufferStorage, Component, ComponentId, ComponentInfo, ComponentValue, Entity, Error, World,
+};
 
 /// Records commands into the world.
 /// Allows insertion and removal of components when the world is not available
@@ -15,7 +19,7 @@ use crate::{BufferStorage, Component, ComponentId, ComponentValue, Entity, Error
 #[derive(Default, Debug)]
 pub struct ComponentBuffer {
     inserts: BufferStorage,
-    insert_locations: BTreeMap<(Entity, ComponentId), usize>,
+    insert_locations: BTreeMap<(Entity, ComponentInfo), usize>,
     removals: Vec<(Entity, ComponentId)>,
 }
 
@@ -33,7 +37,7 @@ impl ComponentBuffer {
         component: Component<T>,
         value: T,
     ) -> &mut Self {
-        match self.insert_locations.entry((id, component.id())) {
+        match self.insert_locations.entry((id, component.info())) {
             Entry::Vacant(slot) => {
                 let offset = self.inserts.insert(value);
                 slot.insert(offset);
@@ -50,7 +54,7 @@ impl ComponentBuffer {
     /// Unlike, [`World::remove`] it does not return the old value as that is
     /// not known at call time.
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> &mut Self {
-        let offset = self.insert_locations.remove(&(id, component.id()));
+        let offset = self.insert_locations.remove(&(id, component.info()));
 
         // Remove from insert list
         if let Some(offset) = offset {
@@ -66,6 +70,22 @@ impl ComponentBuffer {
     /// Applies all contents of the command buffer to the world.
     /// The commandbuffer is cleared and can be reused.
     pub fn apply(&mut self, world: &mut World) -> Result<(), Error> {
+        let groups = self
+            .insert_locations
+            .iter()
+            .group_by(|((entity, _), _)| *entity);
+
+        let storage = &mut self.inserts;
+        let result = (&groups).into_iter().map(|(id, group)| {
+            // Safety
+            // The offset is acquired from the map which was previously acquired
+            unsafe {
+                let components =
+                    group.map(|((_, info), offset)| (*info, storage.take_dyn(*offset)));
+                world.set_with(id, components)
+            }
+        });
+
         todo!()
     }
 
