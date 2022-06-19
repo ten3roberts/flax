@@ -253,14 +253,17 @@ impl World {
             // Migrate all changes
             src.migrate_slot(dst, slot, dst_slot);
 
-            let ns = self.init_namespace(id.namespace());
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
                 eprintln!("Relocating entity");
-                ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+                self.init_namespace(swapped.namespace())
+                    .get_mut(swapped)
+                    .expect("Invalid entity id")
+                    .slot = slot;
             }
             eprintln!("New slot: {dst_slot}");
 
+            let ns = self.init_namespace(id.namespace());
             *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
                 arch: dst_id,
@@ -371,56 +374,38 @@ impl World {
             dst.init_changes(component.id())
                 .set(Change::inserted(Slice::single(dst_slot), change_tick));
 
-            let ns = self.init_namespace(id.namespace());
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
                 eprintln!("Relocating entity");
-                ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+                let swapped_ns = self.init_namespace(swapped.namespace());
+                swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
             }
             eprintln!("New slot: {dst_slot}");
 
+            let ns = self.init_namespace(id.namespace());
             *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
                 arch: dst_id,
             };
         }
         Ok(None)
-
-        // } else if id.namespace() == STATIC_NAMESPACE {
-        //     // Handle static components which may not be registered in world
-        //     let (dst_id, dst) = self.fetch_archetype(self.archetype_root, [&component_info]);
-        //
-        //     let slot = dst.allocate(id);
-        //
-        //     unsafe {
-        //         dst.put_dyn(slot, &component_info, &mut value as *mut T as *mut u8)
-        //             .unwrap();
-        //
-        //         std::mem::forget(value);
-        //         assert_eq!(dst.entity(slot), Some(id));
-        //         dst.init_changes(component.id())
-        //             .set(Change::inserted(Slice::single(slot), change_tick));
-        //
-        //         let ns = self.init_namespace(id.namespace());
-        //
-        //         ns.spawn_at(id, EntityLocation { slot, arch: dst_id });
-        //
-        //         None
-        //     }
-        // } else {
-        //     todo!()
-        // }
     }
 
     pub(crate) fn remove_dyn(&mut self, id: Entity, component: ComponentInfo) -> Result<()> {
-        unsafe { self.remove_inner(id, component, None) }
+        eprintln!("Removing component {component:?} from {id} ");
+        unsafe {
+            self.remove_inner(id, component, |ptr| {
+                eprintln!("Dropping dyn component");
+                (component.drop)(ptr)
+            })
+        }
     }
 
     unsafe fn remove_inner(
         &mut self,
         id: Entity,
         component: ComponentInfo,
-        out: Option<*mut u8>,
+        on_drop: impl FnOnce(*mut u8),
     ) -> Result<()> {
         let ns = self.init_namespace(id.namespace());
         let &EntityLocation { arch: src_id, slot } = ns.get(id).unwrap();
@@ -460,14 +445,13 @@ impl World {
         // forgotten in the move
 
         eprintln!("Moving {id} from {src_id} => {dst_id}");
-        let mut val = std::ptr::null_mut();
         // Capture the ONE moved value
+        let mut on_drop = Some(on_drop);
         let (dst_slot, swapped) = src.move_to(dst, slot, |_, p| {
-            assert_eq!(val as *const u8, std::ptr::null());
-            val = p
+            let drop = on_drop.take().expect("On drop called more than once");
+            (drop)(p);
         });
 
-        assert_ne!(val, std::ptr::null_mut());
         assert_eq!(dst.entity(dst_slot), Some(id));
 
         // Migrate all changes
@@ -475,23 +459,20 @@ impl World {
         dst.init_changes(component.id())
             .set(Change::removed(Slice::single(dst_slot), change_tick));
 
-        let ns = self.init_namespace(id.namespace());
         if let Some(swapped) = swapped {
             // The last entity in src was moved into the slot occupied by id
-            eprintln!("Relocating entity");
-            ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+            eprintln!("Relocating entity {swapped}");
+            let swapped_ns = self.init_namespace(swapped.namespace());
+            swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
-        *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
+        *self
+            .init_namespace(id.namespace())
+            .get_mut(id)
+            .expect("Entity is not valid") = EntityLocation {
             slot: dst_slot,
             arch: dst_id,
         };
-
-        if let Some(out) = out {
-            std::ptr::copy_nonoverlapping(val, out, component.size())
-        } else {
-            (component.drop)(val)
-        }
 
         Ok(())
     }
@@ -499,7 +480,9 @@ impl World {
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Result<T> {
         let mut res: MaybeUninit<T> = MaybeUninit::uninit();
         let res = unsafe {
-            self.remove_inner(id, component.info(), Some(res.as_mut_ptr().cast()))?;
+            self.remove_inner(id, component.info(), |ptr| {
+                res.write(ptr.cast::<T>().read());
+            })?;
             res.assume_init()
         };
         Ok(res)
