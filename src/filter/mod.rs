@@ -65,6 +65,8 @@ gen_bitops! {
     Or[A,B];
     All[];
     Nothing[];
+    With[];
+    Without[];
 }
 
 /// A filter over a query which will be prepared for an archetype, yielding
@@ -341,7 +343,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct Not<T>(T);
+pub struct Not<T>(pub T);
 
 impl<'this, 'a, T> Filter<'this, 'a> for Not<T>
 where

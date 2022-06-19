@@ -91,6 +91,8 @@ fn commandbuffer() {
             cmd.remove(id, name());
         });
 
+    cmd.despawn(ids[8]);
+
     cmd.apply(&mut world).unwrap();
 
     let names = name_query
@@ -104,4 +106,51 @@ fn commandbuffer() {
         names,
         ["Bertha", "Entity Name", "Johnathan", "Shared State"]
     );
+
+    assert_eq!(world.is_alive(ids[8]), false);
+
+    // Spawn some entities
+    component! {
+        soldier: (),
+    }
+
+    (0..100).for_each(|i| {
+        EntityBuilder::new()
+            .set_default(soldier())
+            .set(name(), format!("Soldier: {i}"))
+            .set(health(), 100.0)
+            .spawn_into(&mut cmd)
+    });
+
+    cmd.apply(&mut world).unwrap();
+
+    let soldiers = Query::new(health())
+        .filter(soldier().with())
+        .prepare(&world)
+        .iter()
+        .copied()
+        .collect_vec();
+
+    // Ensure all soldiers are present and up to health
+    assert_eq!(soldiers, [100.0; 100]);
+
+    // Oh no, one got shot
+    Query::new(health().as_mut())
+        .filter(soldier().with())
+        .prepare(&world)
+        .iter()
+        .skip(42)
+        .next()
+        .map(|health| *health -= 20.0);
+
+    // Well, there are only 99 unwounded soldiers left
+    // Lets count them
+    let soldiers = Query::new(name())
+        .filter(soldier().with() & health().gte(100.0))
+        .prepare(&world)
+        .iter()
+        .cloned()
+        .collect_vec();
+
+    assert_eq!(soldiers.len(), 99);
 }

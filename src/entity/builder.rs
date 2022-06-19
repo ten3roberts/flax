@@ -1,5 +1,8 @@
-use crate::{Component, ComponentBuffer, ComponentValue, Entity, Namespace, World};
+use std::mem;
 
+use crate::{CommandBuffer, Component, ComponentBuffer, ComponentValue, Entity, Namespace, World};
+
+#[derive(Debug)]
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
     namespace: Namespace,
@@ -47,12 +50,26 @@ impl EntityBuilder {
         self.buffer.get(component)
     }
 
-    /// Spawns the build entities into the world.
+    /// Spawns the built entity into the world.
     ///
     /// Clears the builder and allows it to be used again, reusing the builder
     /// will reuse the inner storage, even for different components.
     pub fn spawn(&mut self, world: &mut World) -> Entity {
         world.spawn_with(self.namespace, &mut self.buffer)
+    }
+
+    /// Spawns the entity into the world through a commandbuffer
+    pub fn spawn_into(&mut self, cmd: &mut CommandBuffer) {
+        cmd.spawn(self.take());
+    }
+
+    /// Takes all components from self and stores them in a new builder.
+    /// Effectively stealing everything from the builder by mutable reference.
+    pub fn take(&mut self) -> Self {
+        Self {
+            buffer: mem::take(&mut self.buffer),
+            namespace: self.namespace,
+        }
     }
 }
 

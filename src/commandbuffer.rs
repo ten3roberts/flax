@@ -10,7 +10,8 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    BufferStorage, Component, ComponentId, ComponentInfo, ComponentValue, Entity, Error, World,
+    BufferStorage, Component, ComponentId, ComponentInfo, ComponentValue, Entity, EntityBuilder,
+    Error, World,
 };
 
 /// Records commands into the world.
@@ -20,6 +21,8 @@ use crate::{
 pub struct CommandBuffer {
     inserts: BufferStorage,
     insert_locations: BTreeMap<(Entity, ComponentInfo), usize>,
+    spawned: Vec<EntityBuilder>,
+    despawned: Vec<Entity>,
     removals: Vec<(Entity, ComponentInfo)>,
 }
 
@@ -72,6 +75,32 @@ impl CommandBuffer {
         self
     }
 
+    /// Spawn a new entity with the given components of the builder
+    pub fn spawn(&mut self, entity: EntityBuilder) -> &mut Self {
+        self.spawned.push(entity);
+
+        self
+    }
+
+    /// Despawn an entity by id
+    pub fn despawn(&mut self, id: Entity) -> &mut Self {
+        // Drop all inserts for this component
+        self.insert_locations
+            .iter()
+            .skip_while(|((entity, _), _)| *entity != id)
+            .take_while(|((entity, _), _)| *entity == id)
+            .for_each(|((_, component), offset)| unsafe {
+                eprintln!("Removing insert for despawned entity");
+                let ptr = self.inserts.take_dyn(*offset);
+                (component.drop)(ptr);
+            });
+
+        self.removals.retain(|(entity, _)| *entity != id);
+
+        self.despawned.push(id);
+        self
+    }
+
     /// Applies all contents of the command buffer to the world.
     /// The commandbuffer is cleared and can be reused.
     ///
@@ -109,6 +138,18 @@ impl CommandBuffer {
 
         errors.extend(removed);
 
+        self.spawned.drain(..).for_each(|mut builder| {
+            builder.spawn(world);
+        });
+
+        let despawned = self
+            .despawned
+            .drain(..)
+            .map(|id| world.despawn(id))
+            .flat_map(Result::err);
+
+        errors.extend(despawned);
+
         self.clear();
 
         if errors.is_empty() {
@@ -118,9 +159,13 @@ impl CommandBuffer {
         }
     }
 
+    /// Clears all values in the component buffer but keeps allocations around.
+    /// Is automatically called for [`Self::apply`].
     pub fn clear(&mut self) {
         self.inserts.clear();
         self.insert_locations.clear();
         self.removals.clear();
+        self.despawned.clear();
+        self.spawned.clear();
     }
 }
