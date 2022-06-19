@@ -222,12 +222,20 @@ impl<V> EntityStore<V> {
         let index = id.index();
 
         // Init slot
+        let free_head = &mut self.free_head;
         self.slots
-            .extend((self.slots.len()..index.get() as _).map(|_| Slot {
-                val: SlotValue {
-                    vacant: Vacant { next: None },
-                },
-                gen: 1,
+            .extend((self.slots.len()..index.get() as _).map(|i| {
+                let next = if (i + 1) != index.get() as usize {
+                    free_head.replace(NonZeroU32::new(i as u32 + 1).unwrap())
+                } else {
+                    None
+                };
+                Slot {
+                    val: SlotValue {
+                        vacant: Vacant { next },
+                    },
+                    gen: 1,
+                }
             }));
 
         // Remove any occurence in the free list
