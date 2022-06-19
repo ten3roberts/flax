@@ -17,13 +17,13 @@ use crate::{
 /// Allows insertion and removal of components when the world is not available
 /// mutably, such as in systems or during iteration.
 #[derive(Default, Debug)]
-pub struct ComponentBuffer {
+pub struct CommandBuffer {
     inserts: BufferStorage,
     insert_locations: BTreeMap<(Entity, ComponentInfo), usize>,
-    removals: Vec<(Entity, ComponentId)>,
+    removals: Vec<(Entity, ComponentInfo)>,
 }
 
-impl ComponentBuffer {
+impl CommandBuffer {
     pub fn new() -> Self {
         Self::default()
     }
@@ -33,11 +33,11 @@ impl ComponentBuffer {
     /// not known at call time.
     pub fn set<T: ComponentValue>(
         &mut self,
-        id: Entity,
+        id: impl Into<Entity>,
         component: Component<T>,
         value: T,
     ) -> &mut Self {
-        match self.insert_locations.entry((id, component.info())) {
+        match self.insert_locations.entry((id.into(), component.info())) {
             Entry::Vacant(slot) => {
                 let offset = self.inserts.insert(value);
                 slot.insert(offset);
@@ -53,7 +53,12 @@ impl ComponentBuffer {
     /// Deferred removal of a component for `id`.
     /// Unlike, [`World::remove`] it does not return the old value as that is
     /// not known at call time.
-    pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> &mut Self {
+    pub fn remove<T: ComponentValue>(
+        &mut self,
+        id: impl Into<Entity>,
+        component: Component<T>,
+    ) -> &mut Self {
+        let id = id.into();
         let offset = self.insert_locations.remove(&(id, component.info()));
 
         // Remove from insert list
@@ -62,67 +67,60 @@ impl ComponentBuffer {
             eprintln!("Found old value");
         }
 
-        self.removals.push((id, component.id()));
+        self.removals.push((id, component.info()));
 
         self
     }
 
     /// Applies all contents of the command buffer to the world.
     /// The commandbuffer is cleared and can be reused.
-    pub fn apply(&mut self, world: &mut World) -> Result<(), Error> {
+    ///
+    /// Returns a vec of all errors encountered.
+    /// If an error is encountered the commandbuffer will add it to the list and
+    /// continue with the rest of the items.
+    pub fn apply(&mut self, world: &mut World) -> Result<(), Vec<Error>> {
         let groups = self
             .insert_locations
             .iter()
             .group_by(|((entity, _), _)| *entity);
 
         let storage = &mut self.inserts;
-        let result = (&groups).into_iter().map(|(id, group)| {
-            // Safety
-            // The offset is acquired from the map which was previously acquired
-            unsafe {
-                let components =
-                    group.map(|((_, info), offset)| (*info, storage.take_dyn(*offset)));
-                world.set_with(id, components)
-            }
-        });
+        let mut errors = Vec::new();
+        let inserted = (&groups)
+            .into_iter()
+            .map(|(id, group)| {
+                // Safety
+                // The offset is acquired from the map which was previously acquired
+                unsafe {
+                    let components =
+                        group.map(|((_, info), offset)| (*info, storage.take_dyn(*offset)));
+                    world.set_with(id, components)
+                }
+            })
+            .flat_map(Result::err);
 
-        todo!()
+        errors.extend(inserted);
+
+        let removed = self
+            .removals
+            .drain(..)
+            .map(|(id, component)| world.remove_dyn(id, component))
+            .flat_map(Result::err);
+
+        errors.extend(removed);
+
+        self.clear();
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 
-    fn entity_inserts(&self, id: Entity) -> impl Iterator<Item = usize> + '_ {
-        self.insert_locations
-            .iter()
-            .skip_while(move |((entity, _), _)| *entity < id)
-            .take_while(move |((entity, _), _)| *entity == id)
-            .map(|(_, offset)| *offset)
-    }
-}
-
-struct TupleIterator<'a> {
-    map_iter: Peekable<btree_map::Iter<'a, (Entity, ComponentId), usize>>,
-}
-
-impl<'a> TupleIterator<'a> {
-    fn next_chunk(&'a mut self) -> Option<LocationIter> {
-        let ((id, _), _) = self.map_iter.peek()?;
-        Some(LocationIter {
-            iter: &mut self.map_iter,
-            id: *id,
-        })
-    }
-}
-
-struct LocationIter<'a> {
-    iter: &'a mut Peekable<btree_map::Iter<'a, (Entity, ComponentId), usize>>,
-    id: Entity,
-}
-
-impl<'a> Iterator for LocationIter<'a> {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter
-            .next_if(|((id, _), _)| *id == self.id)
-            .map(|(_, offset)| *offset)
+    pub fn clear(&mut self) {
+        self.inserts.clear();
+        self.insert_locations.clear();
+        self.removals.clear();
     }
 }
