@@ -111,6 +111,7 @@ pub use paste::paste;
 
 pub use archetype::{Archetype, ArchetypeId, Change, ChangeKind, ComponentInfo, DebugVisitor};
 pub use buffer::*;
+pub use commandbuffer::CommandBuffer;
 pub use component::*;
 pub use entity::*;
 pub use fetch::*;
