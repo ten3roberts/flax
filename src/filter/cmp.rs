@@ -10,7 +10,7 @@ use std::{cmp::Ordering, fmt::Debug};
 
 use crate::{
     archetype::{Slice, Slot, StorageBorrow},
-    Component, ComponentValue, Filter, PreparedFilter,
+    And, Component, ComponentValue, Filter, Not, Or, PreparedFilter,
 };
 
 pub trait CmpExt<T>
@@ -109,7 +109,7 @@ where
 
 impl<'this, 'w, T> Filter<'this, 'w> for OrdCmp<T>
 where
-    T: ComponentValue + PartialOrd + Debug,
+    T: ComponentValue + PartialOrd,
 {
     type Prepared = PreparedOrdCmp<'this, 'w, T>;
 
@@ -130,7 +130,7 @@ pub struct PreparedOrdCmp<'this, 'w, T> {
 
 impl<'this, 'w, T> PreparedFilter for PreparedOrdCmp<'this, 'w, T>
 where
-    T: ComponentValue + PartialOrd + Debug,
+    T: ComponentValue + PartialOrd,
 {
     fn filter(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         let borrow = match self.borrow {
@@ -251,5 +251,84 @@ where
         };
 
         res
+    }
+}
+
+impl<R, T> std::ops::BitOr<R> for OrdCmp<T>
+where
+    Self: for<'x, 'y> Filter<'x, 'y>,
+    T: ComponentValue + PartialOrd,
+    R: for<'x, 'y> Filter<'x, 'y>,
+{
+    type Output = Or<Self, R>;
+
+    fn bitor(self, rhs: R) -> Self::Output {
+        self.or(rhs)
+    }
+}
+
+impl<R, T> std::ops::BitAnd<R> for OrdCmp<T>
+where
+    Self: for<'x, 'y> Filter<'x, 'y>,
+    T: ComponentValue + PartialOrd,
+    R: for<'x, 'y> Filter<'x, 'y>,
+{
+    type Output = And<Self, R>;
+
+    fn bitand(self, rhs: R) -> Self::Output {
+        self.and(rhs)
+    }
+}
+
+impl<T> std::ops::Neg for OrdCmp<T>
+where
+    Self: for<'x, 'y> Filter<'x, 'y>,
+    T: ComponentValue + PartialOrd,
+{
+    type Output = Not<Self>;
+
+    fn neg(self) -> Self::Output {
+        Not(self)
+    }
+}
+
+impl<R, T, F> std::ops::BitOr<R> for Cmp<T, F>
+where
+    Self: for<'x, 'y> Filter<'x, 'y>,
+    F: Fn(&T) -> bool + Send + Sync + 'static,
+    T: ComponentValue + PartialOrd,
+    R: for<'x, 'y> Filter<'x, 'y>,
+{
+    type Output = Or<Self, R>;
+
+    fn bitor(self, rhs: R) -> Self::Output {
+        self.or(rhs)
+    }
+}
+
+impl<R, T, F> std::ops::BitAnd<R> for Cmp<T, F>
+where
+    Self: for<'x, 'y> Filter<'x, 'y>,
+    F: Fn(&T) -> bool + Send + Sync + 'static,
+    T: ComponentValue + PartialOrd,
+    R: for<'x, 'y> Filter<'x, 'y>,
+{
+    type Output = And<Self, R>;
+
+    fn bitand(self, rhs: R) -> Self::Output {
+        self.and(rhs)
+    }
+}
+
+impl<T, F> std::ops::Neg for Cmp<T, F>
+where
+    Self: for<'x, 'y> Filter<'x, 'y>,
+    F: Fn(&T) -> bool + Send + Sync + 'static,
+    T: ComponentValue + PartialOrd,
+{
+    type Output = Not<Self>;
+
+    fn neg(self) -> Self::Output {
+        Not(self)
     }
 }
