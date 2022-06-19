@@ -17,40 +17,66 @@ pub trait CmpExt<T>
 where
     T: ComponentValue,
 {
-    fn lt(self, other: T) -> Cmp<T>;
-    fn gt(self, other: T) -> Cmp<T>;
-    fn gte(self, other: T) -> Cmp<T>;
-    fn lte(self, other: T) -> Cmp<T>;
-    fn eq(self, other: T) -> Cmp<T>;
+    /// Filter any component less than `other`.
+    fn lt(self, other: T) -> OrdCmp<T>
+    where
+        T: PartialOrd;
+    /// Filter any component greater than `other`.
+    fn gt(self, other: T) -> OrdCmp<T>
+    where
+        T: PartialOrd;
+    /// Filter any component greater than or equal to `other`.
+    fn gte(self, other: T) -> OrdCmp<T>
+    where
+        T: PartialOrd;
+    /// Filter any component less than or equal to `other`.
+    fn lte(self, other: T) -> OrdCmp<T>
+    where
+        T: PartialOrd;
+    /// Filter any component equal to `other`.
+    fn eq(self, other: T) -> OrdCmp<T>
+    where
+        T: PartialOrd;
+    /// Filter any component by predicate.
+    fn cmp<F>(self, func: F) -> Cmp<T, F>
+    where
+        F: Fn(&T) -> bool + Send + Sync + 'static;
 }
 
 impl<T> CmpExt<T> for Component<T>
 where
     T: ComponentValue + Debug,
 {
-    fn lt(self, other: T) -> Cmp<T> {
-        Cmp::new(self, CmpMethod::Less, other)
+    fn lt(self, other: T) -> OrdCmp<T> {
+        OrdCmp::new(self, CmpMethod::Less, other)
     }
 
-    fn gt(self, other: T) -> Cmp<T> {
-        Cmp::new(self, CmpMethod::Greater, other)
+    fn gt(self, other: T) -> OrdCmp<T> {
+        OrdCmp::new(self, CmpMethod::Greater, other)
     }
 
-    fn gte(self, other: T) -> Cmp<T> {
-        Cmp::new(self, CmpMethod::GreaterEq, other)
+    fn gte(self, other: T) -> OrdCmp<T> {
+        OrdCmp::new(self, CmpMethod::GreaterEq, other)
     }
 
-    fn lte(self, other: T) -> Cmp<T> {
-        Cmp::new(self, CmpMethod::LessEq, other)
+    fn lte(self, other: T) -> OrdCmp<T> {
+        OrdCmp::new(self, CmpMethod::LessEq, other)
     }
 
-    fn eq(self, other: T) -> Cmp<T> {
-        Cmp::new(self, CmpMethod::Eq, other)
+    fn eq(self, other: T) -> OrdCmp<T> {
+        OrdCmp::new(self, CmpMethod::Eq, other)
+    }
+
+    fn cmp<F: Fn(&T) -> bool + Send + Sync + 'static>(self, func: F) -> Cmp<T, F> {
+        Cmp {
+            component: self,
+            func,
+        }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum CmpMethod {
+enum CmpMethod {
     Less,
     LessEq,
     Eq,
@@ -59,7 +85,7 @@ pub enum CmpMethod {
 }
 
 #[derive(Debug, Clone)]
-pub struct Cmp<T>
+pub struct OrdCmp<T>
 where
     T: ComponentValue,
 {
@@ -68,11 +94,11 @@ where
     other: T,
 }
 
-impl<T> Cmp<T>
+impl<T> OrdCmp<T>
 where
     T: ComponentValue + Debug,
 {
-    pub fn new(component: Component<T>, method: CmpMethod, other: T) -> Self {
+    fn new(component: Component<T>, method: CmpMethod, other: T) -> Self {
         Self {
             component,
             method,
@@ -81,14 +107,14 @@ where
     }
 }
 
-impl<'this, 'w, T> Filter<'this, 'w> for Cmp<T>
+impl<'this, 'w, T> Filter<'this, 'w> for OrdCmp<T>
 where
     T: ComponentValue + PartialOrd + Debug,
 {
-    type Prepared = PreparedCmp<'this, 'w, T>;
+    type Prepared = PreparedOrdCmp<'this, 'w, T>;
 
-    fn prepare(&'this self, archetype: &'w crate::Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedCmp {
+    fn prepare(&'this self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
+        PreparedOrdCmp {
             borrow: archetype.storage(self.component),
             method: &self.method,
             other: &self.other,
@@ -96,13 +122,13 @@ where
     }
 }
 
-pub struct PreparedCmp<'this, 'w, T> {
+pub struct PreparedOrdCmp<'this, 'w, T> {
     borrow: Option<StorageBorrow<'w, T>>,
     method: &'this CmpMethod,
     other: &'this T,
 }
 
-impl<'this, 'w, T> PreparedFilter for PreparedCmp<'this, 'w, T>
+impl<'this, 'w, T> PreparedFilter for PreparedOrdCmp<'this, 'w, T>
 where
     T: ComponentValue + PartialOrd + Debug,
 {
@@ -116,7 +142,6 @@ where
         let other = &self.other;
         let cmp = |&slot: &Slot| {
             let val = borrow.at(slot);
-            eprintln!("Comparing {val:?}");
 
             let ord = val.partial_cmp(other);
             if let Some(ord) = ord {
@@ -152,7 +177,79 @@ where
             end: start + count,
         };
 
-        eprintln!("Original: {slots:?} ==> {res:?}");
+        res
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Cmp<T, F>
+where
+    T: ComponentValue,
+{
+    component: Component<T>,
+    func: F,
+}
+
+impl<'this, 'w, T, F> Filter<'this, 'w> for Cmp<T, F>
+where
+    T: ComponentValue,
+    F: Fn(&T) -> bool + Send + Sync + 'static,
+{
+    type Prepared = PreparedCmp<'this, 'w, T, F>;
+
+    fn prepare(&'this self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
+        PreparedCmp {
+            borrow: archetype.storage(self.component),
+            func: &self.func,
+        }
+    }
+}
+
+pub struct PreparedCmp<'f, 'w, T, F>
+where
+    T: ComponentValue,
+{
+    borrow: Option<StorageBorrow<'w, T>>,
+    func: &'f F,
+}
+
+impl<'f, 'w, T, F> PreparedFilter for PreparedCmp<'f, 'w, T, F>
+where
+    T: ComponentValue,
+    F: Fn(&T) -> bool + Send + Sync + 'static,
+{
+    fn filter(&mut self, slots: Slice) -> Slice {
+        let borrow = match self.borrow {
+            Some(ref v) => v,
+            None => return Slice::empty(),
+        };
+
+        let cmp = |&slot: &Slot| {
+            let val = borrow.at(slot);
+
+            (self.func)(val)
+        };
+
+        // How many entities yielded true
+        let mut start = slots.start;
+        let count = slots
+            .iter()
+            .skip_while(|slot| {
+                if !cmp(slot) {
+                    start += 1;
+                    true
+                } else {
+                    false
+                }
+            })
+            .take_while(cmp)
+            .count();
+
+        let res = Slice {
+            start,
+            end: start + count,
+        };
+
         res
     }
 }

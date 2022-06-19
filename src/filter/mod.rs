@@ -9,7 +9,7 @@ use crate::{
     ComponentId,
 };
 
-pub use cmp::*;
+pub use cmp::CmpExt;
 
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
@@ -69,7 +69,7 @@ gen_bitops! {
 
 /// A filter over a query which will be prepared for an archetype, yielding
 /// subsets of slots.
-pub trait Filter<'this, 'a>
+pub trait Filter<'this, 'w>
 where
     Self: Sized,
 {
@@ -78,16 +78,16 @@ where
     /// Prepare the filter for an archetype.
     /// `change_tick` refers to the last time this query was run. Useful for
     /// change detection.
-    fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared;
+    fn prepare(&'this self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared;
 
-    fn or<F: for<'x> Filter<'x, 'a>>(self, other: F) -> Or<Self, F> {
+    fn or<F: for<'x> Filter<'x, 'w>>(self, other: F) -> Or<Self, F> {
         Or {
             left: self,
             right: other,
         }
     }
 
-    fn and<F: for<'x> Filter<'x, 'a>>(self, other: F) -> And<Self, F> {
+    fn and<F: for<'x> Filter<'x, 'w>>(self, other: F) -> And<Self, F> {
         And {
             left: self,
             right: other,

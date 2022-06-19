@@ -56,7 +56,8 @@ fn commandbuffer() {
     cmd.set(name(), name(), "Entity Name".into());
     cmd.apply(&mut world).unwrap();
 
-    let names = Query::new(name())
+    let mut name_query = Query::new(name());
+    let names = name_query
         .prepare(&world)
         .iter()
         .cloned()
@@ -79,5 +80,28 @@ fn commandbuffer() {
             "Unnamed: 6",
             "Unnamed: 7",
         ]
+    );
+
+    Query::new(entities())
+        .filter(name().cmp(|name| name.contains("Unnamed")))
+        .prepare(&world)
+        .iter()
+        .for_each(|id| {
+            eprintln!("Removing name for entity: {id}");
+            cmd.remove(id, name());
+        });
+
+    cmd.apply(&mut world).unwrap();
+
+    let names = name_query
+        .prepare(&world)
+        .iter()
+        .cloned()
+        .sorted()
+        .collect_vec();
+
+    assert_eq!(
+        names,
+        ["Bertha", "Entity Name", "Johnathan", "Shared State"]
     );
 }
