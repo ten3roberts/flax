@@ -8,7 +8,8 @@ pub use util::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    Entity, World,
+    system::Access,
+    ArchetypeId, Entity, World,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +30,8 @@ pub trait Fetch<'w> {
     fn prepare(&self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
     fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool;
     fn describe(&self) -> String;
+    /// Returns which components and how will be accessed for an archetype.
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access>;
     /// Returns the required elements in self which are not in archetype
     fn difference(&self, archetype: &Archetype) -> Vec<String>;
 }
@@ -87,6 +90,10 @@ impl<'w> Fetch<'w> for EntityFetch {
     fn difference(&self, _: &Archetype) -> Vec<String> {
         vec![]
     }
+
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        vec![]
+    }
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
@@ -128,6 +135,12 @@ macro_rules! tuple_impl {
 
             fn difference(&self, archetype: &Archetype) -> Vec<String> {
                 [$((self.$idx).difference(archetype)),*].concat()
+            }
+
+            fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+                [ $(
+                    (self.$idx).access(id, archetype),
+                )* ].into_iter().flatten().collect()
             }
 
         }

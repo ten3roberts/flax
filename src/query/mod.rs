@@ -5,7 +5,8 @@ mod view;
 use itertools::Itertools;
 
 use crate::{
-    archetype::ArchetypeId, fetch::Fetch, All, And, Filter, OwnedTuple, PreparedFetch, World,
+    archetype::ArchetypeId, fetch::Fetch, system::WorldAccess, All, And, Filter, PreparedFetch,
+    TupleCloned, World,
 };
 
 use self::prepared::PreparedQuery;
@@ -124,10 +125,11 @@ where
     /// Gathers all elements in the query as a Vec of owned values.
     pub fn as_vec<'w, C>(&'w mut self, world: &'w World) -> Vec<C>
     where
-        for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Item: OwnedTuple<Owned = C>,
+        for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Item:
+            TupleCloned<Cloned = C>,
     {
         let mut prepared = self.prepare(world);
-        let items = prepared.iter().map(|v| v.owned()).collect_vec();
+        let items = prepared.iter().map(|v| v.cloned()).collect_vec();
         items
     }
 
@@ -147,5 +149,23 @@ where
         // Prepare the query
 
         (&self.archetypes, &self.fetch, &self.filter)
+    }
+}
+
+impl<Q, F> WorldAccess for Query<Q, F>
+where
+    Q: for<'x> Fetch<'x>,
+    F: for<'x, 'y> Filter<'x, 'y>,
+{
+    fn access(&mut self, world: &World) -> Vec<crate::system::Access> {
+        let (archetypes, fetch, _) = self.get_archetypes(world);
+
+        archetypes
+            .iter()
+            .flat_map(|id| {
+                let archetype = world.archetype(*id);
+                fetch.access(*id, archetype)
+            })
+            .collect_vec()
     }
 }

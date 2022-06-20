@@ -20,4 +20,13 @@ pub enum Error {
     Disjoint(Vec<Entity>),
 }
 
+#[derive(Debug, Error)]
+#[error("Failed to execute system {name:?}")]
+pub struct SystemError {
+    name: String,
+    #[source]
+    report: eyre::Report,
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
+pub type SystemResult<T> = std::result::Result<T, Error>;
