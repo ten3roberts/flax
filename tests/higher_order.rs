@@ -2,7 +2,7 @@ use std::ptr;
 
 use flax::{
     component, wildcard, Component, ComponentId, ComponentValue, DebugVisitor, EntityBuilder,
-    OwnedTuple, Query, World,
+    Query, TupleCloned, World,
 };
 use itertools::Itertools;
 
@@ -158,7 +158,7 @@ fn relations() {
     let items = query
         .prepare(&world)
         .iter()
-        .map(OwnedTuple::owned)
+        .map(TupleCloned::cloned)
         .sorted()
         .collect_vec();
 

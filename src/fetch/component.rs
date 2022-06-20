@@ -4,7 +4,7 @@ use atomic_refcell::AtomicRefMut;
 
 use crate::{
     archetype::{Archetype, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
-    wildcard, Change, Component, ComponentValue,
+    wildcard, ArchetypeId, Change, Component, ComponentValue,
 };
 
 use super::*;
@@ -54,6 +54,18 @@ where
             vec![self.name().to_string()]
         }
     }
+
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if archetype.has(self.id()) {
+            vec![Access::ArchetypeStorage {
+                arch: id,
+                component: self.id(),
+                mutable: false,
+            }]
+        } else {
+            vec![]
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +98,18 @@ where
             vec![]
         } else {
             vec![self.0.name().to_string()]
+        }
+    }
+
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if archetype.has(self.0.id()) {
+            vec![Access::ArchetypeStorage {
+                arch: id,
+                component: self.0.id(),
+                mutable: true,
+            }]
+        } else {
+            vec![]
         }
     }
 }
@@ -185,6 +209,30 @@ where
             vec![]
         } else {
             vec![self.component.name().to_string()]
+        }
+    }
+
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        let (sub, obj) = self.component.id().into_pair();
+        if obj == wildcard().id().strip_gen() {
+            let borrow = archetype
+                .components()
+                .filter(|v| v.id().strip_gen() == sub)
+                .skip(self.index)
+                .map(|v| Access::ArchetypeStorage {
+                    arch: id,
+                    component: v.id(),
+                    mutable: false,
+                })
+                .next();
+
+            if let Some(borrow) = borrow {
+                vec![borrow]
+            } else {
+                vec![]
+            }
+        } else {
+            todo!()
         }
     }
 }

@@ -104,6 +104,7 @@ pub mod error;
 pub mod fetch;
 mod filter;
 mod query;
+mod system;
 mod world;
 
 // Required due to macro
@@ -113,7 +114,11 @@ pub use archetype::{Archetype, ArchetypeId, Change, ChangeKind, ComponentInfo, D
 pub use buffer::*;
 pub use commandbuffer::CommandBuffer;
 pub use component::*;
-pub use entity::*;
+pub use entity::{
+    entities, wildcard, Entity, EntityBuilder, EntityIndex, EntityLocation, EntityStore,
+    Generation, Namespace, StrippedEntity, STATIC_NAMESPACE,
+};
+
 pub use fetch::*;
 pub use filter::*;
 pub use query::*;
