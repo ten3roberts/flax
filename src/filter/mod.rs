@@ -6,7 +6,7 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Archetype, ChangeKind, Changes, Slice},
-    ComponentId,
+    ComponentId, World,
 };
 
 pub use cmp::CmpExt;
@@ -95,6 +95,13 @@ where
             right: other,
         }
     }
+
+    /// Returns true if the filter will yield at least one entity from the
+    /// archetype.
+    ///
+    /// Returns false if an entity will never yield, such as a mismatched
+    /// archetype
+    fn matches(&self, world: &World, archetype: &Archetype) -> bool;
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +125,10 @@ impl<'this, 'a> Filter<'this, 'a> for ModifiedFilter {
             change_tick,
             ChangeKind::is_modified_or_inserted,
         )
+    }
+
+    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
+        archetype.has(self.component)
     }
 }
 
@@ -143,6 +154,10 @@ impl<'this, 'a> Filter<'this, 'a> for InsertedFilter {
             ChangeKind::is_inserted,
         )
     }
+
+    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
+        archetype.has(self.component)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -166,6 +181,10 @@ impl<'this, 'a> Filter<'this, 'a> for RemovedFilter {
             change_tick,
             ChangeKind::is_removed,
         )
+    }
+
+    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
+        true
     }
 }
 
@@ -194,6 +213,10 @@ where
             right: self.right.prepare(archetype, change_tick),
         }
     }
+
+    fn matches(&self, world: &World, archetype: &Archetype) -> bool {
+        self.left.matches(world, archetype) && self.right.matches(world, archetype)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -220,6 +243,10 @@ where
             left: self.left.prepare(archetype, change_tick),
             right: self.right.prepare(archetype, change_tick),
         }
+    }
+
+    fn matches(&self, world: &World, archetype: &Archetype) -> bool {
+        self.left.matches(world, archetype) || self.right.matches(world, archetype)
     }
 }
 
@@ -354,6 +381,10 @@ where
     fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedNot(self.0.prepare(archetype, change_tick))
     }
+
+    fn matches(&self, world: &World, archetype: &Archetype) -> bool {
+        !self.0.matches(world, archetype)
+    }
 }
 
 impl<R, T> std::ops::BitOr<R> for Not<T>
@@ -452,6 +483,10 @@ impl<'this, 'a> Filter<'this, 'a> for Nothing {
     fn prepare(&'this self, _: &'a Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(false)
     }
+
+    fn matches(&self, _: &World, _: &Archetype) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -462,6 +497,10 @@ impl<'this, 'a> Filter<'this, 'a> for All {
 
     fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(true)
+    }
+
+    fn matches(&self, _: &World, _: &Archetype) -> bool {
+        true
     }
 }
 
@@ -519,6 +558,10 @@ impl<'this, 'a> Filter<'this, 'a> for With {
     fn prepare(&self, archetype: &'a Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(archetype.has(self.component))
     }
+
+    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
+        archetype.has(self.component)
+    }
 }
 
 pub struct Without {
@@ -536,6 +579,10 @@ impl<'this, 'a> Filter<'this, 'a> for Without {
 
     fn prepare(&self, archetype: &'a Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(!archetype.has(self.component))
+    }
+
+    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
+        !archetype.has(self.component)
     }
 }
 

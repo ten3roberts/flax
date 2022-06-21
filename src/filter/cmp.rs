@@ -10,7 +10,7 @@ use std::{cmp::Ordering, fmt::Debug};
 
 use crate::{
     archetype::{Slice, Slot, StorageBorrow},
-    And, Component, ComponentValue, Filter, Not, Or, PreparedFilter,
+    And, Component, ComponentValue, Filter, Not, Or, PreparedFilter, World,
 };
 
 pub trait CmpExt<T>
@@ -120,6 +120,10 @@ where
             other: &self.other,
         }
     }
+
+    fn matches(&self, _: &World, archetype: &crate::Archetype) -> bool {
+        archetype.has(self.component.id())
+    }
 }
 
 pub struct PreparedOrdCmp<'this, 'w, T> {
@@ -202,6 +206,10 @@ where
             borrow: archetype.storage(self.component),
             func: &self.func,
         }
+    }
+
+    fn matches(&self, _: &World, archetype: &crate::Archetype) -> bool {
+        archetype.has(self.component.id())
     }
 }
 
