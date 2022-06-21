@@ -5,11 +5,14 @@ mod view;
 use itertools::Itertools;
 
 use crate::{
-    archetype::ArchetypeId, fetch::Fetch, system::WorldAccess, All, And, Filter, PreparedFetch,
-    TupleCloned, World,
+    archetype::ArchetypeId,
+    fetch::Fetch,
+    system::{SystemData, WorldAccess},
+    util::TupleCloned,
+    All, And, Filter, PreparedFetch, World,
 };
 
-use self::prepared::PreparedQuery;
+pub use self::prepared::PreparedQuery;
 
 /// Represents a query and state for a given world.
 /// The archetypes to visit is cached in the query which means it is more
@@ -167,5 +170,17 @@ where
                 fetch.access(*id, archetype)
             })
             .collect_vec()
+    }
+}
+
+impl<'w, Q, F> SystemData<'w> for Query<Q, F>
+where
+    Q: Fetch<'w> + 'static,
+    F: Filter<'w, 'w> + 'static,
+{
+    type Prepared = PreparedQuery<'w, Q, F>;
+
+    fn prepare(&'w mut self, world: &'w World) -> Self::Prepared {
+        Self::prepare(self, world)
     }
 }

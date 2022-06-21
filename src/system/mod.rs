@@ -1,16 +1,21 @@
+mod traits;
+
 use crate::{
     error::{Result, SystemResult},
-    ArchetypeId, ComponentId, Query, TupleCombine, World,
+    util::TupleCombine,
+    ArchetypeId, ComponentId, Query, World,
 };
 
+pub use traits::*;
+
 pub struct SystemBuilder<T> {
-    current: T,
+    data: T,
 }
 
 impl SystemBuilder<()> {
     /// Creates a new empty system builders.
     pub fn new() -> Self {
-        Self { current: () }
+        Self { data: () }
     }
 }
 
@@ -18,12 +23,44 @@ impl<T> SystemBuilder<T> {
     /// Add a new query to the system
     pub fn with<S>(self, other: S) -> SystemBuilder<T::PushRight>
     where
-        S: WorldAccess,
+        S: WorldAccess + for<'x> SystemData<'x>,
         T: TupleCombine<S>,
     {
         SystemBuilder {
-            current: self.current.push_right(other),
+            data: self.data.push_right(other),
         }
+    }
+
+    pub fn build<F>(self, func: F) -> System<T, F>
+    where
+        F: SystemFn<T, ()>,
+        T: for<'x> SystemData<'x>,
+    {
+        System {
+            data: self.data,
+            func,
+        }
+    }
+}
+
+pub struct System<T, F> {
+    data: T,
+    func: F,
+}
+
+impl System<(), ()> {
+    pub fn builder() -> SystemBuilder<()> {
+        SystemBuilder::new()
+    }
+}
+
+impl<T, F> SystemFn<(), ()> for System<T, F>
+where
+    F: SystemFn<T, ()>,
+    T: for<'x> SystemData<'x>,
+{
+    fn execute<'a>(&mut self, world: &World, _: &mut ()) {
+        self.func.execute(world, &mut self.data);
     }
 }
 
@@ -36,8 +73,24 @@ pub enum Access {
     },
 }
 
-/// Describe an access to the world in ters of shared and unique accesses
-pub trait WorldAccess {
-    /// Returns all the accesses for a system
-    fn access(&mut self, world: &World) -> Vec<Access>;
+#[cfg(test)]
+mod test {
+    use crate::{Fetch, PreparedQuery};
+
+    use super::*;
+
+    #[test]
+    fn system_builder() {
+        component! {
+            a: String,
+            b: i32,
+        };
+
+        fn handler<T>(a: T) {}
+
+        let system = System::builder()
+            .with(Query::new(a()))
+            // .with(Query::new(b()))
+            .build(|a: PreparedQuery<crate::Component<String>, crate::All>| {});
+    }
 }

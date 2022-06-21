@@ -69,6 +69,7 @@ fn query_change() {
             *distance = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
             name.to_string()
         })
+        .sorted()
         .collect_vec();
 
     assert_eq!(consumed, ["A", "B", "D"]);
