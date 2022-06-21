@@ -138,7 +138,7 @@ where
             self.archetypes.clear();
             self.archetypes
                 .extend(world.archetypes().filter_map(|(id, arch)| {
-                    if self.fetch.matches(world, arch) {
+                    if self.fetch.matches(world, arch) && self.filter.matches(world, arch) {
                         Some(id)
                     } else {
                         None

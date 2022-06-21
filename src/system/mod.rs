@@ -36,6 +36,7 @@ pub enum Access {
     },
 }
 
+/// Describe an access to the world in ters of shared and unique accesses
 pub trait WorldAccess {
     /// Returns all the accesses for a system
     fn access(&mut self, world: &World) -> Vec<Access>;
