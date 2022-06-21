@@ -11,22 +11,25 @@ pub trait WorldAccess {
 /// Describes a type which can run on a set of system data.
 ///
 /// Is implemented for functions up to an arity of 8
-pub trait SystemFn<Args, Ret> {
-    fn execute(&mut self, world: &World, data: &mut Args) -> Ret;
+pub trait SystemFn<'w, Args, Ret>
+where
+    Args: SystemData<'w>,
+{
+    fn execute(&'w mut self, world: &'w World, data: &'w mut Args) -> Ret;
 }
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident: $lf: lifetime),*) => {
-            impl<Func, $($ty,)* Ret> SystemFn<($($ty,)*), Ret> for Func
-            where
-                Func: for<'x> Fn($(<$ty as SystemData<'x>>::Prepared,)*) -> Ret,
-                $(for<'x> $ty: SystemData<'x>,)*
-            {
-                fn execute<'a>(&mut self, world: &World, data: &mut ($($ty,)*)) -> Ret {
-                    let _prepared = data.prepare(world);
-                    (self)($((_prepared.$idx),)*)
-                }
-            }
+            // impl<Func, $($ty,)* Ret> SystemFn<($($ty,)*), Ret> for Func
+            // where
+            //     Func: for<'x> Fn($(<$ty as SystemData<'x>>::Prepared,)*) -> Ret,
+            //     $(for<'x> $ty: SystemData<'x>,)*
+            // {
+            //     fn execute<'a>(&mut self, world: &World, data: &mut ($($ty,)*)) -> Ret {
+            //         let _prepared = data.prepare(world);
+            //         (self)($((_prepared.$idx),)*)
+            //     }
+            // }
 
         impl<'w, $($ty,)*> SystemData<'w> for ($($ty,)*)
         where
@@ -44,7 +47,7 @@ tuple_impl! {}
 tuple_impl! { 0 => A: 'a }
 tuple_impl! { 0 => A: 'a, 1 => B: 'b }
 tuple_impl! { 0 => A: 'a, 1 => B: 'b, 2 => C: 'c }
-tuple_impl! { 0 => A: 'a, 1 => B: 'b, 2 => C: 'c, 3 => D: 'd }
+// tuple_impl! { 0 => A: 'a, 1 => B: 'b, 2 => C: 'c, 3 => D: 'd }
 // tuple_impl! { 0 => A: 'a, 1 => B: 'b, 2 => C: 'c, 3 => D: 'd, 4 => E: 'e' }
 // tuple_impl! { 0 => A: 'a, 1 => B: 'b, 2 => C: 'c, 3 => D: 'd, 4 => E: 'e', 5 => F }
 // tuple_impl! { 0 => A: 'a, 1 => B: 'b, 2 => C: 'c, 3 => D: 'd, 4 => E: 'e', 5 => F, 6 => H }
@@ -55,3 +58,18 @@ pub trait SystemData<'w> {
     type Prepared;
     fn prepare(&'w mut self, world: &'w World) -> Self::Prepared;
 }
+
+impl<'w, Func, A> SystemFn<'w, A, ()> for Func
+where
+    Func: FnMut(<A as SystemData<'w>>::Prepared),
+    A: SystemData<'w>,
+{
+    fn execute(&mut self, world: &'w World, data: &'w mut A) -> () {
+        let prepared = data.prepare(world);
+        (self)(prepared)
+    }
+}
+
+// pub trait FromSystemData<T> {
+//     fn from(v: T) -> Self {}
+// }
