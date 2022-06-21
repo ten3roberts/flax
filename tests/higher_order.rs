@@ -1,8 +1,8 @@
 use std::ptr;
 
 use flax::{
-    component, wildcard, Component, ComponentId, ComponentValue, DebugVisitor, EntityBuilder,
-    Query, TupleCloned, World,
+    component, util::TupleCloned, wildcard, Component, ComponentId, ComponentValue, DebugVisitor,
+    EntityBuilder, Query, World,
 };
 use itertools::Itertools;
 

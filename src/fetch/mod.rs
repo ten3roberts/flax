@@ -1,10 +1,8 @@
 mod component;
 mod ext;
-mod util;
 
 pub use component::*;
 pub use ext::*;
-pub use util::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},

@@ -105,6 +105,7 @@ pub mod fetch;
 mod filter;
 mod query;
 mod system;
+pub mod util;
 mod world;
 
 // Required due to macro

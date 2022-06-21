@@ -1,34 +1,9 @@
 // Needed in macro expansion
 #![allow(unused_parens)]
 
-/// Transform (&T, &U) -> (T, U)
-pub trait TupleCloned {
-    type Cloned: 'static;
-
-    fn cloned(self) -> Self::Cloned;
-}
-
-impl<T> TupleCloned for &T
-where
-    T: Clone + 'static,
-{
-    type Cloned = T;
-
-    fn cloned(self) -> Self::Cloned {
-        (self).clone()
-    }
-}
-
-impl<T> TupleCloned for &mut T
-where
-    T: Clone + 'static,
-{
-    type Cloned = T;
-
-    fn cloned(self) -> Self::Cloned {
-        (self).clone()
-    }
-}
+mod cloned;
+mod fn_args;
+pub use cloned::*;
 
 pub trait TupleCombine<T> {
     type PushRight;
@@ -69,7 +44,28 @@ macro_rules! tuple_impl {
     };
 }
 
-tuple_impl! {}
+impl TupleCloned for () {
+    type Cloned = ();
+
+    fn cloned(self) -> Self::Cloned {
+        ()
+    }
+}
+
+impl<T> TupleCombine<T> for () {
+    type PushRight = (T,);
+
+    type PushLeft = (T,);
+
+    fn push_right(self, value: T) -> Self::PushRight {
+        (value,)
+    }
+
+    fn push_left(self, value: T) -> Self::PushLeft {
+        (value,)
+    }
+}
+
 tuple_impl! { 0 => A }
 tuple_impl! { 0 => A, 1 => B }
 tuple_impl! { 0 => A, 1 => B, 2 => C }
@@ -82,7 +78,7 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 
 
 #[cfg(test)]
 mod test {
-    use crate::{TupleCloned, TupleCombine};
+    use super::{TupleCloned, TupleCombine};
 
     #[test]
     fn tuples_clone() {
@@ -93,5 +89,6 @@ mod test {
 
         let cloned: (i32, String, i32) = tuple.push_right(&a).cloned();
         assert_eq!(cloned, (a, b, a));
+        let t = ().push_right(5);
     }
 }
