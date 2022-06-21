@@ -31,10 +31,10 @@ impl<T> SystemBuilder<T> {
         }
     }
 
-    pub fn build<F>(self, func: F) -> System<T, F>
+    pub fn build<'w, F>(self, func: F) -> System<T, F>
     where
-        F: SystemFn<T, ()>,
-        T: for<'x> SystemData<'x>,
+        F: SystemFn<'w, T, ()>,
+        T: SystemData<'w>,
     {
         System {
             data: self.data,
@@ -54,12 +54,12 @@ impl System<(), ()> {
     }
 }
 
-impl<T, F> SystemFn<(), ()> for System<T, F>
+impl<'w, T, F> SystemFn<'w, (), ()> for System<T, F>
 where
-    F: SystemFn<T, ()>,
-    T: for<'x> SystemData<'x>,
+    F: SystemFn<'w, T, ()>,
+    T: SystemData<'w>,
 {
-    fn execute<'a>(&mut self, world: &World, _: &mut ()) {
+    fn execute<'a>(&'w mut self, world: &'w World, _: &'w mut ()) {
         self.func.execute(world, &mut self.data);
     }
 }
@@ -91,6 +91,6 @@ mod test {
         let system = System::builder()
             .with(Query::new(a()))
             // .with(Query::new(b()))
-            .build(|a: PreparedQuery<crate::Component<String>, crate::All>| {});
+            .build(|a| {});
     }
 }
