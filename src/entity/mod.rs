@@ -121,6 +121,10 @@ impl Entity {
     pub fn strip_gen(self) -> StrippedEntity {
         StrippedEntity(NonZeroU32::new(self.to_bits().get() as u32).unwrap())
     }
+
+    pub fn builder() -> EntityBuilder {
+        EntityBuilder::new()
+    }
 }
 
 impl StrippedEntity {

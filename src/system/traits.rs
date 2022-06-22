@@ -35,7 +35,7 @@ macro_rules! tuple_impl {
         // Infallible
         impl<'w, Func, $($ty,)* Ret> SystemFn<'w, ($($ty,)*), Ret> for Func
         where
-            Func: Fn($(<$ty as SystemData<'w>>::Prepared,)*) -> Ret,
+            Func: FnMut($(<$ty as SystemData<'w>>::Prepared,)*) -> Ret,
             $($ty: SystemData<'w>,)*
         {
             fn execute<'a>(&mut self, world: &'w World, data: &'w mut ($($ty,)*)) -> Ret {

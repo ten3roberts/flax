@@ -1,6 +1,10 @@
 use itertools::Itertools;
 
-use crate::{error::SystemError, system::BoxedSystem, World};
+use crate::{
+    error::{SystemError, SystemResult},
+    system::BoxedSystem,
+    World,
+};
 
 /// A collection of systems to run on the world
 #[derive(Default)]
@@ -21,21 +25,66 @@ impl Schedule {
     }
 
     /// Execute all systems in the schedule sequentially on the world.
-    ///
-    /// If a system execution fails, the schedule will proceed and return a list
-    /// of all encountered errors
-    pub fn execute_seq(&mut self, world: &World) -> std::result::Result<(), Vec<SystemError>> {
-        let errors = self
-            .systems
+    /// Returns the first error and aborts if the execution fails.
+    pub fn execute_seq(&mut self, world: &World) -> SystemResult<()> {
+        self.systems
             .iter_mut()
-            .map(|system| system.execute(world))
-            .flat_map(Result::err)
-            .collect_vec();
+            .try_for_each(|system| system.execute(world))?;
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
-        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::{
+        error::Result, schedule::Schedule, system::System, Component, EntityBuilder, PreparedQuery,
+        Query, World,
+    };
+
+    #[test]
+    fn schedule_seq() {
+        component! {
+            a: String,
+            b: i32,
+        };
+
+        let mut world = World::new();
+
+        let id = EntityBuilder::new()
+            .set(a(), "Foo".to_string())
+            .set(b(), 5)
+            .spawn(&mut world);
+
+        let mut prev_count: i32 = 0;
+        let system_a = System::builder().with(Query::new(a())).build(
+            move |mut a: PreparedQuery<Component<String>>| {
+                let count = a.iter().count() as i32;
+
+                eprintln!("Change: {prev_count} -> {count}");
+                prev_count = count;
+            },
+        );
+
+        let system_b = System::builder().with(Query::new(b())).build(
+            move |mut query: PreparedQuery<Component<i32>>| -> Result<()> {
+                let item: &i32 = query.get(id)?;
+                eprintln!("Item: {item}");
+
+                Ok(())
+            },
+        );
+
+        let mut schedule = Schedule::new();
+        schedule.with_system(system_a).with_system(system_b);
+
+        schedule.execute_seq(&world).unwrap();
+
+        world.despawn(id).unwrap();
+        let result: eyre::Result<()> = schedule.execute_seq(&world).map_err(Into::into);
+
+        eprintln!("{result:?}");
+        assert!(result.is_err());
     }
 }
