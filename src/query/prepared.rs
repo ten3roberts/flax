@@ -3,7 +3,7 @@ use std::mem::MaybeUninit;
 use smallvec::SmallVec;
 
 use crate::{
-    error::Result, Archetype, ArchetypeId, Entity, EntityLocation, Error, Fetch, Filter,
+    error::Result, All, Archetype, ArchetypeId, Entity, EntityLocation, Error, Fetch, Filter,
     PreparedFetch, World,
 };
 
@@ -17,7 +17,7 @@ pub struct PreparedArchetype<'w, Q> {
 
 /// A lazily prepared query which borrows and hands out chunk iterators for
 /// each archetype matched.
-pub struct PreparedQuery<'w, Q, F>
+pub struct PreparedQuery<'w, Q, F = All>
 where
     Q: Fetch<'w>,
 {
