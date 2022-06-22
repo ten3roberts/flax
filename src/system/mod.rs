@@ -126,7 +126,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::{error::Result, EntityBuilder, PreparedQuery, Query};
+    use std::process::id;
+
+    use crate::{error::Result, Component, EntityBuilder, PreparedQuery, Query};
 
     use super::*;
 
@@ -147,16 +149,22 @@ mod test {
         let mut system: System<_, _, _> = System::builder()
             .with(Query::new(a()))
             // .with(Query::new(b()))
-            .build(|a| {});
+            .build(|mut a: PreparedQuery<_>| assert_eq!(a.iter().count(), 1));
 
-        let fallible = System::builder().with(Query::new(b())).build(
-            |mut query: PreparedQuery<crate::Component<i32>, crate::All>| -> Result<()> {
-                let item: &i32 = query.get(id).unwrap();
+        let mut fallible = System::builder().with(Query::new(b())).build(
+            |mut query: PreparedQuery<Component<i32>>| -> Result<()> {
+                let item: &i32 = query.get(id)?;
+                eprintln!("Item: {item}");
 
                 Ok(())
             },
         );
 
         system.execute(&world, &mut ()).unwrap();
+        fallible.execute(&world, &mut ()).unwrap();
+
+        world.remove(id, b()).unwrap();
+
+        assert!(fallible.execute(&world, &mut ()).is_err());
     }
 }
