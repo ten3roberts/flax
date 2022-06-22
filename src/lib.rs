@@ -104,6 +104,7 @@ pub mod error;
 pub mod fetch;
 mod filter;
 mod query;
+pub mod schedule;
 mod system;
 pub mod util;
 mod world;

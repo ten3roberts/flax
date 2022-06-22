@@ -1,13 +1,10 @@
-use std::mem::{self, MaybeUninit};
+use std::mem::MaybeUninit;
 
-use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{
-    archetype::{Slice, Slot},
-    error::Result,
-    Archetype, ArchetypeId, Entity, EntityLocation, Error, Fetch, Filter, FilterIter,
-    PreparedFetch, PreparedFilter, World,
+    error::Result, Archetype, ArchetypeId, Entity, EntityLocation, Error, Fetch, Filter,
+    PreparedFetch, World,
 };
 
 use super::iter::QueryIter;
@@ -74,7 +71,6 @@ where
 impl<'w, Q, F> PreparedQuery<'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: for<'x> Filter<'x, 'w>,
 {
     pub fn new(
         world: &'w World,
@@ -99,6 +95,7 @@ where
     pub fn iter<'q>(&'q mut self) -> QueryIter<'w, '_, Q, F>
     where
         'w: 'q,
+        F: Filter<'q, 'w>,
     {
         self.into_iter()
     }
@@ -128,7 +125,10 @@ where
     pub fn get_disjoint<'q, const C: usize>(
         &'q mut self,
         ids: [Entity; C],
-    ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]> {
+    ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]>
+    where
+        Q: Fetch<'w>,
+    {
         let mut sorted = ids;
         sorted.sort();
         if sorted.windows(C).any(|v| v[0] == v[1]) {
@@ -164,7 +164,10 @@ where
 
     /// Get the fetch items for an entity.
     /// **Note**: Filters are ignored.
-    pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
+    pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item>
+    where
+        Q: Fetch<'w>,
+    {
         let &EntityLocation { arch, slot } = self.world.location(id)?;
 
         let idx = self.prepare(arch).ok_or_else(|| {
