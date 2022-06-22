@@ -21,12 +21,12 @@ pub enum Error {
 }
 
 #[derive(Debug, Error)]
-#[error("Failed to execute system {name:?}")]
+#[error("Failed to execute system {:?}", name.as_ref().map(|v| v.as_str()).unwrap_or_else(|| "unnkown"))]
 pub struct SystemError {
-    name: String,
+    pub(crate) name: Option<String>,
     #[source]
-    report: eyre::Report,
+    pub(crate) report: eyre::Report,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-pub type SystemResult<T> = std::result::Result<T, Error>;
+pub type SystemResult<T> = std::result::Result<T, SystemError>;

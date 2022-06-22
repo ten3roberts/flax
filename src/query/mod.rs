@@ -175,12 +175,12 @@ where
 
 impl<'w, Q, F> SystemData<'w> for Query<Q, F>
 where
-    Q: Fetch<'w> + 'static,
-    F: Filter<'w, 'w> + 'static,
+    Q: for<'x> Fetch<'x> + 'static,
+    F: for<'x, 'y> Filter<'x, 'y> + 'static,
 {
     type Prepared = PreparedQuery<'w, Q, F>;
 
-    fn prepare(&'w mut self, world: &'w World) -> Self::Prepared {
-        Self::prepare(self, world)
+    fn prepare_data(&'w mut self, world: &'w World) -> Self::Prepared {
+        self.prepare(world)
     }
 }
