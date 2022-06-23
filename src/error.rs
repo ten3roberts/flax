@@ -12,12 +12,14 @@ pub enum Error {
     MissingComponent(Entity, &'static str),
     #[error("The entity {0} did not match the fetch {1:?}.\nMissing {2:?}.")]
     UnmatchedFetch(Entity, String, Vec<String>),
-    #[error("Component {0} is already borrowed mutably")]
+    #[error("{0} is already borrowed mutably")]
     Borrow(&'static str),
-    #[error("Component {0} can not be borrowed mutably as it is already borrowed")]
+    #[error("{0} can not be borrowed mutably as it is already borrowed")]
     BorrowMut(&'static str),
     #[error("Entities {0:?} were not disjoint")]
     Disjoint(Vec<Entity>),
+    #[error("Could not downcast cell to concrete type {0}")]
+    Downcast(&'static str),
 }
 
 #[derive(Debug, Error)]

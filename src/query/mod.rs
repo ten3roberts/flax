@@ -7,7 +7,7 @@ use itertools::Itertools;
 use crate::{
     archetype::ArchetypeId,
     fetch::Fetch,
-    system::{SystemData, WorldAccess},
+    system::{SystemContext, SystemData, WorldAccess},
     util::TupleCloned,
     All, And, Filter, PreparedFetch, World,
 };
@@ -180,7 +180,7 @@ where
 {
     type Prepared = PreparedQuery<'w, Q, F>;
 
-    fn prepare_data(&'w mut self, world: &'w World) -> Self::Prepared {
-        self.prepare(world)
+    fn prepare_data(&'w mut self, ctx: &'w SystemContext) -> Self::Prepared {
+        todo!()
     }
 }
