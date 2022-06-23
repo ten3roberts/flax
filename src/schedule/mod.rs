@@ -1,9 +1,7 @@
-use itertools::Itertools;
-
 use crate::{
-    error::{SystemError, SystemResult},
-    system::BoxedSystem,
-    World,
+    error::SystemResult,
+    system::{BoxedSystem, SystemContext},
+    CommandBuffer, World,
 };
 
 /// A collection of systems to run on the world
@@ -26,10 +24,12 @@ impl Schedule {
 
     /// Execute all systems in the schedule sequentially on the world.
     /// Returns the first error and aborts if the execution fails.
-    pub fn execute_seq(&mut self, world: &World) -> SystemResult<()> {
+    pub fn execute_seq(&mut self, world: &mut World) -> SystemResult<()> {
+        let mut cmd = CommandBuffer::new();
+        let ctx = SystemContext::new(world, &mut cmd);
         self.systems
             .iter_mut()
-            .try_for_each(|system| system.execute(world))?;
+            .try_for_each(|system| system.execute(&ctx))?;
 
         Ok(())
     }
@@ -79,10 +79,10 @@ mod test {
         let mut schedule = Schedule::new();
         schedule.with_system(system_a).with_system(system_b);
 
-        schedule.execute_seq(&world).unwrap();
+        schedule.execute_seq(&mut world).unwrap();
 
         world.despawn(id).unwrap();
-        let result: eyre::Result<()> = schedule.execute_seq(&world).map_err(Into::into);
+        let result: eyre::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
 
         eprintln!("{result:?}");
         assert!(result.is_err());

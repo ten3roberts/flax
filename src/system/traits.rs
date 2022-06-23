@@ -1,6 +1,6 @@
 use crate::World;
 
-use super::Access;
+use super::{cell::SystemContext, Access};
 
 /// Describe an access to the world in ters of shared and unique accesses
 pub trait WorldAccess {
@@ -15,7 +15,7 @@ pub trait SystemFn<'w, Args, Ret>
 where
     Args: SystemData<'w>,
 {
-    fn execute(&'w mut self, world: &'w World, data: &'w mut Args) -> Ret;
+    fn execute(&'w mut self, ctx: &'w SystemContext, data: &'w mut Args) -> Ret;
 }
 
 macro_rules! tuple_impl {
@@ -38,7 +38,7 @@ macro_rules! tuple_impl {
             Func: FnMut($(<$ty as SystemData<'w>>::Prepared,)*) -> Ret,
             $($ty: SystemData<'w>,)*
         {
-            fn execute<'a>(&mut self, world: &'w World, data: &'w mut ($($ty,)*)) -> Ret {
+            fn execute<'a>(&mut self, world: &'w SystemContext, data: &'w mut ($($ty,)*)) -> Ret {
                 let _prepared = data.prepare_data(world);
                 (self)($((_prepared.$idx),)*)
             }
@@ -49,8 +49,8 @@ macro_rules! tuple_impl {
             $($ty: SystemData<'w>,)*
         {
             type Prepared = ($(<$ty as SystemData<'w>>::Prepared,)*);
-            fn prepare_data(&'w mut self, _world: &'w World) -> Self::Prepared {
-                ($((self.$idx).prepare_data(_world),)*)
+            fn prepare_data(&'w mut self, _ctx: &'w SystemContext) -> Self::Prepared {
+                ($((self.$idx).prepare_data(_ctx),)*)
             }
         }
     };
@@ -69,5 +69,5 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 
 
 pub trait SystemData<'w> {
     type Prepared;
-    fn prepare_data(&'w mut self, world: &'w World) -> Self::Prepared;
+    fn prepare_data(&'w mut self, ctx: &'w SystemContext) -> Self::Prepared;
 }

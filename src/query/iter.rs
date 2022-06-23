@@ -5,7 +5,7 @@ use crate::{
     Fetch, Filter, FilterIter, PreparedFetch, PreparedFilter,
 };
 
-use super::prepared::{PreparedArchetype, PreparedQuery};
+use super::prepared::PreparedArchetype;
 
 /// Iterates over a chunk of entities, specified by a predicate.
 /// In essence, this is the unflattened version of [crate::QueryIter].
