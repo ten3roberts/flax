@@ -2,6 +2,7 @@ mod iter;
 mod prepared;
 mod view;
 
+use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
 use crate::{
@@ -172,15 +173,24 @@ where
             .collect_vec()
     }
 }
-
-impl<'w, Q, F> SystemData<'w> for Query<Q, F>
-where
-    Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x, 'y> Filter<'x, 'y> + 'static,
-{
-    type Prepared = PreparedQuery<'w, Q, F>;
-
-    fn prepare_data(&'w mut self, ctx: &'w SystemContext) -> Self::Prepared {
-        todo!()
-    }
-}
+//
+// impl<'init, 'w, Q, F> SystemData<'init, 'w> for Query<Q, F>
+// where
+//     Q: for<'x> Fetch<'x> + 'static,
+//     F: for<'x, 'y> Filter<'x, 'y> + 'static,
+// {
+//     type Init = AtomicRef<'w, &'w mut World>;
+//
+//     type Data = PreparedQuery<'init, Q, F>;
+//
+//     fn init(&self, ctx: &'w SystemContext) -> Self::Init {
+//         let borrow = ctx.world().expect("Failed to borrow world for query");
+//         borrow
+//     }
+//
+//     fn bind(&mut self, init: &'init Self::Init) -> Self::Data {
+//         let borrow = &***init;
+//
+//         self.prepare(borrow)
+//     }
+// }

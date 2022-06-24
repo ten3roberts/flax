@@ -45,46 +45,46 @@ mod test {
 
     #[test]
     fn schedule_seq() {
-        component! {
-            a: String,
-            b: i32,
-        };
-
-        let mut world = World::new();
-
-        let id = EntityBuilder::new()
-            .set(a(), "Foo".to_string())
-            .set(b(), 5)
-            .spawn(&mut world);
-
-        let mut prev_count: i32 = 0;
-        let system_a = System::builder().with(Query::new(a())).build(
-            move |mut a: PreparedQuery<Component<String>>| {
-                let count = a.iter().count() as i32;
-
-                eprintln!("Change: {prev_count} -> {count}");
-                prev_count = count;
-            },
-        );
-
-        let system_b = System::builder().with(Query::new(b())).build(
-            move |mut query: PreparedQuery<Component<i32>>| -> Result<()> {
-                let item: &i32 = query.get(id)?;
-                eprintln!("Item: {item}");
-
-                Ok(())
-            },
-        );
-
-        let mut schedule = Schedule::new();
-        schedule.with_system(system_a).with_system(system_b);
-
-        schedule.execute_seq(&mut world).unwrap();
-
-        world.despawn(id).unwrap();
-        let result: eyre::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
-
-        eprintln!("{result:?}");
-        assert!(result.is_err());
+        // component! {
+        //     a: String,
+        //     b: i32,
+        // };
+        //
+        // let mut world = World::new();
+        //
+        // let id = EntityBuilder::new()
+        //     .set(a(), "Foo".to_string())
+        //     .set(b(), 5)
+        //     .spawn(&mut world);
+        //
+        // let mut prev_count: i32 = 0;
+        // let system_a = System::builder().with(Query::new(a())).build(
+        //     move |mut a: PreparedQuery<Component<String>>| {
+        //         let count = a.iter().count() as i32;
+        //
+        //         eprintln!("Change: {prev_count} -> {count}");
+        //         prev_count = count;
+        //     },
+        // );
+        //
+        // let system_b = System::builder().with(Query::new(b())).build(
+        //     move |mut query: PreparedQuery<Component<i32>>| -> Result<()> {
+        //         let item: &i32 = query.get(id)?;
+        //         eprintln!("Item: {item}");
+        //
+        //         Ok(())
+        //     },
+        // );
+        //
+        // let mut schedule = Schedule::new();
+        // schedule.with_system(system_a).with_system(system_b);
+        //
+        // schedule.execute_seq(&mut world).unwrap();
+        //
+        // world.despawn(id).unwrap();
+        // let result: eyre::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
+        //
+        // eprintln!("{result:?}");
+        // assert!(result.is_err());
     }
 }
