@@ -79,8 +79,8 @@ impl<'a> SystemContext<'a> {
 
     /// Access the world
     pub fn world(
-        &'a self,
-    ) -> std::result::Result<AtomicRef<&'a mut World>, atomic_refcell::BorrowError> {
+        &self,
+    ) -> std::result::Result<AtomicRef<'_, &'a mut World>, atomic_refcell::BorrowError> {
         self.world.try_borrow()
     }
 
