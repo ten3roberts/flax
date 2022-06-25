@@ -24,29 +24,29 @@ impl SystemBuilder<()> {
 }
 
 impl<T> SystemBuilder<T> {
-    /// Add a new query to the system
-    pub fn with<S>(self, other: S) -> SystemBuilder<T::PushRight>
-    where
-        S: WorldAccess + for<'x, 'y> SystemData<'x, 'y>,
-        T: TupleCombine<S>,
-    {
-        SystemBuilder {
-            data: self.data.push_right(other),
-        }
-    }
+    // Add a new query to the system
+    // pub fn with<S>(self, other: S) -> SystemBuilder<T::PushRight>
+    // where
+    //     S: WorldAccess + for<'x, 'y, 'z> SystemData<'x, 'y>,
+    //     T: TupleCombine<S>,
+    // {
+    //     SystemBuilder {
+    //         data: self.data.push_right(other),
+    //     }
+    // }
 
-    pub fn build<'w, F, E>(self, func: F) -> System<T, F, E>
-    where
-        F: SystemFn<'w, T, E>,
-        E: 'static,
-        T: for<'x> SystemData<'x, 'w>,
-    {
-        System {
-            data: self.data,
-            _marker: PhantomData,
-            func,
-        }
-    }
+    // pub fn build<'w, F, E>(self, func: F) -> System<T, F, E>
+    // where
+    //     F: SystemFn<'w, T, E>,
+    //     E: 'static,
+    //     T: for<'x, 'y> SystemData<'x, 'y>,
+    // {
+    //     System {
+    //         data: self.data,
+    //         _marker: PhantomData,
+    //         func,
+    //     }
+    // }
 }
 
 /// Holds the data and an inner system satisfying all dependencies
@@ -62,35 +62,35 @@ impl System<(), (), ()> {
     }
 }
 
-impl<'w, T, F, E> SystemFn<'w, (), SystemResult<()>> for System<T, F, Result<(), E>>
-where
-    F: SystemFn<'w, T, Result<(), E>>,
-    E: Into<eyre::Report> + 'static,
-    T: for<'x> SystemData<'x, 'w>,
-{
-    fn execute<'a>(&'w mut self, ctx: &'w SystemContext, _: &'w mut ()) -> SystemResult<()> {
-        todo!()
-        // match self.func.execute(ctx, &mut self.data) {
-        //     Ok(()) => Ok(()),
-        //     Err(e) => Err(SystemError {
-        //         name: None,
-        //         report: e.into(),
-        //     }),
-        // }
-    }
-}
-
-impl<'w, T, F> SystemFn<'w, (), SystemResult<()>> for System<T, F, ()>
-where
-    F: SystemFn<'w, T, ()>,
-    T: for<'x> SystemData<'x, 'w>,
-{
-    fn execute<'a>(&'w mut self, ctx: &'w SystemContext, _: &'w mut ()) -> SystemResult<()> {
-        // self.func.execute(ctx, &mut self.data);
-        Ok(())
-    }
-}
-
+// impl<'w, T, F, E> SystemFn<'w, (), SystemResult<()>> for System<T, F, Result<(), E>>
+// where
+//     F: SystemFn<'w, T, Result<(), E>>,
+//     E: Into<eyre::Report> + 'static,
+//     T: for<'x, 'y> SystemData<'x, 'y>,
+// {
+//     fn execute<'a>(&'w mut self, ctx: &'w SystemContext, _: &'w mut ()) -> SystemResult<()> {
+//         todo!()
+//         // match self.func.execute(ctx, &mut self.data) {
+//         //     Ok(()) => Ok(()),
+//         //     Err(e) => Err(SystemError {
+//         //         name: None,
+//         //         report: e.into(),
+//         //     }),
+//         // }
+//     }
+// }
+//
+// impl<'w, T, F> SystemFn<'w, (), SystemResult<()>> for System<T, F, ()>
+// where
+//     F: SystemFn<'w, T, ()>,
+//     T: for<'x, 'y> SystemData<'x, 'y>,
+// {
+//     fn execute<'a>(&'w mut self, ctx: &'w SystemContext, _: &'w mut ()) -> SystemResult<()> {
+//         // self.func.execute(ctx, &mut self.data);
+//         Ok(())
+//     }
+// }
+//
 #[derive(Debug, Clone)]
 pub enum Access {
     ArchetypeStorage {
@@ -106,13 +106,13 @@ pub struct BoxedSystem {
 }
 
 impl BoxedSystem {
-    pub fn new(
-        system: impl for<'x> SystemFn<'x, (), SystemResult<()>> + Send + Sync + 'static,
-    ) -> Self {
-        Self {
-            system: Box::new(system),
-        }
-    }
+    // pub fn new(
+    //     system: impl for<'x> SystemFn<'x, (), SystemResult<()>> + Send + Sync + 'static,
+    // ) -> Self {
+    //     Self {
+    //         system: Box::new(system),
+    //     }
+    // }
 
     pub fn execute(&mut self, ctx: &SystemContext) -> SystemResult<()> {
         // self.system.execute(ctx, &mut ());
@@ -120,14 +120,14 @@ impl BoxedSystem {
     }
 }
 
-impl<T> From<T> for BoxedSystem
-where
-    T: for<'x> SystemFn<'x, (), SystemResult<()>> + Send + Sync + 'static,
-{
-    fn from(system: T) -> Self {
-        Self::new(system)
-    }
-}
+// impl<T> From<T> for BoxedSystem
+// where
+//     T: for<'x> SystemFn<'x, (), SystemResult<()>> + Send + Sync + 'static,
+// {
+//     fn from(system: T) -> Self {
+//         Self::new(system)
+//     }
+// }
 
 #[cfg(test)]
 mod test {

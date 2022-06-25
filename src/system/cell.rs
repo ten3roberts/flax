@@ -86,7 +86,7 @@ impl<'a> SystemContext<'a> {
 
     /// Access the world mutably
     pub fn world_mut(
-        &'a mut self,
+        &self,
     ) -> std::result::Result<AtomicRefMut<&'a mut World>, atomic_refcell::BorrowMutError> {
         self.world.try_borrow_mut()
     }
