@@ -20,7 +20,7 @@ pub trait SystemFn<'w, Args, Ret>
 where
     Ret: 'static,
 {
-    fn execute(&mut self, ctx: &SystemContext<'w>, data: &mut Args) -> Ret;
+    fn execute(&mut self, ctx: &'w SystemContext<'w>, data: &'w mut Args) -> Ret;
 }
 
 macro_rules! tuple_impl {
@@ -83,16 +83,23 @@ macro_rules! tuple_impl {
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
 
-pub trait SystemData<'init, 'ctx, 'w> {
-    type Init;
-    type Data;
-    /// Initialize and fetch data from the system execution context
-    fn init(ctx: &'ctx SystemContext<'w>) -> Self::Init;
-    /// Bind the data to a value passed into the system.
-    ///
-    /// The two stage process is required to infer an appropriate lifetime for
-    /// the `AtomicRef` from the context, and the reference held within
-    fn bind(&mut self, init: &'init mut Self::Init) -> Self::Data;
+// pub trait SystemData<'init, 'ctx, 'w> {
+//     type Init;
+//     /// Initialize and fetch data from the system execution context
+//     fn init(ctx: &'ctx SystemContext<'w>) -> Self::Init;
+// }
+
+/// Describes data needed for a system execution which can construct itself from
+/// a guard returned by the system context.
+pub trait SystemData<'a> {
+    type Output;
+    fn bind(&'a mut self) -> Self::Output;
+}
+
+/// Fetches the appropriate guards from a system context
+pub trait SystemDataInit<'a> {
+    type Output;
+    fn init(&'a mut self, ctx: &'a SystemContext<'a>) -> Self::Output;
 }
 
 struct Write<T>(PhantomData<T>);
@@ -103,28 +110,28 @@ impl<T> Write<T> {
     }
 }
 
-impl<'init, 'ctx, 'w: 'ctx> SystemData<'init, 'ctx, 'w> for Write<World> {
-    type Init = AtomicRefMut<'ctx, &'w mut World>;
+impl<'a, 'w> SystemData<'a> for AtomicRefMut<'w, &'w mut World> {
+    type Output = &'a mut World;
 
-    type Data = &'init mut World;
-
-    fn init(ctx: &'ctx SystemContext<'w>) -> Self::Init {
-        ctx.world_mut().expect("Failed to borrow world as mutable")
+    fn bind(&'a mut self) -> Self::Output {
+        &mut ***self
     }
+}
 
-    fn bind(&mut self, init: &mut Self::Init) -> Self::Data {
-        // **init
-        todo!()
+impl<'a> SystemDataInit<'a> for Write<World> {
+    type Output = AtomicRefMut<'a, &'a mut World>;
+    fn init(&'a mut self, ctx: &'a SystemContext<'a>) -> Self::Output {
+        ctx.world_mut().unwrap()
     }
 }
 
 impl<'w, F> SystemFn<'w, Write<World>, ()> for F
 where
-    F: FnMut(&mut World),
+    F: for<'x> FnMut(&'x mut World),
 {
-    fn execute(&mut self, ctx: &SystemContext<'w>, data: &mut Write<World>) {
-        let mut init = <Write<World>>::init(ctx);
-        let data = data.bind(&mut init);
+    fn execute(&mut self, ctx: &'w SystemContext<'w>, data: &'w mut Write<World>) {
+        let mut init = data.init(ctx);
+        let data = init.bind();
         (self)(data)
     }
 }
