@@ -173,6 +173,40 @@ where
             .collect_vec()
     }
 }
+
+// #[doc(hidden)]
+// pub struct QueryInitData<'a, Q, F> {
+//     query: &'a mut Query<Q, F>,
+//     world: AtomicRef<'a, &'a mut World>,
+// }
+//
+// impl<'a, Q, F> SystemData<'a> for QueryInitData<'a, Q, F>
+// where
+//     Q: for<'x> Fetch<'x>,
+//     F: for<'x, 'y> Filter<'x, 'y>,
+// {
+//     type Output = PreparedQuery<'a, Q, F>;
+//
+//     fn bind(&'a mut self) -> Self::Output {
+//         self.query.prepare(&*self.world)
+//     }
+// }
+//
+// impl<'a, Q, F> SystemDataInit<'a> for Query<Q, F>
+// where
+//     Q: 'a,
+//     F: 'a,
+// {
+//     type Output = QueryInitData<'a, Q, F>;
+//
+//     fn init(&'a mut self, ctx: &'a SystemContext<'a>) -> Self::Output {
+//         QueryInitData {
+//             world: ctx.world().expect("Failed to borrow world for query"),
+//             query: self,
+//         }
+//     }
+// }
+
 //
 // impl<'init, 'w, Q, F> SystemData<'init, 'w> for Query<Q, F>
 // where

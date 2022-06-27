@@ -1,7 +1,9 @@
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+};
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
-use thiserror::private::PathAsDisplay;
 
 use crate::World;
 
@@ -89,58 +91,76 @@ macro_rules! tuple_impl {
 //     fn init(ctx: &'ctx SystemContext<'w>) -> Self::Init;
 // }
 
-/// Describes data needed for a system execution which can construct itself from
-/// a guard returned by the system context.
+/// Describes a type which can fetch assocated Data from the system context and
+/// provide it to the system.
 pub trait SystemData<'a> {
-    type Output;
-    fn bind(&'a mut self) -> Self::Output;
+    type Data;
+    fn get(&mut self, ctx: &'a SystemContext<'a>) -> Self::Data;
 }
 
-/// Fetches the appropriate guards from a system context
-pub trait SystemDataInit<'a> {
-    type Output;
-    fn init(&'a mut self, ctx: &'a SystemContext<'a>) -> Self::Output;
+pub struct Writable<T>(PhantomData<T>);
+pub struct Write<'a, T>(AtomicRefMut<'a, &'a mut T>);
+#[derive(Debug)]
+pub struct Read<'a, T>(AtomicRef<'a, &'a mut T>);
+
+impl<'a, T> Deref for Read<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
 }
 
-struct Write<T>(PhantomData<T>);
+impl<'a, T> Deref for Write<'a, T> {
+    type Target = &'a mut T;
 
-impl<T> Write<T> {
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl<'a, T> DerefMut for Write<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.deref_mut()
+    }
+}
+
+impl<T> Writable<T> {
     fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<'a, 'w> SystemData<'a> for AtomicRefMut<'w, &'w mut World> {
-    type Output = &'a mut World;
+impl<'a> SystemData<'a> for Writable<World> {
+    type Data = Write<'a, World>;
 
-    fn bind(&'a mut self) -> Self::Output {
-        &mut ***self
+    fn get(&mut self, ctx: &'a SystemContext<'a>) -> Self::Data {
+        Write(ctx.world_mut().expect("Failed to borrow world mutably"))
     }
 }
 
-impl<'a> SystemDataInit<'a> for Write<World> {
-    type Output = AtomicRefMut<'a, &'a mut World>;
-    fn init(&'a mut self, ctx: &'a SystemContext<'a>) -> Self::Output {
-        ctx.world_mut().unwrap()
-    }
-}
-
-impl<'w, F> SystemFn<'w, Write<World>, ()> for F
+impl<'w, Args, F> SystemFn<'w, Args, ()> for F
 where
-    F: for<'x> FnMut(&'x mut World),
+    Args: for<'x> SystemData<'x>,
+    F: FnMut(<Args as SystemData>::Data),
 {
-    fn execute(&mut self, ctx: &'w SystemContext<'w>, data: &'w mut Write<World>) {
-        let mut init = data.init(ctx);
-        let data = init.bind();
+    fn execute(&mut self, ctx: &'w SystemContext<'w>, data: &'w mut Args) {
+        let data = data.get(ctx);
         (self)(data)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{system::SystemContext, CommandBuffer, World};
 
-    use super::{SystemFn, Write};
+    use crate::{system::SystemContext, CommandBuffer, Entity, World};
+
+    use super::{SystemFn, Writable, Write};
+
+    component! {
+        name: String,
+        health: f32,
+    }
 
     #[test]
     fn system_fn() {
@@ -148,10 +168,20 @@ mod test {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(&mut world, &mut cmd);
 
-        fn func(world: &mut World) {}
-        // let mut func = Box::new(func);
-        let mut func = &mut func;
+        let mut spawner = |mut w: Write<_>| {
+            Entity::builder()
+                .set(name(), "Neo".to_string())
+                .set(health(), 90.0)
+                .spawn(*w);
 
-        // (func).execute(&ctx, &mut (Write::<World>::new(),))
+            Entity::builder()
+                .set(name(), "Trinity".to_string())
+                .set(health(), 85.0)
+                .spawn(*w);
+        };
+
+        let mut func = &mut spawner;
+
+        (func).execute(&ctx, &mut Writable::<World>::new())
     }
 }
