@@ -2,6 +2,8 @@ mod iter;
 mod prepared;
 mod view;
 
+use std::{fmt::Debug, ops::Deref};
+
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
@@ -174,57 +176,38 @@ where
     }
 }
 
-// #[doc(hidden)]
-// pub struct QueryInitData<'a, Q, F> {
-//     query: &'a mut Query<Q, F>,
-//     world: AtomicRef<'a, &'a mut World>,
-// }
-//
-// impl<'a, Q, F> SystemData<'a> for QueryInitData<'a, Q, F>
-// where
-//     Q: for<'x> Fetch<'x>,
-//     F: for<'x, 'y> Filter<'x, 'y>,
-// {
-//     type Output = PreparedQuery<'a, Q, F>;
-//
-//     fn bind(&'a mut self) -> Self::Output {
-//         self.query.prepare(&*self.world)
-//     }
-// }
-//
-// impl<'a, Q, F> SystemDataInit<'a> for Query<Q, F>
-// where
-//     Q: 'a,
-//     F: 'a,
-// {
-//     type Output = QueryInitData<'a, Q, F>;
-//
-//     fn init(&'a mut self, ctx: &'a SystemContext<'a>) -> Self::Output {
-//         QueryInitData {
-//             world: ctx.world().expect("Failed to borrow world for query"),
-//             query: self,
-//         }
-//     }
-// }
+/// Provides a query and a borrow of the world during system execution
+pub struct QueryData<'a, Q, F = All> {
+    world: AtomicRef<'a, &'a mut World>,
+    query: &'a mut Query<Q, F>,
+}
 
-//
-// impl<'init, 'w, Q, F> SystemData<'init, 'w> for Query<Q, F>
-// where
-//     Q: for<'x> Fetch<'x> + 'static,
-//     F: for<'x, 'y> Filter<'x, 'y> + 'static,
-// {
-//     type Init = AtomicRef<'w, &'w mut World>;
-//
-//     type Data = PreparedQuery<'init, Q, F>;
-//
-//     fn init(&self, ctx: &'w SystemContext) -> Self::Init {
-//         let borrow = ctx.world().expect("Failed to borrow world for query");
-//         borrow
-//     }
-//
-//     fn bind(&mut self, init: &'init Self::Init) -> Self::Data {
-//         let borrow = &***init;
-//
-//         self.prepare(borrow)
-//     }
-// }
+impl<'a, Q, F> SystemData<'a> for Query<Q, F>
+where
+    Q: Debug + 'a,
+    F: Debug + 'a,
+{
+    type Data = QueryData<'a, Q, F>;
+
+    fn get(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data> {
+        let world = ctx
+            .world()
+            .map_err(|_| eyre::eyre!(format!("Failed to borrow world for query: {:?}", self)))?;
+
+        Ok(QueryData { world, query: self })
+    }
+}
+
+impl<'a, Q, F> QueryData<'a, Q, F>
+where
+    for<'x> Q: Fetch<'x>,
+    for<'x, 'y> F: Filter<'x, 'y>,
+{
+    /// Prepare the query.
+    ///
+    /// This will borrow all required archetypes for the duration of the
+    /// `PreparedQuery`.
+    pub fn prepare<'w>(&'w mut self) -> PreparedQuery<'w, Q, F> {
+        self.query.prepare(&self.world)
+    }
+}
