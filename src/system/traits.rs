@@ -4,6 +4,7 @@ use std::{
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
+use eyre::eyre;
 
 use crate::World;
 
@@ -22,62 +23,54 @@ pub trait SystemFn<'w, Args, Ret>
 where
     Ret: 'static,
 {
-    fn execute(&mut self, ctx: &'w SystemContext<'w>, data: &'w mut Args) -> Ret;
+    fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut Args) -> Ret;
 }
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         // Fallible
-        // impl<'w, Func, $($ty,)*T, Err> SystemFn<'w, ($($ty,)*), Result<T, Err>> for Func
-        // where
-        //     Func: Fn($(<$ty as SystemData<'w>>::Prepared,)*) -> Result<T, Err>,
-        //     $($ty: SystemData<'w>,)*
-        // {
-        //     fn execute<'a>(&mut self, world: &'w World, data: &'w mut ($($ty,)*)) -> Result<T, Err> {
-        //         let _prepared = data.prepare_data(world);
-        //         (self)($((_prepared.$idx),)*).into()
-        //     }
-        // }
-
-        // Infallible
-        impl<'w, Func, $($ty,)* Ret> SystemFn<'w, ($($ty,)*), Ret> for Func
+        impl<'w, Func, $($ty,)* T> SystemFn<'w, ($($ty,)*), eyre::Result<T>> for Func
         where
-            Func: for<'x, 'y> FnMut($(<$ty as SystemData<'x, 'y, 'w>>::Data,)*) -> Ret,
-            Ret: 'static,
-            $($ty: for<'x> SystemData<'x, 'w>,)*
+            Func: FnMut($(<$ty as SystemData>::Data,)*) -> eyre::Result<T>,
+            T: 'static,
+            $($ty: for<'x> SystemData<'x>,)*
         {
-            fn execute<'a>(&mut self, world: &'w SystemContext, data: &'w mut ($($ty,)*)) -> Ret {
-                let mut init = <($($ty,)*) as SystemData>::init(world);
-                {
-                    let data = data.bind(&mut init);
-                    (self)($((data.$idx),)*);
-                }
-
-                todo!()
+            fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut ($($ty,)*)) -> eyre::Result<T> {
+                let _data = data.get(ctx)?;
+                (self)($((_data.$idx),)*)
             }
         }
 
-        impl<'init, 'w, $($ty,)*> SystemData<'init, 'w> for ($($ty,)*)
+        // Infallible
+        impl<'w, Func, $($ty,)*> SystemFn<'w, ($($ty,)*), ()> for Func
         where
-            $($ty: SystemData<'init, 'w>,)*
+            Func: FnMut($(<$ty as SystemData>::Data,)*),
+            $($ty: for<'x> SystemData<'x>,)*
         {
-            type Init = ($(<$ty as SystemData<'init, 'w>>::Init,)*);
-            type Data = ($(<$ty as SystemData<'init, 'w>>::Data,)*);
-            fn init(_ctx: &'w SystemContext) -> Self::Init {
-                ($(<$ty>::init(_ctx),)*)
+            fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut ($($ty,)*)) {
+                let _data = data.get(ctx).expect("Failed to get system data from context");
+                (self)($((_data.$idx),)*)
             }
+        }
+        impl<'w, $($ty,)*> SystemData<'w> for ($($ty,)*)
+        where
+            $($ty: SystemData<'w>,)*
+        {
+            type Data = ($(<$ty as SystemData<'w>>::Data,)*);
 
-            fn bind(&mut self, init: &'init mut Self::Init) -> Self::Data {
-                ($((self.$idx).bind(&mut init.$idx),)*)
+            fn get(&'w mut self, _ctx: &'w SystemContext<'w>) -> eyre::Result<Self::Data> {
+                Ok(
+                    ($((self.$idx).get(_ctx)?,)*)
+                )
             }
         }
     };
 }
 
-// tuple_impl! {}
-// tuple_impl! { 0 => A }
-// tuple_impl! { 0 => A, 1 => B }
-// tuple_impl! { 0 => A, 1 => B, 2 => C }
+tuple_impl! {}
+tuple_impl! { 0 => A }
+tuple_impl! { 0 => A, 1 => B }
+tuple_impl! { 0 => A, 1 => B, 2 => C }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
@@ -95,7 +88,7 @@ macro_rules! tuple_impl {
 /// provide it to the system.
 pub trait SystemData<'a> {
     type Data;
-    fn get(&mut self, ctx: &'a SystemContext<'a>) -> Self::Data;
+    fn get(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data>;
 }
 
 pub struct Writable<T>(PhantomData<T>);
@@ -134,26 +127,32 @@ impl<T> Writable<T> {
 impl<'a> SystemData<'a> for Writable<World> {
     type Data = Write<'a, World>;
 
-    fn get(&mut self, ctx: &'a SystemContext<'a>) -> Self::Data {
-        Write(ctx.world_mut().expect("Failed to borrow world mutably"))
+    fn get(&mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data> {
+        Ok(Write(
+            ctx.world_mut()
+                .map_err(|_| eyre!("Failed to borrow world mutably"))?,
+        ))
     }
 }
 
-impl<'w, Args, F> SystemFn<'w, Args, ()> for F
-where
-    Args: for<'x> SystemData<'x>,
-    F: FnMut(<Args as SystemData>::Data),
-{
-    fn execute(&mut self, ctx: &'w SystemContext<'w>, data: &'w mut Args) {
-        let data = data.get(ctx);
-        (self)(data)
-    }
-}
+// impl<'w, Args, F> SystemFn<'w, Args, eyre::Result<()>> for F
+// where
+//     Args: for<'x> SystemData<'x>,
+//     F: FnMut(<Args as SystemData>::Data),
+// {
+//     fn execute(&mut self, ctx: &'w SystemContext<'w>, data: &'w mut Args) -> eyre::Result<()> {
+//         let data = data.get(ctx)?;
+//         (self)(data);
+//         Ok(())
+//     }
+// }
 
 #[cfg(test)]
 mod test {
 
-    use crate::{system::SystemContext, CommandBuffer, Entity, World};
+    use itertools::Itertools;
+
+    use crate::{system::SystemContext, CommandBuffer, Entity, Query, QueryData, World};
 
     use super::{SystemFn, Writable, Write};
 
@@ -163,7 +162,7 @@ mod test {
     }
 
     #[test]
-    fn system_fn() {
+    fn system_fn() -> eyre::Result<()> {
         let mut world = World::new();
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(&mut world, &mut cmd);
@@ -180,8 +179,20 @@ mod test {
                 .spawn(*w);
         };
 
-        let mut func = &mut spawner;
+        let mut reader = |mut q: QueryData<_, _>| {
+            let names = q.prepare().iter().cloned().sorted().collect_vec();
 
-        (func).execute(&ctx, &mut Writable::<World>::new())
+            assert_eq!(names, ["Neo", "Trinity"]);
+        };
+
+        let data = &mut (Writable::<World>::new(),);
+        let mut spawner = &mut spawner;
+        let mut reader = &mut reader;
+
+        (spawner).execute(&*&ctx, data);
+
+        let data = &mut (Query::new(name()),);
+        (reader).execute(&*&ctx, data);
+        Ok(())
     }
 }
