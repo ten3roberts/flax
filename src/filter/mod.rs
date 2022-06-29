@@ -489,6 +489,7 @@ impl<'this, 'a> Filter<'this, 'a> for Nothing {
     }
 }
 
+/// Filter all entities
 #[derive(Debug, Clone)]
 pub struct All;
 

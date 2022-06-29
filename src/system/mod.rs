@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use crate::{
     error::{SystemError, SystemResult},
     util::TupleCombine,
-    ArchetypeId, ComponentId,
+    ArchetypeId, Component, ComponentId, Query, QueryData,
 };
 
 pub use cell::*;
@@ -23,53 +23,94 @@ impl SystemBuilder<()> {
     }
 }
 
-impl<T> SystemBuilder<T> {
+impl<Args> SystemBuilder<Args> {
     /// Add a new query to the system
-    pub fn with<S>(self, other: S) -> SystemBuilder<T::PushRight>
+    pub fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight>
     where
         S: WorldAccess + for<'x> SystemData<'x>,
-        T: TupleCombine<S>,
+        Args: TupleCombine<S>,
     {
         SystemBuilder {
             data: self.data.push_right(other),
         }
     }
 
-    pub fn build<'w, F, E>(self, func: F) -> System<T, F, E>
+    pub fn build<F, Ret>(self, func: F) -> System<F, Args, Ret>
     where
-        F: SystemFn<'w, T, E>,
-        E: 'static,
-        T: for<'x> SystemData<'x>,
+        Args: for<'a> SystemData<'a> + 'static,
+        F: for<'a> SystemFn<
+            'a,
+            (&'a SystemContext<'a>, &'a mut Args),
+            <Args as SystemData<'a>>::Data,
+            Ret,
+        >,
     {
-        System {
-            data: self.data,
-            _marker: PhantomData,
-            func,
-        }
+        System::new(func, self.data)
     }
 }
 
 /// Holds the data and an inner system satisfying all dependencies
-pub struct System<D, F, R> {
-    data: D,
+pub struct System<F, Args, Ret> {
+    data: Args,
     func: F,
-    _marker: PhantomData<R>,
+    _marker: PhantomData<Ret>,
 }
 
+impl<F, Args, Ret> System<F, Args, Ret>
+where
+    for<'a> Args: SystemData<'a> + 'a,
+    F: for<'a> SystemFn<
+        'a,
+        (&'a SystemContext<'a>, &'a mut Args),
+        <Args as SystemData<'a>>::Data,
+        Ret,
+    >,
+{
+    pub fn new(func: F, data: Args) -> Self {
+        Self {
+            data,
+            func,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Convert to a type erased Send + Sync system
+    pub fn boxed(self) -> BoxedSystem
+    where
+        Args: Send + Sync + 'static,
+        Ret: Send + Sync + 'static,
+        F: Send + Sync + 'static,
+        Self: for<'a> SystemFn<'a, &'a SystemContext<'a>, (), SystemResult<()>>,
+    {
+        BoxedSystem::new(self)
+    }
+}
 impl System<(), (), ()> {
     pub fn builder() -> SystemBuilder<()> {
         SystemBuilder::new()
     }
 }
 
-impl<'w, T, F, E> SystemFn<'w, (), SystemResult<()>> for System<T, F, Result<(), E>>
+impl<'a, F, Args> SystemFn<'a, &'a SystemContext<'a>, (), SystemResult<()>> for System<F, Args, ()>
 where
-    F: SystemFn<'w, T, Result<(), E>>,
-    E: Into<eyre::Report> + 'static,
-    T: for<'x> SystemData<'x>,
+    Args: SystemData<'a> + 'a,
+    F: SystemFn<'a, (&'a SystemContext<'a>, &'a mut Args), Args::Data, ()>,
 {
-    fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut ()) -> SystemResult<()> {
-        match self.func.execute(ctx, &mut self.data) {
+    fn execute(&'a mut self, ctx: &'a SystemContext<'a>) -> SystemResult<()> {
+        self.func.execute((ctx, &mut self.data));
+        Ok(())
+    }
+}
+
+impl<'a, F, Args, E> SystemFn<'a, &'a SystemContext<'a>, (), SystemResult<()>>
+    for System<F, Args, std::result::Result<(), E>>
+where
+    Args: SystemData<'a> + 'a,
+    F: SystemFn<'a, (&'a SystemContext<'a>, &'a mut Args), Args::Data, std::result::Result<(), E>>,
+    E: Into<eyre::Report>,
+{
+    fn execute(&'a mut self, ctx: &'a SystemContext<'a>) -> SystemResult<()> {
+        match self.func.execute((ctx, &mut self.data)) {
             Ok(()) => Ok(()),
             Err(e) => Err(SystemError {
                 name: None,
@@ -79,16 +120,37 @@ where
     }
 }
 
-impl<'w, T, F> SystemFn<'w, (), SystemResult<()>> for System<T, F, ()>
-where
-    F: SystemFn<'w, T, ()>,
-    T: for<'x> SystemData<'x>,
-{
-    fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut ()) -> SystemResult<()> {
-        self.func.execute(ctx, &mut self.data);
-        Ok(())
-    }
-}
+// impl<'w, Data, F, Ty> SystemFn<'w, ()> for System<Data, F, Result<(), Ty>>
+// where
+//     F: SystemFn<'w, Ty, Data = Data, Output = eyre::Result<()>>,
+//     Ty: Into<eyre::Report> + 'static,
+//     Data: for<'x> SystemData<'x>,
+// {
+//     type Data = ();
+//     type Output = SystemResult<()>;
+//     fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut ()) -> SystemResult<()> {
+//         match self.func.execute(ctx, &mut self.data) {
+//             Ok(()) => Ok(()),
+//             Err(e) => Err(SystemError {
+//                 name: None,
+//                 report: e.into(),
+//             }),
+//         }
+//     }
+// }
+
+// impl<'w, F, D> SystemFn<'w, D> for F
+// where
+//     F: FnMut(D),
+// {
+//     type Data = (Query<Component<String>>,);
+
+//     type Output = eyre::Result<()>;
+
+//     fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut Self::Data) -> Self::Output {
+//         todo!()
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub enum Access {
@@ -99,30 +161,32 @@ pub enum Access {
     },
 }
 
-/// A sized system that is ready to execute on the world.
+/// A type erased system
 pub struct BoxedSystem {
-    system: Box<dyn for<'x> SystemFn<'x, (), SystemResult<()>> + Send + Sync>,
-    data: (),
+    system:
+        Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, (), SystemResult<()>> + Send + Sync>,
 }
 
 impl BoxedSystem {
     pub fn new(
-        system: impl for<'x> SystemFn<'x, (), SystemResult<()>> + Send + Sync + 'static,
+        system: impl for<'x> SystemFn<'x, &'x SystemContext<'x>, (), SystemResult<()>>
+            + Send
+            + Sync
+            + 'static,
     ) -> Self {
         Self {
             system: Box::new(system),
-            data: (),
         }
     }
 
     pub fn execute<'w>(&'w mut self, ctx: &'w SystemContext<'w>) -> SystemResult<()> {
-        self.system.execute(ctx, &mut self.data)
+        self.system.execute(ctx)
     }
 }
 
 impl<T> From<T> for BoxedSystem
 where
-    T: for<'x> SystemFn<'x, (), SystemResult<()>> + Send + Sync + 'static,
+    T: for<'x> SystemFn<'x, &'x SystemContext<'x>, (), SystemResult<()>> + Send + Sync + 'static,
 {
     fn from(system: T) -> Self {
         Self::new(system)
@@ -132,10 +196,7 @@ where
 #[cfg(test)]
 mod test {
 
-    use crate::{
-        error::Result, CommandBuffer, Component, EntityBuilder, PreparedQuery, Query, QueryData,
-        World,
-    };
+    use crate::{All, CommandBuffer, Component, EntityBuilder, Query, QueryData, World};
 
     use super::*;
 
@@ -153,13 +214,15 @@ mod test {
             .set(b(), 5)
             .spawn(&mut world);
 
-        let mut system: System<_, _, _> = System::builder()
+        let mut system = System::builder()
             .with(Query::new(a()))
             // .with(Query::new(b()))
-            .build(|mut a: QueryData<_, _>| assert_eq!(a.prepare().iter().count(), 1));
+            .build(|mut a: QueryData<Component<String>, All>| {
+                assert_eq!(a.prepare().iter().count(), 1)
+            });
 
         let mut fallible = System::builder().with(Query::new(b())).build(
-            |mut query: QueryData<Component<i32>>| -> eyre::Result<()> {
+            move |mut query: QueryData<Component<i32>>| -> eyre::Result<()> {
                 // Lock archetypes
                 let mut query = query.prepare();
                 let item: &i32 = query.get(id)?;
@@ -172,15 +235,15 @@ mod test {
         let mut cmd = CommandBuffer::new();
 
         let ctx = SystemContext::new(&mut world, &mut cmd);
-        let mut data = ();
-        system.execute(&ctx, &mut data).unwrap();
+        system.execute(&ctx).unwrap();
 
-        let mut data = ();
-        fallible.execute(&ctx, &mut data).unwrap();
+        fallible.execute(&ctx).unwrap();
 
         world.remove(id, b()).unwrap();
 
+        let mut boxed = fallible.boxed();
+
         let ctx = SystemContext::new(&mut world, &mut cmd);
-        assert!(fallible.execute(&ctx, &mut ()).is_err());
+        assert!(boxed.execute(&ctx).is_err());
     }
 }

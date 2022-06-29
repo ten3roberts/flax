@@ -123,6 +123,7 @@ pub use entity::{
 pub use fetch::*;
 pub use filter::*;
 pub use query::*;
+pub use system::*;
 pub use world::*;
 
 pub use error::Error;

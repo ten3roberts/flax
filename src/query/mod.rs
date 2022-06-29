@@ -25,7 +25,7 @@ pub use self::prepared::PreparedQuery;
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
 #[derive(Debug, Clone)]
-pub struct Query<Q, F> {
+pub struct Query<Q, F = All> {
     // The archetypes to visit
     archetypes: Vec<ArchetypeId>,
     filter: F,
@@ -207,6 +207,9 @@ where
     ///
     /// This will borrow all required archetypes for the duration of the
     /// `PreparedQuery`.
+    ///
+    /// The same query can be prepared multiple times, though not
+    /// simultaneously.
     pub fn prepare<'w>(&'w mut self) -> PreparedQuery<'w, Q, F> {
         self.query.prepare(&self.world)
     }
