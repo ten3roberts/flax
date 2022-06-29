@@ -16,42 +16,41 @@ pub trait WorldAccess {
     fn access(&mut self, world: &World) -> Vec<Access>;
 }
 
-/// Describes a type which can run on a set of system data.
-///
-/// Is implemented for functions up to an arity of 8
-pub trait SystemFn<'w, Args, Ret>
-where
-    Ret: 'static,
-{
-    fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut Args) -> Ret;
+/// Trait for any function `Fn(Args) -> Ret)` or similar which is callable with
+/// the provided context
+pub trait SystemFn<'a, Ctx, Args, Ret> {
+    fn execute(&'a mut self, ctx: Ctx) -> Ret;
+}
+
+// impl<'a, Func, A, Ret> SystemFn<(&'a SystemContext<'a>, &'a mut (A,)), A::Data, Ret> for Func
+// where
+//     A: SystemData<'a> + 'a,
+//     Func: FnMut(A::Data) -> Ret,
+// {
+//     fn execute(&mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut (A,))) -> Ret {
+//         let data = data.get(ctx).unwrap();
+//         (self)(data.0)
+//     }
+// }
+
+struct FnTy<T, U> {
+    _marker: PhantomData<(T, U)>,
 }
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         // Fallible
-        impl<'w, Func, $($ty,)* T> SystemFn<'w, ($($ty,)*), eyre::Result<T>> for Func
+        impl<'a, Func, Ret, $($ty,)* > SystemFn<'a, (&'a SystemContext<'a>, &'a mut ($($ty,)*)), ($($ty::Data,)*), Ret> for Func
         where
-            Func: FnMut($(<$ty as SystemData>::Data,)*) -> eyre::Result<T>,
-            T: 'static,
-            $($ty: for<'x> SystemData<'x>,)*
+            Func: FnMut($($ty::Data,)*) -> Ret,
+            $($ty: SystemData<'a>,)*
         {
-            fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut ($($ty,)*)) -> eyre::Result<T> {
-                let _data = data.get(ctx)?;
+            fn execute(&mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut ($($ty,)*))) -> Ret {
+                let _data = data.get(ctx).expect("Failed to get system data");
                 (self)($((_data.$idx),)*)
             }
         }
 
-        // Infallible
-        impl<'w, Func, $($ty,)*> SystemFn<'w, ($($ty,)*), ()> for Func
-        where
-            Func: FnMut($(<$ty as SystemData>::Data,)*),
-            $($ty: for<'x> SystemData<'x>,)*
-        {
-            fn execute(&'w mut self, ctx: &'w SystemContext<'w>, data: &'w mut ($($ty,)*)) {
-                let _data = data.get(ctx).expect("Failed to get system data from context");
-                (self)($((_data.$idx),)*)
-            }
-        }
         impl<'w, $($ty,)*> SystemData<'w> for ($($ty,)*)
         where
             $($ty: SystemData<'w>,)*
@@ -71,7 +70,7 @@ tuple_impl! {}
 tuple_impl! { 0 => A }
 tuple_impl! { 0 => A, 1 => B }
 tuple_impl! { 0 => A, 1 => B, 2 => C }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
@@ -152,9 +151,9 @@ mod test {
 
     use itertools::Itertools;
 
-    use crate::{system::SystemContext, CommandBuffer, Entity, Query, QueryData, World};
+    use crate::{system::SystemContext, CommandBuffer, Entity, Query, QueryData, SystemFn, World};
 
-    use super::{SystemFn, Writable, Write};
+    use super::{Writable, Write};
 
     component! {
         name: String,
@@ -186,13 +185,11 @@ mod test {
         };
 
         let data = &mut (Writable::<World>::new(),);
-        let mut spawner = &mut spawner;
-        let mut reader = &mut reader;
 
-        (spawner).execute(&*&ctx, data);
+        (spawner).execute((&ctx, data));
 
         let data = &mut (Query::new(name()),);
-        (reader).execute(&*&ctx, data);
+        (reader).execute((&ctx, data));
         Ok(())
     }
 }
