@@ -1,4 +1,5 @@
 use std::{
+    fmt::{self},
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
@@ -20,6 +21,8 @@ pub trait WorldAccess {
 /// the provided context
 pub trait SystemFn<'a, Ctx, Args, Ret> {
     fn execute(&'a mut self, ctx: Ctx) -> Ret;
+    /// Human friendly description of this system
+    fn describe(&self, f: &mut dyn fmt::Write);
 }
 
 // impl<'a, Func, A, Ret> SystemFn<(&'a SystemContext<'a>, &'a mut (A,)), A::Data, Ret> for Func
@@ -33,10 +36,6 @@ pub trait SystemFn<'a, Ctx, Args, Ret> {
 //     }
 // }
 
-struct FnTy<T, U> {
-    _marker: PhantomData<(T, U)>,
-}
-
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         // Fallible
@@ -48,6 +47,14 @@ macro_rules! tuple_impl {
             fn execute(&mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut ($($ty,)*))) -> Ret {
                 let _data = data.get(ctx).expect("Failed to get system data");
                 (self)($((_data.$idx),)*)
+            }
+
+            fn describe(&self, f: &mut dyn fmt::Write) {
+                write!(f, "|").unwrap();
+                $(
+                    write!(f, "{},", std::any::type_name::<$ty>()).unwrap();
+                )*
+                write!(f, "| -> {}", std::any::type_name::<Ret>()).unwrap();
             }
         }
 
@@ -71,9 +78,9 @@ tuple_impl! { 0 => A }
 tuple_impl! { 0 => A, 1 => B }
 tuple_impl! { 0 => A, 1 => B, 2 => C }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
 // tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
 
