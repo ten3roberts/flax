@@ -30,6 +30,10 @@ impl Schedule {
 
         Ok(())
     }
+
+    fn build_dependencies(&self) {
+        // self.systems.iter().enumerate().map(|(i, val)| {})
+    }
 }
 
 impl Default for Schedule {
