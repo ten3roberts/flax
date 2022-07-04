@@ -10,7 +10,7 @@ use itertools::Itertools;
 use crate::{
     archetype::ArchetypeId,
     fetch::Fetch,
-    system::{SystemContext, SystemData, WorldAccess},
+    system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
     All, And, Filter, PreparedFetch, World,
 };
@@ -158,7 +158,7 @@ where
     }
 }
 
-impl<Q, F> WorldAccess for Query<Q, F>
+impl<Q, F> SystemAccess for Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x, 'y> Filter<'x, 'y>,

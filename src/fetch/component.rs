@@ -4,7 +4,7 @@ use atomic_refcell::AtomicRefMut;
 
 use crate::{
     archetype::{Archetype, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
-    wildcard, ArchetypeId, Change, Component, ComponentValue,
+    wildcard, AccessKind, ArchetypeId, Change, Component, ComponentValue,
 };
 
 use super::*;
@@ -57,9 +57,11 @@ where
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
         if archetype.has(self.id()) {
-            vec![Access::ArchetypeStorage {
-                arch: id,
-                component: self.id(),
+            vec![Access {
+                kind: AccessKind::Archetype {
+                    id,
+                    component: self.id(),
+                },
                 mutable: false,
             }]
         } else {
@@ -103,9 +105,11 @@ where
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
         if archetype.has(self.0.id()) {
-            vec![Access::ArchetypeStorage {
-                arch: id,
-                component: self.0.id(),
+            vec![Access {
+                kind: AccessKind::Archetype {
+                    id,
+                    component: self.0.id(),
+                },
                 mutable: true,
             }]
         } else {
@@ -219,9 +223,11 @@ where
                 .components()
                 .filter(|v| v.id().strip_gen() == sub)
                 .skip(self.index)
-                .map(|v| Access::ArchetypeStorage {
-                    arch: id,
-                    component: v.id(),
+                .map(|v| Access {
+                    kind: AccessKind::Archetype {
+                        id,
+                        component: v.id(),
+                    },
                     mutable: false,
                 })
                 .next();

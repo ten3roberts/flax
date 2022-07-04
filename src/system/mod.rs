@@ -14,7 +14,7 @@ pub struct SystemBuilder<T> {
 }
 
 impl SystemBuilder<()> {
-    /// Creates a new empty system builders.
+    /// Creates a new empty system builder.
     pub fn new() -> Self {
         Self {
             data: (),
@@ -27,7 +27,7 @@ impl<Args> SystemBuilder<Args> {
     /// Add a new query to the system
     pub fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight>
     where
-        S: WorldAccess + for<'x> SystemData<'x>,
+        S: SystemAccess + for<'x> SystemData<'x>,
         Args: TupleCombine<S>,
     {
         SystemBuilder {
@@ -116,6 +116,10 @@ where
         }
         self.func.describe(f);
     }
+
+    fn access(&'a mut self, ctx: &'a SystemContext<'a>) -> Vec<Access> {
+        self.func.access((ctx, &mut self.data))
+    }
 }
 
 impl<'a, F, Args, E> SystemFn<'a, &'a SystemContext<'a>, (), eyre::Result<()>>
@@ -140,21 +144,68 @@ where
         }
         self.func.describe(f);
     }
+
+    fn access(&'a mut self, ctx: &'a SystemContext<'a>) -> Vec<Access> {
+        self.func.access((ctx, &mut self.data))
+    }
 }
 
-#[derive(Debug, Clone)]
-pub enum Access {
-    ArchetypeStorage {
-        arch: ArchetypeId,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccessKind {
+    /// Borrow a single component of an archetype
+    Archetype {
+        id: ArchetypeId,
         component: ComponentId,
-        mutable: bool,
     },
+    /// Borrow the whole world
+    World,
+    CommandBuffer,
+}
+
+impl AccessKind {
+    /// Returns `true` if the access kind is [`Archetype`].
+    ///
+    /// [`Archetype`]: AccessKind::Archetype
+    #[must_use]
+    pub fn is_archetype(&self) -> bool {
+        matches!(self, Self::Archetype { .. })
+    }
+
+    /// Returns `true` if the access kind is [`World`].
+    ///
+    /// [`World`]: AccessKind::World
+    #[must_use]
+    pub fn is_world(&self) -> bool {
+        matches!(self, Self::World)
+    }
+}
+#[derive(Debug, Clone)]
+pub struct Access {
+    pub kind: AccessKind,
+    pub mutable: bool,
+}
+
+impl Access {
+    /// Returns true it both accesses can coexist
+    pub fn is_compatible_with(&self, other: &Self) -> bool {
+        // Any access to the whole world breaks concurrency, sadly
+        if self.kind.is_archetype()
+            && other.kind.is_world()
+            && other.kind.is_archetype()
+            && self.kind.is_world()
+        {
+            false
+        } else if self.kind != other.kind {
+            true
+        } else {
+            self.mutable == false && other.mutable == false
+        }
+    }
 }
 
 /// A type erased system
 pub struct BoxedSystem {
-    system:
-        Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, (), eyre::Result<()>> + Send + Sync>,
+    inner: Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, (), eyre::Result<()>> + Send + Sync>,
 }
 
 impl BoxedSystem {
@@ -165,12 +216,20 @@ impl BoxedSystem {
             + 'static,
     ) -> Self {
         Self {
-            system: Box::new(system),
+            inner: Box::new(system),
         }
     }
 
-    pub fn execute<'w>(&'w mut self, ctx: &'w SystemContext<'w>) -> eyre::Result<()> {
-        self.system.execute(ctx)
+    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<()> {
+        self.inner.execute(ctx)
+    }
+
+    pub fn describe<'a>(&self, f: &mut dyn std::fmt::Write) {
+        self.inner.describe(f)
+    }
+
+    pub fn access<'a>(&'a mut self, ctx: &'a SystemContext<'a>) -> Vec<Access> {
+        self.inner.access(ctx)
     }
 }
 
@@ -238,8 +297,7 @@ mod test {
 
         let ctx = SystemContext::new(&mut world, &mut cmd);
         let res = boxed.execute(&ctx);
-        eprintln!("{:?}", res.unwrap_err());
-        todo!()
-        // assert!(res.is_err());
+        eprintln!("{:?}", res.as_ref().unwrap_err());
+        assert!(res.is_err());
     }
 }
