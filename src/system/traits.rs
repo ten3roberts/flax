@@ -1,5 +1,5 @@
 use std::{
-    fmt::{self},
+    fmt,
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
