@@ -2,7 +2,7 @@ mod iter;
 mod prepared;
 mod view;
 
-use std::{fmt::Debug, ops::Deref};
+use std::fmt::Debug;
 
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
