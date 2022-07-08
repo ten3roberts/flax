@@ -261,30 +261,24 @@ where
     }
 }
 
-pub struct QueryIter<'w, 'q, Q, F>
+pub struct QueryIter<'prep, 'q, 'w, Q, F>
 where
-    Q: Fetch<'w>,
+    Q: Fetch<'q, 'w>,
     F: Filter<'q, 'w>,
 {
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
     pub(crate) filter: &'q F,
-    pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
+    pub(crate) archetypes: IterMut<'prep, PreparedArchetype<'w, Q::Prepared>>,
     pub(crate) current: Option<Chunks<'q, Q::Prepared, F::Prepared>>,
 }
 
-impl<'w, 'q, Q, F> QueryIter<'w, 'q, Q, F>
+impl<'prep, 'w, 'q, Q, F> Iterator for QueryIter<'prep, 'q, 'w, Q, F>
 where
-    Q: Fetch<'w>,
+    Q: Fetch<'q, 'w>,
     F: Filter<'q, 'w>,
     'w: 'q,
-{
-}
-
-impl<'w, 'q, Q, F> Iterator for QueryIter<'w, 'q, Q, F>
-where
-    Q: Fetch<'w>,
-    F: Filter<'q, 'w>,
+    'q: 'prep,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
@@ -296,17 +290,17 @@ where
                 }
             }
 
-            let PreparedArchetype { arch, fetch, .. } = self.archetypes.next()?;
-            let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
+            // let PreparedArchetype { arch, fetch, .. } = self.archetypes.next()?;
+            // let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
 
-            let chunk = Chunks {
-                fetch,
-                filter,
-                new_tick: self.new_tick,
-                chunk: Default::default(),
-            };
+            // let chunk = Chunks {
+            //     fetch,
+            //     filter,
+            //     new_tick: self.new_tick,
+            //     chunk: Default::default(),
+            // };
 
-            self.current = Some(chunk);
+            // self.current = Some(chunk);
         }
     }
 }
