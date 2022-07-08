@@ -187,6 +187,10 @@ pub struct ComponentBuffer {
     storage: BufferStorage,
 }
 
+/// Since all components are Send + Sync, the componentbuffer is as well
+unsafe impl Send for ComponentBuffer {}
+unsafe impl Sync for ComponentBuffer {}
+
 impl ComponentBuffer {
     pub fn new() -> Self {
         Self::default()
