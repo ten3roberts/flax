@@ -174,7 +174,6 @@ impl<V> EntityStore<V> {
 
     #[inline]
     pub fn is_alive(&self, id: Entity) -> bool {
-        dbg!(id.generation(), self.slot(id.index()).unwrap().gen);
         let ns = self.namespace;
         self.slot(id.index())
             .filter(|v| ns == id.namespace() && v.gen == to_slot_gen(id.generation()))
@@ -189,10 +188,8 @@ impl<V> EntityStore<V> {
         let index = id.index();
 
         let next = self.free_head.take();
-        eprintln!("Removing index: {index}");
         let slot = self.slot_mut(index).unwrap();
 
-        eprintln!("id: {id}");
         slot.gen = slot.gen.wrapping_add(1);
 
         unsafe {

@@ -181,7 +181,6 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
         inner(i, items, deps, &mut visited, &mut result, 0)
     }
 
-    dbg!(&visited);
     let groups = result.into_iter().group_by(|v| match visited.get(v) {
         Some(VisitedState::Visited(depth)) => depth,
         _ => unreachable!(),
