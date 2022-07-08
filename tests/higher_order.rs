@@ -44,7 +44,7 @@ impl<const C: usize> Countdown<C> {
             std::cmp::Ordering::Less => false,
             std::cmp::Ordering::Equal => true,
             std::cmp::Ordering::Greater => {
-                eprintln!("Sir!");
+                eprintln!("Sire!");
                 self.0 = C;
                 true
             }
@@ -109,31 +109,39 @@ fn relations() {
 
     let mut world = World::new();
 
-    world.set(name(), debug(), DebugVisitor::new(name()));
+    world
+        .set(name(), debug(), DebugVisitor::new(name()))
+        .unwrap();
 
     let parent = EntityBuilder::new()
         .set(name(), "Jessica")
         .set(hobby(), "Reading")
         .spawn(&mut world);
 
-    world.set(
-        child_of(parent),
-        debug(),
-        DebugVisitor::new(child_of(parent)),
-    );
+    world
+        .set(
+            child_of(parent),
+            debug(),
+            DebugVisitor::new(child_of(parent)),
+        )
+        .unwrap();
 
     let parent2 = EntityBuilder::new()
         .set(name(), "Jack")
         .set(hobby(), "Crocheting")
         .spawn(&mut world);
 
-    world.set(
-        child_of(parent2),
-        debug(),
-        DebugVisitor::new(child_of(parent2)),
-    );
+    world
+        .set(
+            child_of(parent2),
+            debug(),
+            DebugVisitor::new(child_of(parent2)),
+        )
+        .unwrap();
 
-    world.set(hobby(), debug(), DebugVisitor::new(hobby()));
+    world
+        .set(hobby(), debug(), DebugVisitor::new(hobby()))
+        .unwrap();
 
     let child = EntityBuilder::new()
         .set(name(), "John")

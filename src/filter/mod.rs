@@ -413,7 +413,6 @@ where
         let l = self.left.filter(slots);
         let r = self.right.filter(slots);
         let u = l.union(&r);
-        eprintln!("l: {l:?} r: {r:?} u: {u:?}");
         match u {
             Some(v) => v,
             None => {
@@ -830,10 +829,9 @@ mod tests {
             .collect_vec();
 
         let chunks = FilterIter::new(slots, filter.prepare(&archetype, 1))
-            .inspect(|v| eprintln!("Changes: {v:?}"))
             .flatten()
             .collect_vec();
 
-        // assert_eq!(chunks, chunks_set);
+         assert_eq!(chunks, chunks_set);
     }
 }
