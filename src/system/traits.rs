@@ -7,7 +7,7 @@ use std::{
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use eyre::eyre;
 
-use crate::{AccessKind, World};
+use crate::{AccessKind, CommandBuffer, World};
 
 use super::{cell::SystemContext, Access};
 
@@ -105,8 +105,9 @@ pub trait SystemData<'a> {
     fn get(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data>;
 }
 
-pub struct Writable<T>(PhantomData<T>);
-pub struct Write<'a, T>(AtomicRefMut<'a, &'a mut T>);
+/// Access part of the context mutably.
+pub struct Write<T>(PhantomData<T>);
+pub struct Writable<'a, T>(AtomicRefMut<'a, &'a mut T>);
 #[derive(Debug)]
 pub struct Read<'a, T>(AtomicRef<'a, &'a mut T>);
 
@@ -118,7 +119,7 @@ impl<'a, T> Deref for Read<'a, T> {
     }
 }
 
-impl<'a, T> Deref for Write<'a, T> {
+impl<'a, T> Deref for Writable<'a, T> {
     type Target = &'a mut T;
 
     fn deref(&self) -> &Self::Target {
@@ -126,33 +127,52 @@ impl<'a, T> Deref for Write<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for Write<'a, T> {
+impl<'a, T> DerefMut for Writable<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.deref_mut()
     }
 }
 
-impl<T> Writable<T> {
-    fn new() -> Self {
+impl<T> Write<T> {
+    pub fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<'a> SystemData<'a> for Writable<World> {
-    type Data = Write<'a, World>;
+impl<'a> SystemData<'a> for Write<World> {
+    type Data = Writable<'a, World>;
 
     fn get(&mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data> {
-        Ok(Write(
+        Ok(Writable(
             ctx.world_mut()
                 .map_err(|_| eyre!("Failed to borrow world mutably"))?,
         ))
     }
 }
 
-impl SystemAccess for Writable<World> {
+impl SystemAccess for Write<World> {
     fn access(&mut self, _: &World) -> Vec<Access> {
         vec![Access {
             kind: AccessKind::World,
+            mutable: true,
+        }]
+    }
+}
+
+impl<'a> SystemData<'a> for Write<CommandBuffer> {
+    type Data = Writable<'a, CommandBuffer>;
+
+    fn get(&mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data> {
+        Ok(Writable(ctx.cmd_mut().map_err(|_| {
+            eyre!("Failed to borrow commandbuffer mutably")
+        })?))
+    }
+}
+
+impl SystemAccess for Write<CommandBuffer> {
+    fn access(&mut self, _: &World) -> Vec<Access> {
+        vec![Access {
+            kind: AccessKind::CommandBuffer,
             mutable: true,
         }]
     }
@@ -178,7 +198,7 @@ mod test {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(&mut world, &mut cmd);
 
-        let mut spawner = |mut w: Write<_>| {
+        let mut spawner = |mut w: Writable<_>| {
             Entity::builder()
                 .set(name(), "Neo".to_string())
                 .set(health(), 90.0)
@@ -196,7 +216,7 @@ mod test {
             assert_eq!(names, ["Neo", "Trinity"]);
         };
 
-        let data = &mut (Writable::<World>::new(),);
+        let data = &mut (Write::<World>::new(),);
 
         (spawner).execute((&ctx, data));
 

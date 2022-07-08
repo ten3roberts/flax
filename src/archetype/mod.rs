@@ -35,6 +35,10 @@ pub struct Archetype {
     edges: BTreeMap<Entity, ArchetypeId>,
 }
 
+/// Since all components are Send + Sync, the archetype is as well
+unsafe impl Send for Archetype {}
+unsafe impl Sync for Archetype {}
+
 impl Archetype {
     pub fn empty() -> Self {
         Self {
@@ -108,7 +112,12 @@ impl Archetype {
         let storage = self.storage.get(&component.id())?;
 
         // Type is guaranteed by `map`
-        let data = storage.data.borrow_mut();
+        let data = storage
+            .data
+            .try_borrow_mut()
+            .map_err(|_| format!("Component {} is already borrowed", storage.component.name()))
+            .unwrap();
+
         let data = AtomicRefMut::map(data, |v| unsafe {
             std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), len)
         });
@@ -151,7 +160,17 @@ impl Archetype {
     pub fn storage<T: ComponentValue>(&self, component: Component<T>) -> Option<StorageBorrow<T>> {
         let storage = self.storage.get(&component.id())?;
         // Type is guaranteed by `map`
-        let data = storage.data.borrow();
+        let data = storage
+            .data
+            .try_borrow()
+            .map_err(|_| {
+                format!(
+                    "Component {} is already borrowed mutably",
+                    storage.component.name()
+                )
+            })
+            .unwrap();
+
         let data = AtomicRef::map(data, |v| unsafe {
             std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
         });
@@ -264,6 +283,7 @@ impl Archetype {
     /// `src` shall be considered moved.
     /// `component` must match the type of data.
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
+    /// The component must be Send + Sync
     pub unsafe fn put_dyn(
         &mut self,
         slot: Slot,

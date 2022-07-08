@@ -178,6 +178,14 @@ impl AccessKind {
     pub fn is_world(&self) -> bool {
         matches!(self, Self::World)
     }
+
+    /// Returns `true` if the access kind is [`CommandBuffer`].
+    ///
+    /// [`CommandBuffer`]: AccessKind::CommandBuffer
+    #[must_use]
+    pub fn is_command_buffer(&self) -> bool {
+        matches!(self, Self::CommandBuffer)
+    }
 }
 #[derive(Debug, Clone)]
 pub struct Access {
@@ -189,10 +197,8 @@ impl Access {
     /// Returns true it both accesses can coexist
     pub fn is_compatible_with(&self, other: &Self) -> bool {
         // Any access to the whole world breaks concurrency, sadly
-        if self.kind.is_archetype()
-            && other.kind.is_world()
-            && other.kind.is_archetype()
-            && self.kind.is_world()
+        if (!self.kind.is_command_buffer() && other.kind.is_world())
+            || (!other.kind.is_command_buffer() && self.kind.is_world())
         {
             false
         } else if self.kind != other.kind {

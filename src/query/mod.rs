@@ -164,13 +164,14 @@ where
     F: for<'x, 'y> Filter<'x, 'y>,
 {
     fn access(&mut self, world: &World) -> Vec<crate::system::Access> {
-        let (archetypes, fetch, _) = self.get_archetypes(world);
-
+        let (archetypes, fetch, filter) = self.get_archetypes(world);
         archetypes
             .iter()
-            .flat_map(|id| {
-                let archetype = world.archetype(*id);
-                fetch.access(*id, archetype)
+            .flat_map(|&id| {
+                let archetype = world.archetype(id);
+                let mut res = fetch.access(id, archetype);
+                res.append(&mut filter.access(world, id, archetype));
+                res
             })
             .collect_vec()
     }
