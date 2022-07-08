@@ -41,22 +41,26 @@ where
     type IntoIter = QueryIter<'w, 'q, Q, F>;
 
     fn into_iter(self) -> Self::IntoIter {
-        // Prepared all archetypes
-        self.prepared = self
-            .archetypes
-            .iter()
-            .map(|&v| {
-                let arch = self.world.archetype(v);
-                PreparedArchetype {
-                    id: v,
-                    arch,
-                    fetch: self
-                        .fetch
-                        .prepare(self.world, arch)
-                        .expect("Mismathed archetype"),
-                }
-            })
-            .collect();
+        // Prepare all archetypes only if it is not already done
+        // Clear previous borrows
+        if self.prepared.len() != self.archetypes.len() {
+            self.prepared.clear();
+            self.prepared = self
+                .archetypes
+                .iter()
+                .map(|&v| {
+                    let arch = self.world.archetype(v);
+                    PreparedArchetype {
+                        id: v,
+                        arch,
+                        fetch: self
+                            .fetch
+                            .prepare(self.world, arch)
+                            .expect("Mismathed archetype"),
+                    }
+                })
+                .collect();
+        }
 
         QueryIter {
             old_tick: self.old_tick,
@@ -68,10 +72,17 @@ where
     }
 }
 
+/// Represents a query that is bounded to the lifetime of the world.
+/// Contains the borrows and holds them until it is dropped.
+///
+/// The borrowing is lazy, as such, calling [`PreparedQuery::get`] will only borrow the one required archetype.
+/// [`PreparedQuery::iter`] will borrow the components from all archetypes and release them once the prepared query drops.
+/// Subsequent calls to iter will use the same borrow.
 impl<'w, Q, F> PreparedQuery<'w, Q, F>
 where
     Q: Fetch<'w>,
 {
+    /// Creates a new prepared query from a query, but does not allocate or lock anything.
     pub fn new(
         world: &'w World,
         archetypes: &'w [ArchetypeId],
@@ -100,7 +111,7 @@ where
         self.into_iter()
     }
 
-    fn prepare(&mut self, arch: ArchetypeId) -> Option<usize> {
+    fn prepare_archetype(&mut self, arch: ArchetypeId) -> Option<usize> {
         let world = self.world;
         let prepared = &mut self.prepared;
 
@@ -143,7 +154,7 @@ where
             let id = ids[i];
             let &EntityLocation { arch, slot } = self.world.location(id)?;
             idxs[i] = (
-                self.prepare(arch).ok_or_else(|| {
+                self.prepare_archetype(arch).ok_or_else(|| {
                     let arch = self.world.archetype(arch);
                     Error::UnmatchedFetch(id, self.fetch.describe(), self.fetch.difference(arch))
                 })?,
@@ -170,7 +181,7 @@ where
     {
         let &EntityLocation { arch, slot } = self.world.location(id)?;
 
-        let idx = self.prepare(arch).ok_or_else(|| {
+        let idx = self.prepare_archetype(arch).ok_or_else(|| {
             let arch = self.world.archetype(arch);
             Error::UnmatchedFetch(id, self.fetch.describe(), self.fetch.difference(arch))
         })?;
