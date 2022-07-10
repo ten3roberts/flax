@@ -47,6 +47,16 @@ impl Archetype {
         }
     }
 
+    /// Returns relations which are like [`rel`]. I.e, the relation matches,
+    /// but the associated object may differ.
+    pub fn relations_like(&self, rel: Entity) -> impl Iterator<Item = (Entity)> + '_ {
+        let rel = rel.strip_gen();
+        self.storage
+            .keys()
+            .filter(move |k| k.strip_gen() == rel)
+            .copied()
+    }
+
     /// Create a new archetype.
     /// Assumes `components` are sorted by id.
     pub fn new(components: impl IntoIterator<Item = ComponentInfo>) -> Self {
