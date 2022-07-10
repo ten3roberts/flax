@@ -646,8 +646,6 @@ mod tests {
         assert!(archetype.has(a().id()));
         assert!(archetype.has(b().id()));
 
-        // dbg!(&world.archetypes);
-
         // () -> (a) -> (ab) -> (abc)
         //                   -> (abd)
         let (_, archetype) = world.fetch_archetype(root, &[a().info(), b().info(), d().info()]);
@@ -660,7 +658,7 @@ mod tests {
         let mut world = World::new();
         let id = world.spawn();
 
-        world.set(id, a(), 65);
+        world.set(id, a(), 65).unwrap();
         let shared = Arc::new("Foo".to_string());
 
         assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
@@ -671,9 +669,9 @@ mod tests {
         assert_eq!(world.has(id, c()), false);
 
         let id2 = world.spawn();
-        world.set(id2, a(), 7);
+        world.set(id2, a(), 7).unwrap();
 
-        world.set(id2, c(), "Foo".to_string());
+        world.set(id2, c(), "Foo".to_string()).unwrap();
 
         eprintln!("a: {}, b: {}, c: {}, id: {}", a(), a(), c(), id);
 

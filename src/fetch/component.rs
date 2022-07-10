@@ -4,7 +4,7 @@ use atomic_refcell::AtomicRefMut;
 
 use crate::{
     archetype::{Archetype, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
-    wildcard, ArchetypeId, Change, Component, ComponentValue,
+    wildcard, AccessKind, ArchetypeId, Change, Component, ComponentValue,
 };
 
 use super::*;
@@ -26,7 +26,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
     }
 }
 
-impl<'w, T> Fetch<'w> for Component<T>
+impl<'this, 'w, T> Fetch<'this, 'w> for Component<T>
 where
     T: ComponentValue,
 {
@@ -57,9 +57,12 @@ where
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
         if archetype.has(self.id()) {
-            vec![Access::ArchetypeStorage {
-                arch: id,
-                component: self.id(),
+            eprintln!("Archetype has: {:?}", self.name());
+            vec![Access {
+                kind: AccessKind::Archetype {
+                    id,
+                    component: self.id(),
+                },
                 mutable: false,
             }]
         } else {
@@ -71,7 +74,7 @@ where
 #[derive(Debug, Clone)]
 pub struct Mutable<T: ComponentValue>(pub(crate) Component<T>);
 
-impl<'w, 'b, T> Fetch<'w> for Mutable<T>
+impl<'this, 'w, 'b, T> Fetch<'this, 'w> for Mutable<T>
 where
     T: ComponentValue,
 {
@@ -103,9 +106,13 @@ where
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
         if archetype.has(self.0.id()) {
-            vec![Access::ArchetypeStorage {
-                arch: id,
-                component: self.0.id(),
+            eprintln!("Archetype has mut: {:?}", self.0.name());
+
+            vec![Access {
+                kind: AccessKind::Archetype {
+                    id,
+                    component: self.0.id(),
+                },
                 mutable: true,
             }]
         } else {
@@ -143,7 +150,7 @@ impl<T: ComponentValue> Relation<T> {
     }
 }
 
-impl<'a, T> Fetch<'a> for Relation<T>
+impl<'this, 'a, T> Fetch<'this, 'a> for Relation<T>
 where
     T: ComponentValue,
 {
@@ -219,9 +226,11 @@ where
                 .components()
                 .filter(|v| v.id().strip_gen() == sub)
                 .skip(self.index)
-                .map(|v| Access::ArchetypeStorage {
-                    arch: id,
-                    component: v.id(),
+                .map(|v| Access {
+                    kind: AccessKind::Archetype {
+                        id,
+                        component: v.id(),
+                    },
                     mutable: false,
                 })
                 .next();

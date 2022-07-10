@@ -10,7 +10,8 @@ use std::{cmp::Ordering, fmt::Debug};
 
 use crate::{
     archetype::{Slice, Slot, StorageBorrow},
-    And, Component, ComponentValue, Filter, Not, Or, PreparedFilter, World,
+    Access, And, Archetype, ArchetypeId, Component, ComponentValue, Filter, Not, Or,
+    PreparedFilter, World,
 };
 
 pub trait CmpExt<T>
@@ -124,6 +125,20 @@ where
     fn matches(&self, _: &World, archetype: &crate::Archetype) -> bool {
         archetype.has(self.component.id())
     }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(world, archetype) {
+            vec![Access {
+                kind: crate::AccessKind::Archetype {
+                    id,
+                    component: self.component.id(),
+                },
+                mutable: false,
+            }]
+        } else {
+            vec![]
+        }
+    }
 }
 
 pub struct PreparedOrdCmp<'this, 'w, T> {
@@ -210,6 +225,20 @@ where
 
     fn matches(&self, _: &World, archetype: &crate::Archetype) -> bool {
         archetype.has(self.component.id())
+    }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(world, archetype) {
+            vec![Access {
+                kind: crate::AccessKind::Archetype {
+                    id,
+                    component: self.component.id(),
+                },
+                mutable: false,
+            }]
+        } else {
+            vec![]
+        }
     }
 }
 

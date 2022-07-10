@@ -10,8 +10,8 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    BufferStorage, Component, ComponentId, ComponentInfo, ComponentValue, Entity, EntityBuilder,
-    Error, World,
+    error::Result, BufferStorage, Component, ComponentId, ComponentInfo, ComponentValue, Entity,
+    EntityBuilder, Error, World,
 };
 
 /// Records commands into the world.
@@ -25,6 +25,10 @@ pub struct CommandBuffer {
     despawned: Vec<Entity>,
     removals: Vec<(Entity, ComponentInfo)>,
 }
+
+/// Since all components are Send + Sync, the commandbuffer is as well
+unsafe impl Send for CommandBuffer {}
+unsafe impl Sync for CommandBuffer {}
 
 impl CommandBuffer {
     pub fn new() -> Self {
@@ -103,40 +107,28 @@ impl CommandBuffer {
 
     /// Applies all contents of the command buffer to the world.
     /// The commandbuffer is cleared and can be reused.
-    ///
-    /// Returns a vec of all errors encountered.
-    /// If an error is encountered the commandbuffer will add it to the list and
-    /// continue with the rest of the items.
-    pub fn apply(&mut self, world: &mut World) -> Result<(), Vec<Error>> {
+    pub fn apply(&mut self, world: &mut World) -> Result<()> {
         let groups = self
             .insert_locations
             .iter()
             .group_by(|((entity, _), _)| *entity);
 
         let storage = &mut self.inserts;
-        let mut errors = Vec::new();
-        let inserted = (&groups)
-            .into_iter()
-            .map(|(id, group)| {
-                // Safety
-                // The offset is acquired from the map which was previously acquired
-                unsafe {
-                    let components =
-                        group.map(|((_, info), offset)| (*info, storage.take_dyn(*offset)));
-                    world.set_with(id, components)
-                }
-            })
-            .flat_map(Result::err);
 
-        errors.extend(inserted);
+        let inserted = (&groups).into_iter().try_for_each(|(id, group)| {
+            // Safety
+            // The offset is acquired from the map which was previously acquired
+            unsafe {
+                let components =
+                    group.map(|((_, info), offset)| (*info, storage.take_dyn(*offset)));
+                world.set_with(id, components)
+            }
+        })?;
 
         let removed = self
             .removals
             .drain(..)
-            .map(|(id, component)| world.remove_dyn(id, component))
-            .flat_map(Result::err);
-
-        errors.extend(removed);
+            .try_for_each(|(id, component)| world.remove_dyn(id, component))?;
 
         self.spawned.drain(..).for_each(|mut builder| {
             builder.spawn(world);
@@ -145,18 +137,11 @@ impl CommandBuffer {
         let despawned = self
             .despawned
             .drain(..)
-            .map(|id| world.despawn(id))
-            .flat_map(Result::err);
-
-        errors.extend(despawned);
+            .try_for_each(|id| world.despawn(id))?;
 
         self.clear();
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
-        }
+        Ok(())
     }
 
     /// Clears all values in the component buffer but keeps allocations around.
