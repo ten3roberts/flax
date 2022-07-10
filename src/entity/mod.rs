@@ -118,6 +118,7 @@ impl Entity {
         (subject, object)
     }
 
+    #[inline]
     pub fn strip_gen(self) -> StrippedEntity {
         StrippedEntity(NonZeroU32::new(self.to_bits().get() as u32).unwrap())
     }

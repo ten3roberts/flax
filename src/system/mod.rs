@@ -238,8 +238,7 @@ mod test {
 
         let ctx = SystemContext::new(&mut world, &mut cmd);
         let res = boxed.execute(&ctx);
-        eprintln!("{:?}", res.unwrap_err());
-        todo!()
-        // assert!(res.is_err());
+        eprintln!("{:?}", res.as_ref().unwrap_err());
+        assert!(res.is_err());
     }
 }
