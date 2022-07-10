@@ -1,124 +1,137 @@
-// use crate::{Fetch, PreparedFetch};
+use crate::{Fetch, PreparedFetch};
 
-// /// Transform a fetch into a optional fetch
-// pub struct Opt<F> {
-//     inner: F,
-// }
+/// Transform a fetch into a optional fetch
+pub struct Opt<F> {
+    inner: F,
+}
 
-// impl<'w, F> Fetch<'w> for Opt<F>
-// where
-//     F: for<'x> Fetch<'x>,
-// {
-//     const MUTABLE: bool = F::MUTABLE;
+impl<F> Opt<F> {
+    pub fn new(inner: F) -> Self {
+        Self { inner }
+    }
+}
 
-//     type Prepared = PreparedOpt<<F as Fetch<'w>>::Prepared>;
+impl<'w, F> Fetch<'w> for Opt<F>
+where
+    F: for<'x> Fetch<'x>,
+{
+    const MUTABLE: bool = F::MUTABLE;
 
-//     fn prepare(
-//         &self,
-//         world: &'w crate::World,
-//         archetype: &'w crate::Archetype,
-//     ) -> Option<Self::Prepared> {
-//         Some(PreparedOpt {
-//             inner: self.inner.prepare(world, archetype),
-//         })
-//     }
+    type Prepared = PreparedOpt<<F as Fetch<'w>>::Prepared>;
 
-//     fn matches(&self, _: &'w crate::World, _: &'w crate::Archetype) -> bool {
-//         true
-//     }
+    fn prepare(
+        &'w self,
+        world: &'w crate::World,
+        archetype: &'w crate::Archetype,
+    ) -> Option<Self::Prepared> {
+        Some(PreparedOpt {
+            inner: self.inner.prepare(world, archetype),
+        })
+    }
 
-//     fn describe(&self) -> String {
-//         format!("opt {}", self.inner.describe())
-//     }
+    fn matches(&self, _: &'w crate::World, _: &'w crate::Archetype) -> bool {
+        true
+    }
 
-//     fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
-//         self.inner.access(id, archetype)
-//     }
+    fn describe(&self) -> String {
+        format!("opt {}", self.inner.describe())
+    }
 
-//     fn difference(&self, _: &crate::Archetype) -> Vec<String> {
-//         vec![]
-//     }
-// }
+    fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
+        self.inner.access(id, archetype)
+    }
 
-// #[doc(hidden)]
-// pub struct PreparedOpt<F> {
-//     inner: Option<F>,
-// }
+    fn difference(&self, _: &crate::Archetype) -> Vec<String> {
+        vec![]
+    }
+}
 
-// impl<'q, F> PreparedFetch<'q> for PreparedOpt<F>
-// where
-//     F: for<'x> PreparedFetch<'x>,
-// {
-//     type Item = Option<<F as PreparedFetch<'q>>::Item>;
+#[doc(hidden)]
+pub struct PreparedOpt<F> {
+    inner: Option<F>,
+}
 
-//     unsafe fn fetch(&'q self, slot: crate::archetype::Slot) -> Self::Item {
-//         match self.inner {
-//             Some(ref v) => Some(v.fetch(slot)),
-//             None => None,
-//         }
-//     }
-// }
+impl<'q, F> PreparedFetch<'q> for PreparedOpt<F>
+where
+    F: for<'x> PreparedFetch<'x>,
+{
+    type Item = Option<<F as PreparedFetch<'q>>::Item>;
 
-// /// Transform a fetch into a optional fetch
-// pub struct OptOr<F, V> {
-//     inner: F,
-//     or: V,
-// }
+    unsafe fn fetch(&'q self, slot: crate::archetype::Slot) -> Self::Item {
+        match self.inner {
+            Some(ref v) => Some(v.fetch(slot)),
+            None => None,
+        }
+    }
+}
 
-// impl<'w, F, V> Fetch<'w> for OptOr<F, V>
-// where
-//     F: for<'x> Fetch<'x>,
-//     for<'x> <F as Fetch<'x>>::Prepared: PreparedFetch<'x, Item = &'x V>,
-//     V: 'static,
-// {
-//     const MUTABLE: bool = F::MUTABLE;
+/// Transform a fetch into a optional fetch
+pub struct OptOr<F, V> {
+    inner: F,
+    or: V,
+}
 
-//     type Prepared = PreparedOptOr<'w, <F as Fetch<'w>>::Prepared, V>;
+impl<F, V> OptOr<F, V> {
+    pub fn new(inner: F, or: V) -> Self {
+        Self { inner, or }
+    }
+}
 
-//     fn prepare(
-//         &self,
-//         world: &'w crate::World,
-//         archetype: &'w crate::Archetype,
-//     ) -> Option<Self::Prepared> {
-//         Some(PreparedOptOr {
-//             inner: self.inner.prepare(world, archetype),
-//             or: &self.or,
-//         })
-//     }
+impl<'w, F, V> Fetch<'w> for OptOr<F, V>
+where
+    F: for<'x> Fetch<'x>,
+    for<'x, 'y> <F as Fetch<'x>>::Prepared: PreparedFetch<'y, Item = &'y V>,
+    V: 'static,
+{
+    const MUTABLE: bool = F::MUTABLE;
 
-//     fn matches(&self, _: &'w crate::World, _: &'w crate::Archetype) -> bool {
-//         true
-//     }
+    type Prepared = PreparedOptOr<'w, <F as Fetch<'w>>::Prepared, V>;
 
-//     fn describe(&self) -> String {
-//         format!("opt {}", self.inner.describe())
-//     }
+    fn prepare(
+        &'w self,
+        world: &'w crate::World,
+        archetype: &'w crate::Archetype,
+    ) -> Option<Self::Prepared> {
+        Some(PreparedOptOr {
+            inner: self.inner.prepare(world, archetype),
+            or: &self.or,
+        })
+    }
 
-//     fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
-//         self.inner.access(id, archetype)
-//     }
+    fn matches(&self, _: &'w crate::World, _: &'w crate::Archetype) -> bool {
+        true
+    }
 
-//     fn difference(&self, _: &crate::Archetype) -> Vec<String> {
-//         vec![]
-//     }
-// }
+    fn describe(&self) -> String {
+        format!("opt {}", self.inner.describe())
+    }
 
-// #[doc(hidden)]
-// pub struct PreparedOptOr<'q, F, V> {
-//     inner: Option<F>,
-//     or: &'q V,
-// }
+    fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
+        self.inner.access(id, archetype)
+    }
 
-// impl<'q, F, V> PreparedFetch<'q> for PreparedOptOr<'q, F, V>
-// where
-//     F: for<'x> PreparedFetch<'x, Item = &'q V>,
-// {
-//     type Item = <F as PreparedFetch<'q>>::Item;
+    fn difference(&self, _: &crate::Archetype) -> Vec<String> {
+        vec![]
+    }
+}
 
-//     unsafe fn fetch(&'q self, slot: crate::archetype::Slot) -> Self::Item {
-//         match self.inner {
-//             Some(ref v) => v.fetch(slot),
-//             None => self.or,
-//         }
-//     }
-// }
+#[doc(hidden)]
+pub struct PreparedOptOr<'w, F, V> {
+    inner: Option<F>,
+    or: &'w V,
+}
+
+impl<'q, 'w, F, V> PreparedFetch<'q> for PreparedOptOr<'w, F, V>
+where
+    F: for<'x> PreparedFetch<'x, Item = &'x V>,
+    V: 'static,
+{
+    type Item = &'q V;
+
+    unsafe fn fetch(&'q self, slot: crate::archetype::Slot) -> Self::Item {
+        match self.inner {
+            Some(ref v) => v.fetch(slot),
+            None => self.or,
+        }
+    }
+}

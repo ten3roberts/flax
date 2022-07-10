@@ -1,8 +1,10 @@
 mod component;
 mod ext;
+mod opt;
 
 pub use component::*;
 pub use ext::*;
+pub use opt::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
@@ -19,13 +21,13 @@ pub struct PrepareInfo {
 }
 
 /// Describes a type which can fetch itself from an archetype
-pub trait Fetch<'this, 'w> {
+pub trait Fetch<'w> {
     const MUTABLE: bool;
 
-    type Prepared: for<'x> PreparedFetch<'x>;
+    type Prepared: for<'x> PreparedFetch<'x> + 'w;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
-    fn prepare(&'this self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
+    fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
     fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool;
     fn describe(&self) -> String;
     /// Returns which components and how will be accessed for an archetype.
@@ -66,12 +68,12 @@ pub struct PreparedEntities<'a> {
     entities: &'a [Option<Entity>],
 }
 
-impl<'this, 'w> Fetch<'this, 'w> for EntityFetch {
+impl<'w> Fetch<'w> for EntityFetch {
     const MUTABLE: bool = false;
 
     type Prepared = PreparedEntities<'w>;
 
-    fn prepare(&'this self, _: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
+    fn prepare(&'w self, _: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
         Some(PreparedEntities {
             entities: archetype.entities(),
         })
@@ -105,13 +107,13 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<'this, 'w, $($ty, )*> Fetch<'this, 'w> for ($($ty,)*)
-            where $($ty: Fetch<'this, 'w>,)*
+        impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
+            where $($ty: Fetch<'w>,)*
         {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
             type Prepared       = ($($ty::Prepared,)*);
 
-            fn prepare(&'this self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
+            fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
                 Some(($(
                     (self.$idx).prepare(world, archetype)?,
                 )*))
