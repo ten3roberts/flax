@@ -1,6 +1,5 @@
 use std::{
     any::{type_name, TypeId},
-    collections::HashMap,
     marker::PhantomData,
     ptr::NonNull,
 };
@@ -89,5 +88,21 @@ impl<'a> SystemContext<'a> {
         &self,
     ) -> std::result::Result<AtomicRefMut<&'a mut World>, atomic_refcell::BorrowMutError> {
         self.world.try_borrow_mut()
+    }
+
+    /// Access the commandbuffer
+    pub fn cmp(
+        &self,
+    ) -> std::result::Result<AtomicRef<'_, &'a mut CommandBuffer>, atomic_refcell::BorrowError>
+    {
+        self.cmd.try_borrow()
+    }
+
+    /// Access the commandbuffer mutably
+    pub fn cmd_mut(
+        &self,
+    ) -> std::result::Result<AtomicRefMut<&'a mut CommandBuffer>, atomic_refcell::BorrowMutError>
+    {
+        self.cmd.try_borrow_mut()
     }
 }

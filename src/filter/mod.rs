@@ -3,10 +3,11 @@ mod cmp;
 use std::{iter::FusedIterator, ops::Neg};
 
 use atomic_refcell::AtomicRef;
+use rayon::vec;
 
 use crate::{
     archetype::{Archetype, ChangeKind, Changes, Slice},
-    ComponentId, World,
+    Access, ArchetypeId, ComponentId, World,
 };
 
 pub use cmp::CmpExt;
@@ -102,6 +103,8 @@ where
     /// Returns false if an entity will never yield, such as a mismatched
     /// archetype
     fn matches(&self, world: &World, archetype: &Archetype) -> bool;
+    /// Returns which components and how will be accessed for an archetype.
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access>;
 }
 
 #[derive(Debug, Clone)]
@@ -129,6 +132,20 @@ impl<'this, 'a> Filter<'this, 'a> for ModifiedFilter {
 
     fn matches(&self, _: &World, archetype: &Archetype) -> bool {
         archetype.has(self.component)
+    }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(world, archetype) {
+            vec![Access {
+                kind: crate::AccessKind::Archetype {
+                    id,
+                    component: self.component,
+                },
+                mutable: false,
+            }]
+        } else {
+            vec![]
+        }
     }
 }
 
@@ -158,6 +175,20 @@ impl<'this, 'a> Filter<'this, 'a> for InsertedFilter {
     fn matches(&self, _: &World, archetype: &Archetype) -> bool {
         archetype.has(self.component)
     }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(world, archetype) {
+            vec![Access {
+                kind: crate::AccessKind::Archetype {
+                    id,
+                    component: self.component,
+                },
+                mutable: false,
+            }]
+        } else {
+            vec![]
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -185,6 +216,20 @@ impl<'this, 'a> Filter<'this, 'a> for RemovedFilter {
 
     fn matches(&self, _: &World, archetype: &Archetype) -> bool {
         true
+    }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(world, archetype) {
+            vec![Access {
+                kind: crate::AccessKind::Archetype {
+                    id,
+                    component: self.component,
+                },
+                mutable: false,
+            }]
+        } else {
+            vec![]
+        }
     }
 }
 
@@ -217,6 +262,12 @@ where
     fn matches(&self, world: &World, archetype: &Archetype) -> bool {
         self.left.matches(world, archetype) && self.right.matches(world, archetype)
     }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        let mut res = self.left.access(world, id, archetype);
+        res.append(&mut self.right.access(world, id, archetype));
+        res
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -247,6 +298,12 @@ where
 
     fn matches(&self, world: &World, archetype: &Archetype) -> bool {
         self.left.matches(world, archetype) || self.right.matches(world, archetype)
+    }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        let mut accesses = self.left.access(world, id, archetype);
+        accesses.append(&mut self.right.access(world, id, archetype));
+        accesses
     }
 }
 
@@ -356,7 +413,6 @@ where
         let l = self.left.filter(slots);
         let r = self.right.filter(slots);
         let u = l.union(&r);
-        eprintln!("l: {l:?} r: {r:?} u: {u:?}");
         match u {
             Some(v) => v,
             None => {
@@ -384,6 +440,10 @@ where
 
     fn matches(&self, world: &World, archetype: &Archetype) -> bool {
         !self.0.matches(world, archetype)
+    }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        self.0.access(world, id, archetype)
     }
 }
 
@@ -487,6 +547,10 @@ impl<'this, 'a> Filter<'this, 'a> for Nothing {
     fn matches(&self, _: &World, _: &Archetype) -> bool {
         false
     }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        vec![]
+    }
 }
 
 /// Filter all entities
@@ -502,6 +566,10 @@ impl<'this, 'a> Filter<'this, 'a> for All {
 
     fn matches(&self, _: &World, _: &Archetype) -> bool {
         true
+    }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        vec![]
     }
 }
 
@@ -524,7 +592,6 @@ where
     type Item = Slice;
 
     fn next(&mut self) -> Option<Self::Item> {
-        eprintln!("Here");
         let cur = self.filter.filter(self.slots);
 
         if cur.is_empty() {
@@ -563,6 +630,10 @@ impl<'this, 'a> Filter<'this, 'a> for With {
     fn matches(&self, _: &World, archetype: &Archetype) -> bool {
         archetype.has(self.component)
     }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        vec![]
+    }
 }
 
 pub struct Without {
@@ -584,6 +655,10 @@ impl<'this, 'a> Filter<'this, 'a> for Without {
 
     fn matches(&self, _: &World, archetype: &Archetype) -> bool {
         !archetype.has(self.component)
+    }
+
+    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        vec![]
     }
 }
 
@@ -754,10 +829,9 @@ mod tests {
             .collect_vec();
 
         let chunks = FilterIter::new(slots, filter.prepare(&archetype, 1))
-            .inspect(|v| eprintln!("Changes: {v:?}"))
             .flatten()
             .collect_vec();
 
-        // assert_eq!(chunks, chunks_set);
+         assert_eq!(chunks, chunks_set);
     }
 }

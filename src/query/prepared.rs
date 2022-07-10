@@ -17,66 +17,80 @@ pub struct PreparedArchetype<'w, Q> {
 
 /// A lazily prepared query which borrows and hands out chunk iterators for
 /// each archetype matched.
-pub struct PreparedQuery<'w, Q, F = All>
+pub struct PreparedQuery<'q, 'w, Q, F = All>
 where
-    Q: Fetch<'w>,
+    Q: Fetch<'q, 'w>,
+    F: Filter<'q, 'w>,
+    'w: 'q,
 {
     pub(crate) prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared>; 8]>,
     pub(crate) world: &'w World,
-    pub(crate) archetypes: &'w [ArchetypeId],
-    pub(crate) fetch: &'w Q,
-    pub(crate) filter: &'w F,
+    pub(crate) archetypes: &'q [ArchetypeId],
+    pub(crate) fetch: &'q Q,
+    pub(crate) filter: &'q F,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
 }
 
-impl<'w, 'q, Q, F> IntoIterator for &'q mut PreparedQuery<'w, Q, F>
+impl<'prep, 'w, 'q, Q, F> IntoIterator for &'prep mut PreparedQuery<'q, 'w, Q, F>
 where
-    Q: Fetch<'w>,
+    Q: Fetch<'q, 'w>,
     F: Filter<'q, 'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
-    type IntoIter = QueryIter<'w, 'q, Q, F>;
+    type IntoIter = QueryIter<'prep, 'q, 'w, Q, F>;
 
     fn into_iter(self) -> Self::IntoIter {
-        // Prepared all archetypes
-        self.prepared = self
-            .archetypes
-            .iter()
-            .map(|&v| {
-                let arch = self.world.archetype(v);
-                PreparedArchetype {
-                    id: v,
-                    arch,
-                    fetch: self
-                        .fetch
-                        .prepare(self.world, arch)
-                        .expect("Mismathed archetype"),
-                }
-            })
-            .collect();
-
-        QueryIter {
-            old_tick: self.old_tick,
-            new_tick: self.new_tick,
-            filter: self.filter,
-            archetypes: self.prepared.iter_mut(),
-            current: None,
+        // Prepare all archetypes only if it is not already done
+        // Clear previous borrows
+        if self.prepared.len() != self.archetypes.len() {
+            self.prepared.clear();
+            self.prepared = self
+                .archetypes
+                .iter()
+                .map(|&v| {
+                    let arch = self.world.archetype(v);
+                    PreparedArchetype {
+                        id: v,
+                        arch,
+                        fetch: self
+                            .fetch
+                            .prepare(self.world, arch)
+                            .expect("Mismathed archetype"),
+                    }
+                })
+                .collect();
         }
+        todo!()
+        // QueryIter {
+        //     old_tick: self.old_tick,
+        //     new_tick: self.new_tick,
+        //     filter: self.filter,
+        //     archetypes: self.prepared.iter_mut(),
+        //     current: None,
+        // }
     }
 }
 
-impl<'w, Q, F> PreparedQuery<'w, Q, F>
+/// Represents a query that is bounded to the lifetime of the world.
+/// Contains the borrows and holds them until it is dropped.
+///
+/// The borrowing is lazy, as such, calling [`PreparedQuery::get`] will only borrow the one required archetype.
+/// [`PreparedQuery::iter`] will borrow the components from all archetypes and release them once the prepared query drops.
+/// Subsequent calls to iter will use the same borrow.
+impl<'q, 'w, Q, F> PreparedQuery<'q, 'w, Q, F>
 where
-    Q: Fetch<'w>,
+    Q: Fetch<'q, 'w>,
+    F: Filter<'q, 'w>,
 {
+    /// Creates a new prepared query from a query, but does not allocate or lock anything.
     pub fn new(
         world: &'w World,
-        archetypes: &'w [ArchetypeId],
-        fetch: &'w Q,
-        filter: &'w F,
+        archetypes: &'q [ArchetypeId],
+        fetch: &'q Q,
+        filter: &'q F,
         old_tick: u32,
         new_tick: u32,
     ) -> Self {
@@ -92,7 +106,7 @@ where
     }
 
     /// Iterate all items matched by query and filter.
-    pub fn iter<'q>(&'q mut self) -> QueryIter<'w, '_, Q, F>
+    pub fn iter(&mut self) -> QueryIter<'_, 'q, 'w, Q, F>
     where
         'w: 'q,
         F: Filter<'q, 'w>,
@@ -100,7 +114,7 @@ where
         self.into_iter()
     }
 
-    fn prepare(&mut self, arch: ArchetypeId) -> Option<usize> {
+    fn prepare_archetype(&mut self, arch: ArchetypeId) -> Option<usize> {
         let world = self.world;
         let prepared = &mut self.prepared;
 
@@ -122,13 +136,10 @@ where
 
     /// Access any number of entites which are disjoint.
     /// Return None if any `id` is not disjoint.
-    pub fn get_disjoint<'q, const C: usize>(
-        &'q mut self,
+    pub fn get_disjoint<const C: usize>(
+        &mut self,
         ids: [Entity; C],
-    ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]>
-    where
-        Q: Fetch<'w>,
-    {
+    ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]> {
         let mut sorted = ids;
         sorted.sort();
         if sorted.windows(C).any(|v| v[0] == v[1]) {
@@ -143,7 +154,7 @@ where
             let id = ids[i];
             let &EntityLocation { arch, slot } = self.world.location(id)?;
             idxs[i] = (
-                self.prepare(arch).ok_or_else(|| {
+                self.prepare_archetype(arch).ok_or_else(|| {
                     let arch = self.world.archetype(arch);
                     Error::UnmatchedFetch(id, self.fetch.describe(), self.fetch.difference(arch))
                 })?,
@@ -164,13 +175,10 @@ where
 
     /// Get the fetch items for an entity.
     /// **Note**: Filters are ignored.
-    pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item>
-    where
-        Q: Fetch<'w>,
-    {
+    pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
         let &EntityLocation { arch, slot } = self.world.location(id)?;
 
-        let idx = self.prepare(arch).ok_or_else(|| {
+        let idx = self.prepare_archetype(arch).ok_or_else(|| {
             let arch = self.world.archetype(arch);
             Error::UnmatchedFetch(id, self.fetch.describe(), self.fetch.difference(arch))
         })?;

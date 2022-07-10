@@ -2,7 +2,7 @@ mod iter;
 mod prepared;
 mod view;
 
-use std::{fmt::Debug, ops::Deref};
+use std::fmt::Debug;
 
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
@@ -10,7 +10,7 @@ use itertools::Itertools;
 use crate::{
     archetype::ArchetypeId,
     fetch::Fetch,
-    system::{SystemContext, SystemData, WorldAccess},
+    system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
     All, And, Filter, PreparedFetch, World,
 };
@@ -52,7 +52,7 @@ impl<Q> Query<Q, All> {
 
 impl<Q, F> Query<Q, F>
 where
-    Q: for<'x> Fetch<'x>,
+    Q: for<'x, 'y> Fetch<'x, 'y>,
     F: for<'x, 'y> Filter<'x, 'y>,
 {
     /// Adds a new filter to the query.
@@ -120,7 +120,7 @@ where
     ///
     /// It is safe to use the same prepared query for both iteration and random
     /// access, Rust's borrow rules will ensure aliasing rules.
-    pub fn prepare<'w>(&'w mut self, world: &'w World) -> PreparedQuery<'w, Q, F> {
+    pub fn prepare<'w>(&mut self, world: &'w World) -> PreparedQuery<'_, 'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
         dbg!(old_tick, new_tick);
         let (archetypes, fetch, filter) = self.get_archetypes(world);
@@ -131,7 +131,7 @@ where
     /// Gathers all elements in the query as a Vec of owned values.
     pub fn as_vec<'w, C>(&'w mut self, world: &'w World) -> Vec<C>
     where
-        for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Item:
+        for<'x, 'y> <<Q as Fetch<'x, 'y>>::Prepared as PreparedFetch<'y>>::Item:
             TupleCloned<Cloned = C>,
     {
         let mut prepared = self.prepare(world);
@@ -158,19 +158,20 @@ where
     }
 }
 
-impl<Q, F> WorldAccess for Query<Q, F>
+impl<Q, F> SystemAccess for Query<Q, F>
 where
-    Q: for<'x> Fetch<'x>,
+    Q: for<'x, 'y> Fetch<'x, 'y>,
     F: for<'x, 'y> Filter<'x, 'y>,
 {
     fn access(&mut self, world: &World) -> Vec<crate::system::Access> {
-        let (archetypes, fetch, _) = self.get_archetypes(world);
-
+        let (archetypes, fetch, filter) = self.get_archetypes(world);
         archetypes
             .iter()
-            .flat_map(|id| {
-                let archetype = world.archetype(*id);
-                fetch.access(*id, archetype)
+            .flat_map(|&id| {
+                let archetype = world.archetype(id);
+                let mut res = fetch.access(id, archetype);
+                res.append(&mut filter.access(world, id, archetype));
+                res
             })
             .collect_vec()
     }
@@ -200,7 +201,7 @@ where
 
 impl<'a, Q, F> QueryData<'a, Q, F>
 where
-    for<'x> Q: Fetch<'x>,
+    for<'x, 'y> Q: Fetch<'x, 'y>,
     for<'x, 'y> F: Filter<'x, 'y>,
 {
     /// Prepare the query.
@@ -210,7 +211,7 @@ where
     ///
     /// The same query can be prepared multiple times, though not
     /// simultaneously.
-    pub fn prepare<'w>(&'w mut self) -> PreparedQuery<'w, Q, F> {
+    pub fn prepare<'w>(&'w mut self) -> PreparedQuery<'w, 'w, Q, F> {
         self.query.prepare(&self.world)
     }
 }
