@@ -26,7 +26,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
     }
 }
 
-impl<'this, 'w, T> Fetch<'this, 'w> for Component<T>
+impl<'w, T> Fetch<'w> for Component<T>
 where
     T: ComponentValue,
 {
@@ -74,7 +74,7 @@ where
 #[derive(Debug, Clone)]
 pub struct Mutable<T: ComponentValue>(pub(crate) Component<T>);
 
-impl<'this, 'w, 'b, T> Fetch<'this, 'w> for Mutable<T>
+impl<'w, 'b, T> Fetch<'w> for Mutable<T>
 where
     T: ComponentValue,
 {
@@ -150,7 +150,7 @@ impl<T: ComponentValue> Relation<T> {
     }
 }
 
-impl<'this, 'a, T> Fetch<'this, 'a> for Relation<T>
+impl<'a, T> Fetch<'a> for Relation<T>
 where
     T: ComponentValue,
 {

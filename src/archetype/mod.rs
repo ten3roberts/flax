@@ -53,7 +53,7 @@ impl Archetype {
 
     /// Returns relations which are like [`rel`]. I.e, the relation matches,
     /// but the associated object may differ.
-    pub fn relations_like(&self, rel: Entity) -> impl Iterator<Item = (Entity)> + '_ {
+    pub fn relations_like(&self, rel: Entity) -> impl Iterator<Item = Entity> + '_ {
         let rel = rel.strip_gen();
         self.storage
             .keys()

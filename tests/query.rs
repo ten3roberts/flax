@@ -1,4 +1,4 @@
-use flax::{component, CmpExt, EntityBuilder, Query, World};
+use flax::{component, util::TupleCloned, CmpExt, EntityBuilder, FetchExt, Query, World};
 use itertools::Itertools;
 
 #[test]
@@ -74,4 +74,64 @@ fn query_change() {
 
     assert_eq!(consumed, ["A", "B", "D"]);
     // Everything which is alive will move a bit
+}
+
+#[test]
+fn query_opt() {
+    component! {
+        name: String,
+        mass: f32,
+        vel: f32,
+        status_effect: String,
+    }
+
+    let mut world = World::new();
+    EntityBuilder::new()
+        .set(name(), "Alyx".to_string())
+        .set(mass(), 70.0)
+        .set(vel(), 1.0)
+        .set(status_effect(), "Neurotoxin".to_string())
+        .spawn(&mut world);
+
+    EntityBuilder::new()
+        .set(name(), "Gordon".to_string())
+        .set(mass(), 95.0)
+        .set(vel(), 1.5)
+        .spawn(&mut world);
+
+    EntityBuilder::new()
+        .set(name(), "Citadel".to_string())
+        .set(mass(), 1e9)
+        .spawn(&mut world);
+
+    let mut query = Query::new((name(), mass(), vel().opt_or_default()));
+
+    let items = query
+        .prepare(&world)
+        .iter()
+        .sorted_by_key(|v| v.0)
+        .map(|v| v.cloned())
+        .collect_vec();
+
+    assert_eq!(
+        items,
+        [
+            ("Alyx".to_string(), 70.0, 1.0),
+            ("Citadel".to_string(), 1e9, 0.0),
+            ("Gordon".to_string(), 95.0, 1.5)
+        ]
+    );
+
+    let mut query = Query::new((name(), status_effect().opt()));
+    let mut query = query.prepare(&world);
+    let items = query.iter().sorted().collect_vec();
+
+    assert_eq!(
+        items,
+        [
+            (&"Alyx".to_string(), Some(&"Neurotoxin".to_string())),
+            (&"Citadel".to_string(), None),
+            (&"Gordon".to_string(), None),
+        ]
+    );
 }

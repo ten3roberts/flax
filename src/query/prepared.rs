@@ -17,30 +17,28 @@ pub struct PreparedArchetype<'w, Q> {
 
 /// A lazily prepared query which borrows and hands out chunk iterators for
 /// each archetype matched.
-pub struct PreparedQuery<'q, 'w, Q, F = All>
+pub struct PreparedQuery<'w, Q, F = All>
 where
-    Q: Fetch<'q, 'w>,
-    F: Filter<'q, 'w>,
-    'w: 'q,
+    Q: Fetch<'w>,
 {
     pub(crate) prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared>; 8]>,
     pub(crate) world: &'w World,
-    pub(crate) archetypes: &'q [ArchetypeId],
-    pub(crate) fetch: &'q Q,
-    pub(crate) filter: &'q F,
+    pub(crate) archetypes: &'w [ArchetypeId],
+    pub(crate) fetch: &'w Q,
+    pub(crate) filter: &'w F,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
 }
 
-impl<'prep, 'w, 'q, Q, F> IntoIterator for &'prep mut PreparedQuery<'q, 'w, Q, F>
+impl<'w, 'q, Q, F> IntoIterator for &'q mut PreparedQuery<'w, Q, F>
 where
-    Q: Fetch<'q, 'w>,
+    Q: Fetch<'w>,
     F: Filter<'q, 'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
-    type IntoIter = QueryIter<'prep, 'q, 'w, Q, F>;
+    type IntoIter = QueryIter<'q, 'w, Q, F>;
 
     fn into_iter(self) -> Self::IntoIter {
         // Prepare all archetypes only if it is not already done
@@ -63,14 +61,14 @@ where
                 })
                 .collect();
         }
-        todo!()
-        // QueryIter {
-        //     old_tick: self.old_tick,
-        //     new_tick: self.new_tick,
-        //     filter: self.filter,
-        //     archetypes: self.prepared.iter_mut(),
-        //     current: None,
-        // }
+
+        QueryIter {
+            old_tick: self.old_tick,
+            new_tick: self.new_tick,
+            filter: self.filter,
+            archetypes: self.prepared.iter_mut(),
+            current: None,
+        }
     }
 }
 
@@ -80,17 +78,16 @@ where
 /// The borrowing is lazy, as such, calling [`PreparedQuery::get`] will only borrow the one required archetype.
 /// [`PreparedQuery::iter`] will borrow the components from all archetypes and release them once the prepared query drops.
 /// Subsequent calls to iter will use the same borrow.
-impl<'q, 'w, Q, F> PreparedQuery<'q, 'w, Q, F>
+impl<'w, Q, F> PreparedQuery<'w, Q, F>
 where
-    Q: Fetch<'q, 'w>,
-    F: Filter<'q, 'w>,
+    Q: Fetch<'w>,
 {
     /// Creates a new prepared query from a query, but does not allocate or lock anything.
     pub fn new(
         world: &'w World,
-        archetypes: &'q [ArchetypeId],
-        fetch: &'q Q,
-        filter: &'q F,
+        archetypes: &'w [ArchetypeId],
+        fetch: &'w Q,
+        filter: &'w F,
         old_tick: u32,
         new_tick: u32,
     ) -> Self {
@@ -106,7 +103,7 @@ where
     }
 
     /// Iterate all items matched by query and filter.
-    pub fn iter(&mut self) -> QueryIter<'_, 'q, 'w, Q, F>
+    pub fn iter<'q>(&'q mut self) -> QueryIter<'q, 'w, Q, F>
     where
         'w: 'q,
         F: Filter<'q, 'w>,

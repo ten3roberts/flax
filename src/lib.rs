@@ -99,7 +99,6 @@ mod entity;
 pub mod macros;
 mod buffer;
 mod commandbuffer;
-pub mod components;
 pub mod error;
 pub mod fetch;
 mod filter;
