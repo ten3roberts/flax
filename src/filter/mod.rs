@@ -680,7 +680,7 @@ mod tests {
     use atomic_refcell::AtomicRefCell;
     use itertools::Itertools;
 
-    use crate::archetype::Change;
+    use crate::{archetype::Change, component};
 
     use super::*;
     #[test]
@@ -832,6 +832,6 @@ mod tests {
             .flatten()
             .collect_vec();
 
-         assert_eq!(chunks, chunks_set);
+        assert_eq!(chunks, chunks_set);
     }
 }

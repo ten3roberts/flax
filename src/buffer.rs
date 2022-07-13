@@ -274,6 +274,8 @@ impl<'a> Drop for ComponentBufferIter<'a> {
 mod tests {
     use std::sync::Arc;
 
+    use crate::component;
+
     use super::*;
     component! {
         a: i32,

@@ -206,6 +206,21 @@ impl Archetype {
         self.storage.get_mut(&component)
     }
 
+    pub fn get_unique<T: ComponentValue>(
+        &mut self,
+        slot: Slot,
+        component: Component<T>,
+    ) -> Option<&mut T> {
+        let storage = self.storage.get_mut(&component.id())?;
+
+        if slot < self.len {
+            let v = storage.data.get_mut();
+            unsafe { Some(&mut *(v.as_ptr().cast::<T>().add(slot))) }
+        } else {
+            None
+        }
+    }
+
     /// Get a component from the entity at `slot`. Assumes slot is valid.
     pub fn get_mut<T: ComponentValue>(
         &self,
