@@ -205,7 +205,9 @@ mod test {
 
     use itertools::Itertools;
 
-    use crate::{schedule::Schedule, system::System, EntityBuilder, Query, QueryData, World};
+    use crate::{
+        component, schedule::Schedule, system::System, EntityBuilder, Query, QueryData, World,
+    };
 
     use super::topo_sort;
 

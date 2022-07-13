@@ -96,17 +96,20 @@ mod archetype;
 mod component;
 mod entity;
 #[macro_use]
-pub mod macros;
 mod buffer;
 mod commandbuffer;
-pub mod error;
-pub mod fetch;
 mod filter;
 mod query;
-pub mod schedule;
 mod system;
-pub mod util;
 mod world;
+
+mod entity_ref;
+pub mod entry;
+pub mod error;
+pub mod fetch;
+pub mod macros;
+pub mod schedule;
+pub mod util;
 
 // Required due to macro
 pub use paste::paste;

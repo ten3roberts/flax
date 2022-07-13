@@ -251,7 +251,7 @@ where
 #[cfg(test)]
 mod test {
 
-    use crate::{All, CommandBuffer, Component, EntityBuilder, Query, QueryData, World};
+    use crate::{component, All, CommandBuffer, Component, EntityBuilder, Query, QueryData, World};
 
     use super::*;
 

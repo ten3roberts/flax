@@ -11,6 +11,8 @@ use itertools::Itertools;
 use crate::{
     archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, Visitor},
     entity::{EntityLocation, EntityStore},
+    entity_borrow::{EntityRef, EntityRefMut},
+    entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity, Error, Namespace,
     STATIC_NAMESPACE,
@@ -298,6 +300,15 @@ impl World {
         component: Component<T>,
         mut value: T,
     ) -> Result<Option<T>> {
+        self.set_inner(id, component, value).map(|v| v.0)
+    }
+
+    pub(crate) fn set_inner<T: ComponentValue>(
+        &mut self,
+        id: impl Into<Entity>,
+        component: Component<T>,
+        mut value: T,
+    ) -> Result<(Option<T>, EntityLocation)> {
         let id = id.into();
         // We know things will change either way
         let change_tick = self.advance_change_tick();
@@ -314,7 +325,10 @@ impl World {
                 .expect("Missing change list")
                 .set(Change::modified(Slice::single(slot), change_tick));
 
-            return Ok(Some(mem::replace(&mut *val, value)));
+            return Ok((
+                Some(mem::replace(&mut *val, value)),
+                EntityLocation { arch: src_id, slot },
+            ));
         }
 
         // Pick up the entity and move it to the destination archetype
@@ -383,30 +397,29 @@ impl World {
             eprintln!("New slot: {dst_slot}");
 
             let ns = self.init_namespace(id.namespace());
-            *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
+            let loc = EntityLocation {
                 slot: dst_slot,
                 arch: dst_id,
             };
+            *ns.get_mut(id).expect("Entity is not valid") = loc;
+            Ok((None, loc))
         }
-        Ok(None)
     }
 
     pub(crate) fn remove_dyn(&mut self, id: Entity, component: ComponentInfo) -> Result<()> {
         eprintln!("Removing component {component:?} from {id} ");
         unsafe {
-            self.remove_inner(id, component, |ptr| {
-                eprintln!("Dropping dyn component");
-                (component.drop)(ptr)
-            })
+            self.remove_inner(id, component, |ptr| (component.drop)(ptr))
+                .map(|_| {})
         }
     }
 
-    unsafe fn remove_inner(
+    pub(crate) unsafe fn remove_inner(
         &mut self,
         id: Entity,
         component: ComponentInfo,
         on_drop: impl FnOnce(*mut u8),
-    ) -> Result<()> {
+    ) -> Result<EntityLocation> {
         let ns = self.init_namespace(id.namespace());
         let &EntityLocation { arch: src_id, slot } = ns.get(id).unwrap();
 
@@ -466,15 +479,17 @@ impl World {
             swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
-        *self
-            .init_namespace(id.namespace())
-            .get_mut(id)
-            .expect("Entity is not valid") = EntityLocation {
+        let loc = EntityLocation {
             slot: dst_slot,
             arch: dst_id,
         };
 
-        Ok(())
+        *self
+            .init_namespace(id.namespace())
+            .get_mut(id)
+            .expect("Entity is not valid") = loc;
+
+        Ok(loc)
     }
 
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Result<T> {
@@ -501,17 +516,32 @@ impl World {
             .ok_or_else(|| Error::MissingComponent(id, component.name()))
     }
 
+    pub fn get_at<T: ComponentValue>(
+        &self,
+        EntityLocation { arch, slot }: EntityLocation,
+        id: Entity,
+        component: Component<T>,
+    ) -> Result<AtomicRef<T>> {
+        self.archetype(arch)
+            .get(slot, component)
+            .ok_or_else(|| Error::MissingComponent(id, component.name()))
+    }
     /// Randomly access an entity's component.
     pub fn get_mut<T: ComponentValue>(
         &self,
         id: Entity,
         component: Component<T>,
     ) -> Result<AtomicRefMut<T>> {
-        let &EntityLocation { arch, slot } = self
-            .get_namespace(id.namespace())?
-            .get(id)
-            .ok_or(Error::NoSuchEntity(id))?;
-
+        let &loc = self.location(id)?;
+        self.get_mut_at(loc, component)
+            .ok_or_else(|| Error::MissingComponent(id, component.name()))
+    }
+    /// Randomly access an entity's component.
+    pub(crate) fn get_mut_at<T: ComponentValue>(
+        &self,
+        EntityLocation { arch, slot }: EntityLocation,
+        component: Component<T>,
+    ) -> Option<AtomicRefMut<T>> {
         let archetype = self.archetype(arch);
 
         let change_tick = self.advance_change_tick();
@@ -521,9 +551,7 @@ impl World {
             .expect("Change list is empty")
             .set(Change::modified(Slice::single(slot), change_tick));
 
-        archetype
-            .get_mut(slot, component)
-            .ok_or_else(|| Error::MissingComponent(id, component.name()))
+        archetype.get_mut(slot, component)
     }
 
     /// Returns true if the entity has the specified component.
@@ -610,6 +638,35 @@ impl World {
 
         ns.reconstruct(id).map(|v| v.0)
     }
+
+    /// Access, insert, and remove all components of an entity
+    pub fn entity_mut(&mut self, id: Entity) -> Result<EntityRefMut> {
+        let &loc = self.location(id)?;
+        Ok(EntityRefMut {
+            world: self,
+            loc,
+            id,
+        })
+    }
+
+    /// Access all components of an entity
+    pub fn entity(&self, id: Entity) -> Result<EntityRef> {
+        let &loc = self.location(id)?;
+        Ok(EntityRef {
+            world: self,
+            loc,
+            id,
+        })
+    }
+
+    pub fn entry<T: ComponentValue>(
+        &mut self,
+        id: Entity,
+        component: Component<T>,
+    ) -> Result<Entry<T>> {
+        let &loc = self.location(id)?;
+        todo!()
+    }
 }
 
 impl Default for World {
@@ -622,7 +679,7 @@ impl Default for World {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{EntityBuilder, Query};
+    use crate::{component, EntityBuilder, Query};
 
     use super::*;
 
