@@ -13,7 +13,7 @@ fn main() {
     let mut world = World::new();
 
     // Spawn an entity
-    let p = EntityBuilder::new()
+    EntityBuilder::new()
         .tag(player())
         .set(health(), 50.0)
         .set(pos(), (0.0, 0.0))

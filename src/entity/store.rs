@@ -1,8 +1,5 @@
-use crate::{
-    archetype::ArchetypeId, error::Result, Error, Generation, Namespace, StrippedEntity,
-    STATIC_NAMESPACE,
-};
-use std::{any::Any, iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
+use crate::{archetype::ArchetypeId, error::Result, Error, Generation, Namespace, StrippedEntity};
+use std::{iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
 
 use super::{Entity, EntityIndex};
 
@@ -25,22 +22,6 @@ struct Slot<T> {
 impl<T> Slot<T> {
     pub fn is_alive(&self) -> bool {
         self.gen & 1 == 1
-    }
-
-    pub fn get(&self) -> Option<&T> {
-        if self.is_alive() {
-            Some(unsafe { &self.val.occupied })
-        } else {
-            None
-        }
-    }
-
-    pub fn get_mut(&mut self) -> Option<&mut T> {
-        if self.is_alive() {
-            Some(unsafe { &mut self.val.occupied })
-        } else {
-            None
-        }
     }
 }
 

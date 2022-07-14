@@ -1,6 +1,6 @@
 use atomic_refcell::AtomicRefMut;
 
-use crate::{error::Result, Component, ComponentValue, Entity, World};
+use crate::{Component, ComponentValue, Entity, World};
 
 pub enum Entry<'a, T: ComponentValue> {
     Vacant(VacantEntry<'a, T>),

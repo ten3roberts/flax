@@ -3,7 +3,6 @@ mod cmp;
 use std::{iter::FusedIterator, ops::Neg};
 
 use atomic_refcell::AtomicRef;
-use rayon::vec;
 
 use crate::{
     archetype::{Archetype, ChangeKind, Changes, Slice},
@@ -214,7 +213,7 @@ impl<'this, 'a> Filter<'this, 'a> for RemovedFilter {
         )
     }
 
-    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
+    fn matches(&self, _: &World, _: &Archetype) -> bool {
         true
     }
 
@@ -548,7 +547,7 @@ impl<'this, 'a> Filter<'this, 'a> for Nothing {
         false
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+    fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }
@@ -568,7 +567,7 @@ impl<'this, 'a> Filter<'this, 'a> for All {
         true
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+    fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }
@@ -631,7 +630,7 @@ impl<'this, 'a> Filter<'this, 'a> for With {
         archetype.has(self.component)
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+    fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }
@@ -657,7 +656,7 @@ impl<'this, 'a> Filter<'this, 'a> for Without {
         !archetype.has(self.component)
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+    fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }

@@ -1,6 +1,5 @@
 mod iter;
 mod prepared;
-mod view;
 
 use std::fmt::Debug;
 

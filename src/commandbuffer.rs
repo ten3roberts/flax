@@ -1,17 +1,10 @@
-use std::{
-    collections::{
-        btree_map::{self, Entry},
-        BTreeMap,
-    },
-    iter::Peekable,
-    process::id,
-};
+use std::collections::{btree_map::Entry, BTreeMap};
 
 use itertools::Itertools;
 
 use crate::{
-    error::Result, BufferStorage, Component, ComponentId, ComponentInfo, ComponentValue, Entity,
-    EntityBuilder, Error, World,
+    error::Result, BufferStorage, Component, ComponentInfo, ComponentValue, Entity, EntityBuilder,
+    World,
 };
 
 /// Records commands into the world.
@@ -115,7 +108,7 @@ impl CommandBuffer {
 
         let storage = &mut self.inserts;
 
-        let inserted = (&groups).into_iter().try_for_each(|(id, group)| {
+        (&groups).into_iter().try_for_each(|(id, group)| {
             // Safety
             // The offset is acquired from the map which was previously acquired
             unsafe {
@@ -125,8 +118,7 @@ impl CommandBuffer {
             }
         })?;
 
-        let removed = self
-            .removals
+        self.removals
             .drain(..)
             .try_for_each(|(id, component)| world.remove_dyn(id, component))?;
 
@@ -134,8 +126,7 @@ impl CommandBuffer {
             builder.spawn(world);
         });
 
-        let despawned = self
-            .despawned
+        self.despawned
             .drain(..)
             .try_for_each(|id| world.despawn(id))?;
 

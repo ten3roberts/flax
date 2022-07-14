@@ -204,7 +204,7 @@ mod tests {
         let b = entities.spawn(EntityLocation { arch, slot: 2 });
         let c = entities.spawn(EntityLocation { arch, slot: 3 });
 
-        entities.despawn(b);
+        entities.despawn(b).unwrap();
 
         eprintln!("Despawning: {b:?}");
         assert!(entities.is_alive(a));

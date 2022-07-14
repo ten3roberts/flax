@@ -91,7 +91,7 @@ impl<'w> Fetch<'w> for EntityFetch {
         vec![]
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }

@@ -90,5 +90,6 @@ mod test {
         let cloned: (i32, String, i32) = tuple.push_right(&a).cloned();
         assert_eq!(cloned, (a, b, a));
         let t = ().push_right(5);
+        assert_eq!(t, (5,));
     }
 }
