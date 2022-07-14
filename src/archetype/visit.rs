@@ -1,6 +1,6 @@
 use std::{fmt::Write, slice};
 
-use crate::{ArchetypeId, Component, ComponentValue, Entity};
+use crate::{Component, ComponentValue};
 
 use super::ComponentInfo;
 

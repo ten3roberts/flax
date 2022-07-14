@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    env::VarError,
     mem::{self, MaybeUninit},
     ptr,
     sync::atomic::{AtomicU32, Ordering},
@@ -754,7 +753,7 @@ mod tests {
         assert_eq!(world.has(id, c()), false);
         assert_eq!(world.get(id2, a()).as_deref(), Ok(&7));
         assert_eq!(world.get(id2, c()).as_deref(), Ok(&"Foo".to_string()));
-        world.set(id, e(), shared.clone());
+        world.set(id, e(), shared.clone()).unwrap();
         assert_eq!(
             world.get(id, e()).as_deref().map(|v| &**v),
             Ok(&"Foo".to_string())
@@ -771,9 +770,9 @@ mod tests {
         let id1 = world.spawn();
         let id2 = world.spawn();
 
-        world.set(id1, a(), 40);
+        world.set(id1, a(), 40).unwrap();
 
-        world.set(id2, b(), 4.3);
+        world.set(id2, b(), 4.3).unwrap();
 
         // Borrow a
         let id_a = world.get(id1, a()).unwrap();
@@ -801,7 +800,7 @@ mod tests {
 
         let shared = Arc::new("The meaning of life is ...".to_string());
 
-        world.set(id, e(), shared.clone());
+        world.set(id, e(), shared.clone()).unwrap();
         let id2 = EntityBuilder::new()
             .set(a(), 6)
             .set(b(), 0.219)

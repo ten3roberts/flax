@@ -1,34 +1,5 @@
-use std::ptr;
-
-use flax::{
-    component, util::TupleCloned, wildcard, Component, ComponentId, ComponentValue, DebugVisitor,
-    EntityBuilder, Query, World,
-};
+use flax::{component, util::TupleCloned, wildcard, DebugVisitor, EntityBuilder, Query, World};
 use itertools::Itertools;
-
-/// Type erased clone
-pub struct Cloneable {
-    func: unsafe fn(*const u8, *mut u8),
-    component: ComponentId,
-}
-
-impl Cloneable {
-    /// Clones src into dst
-    /// Types must match
-    pub unsafe fn clone(&self, src: *const u8, dst: *mut u8) {
-        (self.func)(src, dst)
-    }
-
-    pub fn new<T: ComponentValue + Clone>(component: Component<T>) -> Self {
-        Self {
-            func: |src, dst| unsafe {
-                let val = (*src.cast::<T>()).clone();
-                ptr::write(dst.cast::<T>(), val);
-            },
-            component: component.id(),
-        }
-    }
-}
 
 pub struct Countdown<const C: usize>(usize);
 
@@ -53,7 +24,6 @@ impl<const C: usize> Countdown<C> {
 }
 
 component! {
-    clone: Cloneable,
     debug: DebugVisitor,
 }
 
@@ -68,7 +38,7 @@ fn visitors() {
 
     let mut world = World::new();
 
-    let grenade = EntityBuilder::new()
+    EntityBuilder::new()
         .set(name(), "Holy Hand Grenade of Antioch".to_string())
         .spawn(&mut world);
 
@@ -82,8 +52,12 @@ fn visitors() {
     }
 
     // Add the `debug` component to `name`
-    world.set(name(), debug(), DebugVisitor::new(name()));
-    world.set(health(), debug(), DebugVisitor::new(health()));
+    world
+        .set(name(), debug(), DebugVisitor::new(name()))
+        .unwrap();
+    world
+        .set(health(), debug(), DebugVisitor::new(health()))
+        .unwrap();
 
     let mut buf = String::new();
 
@@ -98,7 +72,6 @@ fn relations() {
     enum RelationKind {
         Mom,
         Dad,
-        Parent, // Not everything is binary
     }
 
     component! {
@@ -143,19 +116,19 @@ fn relations() {
         .set(hobby(), debug(), DebugVisitor::new(hobby()))
         .unwrap();
 
-    let child = EntityBuilder::new()
+    let _child = EntityBuilder::new()
         .set(name(), "John")
         .set(hobby(), "Studying")
         .set(child_of(parent), RelationKind::Mom)
         .spawn(&mut world);
 
-    let child2 = EntityBuilder::new()
+    let _child2 = EntityBuilder::new()
         .set(name(), "Sally")
         .set(hobby(), "Hockey")
         .set(child_of(parent), RelationKind::Mom)
         .spawn(&mut world);
 
-    let child3 = EntityBuilder::new()
+    let _child3 = EntityBuilder::new()
         .set(name(), "Reacher")
         .set(hobby(), "Hockey")
         .set(child_of(parent2), RelationKind::Dad)

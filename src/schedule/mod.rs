@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, process::Command};
+use std::collections::BTreeMap;
 
 use itertools::Itertools;
 
@@ -269,7 +269,6 @@ mod test {
             Sword,
             Bow,
             Crossbow,
-            Dagger,
         }
 
         component! {

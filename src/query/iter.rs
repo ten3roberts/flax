@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, slice::IterMut};
+use std::slice::IterMut;
 
 use crate::{
     archetype::{Slice, Slot},

@@ -209,7 +209,7 @@ impl Changes {
         self.inner.iter()
     }
 
-    pub(crate) fn as_changed_set(&self, tick: u32) -> BTreeSet<Slot> {
+    pub fn as_changed_set(&self, tick: u32) -> BTreeSet<Slot> {
         self.as_set(|v| v.kind.is_modified_or_inserted() && v.tick > tick)
     }
 }

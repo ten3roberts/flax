@@ -1,5 +1,5 @@
 use std::alloc::alloc;
-use std::collections::{btree_map, hash_map, BTreeMap, HashMap};
+use std::collections::{hash_map, HashMap};
 use std::{
     alloc::{dealloc, Layout},
     ptr::NonNull,

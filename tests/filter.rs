@@ -39,7 +39,7 @@ fn filters() {
     assert_eq!(items.len(), 11);
 
     eprintln!("Current change: {}", world.change_tick());
-    world.set(id1, a(), 34.0);
+    world.set(id1, a(), 34.0).unwrap();
 
     eprintln!("Current change: {}", world.change_tick());
 
@@ -82,7 +82,7 @@ fn filters() {
         &[-40.0, -30.0, -6.0, -5.0, 0.0, 1.0, 2.0, 7.0, 8.0, 9.0, 34.0]
     );
 
-    world.set(id2, a(), 29.5);
+    world.set(id2, a(), 29.5).unwrap();
 
     let items = query
         .as_vec(&world)
@@ -97,7 +97,7 @@ fn filters() {
     let items = query.prepare(&world).iter().collect_vec();
 
     assert_eq!(items, []);
-    world.remove(id2, a());
+    world.remove(id2, a()).unwrap();
 
     let items = query.prepare(&world).iter().collect_vec();
 

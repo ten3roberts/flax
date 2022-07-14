@@ -583,10 +583,6 @@ impl Storage {
             .as_ptr()
             .add(self.component.size() * slot)
     }
-
-    pub(crate) fn component(&self) -> ComponentInfo {
-        self.component
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -636,25 +632,6 @@ impl ComponentInfo {
 }
 
 impl Storage {
-    /// # Safety
-    /// Assumes the type `T` is compatible with the stored type.
-    /// `len` is the length of the allocated slice in T
-    unsafe fn as_slice_mut<T>(&mut self, len: usize) -> &mut [T] {
-        std::slice::from_raw_parts_mut(self.data.get_mut().as_ptr().cast(), len)
-    }
-
-    /// # Safety
-    /// Assumes the type `T` is compatible with the stored type.
-    /// `len` is the length of the allocated slice in T
-    unsafe fn as_slice<T>(&mut self, len: usize) -> &mut [T] {
-        std::slice::from_raw_parts_mut(self.data.get_mut().as_ptr().cast(), len)
-    }
-
-    /// Returns the `index`th element of type represented by info.
-    unsafe fn elem_raw(&mut self, index: usize, info: &ComponentInfo) -> *mut u8 {
-        self.data.get_mut().as_ptr().add(index * info.size())
-    }
-
     unsafe fn at_mut(&mut self, slot: Slot) -> *mut u8 {
         self.data
             .get_mut()
