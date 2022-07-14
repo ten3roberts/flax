@@ -8,9 +8,9 @@ pub enum Entry<'a, T: ComponentValue> {
 }
 
 pub struct VacantEntry<'a, T: ComponentValue> {
-    world: &'a mut World,
-    id: Entity,
-    component: Component<T>,
+    pub(crate) world: &'a mut World,
+    pub(crate) id: Entity,
+    pub(crate) component: Component<T>,
 }
 
 impl<'a, T: ComponentValue> VacantEntry<'a, T> {
@@ -33,7 +33,7 @@ impl<'a, T: ComponentValue> VacantEntry<'a, T> {
 }
 
 pub struct OccupiedEntry<'a, T: ComponentValue> {
-    borrow: AtomicRefMut<'a, T>,
+    pub(crate) borrow: AtomicRefMut<'a, T>,
 }
 
 impl<'a, T: ComponentValue> OccupiedEntry<'a, T> {
@@ -85,12 +85,4 @@ where
             Entry::Occupied(slot) => slot.into_mut(),
         }
     }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn entry() {}
 }

@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    env::VarError,
     mem::{self, MaybeUninit},
     ptr,
     sync::atomic::{AtomicU32, Ordering},
@@ -11,7 +12,7 @@ use itertools::Itertools;
 use crate::{
     archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, Visitor},
     entity::{EntityLocation, EntityStore},
-    entity_borrow::{EntityRef, EntityRefMut},
+    entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity, Error, Namespace,
@@ -298,7 +299,7 @@ impl World {
         &mut self,
         id: impl Into<Entity>,
         component: Component<T>,
-        mut value: T,
+        value: T,
     ) -> Result<Option<T>> {
         self.set_inner(id, component, value).map(|v| v.0)
     }
@@ -519,12 +520,9 @@ impl World {
     pub fn get_at<T: ComponentValue>(
         &self,
         EntityLocation { arch, slot }: EntityLocation,
-        id: Entity,
         component: Component<T>,
-    ) -> Result<AtomicRef<T>> {
-        self.archetype(arch)
-            .get(slot, component)
-            .ok_or_else(|| Error::MissingComponent(id, component.name()))
+    ) -> Option<AtomicRef<T>> {
+        self.archetype(arch).get(slot, component)
     }
     /// Randomly access an entity's component.
     pub fn get_mut<T: ComponentValue>(
@@ -659,13 +657,28 @@ impl World {
         })
     }
 
-    pub fn entry<T: ComponentValue>(
-        &mut self,
+    /// Returns an entry for a given component of an entity allowing for
+    /// in-place manipulation, insertion or removal.
+    ///
+    /// Fails if the entity is not valid.
+    pub fn entry<'a, T: ComponentValue>(
+        &'a mut self,
         id: Entity,
         component: Component<T>,
-    ) -> Result<Entry<T>> {
+    ) -> Result<Entry<'a, T>> {
         let &loc = self.location(id)?;
-        todo!()
+        let arch = self.archetype(loc.arch);
+        if arch.has(component.id()) {
+            return Ok(Entry::Occupied(OccupiedEntry {
+                borrow: self.get_mut(id, component).unwrap(),
+            }));
+        } else {
+            return Ok(Entry::Vacant(VacantEntry {
+                world: self,
+                id,
+                component,
+            }));
+        };
     }
 }
 
