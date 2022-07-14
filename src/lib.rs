@@ -103,6 +103,7 @@ mod query;
 mod system;
 mod world;
 
+pub mod components;
 mod entity_ref;
 pub mod entry;
 pub mod error;
