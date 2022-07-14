@@ -1,8 +1,12 @@
 use std::mem::MaybeUninit;
 
-use atomic_refcell::AtomicRef;
+use atomic_refcell::{AtomicRef, AtomicRefMut};
 
-use crate::{component, error::Result, Component, ComponentValue, Entity, EntityLocation, World};
+use crate::{
+    entry::{Entry, OccupiedEntry, VacantEntry},
+    error::Result,
+    Component, ComponentValue, Entity, EntityLocation, Error, World,
+};
 
 /// Borrow all the components of an entity at once.
 ///
@@ -17,12 +21,16 @@ pub struct EntityRefMut<'a> {
 impl<'a> EntityRefMut<'a> {
     /// Access a component
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
-        self.world.get_at(self.loc, self.id, component)
+        self.world
+            .get_at(self.loc, component)
+            .ok_or_else(|| Error::MissingComponent(self.id, component.name()))
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
-        self.world.get_at(self.loc, self.id, component)
+    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRefMut<T>> {
+        self.world
+            .get_mut_at(self.loc, component)
+            .ok_or_else(|| Error::MissingComponent(self.id, component.name()))
     }
 
     /// Check if the entity currently has the specified component without
@@ -59,6 +67,21 @@ impl<'a> EntityRefMut<'a> {
     pub fn id(&self) -> Entity {
         self.id
     }
+
+    /// See [`crate::World::entry`]
+    pub fn entry<T: ComponentValue>(self, component: Component<T>) -> Entry<'a, T> {
+        if self.has(component) {
+            Entry::Occupied(OccupiedEntry {
+                borrow: self.world.get_mut_at(self.loc, component).unwrap(),
+            })
+        } else {
+            Entry::Vacant(VacantEntry {
+                world: self.world,
+                id: self.id,
+                component,
+            })
+        }
+    }
 }
 
 /// Borrow all the components of an entity at once.
@@ -74,12 +97,16 @@ pub struct EntityRef<'a> {
 impl<'a> EntityRef<'a> {
     /// Access a component
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
-        self.world.get_at(self.loc, self.id, component)
+        self.world
+            .get_at(self.loc, component)
+            .ok_or_else(|| Error::MissingComponent(self.id, component.name()))
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
-        self.world.get_at(self.loc, self.id, component)
+    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRefMut<T>> {
+        self.world
+            .get_mut_at(self.loc, component)
+            .ok_or_else(|| Error::MissingComponent(self.id, component.name()))
     }
 
     /// Check if the entity currently has the specified component without
@@ -131,5 +158,11 @@ mod test {
         assert!(entity.get(pos()).is_err());
         assert!(entity.get(health()).is_err());
         assert_eq!(entity.has(health()), false);
+
+        let mut entity = world.entity_mut(id).unwrap();
+
+        entity.set(pos(), (0.0, 0.0)).unwrap();
+        let pos = entity.entry(pos()).and_modify(|v| v.0 += 1.0).or_default();
+        assert_eq!(*pos, (1.0, 0.0));
     }
 }
