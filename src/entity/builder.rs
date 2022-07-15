@@ -23,7 +23,7 @@ impl EntityBuilder {
 
     /// Sets the component of the entity.
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> &mut Self {
-        self.buffer.insert(component, value);
+        self.buffer.set(component, value);
         self
     }
 

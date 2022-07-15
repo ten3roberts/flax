@@ -1,4 +1,6 @@
-use flax::{component, util::TupleCloned, wildcard, DebugVisitor, EntityBuilder, Query, World};
+use flax::{
+    component, util::TupleCloned, visitors::DebugVisitor, wildcard, EntityBuilder, Query, World,
+};
 use itertools::Itertools;
 
 pub struct Countdown<const C: usize>(usize);

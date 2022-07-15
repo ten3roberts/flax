@@ -218,7 +218,7 @@ impl ComponentBuffer {
         unsafe { Some(self.storage.take(offset)) }
     }
 
-    pub fn insert<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
+    pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
         if let Some(&(offset, _)) = self.components.get(&component.id()) {
             unsafe { Some(self.storage.swap(offset, value)) }
         } else {
@@ -290,12 +290,12 @@ mod tests {
     pub fn component_buffer() {
         let shared = Arc::new("abc".to_string());
         let mut buffer = ComponentBuffer::new();
-        buffer.insert(a(), 7);
-        buffer.insert(c(), 9);
-        buffer.insert(b(), "Hello, World".to_string());
-        buffer.insert(e(), [5.0; 100]);
+        buffer.set(a(), 7);
+        buffer.set(c(), 9);
+        buffer.set(b(), "Hello, World".to_string());
+        buffer.set(e(), [5.0; 100]);
 
-        buffer.insert(f(), shared.clone());
+        buffer.set(f(), shared.clone());
 
         assert_eq!(buffer.get(a()), Some(&7));
         assert_eq!(buffer.get(c()), Some(&9));
@@ -314,8 +314,8 @@ mod tests {
 
         let shared = Arc::new("abc".to_string());
         let shared_2 = Arc::new("abc".to_string());
-        buffer.insert(f(), shared.clone());
-        buffer.insert(f(), shared_2.clone());
+        buffer.set(f(), shared.clone());
+        buffer.set(f(), shared_2.clone());
 
         assert_eq!(Arc::strong_count(&shared), 1);
         assert_eq!(Arc::strong_count(&shared_2), 2);

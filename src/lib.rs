@@ -109,13 +109,15 @@ pub mod entry;
 pub mod error;
 pub mod fetch;
 pub mod macros;
+mod meta;
 pub mod schedule;
 pub mod util;
+pub mod visitors;
 
 // Required due to macro
 pub use paste::paste;
 
-pub use archetype::{Archetype, ArchetypeId, Change, ChangeKind, ComponentInfo, DebugVisitor};
+pub use archetype::{Archetype, ArchetypeId, Change, ChangeKind, ComponentInfo};
 pub use buffer::*;
 pub use commandbuffer::CommandBuffer;
 pub use component::*;
@@ -123,6 +125,7 @@ pub use entity::{
     entities, wildcard, Entity, EntityBuilder, EntityIndex, EntityLocation, EntityStore,
     Generation, Namespace, StrippedEntity, STATIC_NAMESPACE,
 };
+pub use meta::*;
 
 pub use fetch::*;
 pub use filter::*;

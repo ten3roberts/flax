@@ -28,10 +28,12 @@ macro_rules! hash {
 /// use flax::component;
 /// component! {
 ///     health: f32,
+///     connection(id): f32,
 /// }
 /// ```
 /// This will create a function `health()` which returns the component id.
 macro_rules! component {
+    // Relations
     ($(#[$outer:meta])* $vis: vis $name: ident( $obj: ident ): $ty: ty, $($rest:tt)*) => {
         $crate::paste! {
             #[allow(dead_code)]
@@ -45,14 +47,31 @@ macro_rules! component {
         $crate::component!{ $($rest)* }
     };
 
-    ($(#[$outer:meta])* $vis: vis $name: ident: $ty: ty, $($rest:tt)*) => {
+    // Component
+    ($(#[$outer:meta])* $vis: vis $name: ident: $ty: ty $(=> [$($metadata: ty),*])?, $($rest:tt)*) => {
 
         $crate::paste! {
             #[allow(dead_code)]
             static [<COMPONENT_ $name:snake:upper _ID>]: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             $(#[$outer])*
             $vis fn $name() -> $crate::Component<$ty> {
-                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name))
+                fn meta(_component: $crate::Component<$ty>) -> $crate::ComponentBuffer {
+                    let mut _buffer = $crate::ComponentBuffer::new();
+
+                    <$crate::Name as $crate::MetaData<$ty>>::attach(_component, &mut _buffer);
+
+                    $(
+                        $(
+                            <$metadata as $crate::MetaData::<$ty>>::attach(_component, &mut _buffer);
+                        )*
+                    )*
+
+                    _buffer
+                }
+                let mut component = $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name));
+
+                component.set_meta(meta);
+                component
             }
         }
 

@@ -1,10 +1,12 @@
 codecov:
-  require_ci_to_pass: yes
+  require_ci_to_pass: true
 
 coverage:
   status:
     project:
       default: true
     patch:
+      status:
+        patch: false
       default:
         target: 60%  # new contributions should have a coverage at least equal to target
