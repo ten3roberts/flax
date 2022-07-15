@@ -5,7 +5,8 @@ use crate::{Component, ComponentValue};
 use super::ComponentInfo;
 
 #[derive(PartialEq)]
-pub struct Visit {
+/// The current component being visited.
+pub struct VisitData {
     pub len: usize,
     pub data: *const u8,
     pub component: ComponentInfo,
@@ -20,32 +21,5 @@ pub struct Visit {
 ///
 /// **Note**: This is a low level API.
 pub trait Visitor<Ctx> {
-    unsafe fn visit(&mut self, ctx: &mut Ctx, visit: Visit);
-}
-
-pub struct DebugVisitor {
-    func: unsafe fn(&mut dyn Write, Visit),
-}
-
-impl DebugVisitor {
-    pub fn new<T>(_: Component<T>) -> Self
-    where
-        T: ComponentValue + std::fmt::Debug,
-    {
-        Self {
-            func: |f, visit| unsafe {
-                let val = slice::from_raw_parts(visit.data.cast::<T>(), visit.len);
-                write!(f, "{}: {:#?}\n", visit.component.name(), val).expect("Failed to write");
-            },
-        }
-    }
-}
-
-impl<W> Visitor<W> for DebugVisitor
-where
-    W: Write,
-{
-    unsafe fn visit(&mut self, ctx: &mut W, visit: Visit) {
-        (self.func)(ctx, visit)
-    }
+    unsafe fn visit(&mut self, ctx: &mut Ctx, visit: VisitData);
 }

@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::{
-    archetype::ComponentInfo, entity::EntityIndex, Entity, InsertedFilter, ModifiedFilter, Mutable,
-    Relation, RemovedFilter, With, Without, STATIC_NAMESPACE,
+    archetype::ComponentInfo, entity::EntityIndex, ComponentBuffer, Entity, InsertedFilter,
+    ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without, STATIC_NAMESPACE,
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
@@ -22,6 +22,10 @@ pub struct Component<T> {
     id: ComponentId,
     name: &'static str,
     marker: PhantomData<T>,
+
+    /// A metadata is a component which is attached to the component, such as
+    /// metadata or name
+    meta: fn(Self) -> ComponentBuffer,
 }
 
 impl<T: ComponentValue> Eq for Component<T> {}
@@ -40,6 +44,7 @@ impl<T: ComponentValue> Clone for Component<T> {
             id: self.id,
             name: self.name,
             marker: PhantomData,
+            meta: self.meta,
         }
     }
 }
@@ -57,11 +62,15 @@ impl<T: ComponentValue> Display for Component<T> {
 }
 
 impl<T: ComponentValue> Component<T> {
+    /// Create a new component given a unique id and name.
+    ///
+    /// *SAFETY*: The id must not be used by anything else
     pub fn new(id: ComponentId, name: &'static str) -> Self {
         Self {
             id,
             name,
             marker: PhantomData,
+            meta: |_| Default::default(),
         }
     }
 
@@ -70,6 +79,7 @@ impl<T: ComponentValue> Component<T> {
             id: Entity::pair(self.id, object),
             name: self.name,
             marker: PhantomData,
+            meta: |_| Default::default(),
         }
     }
 
@@ -89,6 +99,16 @@ impl<T: ComponentValue> Component<T> {
             Entity::from_parts(EntityIndex::new(index).unwrap(), 1, STATIC_NAMESPACE),
             name,
         )
+    }
+
+    /// Attaches a function to generate component metadata
+    pub fn set_meta(&mut self, meta: fn(Self) -> ComponentBuffer) {
+        self.meta = meta
+    }
+
+    /// Returns all metadata components
+    pub fn get_meta(&self) -> ComponentBuffer {
+        (self.meta)(*self)
     }
 
     /// Get the component's id.

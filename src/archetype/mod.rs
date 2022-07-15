@@ -503,7 +503,7 @@ impl Archetype {
         unsafe {
             visitor.visit(
                 ctx,
-                Visit {
+                VisitData {
                     len: self.len,
                     data: data.as_ptr(),
                     component: storage.component,
@@ -666,9 +666,9 @@ mod tests {
         let shared = Arc::new("abc".to_string());
 
         let mut buffer = ComponentBuffer::new();
-        buffer.insert(a(), 7);
-        buffer.insert(b(), "Foo".to_string());
-        buffer.insert(c(), shared.clone());
+        buffer.set(a(), 7);
+        buffer.set(b(), "Foo".to_string());
+        buffer.set(c(), shared.clone());
 
         let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2, 0);
         let id_2 = Entity::from_parts(NonZeroU32::new(5).unwrap(), 2, 0);
@@ -677,9 +677,9 @@ mod tests {
         eprintln!("Slot: {slot}");
 
         // Reuse buffer and insert again
-        buffer.insert(a(), 9);
-        buffer.insert(b(), "Bar".to_string());
-        buffer.insert(c(), shared.clone());
+        buffer.set(a(), 9);
+        buffer.set(b(), "Bar".to_string());
+        buffer.set(c(), shared.clone());
 
         let slot_2 = arch.insert(id_2, &mut buffer);
 

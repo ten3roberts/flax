@@ -275,6 +275,17 @@ impl World {
         Ok(())
     }
 
+    /// Set metadata for a given component if they do not already exist
+    pub fn register_component_meta(&mut self, component: ComponentId, mut meta: ComponentBuffer) {
+        if let Ok(loc) = self.location(component) {
+            if self.archetype(loc.arch).has(component) {
+                return;
+            }
+        }
+
+        unsafe { self.set_with(component, meta.take_all()).unwrap() }
+    }
+
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
         let &EntityLocation {
             arch: archetype,
@@ -552,7 +563,8 @@ impl World {
     }
 
     /// Returns true if the entity has the specified component.
-    /// Returns false if
+    /// Returns false if the entity does not exist or it does not have the
+    /// specified component
     pub fn has<T: ComponentValue>(&self, id: Entity, component: Component<T>) -> bool {
         if let Ok(loc) = self.location(id) {
             self.archetype(loc.arch).has(component.id())
