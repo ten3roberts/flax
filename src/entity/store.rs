@@ -35,8 +35,8 @@ pub fn from_slot_gen(gen: u32) -> u16 {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EntityLocation {
-    pub(crate) arch: ArchetypeId,
     pub(crate) slot: usize,
+    pub(crate) arch: ArchetypeId,
 }
 
 pub struct EntityStore<V = EntityLocation> {
@@ -165,6 +165,7 @@ impl<V> EntityStore<V> {
         if !self.is_alive(id) {
             return Err(Error::NoSuchEntity(id));
         }
+        eprintln!("Despawning: {id} in {}", self.namespace);
 
         let index = id.index();
 
@@ -194,6 +195,7 @@ impl<V> EntityStore<V> {
     /// Spawns an entity at the provided id.
     /// Any entity with the same index as id will be despawned
     pub(crate) fn spawn_at(&mut self, id: Entity, value: V) -> &V {
+        dbg!(id);
         let ns = self.namespace;
         assert_eq!(ns, id.namespace());
 
@@ -201,47 +203,99 @@ impl<V> EntityStore<V> {
 
         // Init slot
         let free_head = &mut self.free_head;
-        self.slots
-            .extend((self.slots.len()..index.get() as _).map(|i| {
-                let next = if (i + 1) != index.get() as usize {
-                    free_head.replace(NonZeroU32::new(i as u32 + 1).unwrap())
-                } else {
-                    None
-                };
-                Slot {
-                    val: SlotValue {
-                        vacant: Vacant { next },
-                    },
-                    gen: 1,
-                }
-            }));
+        dbg!(self.slots.len(), index.get(), *free_head, self.namespace);
 
-        // Remove any occurence in the free list
+        let diff = (index.get() as usize).saturating_sub(self.slots.len());
+
+        eprintln!("Padding with: {diff}");
+        // Fill the slots between the last and the new with free slots
+        // The wanted id may already be inside the valid range, or it may be
+        // outside.
+        //
+        // Regardless, it will now be in the free list
+        self.slots.extend(
+            (self.slots.len()..)
+                .map(|i| {
+                    // This slot is not filled so mark it as free
+                    let current = NonZeroU32::new(i as u32 + 1).unwrap();
+                    eprintln!("Replacing free head {free_head:?} with {current}");
+                    // Mark current slot as free
+                    let next = free_head.replace(current);
+
+                    eprintln!("Next: {next:?}");
+                    Slot {
+                        val: SlotValue {
+                            vacant: Vacant { next },
+                        },
+                        gen: 0,
+                    }
+                })
+                .take(diff),
+        );
+
+        // Find it in the free list
+        let mut prev = None;
         let mut cur = self.free_head;
         while let Some(current) = cur {
+            dbg!(current);
             let slot = self.slot(current).expect("Invalid free list node");
-            let next = unsafe { slot.val.vacant.next };
-            if let Some(next) = next {
-                if next == index {
-                    let next_slot = self.slot(next).unwrap();
-                    // Oh no
-                    eprintln!("Found id in free list");
-                    self.slot_mut(current).unwrap().val.vacant.next =
-                        unsafe { next_slot.val.vacant.next };
+
+            let next_free = unsafe { slot.val.vacant.next };
+            assert!(!slot.is_alive());
+            if current == index {
+                eprintln!("Found slot in free list: {id}");
+                if let Some(prev) = prev {
+                    self.slot_mut(prev).unwrap().val.vacant = Vacant { next: next_free }
+                } else {
+                    self.free_head = next_free;
                 }
+
+                let slot = self.slot_mut(current).unwrap();
+                *slot = Slot {
+                    gen: to_slot_gen(id.generation()),
+                    val: SlotValue {
+                        occupied: ManuallyDrop::new(value),
+                    },
+                };
+
+                return unsafe { &*slot.val.occupied };
             }
 
-            cur = next
-        }
+            // let next_free = unsafe { slot.val.vacant.next };
+            // if let Some(next) = next {
+            //     if next == index {
+            //         let next_slot = self.slot(next).unwrap();
+            //         // Oh no
+            //         eprintln!("Found id {id} in free list");
+            //         self.slot_mut(current).unwrap().val.vacant.next =
+            //             unsafe { next_slot.val.vacant.next };
+            //     }
+            // }
 
+            prev = Some(current);
+            cur = next_free
+        }
+        eprintln!("Slot is alive");
+
+        // It was not free, that means it already exists
         let slot = self.slot_mut(index).expect("Padded vector");
+
+        assert!(slot.is_alive());
+
         eprintln!("Init {id}");
 
-        slot.gen = to_slot_gen(id.generation());
+        unsafe {
+            ManuallyDrop::<V>::drop(&mut slot.val.occupied);
+        }
 
-        slot.val.occupied = ManuallyDrop::new(value);
+        *slot = Slot {
+            gen: to_slot_gen(id.generation()),
+            val: SlotValue {
+                occupied: ManuallyDrop::new(value),
+            },
+        };
 
-        unsafe { &slot.val.occupied }
+        unsafe { &*slot.val.occupied }
     }
 }
 
