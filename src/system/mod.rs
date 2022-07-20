@@ -272,9 +272,7 @@ mod test {
         let mut system = System::builder()
             .with(Query::new(a()))
             // .with(Query::new(b()))
-            .build(|mut a: QueryData<Component<String>, All>| {
-                assert_eq!(a.prepare().iter().count(), 1)
-            });
+            .build(|mut a: QueryData<Component<String>>| assert_eq!(a.prepare().iter().count(), 1));
 
         let mut fallible = System::builder()
             .with_name("Fallible")

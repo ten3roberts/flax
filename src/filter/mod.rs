@@ -71,9 +71,11 @@ gen_bitops! {
 
 /// A filter over a query which will be prepared for an archetype, yielding
 /// subsets of slots.
+///
+/// A filter requires Debug for error messages for user conveniance
 pub trait Filter<'this, 'w>
 where
-    Self: Sized,
+    Self: Sized + std::fmt::Debug,
 {
     type Prepared: PreparedFilter;
 
@@ -101,9 +103,9 @@ where
     ///
     /// Returns false if an entity will never yield, such as a mismatched
     /// archetype
-    fn matches(&self, world: &World, archetype: &Archetype) -> bool;
+    fn matches(&self, world: &World, arch: &Archetype) -> bool;
     /// Returns which components and how will be accessed for an archetype.
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access>;
+    fn access(&self, world: &World, id: ArchetypeId, arch: &Archetype) -> Vec<Access>;
 }
 
 #[derive(Debug, Clone)]
@@ -609,6 +611,7 @@ where
 
 impl<F: PreparedFilter> FusedIterator for FilterIter<F> {}
 
+#[derive(Debug, Clone)]
 pub struct With {
     component: ComponentId,
 }
@@ -635,6 +638,7 @@ impl<'this, 'a> Filter<'this, 'a> for With {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Without {
     component: ComponentId,
 }

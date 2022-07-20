@@ -107,8 +107,8 @@ impl<V> EntityStore<V> {
         }
 
         unsafe {
-            let a = &mut *((self.get(a)?) as *const V as *mut V);
-            let b = &mut *((self.get(b)?) as *const V as *mut V);
+            let a = &mut *((self.get_mut(a)?) as *mut V);
+            let b = &mut *((self.get_mut(b)?) as *mut V);
             Some((a, b))
         }
     }
@@ -135,6 +135,17 @@ impl<V> EntityStore<V> {
                 .val
                 .occupied
         })
+    }
+
+    /// Return the entity at a given index
+    pub fn at(&self, index: EntityIndex) -> Option<Entity> {
+        let slot = self.slot(index)?;
+
+        Some(Entity::from_parts(
+            index,
+            (slot.gen >> 1) as u16,
+            self.namespace,
+        ))
     }
 
     #[inline]
@@ -193,21 +204,21 @@ impl<V> EntityStore<V> {
     }
 
     /// Spawns an entity at the provided id.
-    /// Any entity with the same index as id will be despawned
-    pub(crate) fn spawn_at(&mut self, id: Entity, value: V) -> &V {
-        dbg!(id);
-        let ns = self.namespace;
-        assert_eq!(ns, id.namespace());
-
-        let index = id.index();
-
+    ///
+    /// Fails if the index is occupied.
+    pub(crate) fn spawn_at(
+        &mut self,
+        index: EntityIndex,
+        generation: Generation,
+        value: V,
+    ) -> Result<&V> {
         // Init slot
         let free_head = &mut self.free_head;
-        dbg!(self.slots.len(), index.get(), *free_head, self.namespace);
+
+        eprintln!("Spawning at: {index}");
 
         let diff = (index.get() as usize).saturating_sub(self.slots.len());
 
-        eprintln!("Padding with: {diff}");
         // Fill the slots between the last and the new with free slots
         // The wanted id may already be inside the valid range, or it may be
         // outside.
@@ -218,11 +229,9 @@ impl<V> EntityStore<V> {
                 .map(|i| {
                     // This slot is not filled so mark it as free
                     let current = NonZeroU32::new(i as u32 + 1).unwrap();
-                    eprintln!("Replacing free head {free_head:?} with {current}");
                     // Mark current slot as free
                     let next = free_head.replace(current);
 
-                    eprintln!("Next: {next:?}");
                     Slot {
                         val: SlotValue {
                             vacant: Vacant { next },
@@ -243,7 +252,6 @@ impl<V> EntityStore<V> {
             let next_free = unsafe { slot.val.vacant.next };
             assert!(!slot.is_alive());
             if current == index {
-                eprintln!("Found slot in free list: {id}");
                 if let Some(prev) = prev {
                     self.slot_mut(prev).unwrap().val.vacant = Vacant { next: next_free }
                 } else {
@@ -252,50 +260,21 @@ impl<V> EntityStore<V> {
 
                 let slot = self.slot_mut(current).unwrap();
                 *slot = Slot {
-                    gen: to_slot_gen(id.generation()),
+                    gen: to_slot_gen(generation),
                     val: SlotValue {
                         occupied: ManuallyDrop::new(value),
                     },
                 };
 
-                return unsafe { &*slot.val.occupied };
+                return unsafe { Ok(&*slot.val.occupied) };
             }
-
-            // let next_free = unsafe { slot.val.vacant.next };
-            // if let Some(next) = next {
-            //     if next == index {
-            //         let next_slot = self.slot(next).unwrap();
-            //         // Oh no
-            //         eprintln!("Found id {id} in free list");
-            //         self.slot_mut(current).unwrap().val.vacant.next =
-            //             unsafe { next_slot.val.vacant.next };
-            //     }
-            // }
 
             prev = Some(current);
             cur = next_free
         }
-        eprintln!("Slot is alive");
 
         // It was not free, that means it already exists
-        let slot = self.slot_mut(index).expect("Padded vector");
-
-        assert!(slot.is_alive());
-
-        eprintln!("Init {id}");
-
-        unsafe {
-            ManuallyDrop::<V>::drop(&mut slot.val.occupied);
-        }
-
-        *slot = Slot {
-            gen: to_slot_gen(id.generation()),
-            val: SlotValue {
-                occupied: ManuallyDrop::new(value),
-            },
-        };
-
-        unsafe { &*slot.val.occupied }
+        Err(Error::EntityExists(self.at(index).unwrap()))
     }
 }
 
@@ -326,16 +305,20 @@ impl<'a, V> Iterator for EntityStoreIter<'a, V> {
     type Item = (Entity, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some((index, slot)) = self.iter.next() {
-            if slot.gen & 1 == 1 {
-                let val = unsafe { &slot.val.occupied };
-                let id = Entity::from_parts(
-                    NonZeroU32::new(index as u32 + 1).unwrap(),
-                    (slot.gen >> 1) as u16,
-                    self.namespace,
-                );
+        loop {
+            if let Some((index, slot)) = self.iter.next() {
+                if slot.gen & 1 == 1 {
+                    let val = unsafe { &slot.val.occupied };
+                    let id = Entity::from_parts(
+                        NonZeroU32::new(index as u32 + 1).unwrap(),
+                        (slot.gen >> 1) as u16,
+                        self.namespace,
+                    );
 
-                return Some((id, val));
+                    return Some((id, val));
+                }
+            } else {
+                break;
             }
         }
 

@@ -20,6 +20,9 @@ pub enum Error {
     Disjoint(Vec<Entity>),
     #[error("Could not downcast cell to concrete type {0}")]
     Downcast(&'static str),
+
+    #[error("Entity {0} already exists")]
+    EntityExists(Entity),
 }
 
 #[derive(Debug, Error)]

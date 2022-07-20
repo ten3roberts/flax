@@ -2,7 +2,7 @@ use std::{fmt::Write, slice};
 
 use crate::{
     archetype::{VisitData, Visitor},
-    component, Component, ComponentValue,
+    component, ComponentValue,
 };
 
 /// Format a component with debug
@@ -11,14 +11,16 @@ pub struct DebugVisitor {
 }
 
 impl DebugVisitor {
-    pub fn new<T>(_: Component<T>) -> Self
+    pub fn new<T>() -> Self
     where
         T: ComponentValue + std::fmt::Debug,
     {
         Self {
             func: |f, visit| unsafe {
                 let val = slice::from_raw_parts(visit.data.cast::<T>(), visit.len);
-                write!(f, "{}: {:#?}\n", visit.component.name(), val).expect("Failed to write");
+                // if !val.is_empty() {
+                writeln!(f, "{}: {:#?}", visit.component.name(), val).expect("Failed to write");
+                // }
             },
         }
     }

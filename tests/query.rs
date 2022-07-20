@@ -1,10 +1,11 @@
 use flax::{component, util::TupleCloned, CmpExt, EntityBuilder, FetchExt, Query, World};
 use itertools::Itertools;
 
+use flax::components::name;
+
 #[test]
 fn query_change() {
     component! {
-        name: String,
         health: f32,
         pos: (f32, f32),
         // Distance from origin
@@ -79,7 +80,6 @@ fn query_change() {
 #[test]
 fn query_opt() {
     component! {
-        name: String,
         mass: f32,
         vel: f32,
         status_effect: String,

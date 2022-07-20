@@ -38,7 +38,7 @@ impl BufferStorage {
         let new_len = new_offset + layout.size();
 
         if new_len >= self.layout.size() || layout.align() > self.layout.align() && new_len != 0 {
-            eprintln!("Reallocating {} => {}", self.layout.size(), new_len);
+            // eprintln!("Reallocating {} => {}", self.layout.size(), new_len);
             let align = self.layout.align().max(layout.align());
             let new_layout = Layout::from_size_align(new_len.next_power_of_two(), align).unwrap();
 
@@ -181,10 +181,18 @@ impl Drop for BufferStorage {
 /// Can hold up to one if each component.
 ///
 /// Used for gathering up an entity's components or inserting it.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct ComponentBuffer {
     components: HashMap<ComponentId, (Offset, ComponentInfo)>,
     storage: BufferStorage,
+}
+
+impl std::fmt::Debug for ComponentBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(self.components().map(|v| v.name()))
+            .finish()
+    }
 }
 
 /// Since all components are Send + Sync, the componentbuffer is as well

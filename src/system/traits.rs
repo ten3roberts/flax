@@ -184,13 +184,13 @@ mod test {
     use itertools::Itertools;
 
     use crate::{
-        component, system::SystemContext, CommandBuffer, Entity, Query, QueryData, SystemFn, World,
+        component, components::name, system::SystemContext, CommandBuffer, Entity, Query,
+        QueryData, SystemFn, World,
     };
 
     use super::{Writable, Write};
 
     component! {
-        name: String,
         health: f32,
     }
 

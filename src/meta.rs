@@ -1,8 +1,6 @@
-use crate::{
-    components::name,
-    visitors::{debug_visitor, DebugVisitor},
-    Component, ComponentBuffer, ComponentValue,
-};
+use crate::components::name;
+use crate::visitors::debug_visitor;
+use crate::{visitors::DebugVisitor, Component, ComponentBuffer, ComponentInfo, ComponentValue};
 
 /// Additional data that can attach itself to a component
 ///
@@ -10,7 +8,7 @@ use crate::{
 /// components.
 pub trait MetaData<T: ComponentValue> {
     /// Attach the metadata to the component buffer
-    fn attach(component: Component<T>, buffer: &mut ComponentBuffer);
+    fn attach(component: ComponentInfo, buffer: &mut ComponentBuffer);
 }
 
 #[derive(Debug, Clone)]
@@ -20,7 +18,7 @@ impl<T> MetaData<T> for Name
 where
     T: ComponentValue,
 {
-    fn attach(component: Component<T>, buffer: &mut ComponentBuffer) {
+    fn attach(component: ComponentInfo, buffer: &mut ComponentBuffer) {
         buffer.set(name(), component.name().to_string());
     }
 }
@@ -33,8 +31,8 @@ impl<T> MetaData<T> for Debug
 where
     T: std::fmt::Debug + ComponentValue,
 {
-    fn attach(component: Component<T>, buffer: &mut ComponentBuffer) {
-        buffer.set(debug_visitor(), DebugVisitor::new(component));
+    fn attach(component: ComponentInfo, buffer: &mut ComponentBuffer) {
+        buffer.set(debug_visitor(), DebugVisitor::new::<T>());
     }
 }
 

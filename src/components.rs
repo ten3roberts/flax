@@ -3,9 +3,16 @@
 
 use crate::component;
 
+use crate::ComponentInfo;
+use crate::Debug;
+
 component! {
     /// A name for an entity of component
     pub name: String,
     /// The default parent relationship
     pub parent: (),
+    /// Tag for anything which is a component.
+    /// Added automatically to all components.
+    /// This is the basis of the reflection provided by flax
+    pub component: ComponentInfo,
 }
