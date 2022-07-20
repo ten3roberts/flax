@@ -149,7 +149,7 @@ where
 
         for i in 0..C {
             let id = ids[i];
-            let &EntityLocation { arch, slot } = self.world.location(id)?;
+            let EntityLocation { arch, slot } = self.world.location(id)?;
             idxs[i] = (
                 self.prepare_archetype(arch).ok_or_else(|| {
                     let arch = self.world.archetype(arch);
@@ -173,7 +173,7 @@ where
     /// Get the fetch items for an entity.
     /// **Note**: Filters are ignored.
     pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
-        let &EntityLocation { arch, slot } = self.world.location(id)?;
+        let EntityLocation { arch, slot } = self.world.location(id)?;
 
         let idx = self.prepare_archetype(arch).ok_or_else(|| {
             let arch = self.world.archetype(arch);

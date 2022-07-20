@@ -136,7 +136,13 @@ impl Archetype {
     }
 
     pub fn init_changes(&mut self, component: ComponentId) -> &mut Changes {
-        self.changes.entry(component).or_default().get_mut()
+        self.changes
+            .entry(component)
+            .or_insert_with(|| {
+                eprintln!("Initialized changes for {component}");
+                Default::default()
+            })
+            .get_mut()
     }
 
     pub fn remove_slot_changes(&mut self, slot: Slot) {
@@ -591,6 +597,13 @@ pub struct ComponentInfo {
     pub(crate) id: ComponentId,
     pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
+    meta: fn(Self) -> ComponentBuffer,
+}
+
+impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
+    fn from(v: Component<T>) -> Self {
+        v.info()
+    }
 }
 
 impl PartialOrd for ComponentInfo {
@@ -615,6 +628,7 @@ impl ComponentInfo {
             layout: Layout::new::<T>(),
             id: component.id(),
             name: component.name(),
+            meta: component.meta(),
         }
     }
 
@@ -628,6 +642,14 @@ impl ComponentInfo {
 
     pub fn id(&self) -> Entity {
         self.id
+    }
+
+    pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
+        self.meta
+    }
+
+    pub(crate) fn get_meta(&self) -> ComponentBuffer {
+        (self.meta)(*self)
     }
 }
 

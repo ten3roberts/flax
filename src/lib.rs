@@ -119,18 +119,16 @@ pub use paste::paste;
 
 pub use archetype::{Archetype, ArchetypeId, Change, ChangeKind, ComponentInfo};
 pub use buffer::*;
-pub use commandbuffer::CommandBuffer;
+pub use commandbuffer::*;
 pub use component::*;
-pub use entity::{
-    entities, wildcard, Entity, EntityBuilder, EntityIndex, EntityLocation, EntityStore,
-    Generation, Namespace, StrippedEntity, STATIC_NAMESPACE,
-};
-pub use meta::*;
-
+pub use entity::*;
 pub use fetch::*;
 pub use filter::*;
+pub use meta::*;
 pub use query::*;
+pub use schedule::*;
 pub use system::*;
+pub use visitors::*;
 pub use world::*;
 
 pub use error::Error;

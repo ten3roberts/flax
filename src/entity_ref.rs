@@ -118,14 +118,13 @@ impl<'a> EntityRef<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{component, EntityBuilder};
+    use crate::{component, components::name, EntityBuilder};
 
     use super::*;
 
     #[test]
     fn entity_ref() {
         component! {
-            name: String,
             health: f32,
             pos: (f32, f32),
         }

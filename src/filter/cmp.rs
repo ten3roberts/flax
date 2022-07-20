@@ -6,12 +6,11 @@
 //! An alternative may be a "modify guard", a Notify on Write, or NOW if you
 //! want :P.
 
-use std::{cmp::Ordering, fmt::Debug};
+use std::{any::type_name, cmp::Ordering, fmt::Debug};
 
 use crate::{
-    archetype::{Slice, Slot, StorageBorrow},
-    Access, And, Archetype, ArchetypeId, Component, ComponentValue, Filter, Not, Or,
-    PreparedFilter, World,
+    archetype::{ArchetypeId, Slice, Slot, StorageBorrow},
+    Access, And, Archetype, Component, ComponentValue, Filter, Not, Or, PreparedFilter, World,
 };
 
 pub trait CmpExt<T>
@@ -85,7 +84,7 @@ enum CmpMethod {
     Greater,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OrdCmp<T>
 where
     T: ComponentValue,
@@ -95,9 +94,21 @@ where
     other: T,
 }
 
+impl<T> Debug for OrdCmp<T>
+where
+    T: ComponentValue,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OrdCmp")
+            .field("component", &self.component)
+            .field("method", &self.method)
+            .finish()
+    }
+}
+
 impl<T> OrdCmp<T>
 where
-    T: ComponentValue + Debug,
+    T: ComponentValue,
 {
     fn new(component: Component<T>, method: CmpMethod, other: T) -> Self {
         Self {
@@ -200,13 +211,25 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Cmp<T, F>
 where
     T: ComponentValue,
 {
     component: Component<T>,
     func: F,
+}
+
+impl<T, F> Debug for Cmp<T, F>
+where
+    T: ComponentValue,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Cmp")
+            .field("component", &self.component)
+            .field("func", &type_name::<F>())
+            .finish()
+    }
 }
 
 impl<'this, 'w, T, F> Filter<'this, 'w> for Cmp<T, F>

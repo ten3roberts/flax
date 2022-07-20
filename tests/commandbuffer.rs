@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use flax::components::*;
 use flax::*;
+
 use itertools::Itertools;
 component! {
-    name: String,
     shared: Arc<String>,
     health: f32,
 }
@@ -38,6 +39,7 @@ fn commandbuffer() {
 
     assert_eq!(world.get(ids[8], health()).as_deref(), Ok(&28.5));
 
+    // Add a name to each component which doesn't have a name
     let mut query = Query::new(entities()).filter(name().without());
 
     // Deferred world modification while iterating
@@ -50,10 +52,6 @@ fn commandbuffer() {
             cmd.set(id, name(), format!("Unnamed: {i}"));
         });
 
-    // Yes, you can also name components.
-    // How nifty
-    cmd.set(shared(), name(), "Shared State".into());
-    cmd.set(name(), name(), "Entity Name".into());
     cmd.apply(&mut world).unwrap();
 
     let mut name_query = Query::new(name());
@@ -68,9 +66,7 @@ fn commandbuffer() {
         names,
         [
             "Bertha",
-            "Entity Name",
             "Johnathan",
-            "Shared State",
             "Unnamed: 0",
             "Unnamed: 1",
             "Unnamed: 2",
@@ -82,12 +78,12 @@ fn commandbuffer() {
         ]
     );
 
-    Query::new(entities())
+    Query::new((entities(), name()))
         .filter(name().cmp(|name| name.contains("Unnamed")))
         .prepare(&world)
         .iter()
-        .for_each(|id| {
-            eprintln!("Removing name for entity: {id}");
+        .for_each(|(id, n)| {
+            eprintln!("Removing name for entity: {id} {n}");
             cmd.remove(id, name());
         });
 
@@ -102,10 +98,7 @@ fn commandbuffer() {
         .sorted()
         .collect_vec();
 
-    assert_eq!(
-        names,
-        ["Bertha", "Entity Name", "Johnathan", "Shared State"]
-    );
+    assert_eq!(names, ["Bertha", "Johnathan"]);
 
     assert_eq!(world.is_alive(ids[8]), false);
 

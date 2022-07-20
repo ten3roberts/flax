@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flax::{component, entities, EntityBuilder, Error, Query, World};
+use flax::{component, components::name, entities, EntityBuilder, Error, Query, World};
 use itertools::Itertools;
 
 #[test]
@@ -153,7 +153,6 @@ fn tags() {
 #[test]
 fn query_view() {
     component! {
-        name: String,
         vel: f32,
         pos: f32,
     }

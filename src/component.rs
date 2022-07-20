@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     archetype::ComponentInfo, entity::EntityIndex, ComponentBuffer, Entity, InsertedFilter,
-    ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without, STATIC_NAMESPACE,
+    MetaData, ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without, STATIC_NAMESPACE,
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
@@ -25,7 +25,7 @@ pub struct Component<T> {
 
     /// A metadata is a component which is attached to the component, such as
     /// metadata or name
-    meta: fn(Self) -> ComponentBuffer,
+    meta: fn(ComponentInfo) -> ComponentBuffer,
 }
 
 impl<T: ComponentValue> Eq for Component<T> {}
@@ -65,12 +65,16 @@ impl<T: ComponentValue> Component<T> {
     /// Create a new component given a unique id and name.
     ///
     /// *SAFETY*: The id must not be used by anything else
-    pub fn new(id: ComponentId, name: &'static str) -> Self {
+    pub fn new(
+        id: ComponentId,
+        name: &'static str,
+        meta: fn(ComponentInfo) -> ComponentBuffer,
+    ) -> Self {
         Self {
             id,
             name,
             marker: PhantomData,
-            meta: |_| Default::default(),
+            meta,
         }
     }
 
@@ -79,11 +83,16 @@ impl<T: ComponentValue> Component<T> {
             id: Entity::pair(self.id, object),
             name: self.name,
             marker: PhantomData,
-            meta: |_| Default::default(),
+            meta: self.meta,
         }
     }
 
-    pub fn static_init(id: &AtomicU32, name: &'static str) -> Self {
+    #[doc(hidden)]
+    pub fn static_init(
+        id: &AtomicU32,
+        name: &'static str,
+        meta: fn(ComponentInfo) -> ComponentBuffer,
+    ) -> Self {
         let index = match id.fetch_update(Acquire, Relaxed, |v| {
             if v != 0 {
                 None
@@ -98,21 +107,21 @@ impl<T: ComponentValue> Component<T> {
         Self::new(
             Entity::from_parts(EntityIndex::new(index).unwrap(), 1, STATIC_NAMESPACE),
             name,
+            meta,
         )
     }
 
     /// Attaches a function to generate component metadata
-    pub fn set_meta(&mut self, meta: fn(Self) -> ComponentBuffer) {
+    pub fn set_meta(&mut self, meta: fn(ComponentInfo) -> ComponentBuffer) {
         self.meta = meta
     }
 
     /// Returns all metadata components
     pub fn get_meta(&self) -> ComponentBuffer {
-        (self.meta)(*self)
+        (self.meta)(self.info())
     }
 
     /// Get the component's id.
-    #[must_use]
     #[inline(always)]
     pub fn id(&self) -> ComponentId {
         self.id
@@ -166,11 +175,15 @@ impl<T: ComponentValue> Component<T> {
     pub fn name(&self) -> &'static str {
         self.name
     }
+
+    pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
+        self.meta
+    }
 }
 
-impl<T: ComponentValue> Into<Entity> for Component<T> {
-    fn into(self) -> Entity {
-        self.id()
+impl<T: ComponentValue> MetaData<T> for Component<T> {
+    fn attach(info: ComponentInfo, buffer: &mut ComponentBuffer) {
+        buffer.set(crate::components::component(), info);
     }
 }
 

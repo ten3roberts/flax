@@ -261,7 +261,8 @@ mod test {
     #[cfg(feature = "parallel")]
     fn schedule_par() {
         use crate::{
-            entities, CmpExt, CommandBuffer, Component, EntityFetch, Mutable, Writable, Write,
+            components::name, entities, CmpExt, CommandBuffer, Component, EntityFetch, Mutable,
+            Writable, Write,
         };
 
         #[derive(Debug, Clone)]
@@ -272,7 +273,6 @@ mod test {
         }
 
         component! {
-            name: String,
             health: f32,
             damage: f32,
             range: f32,

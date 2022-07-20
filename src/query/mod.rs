@@ -11,7 +11,7 @@ use crate::{
     fetch::Fetch,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    All, And, Filter, PreparedFetch, World,
+    All, And, Filter, PreparedFetch, Without, World,
 };
 
 pub use self::prepared::PreparedQuery;
@@ -24,7 +24,7 @@ pub use self::prepared::PreparedQuery;
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
 #[derive(Debug, Clone)]
-pub struct Query<Q, F = All> {
+pub struct Query<Q, F = Without> {
     // The archetypes to visit
     archetypes: Vec<ArchetypeId>,
     filter: F,
@@ -33,12 +33,29 @@ pub struct Query<Q, F = All> {
     fetch: Q,
 }
 
-impl<Q> Query<Q, All> {
+impl<Q> Query<Q, Without> {
     /// Construct a new query which will fetch all items in the given query.
 
     /// The query can be either a singular component, a tuple of components, or
     /// any other type which implements [crate::Fetch].
+    ///
+    /// **Note**: The query will not yield components, as it may not be intended
+    /// behaviour since the most common intent is the entities. See
+    /// [`Query::with_components`]
     pub fn new(query: Q) -> Self {
+        Self {
+            archetypes: Vec::new(),
+            filter: crate::components::component().without(),
+            fetch: query,
+            change_tick: 0,
+            archetype_gen: 0,
+        }
+    }
+}
+
+impl<Q> Query<Q, All> {
+    /// Create a query which will yield components
+    pub fn with_components(query: Q) -> Self {
         Self {
             archetypes: Vec::new(),
             filter: All,
@@ -176,7 +193,7 @@ where
 }
 
 /// Provides a query and a borrow of the world during system execution
-pub struct QueryData<'a, Q, F = All> {
+pub struct QueryData<'a, Q, F = Without> {
     world: AtomicRef<'a, &'a mut World>,
     query: &'a mut Query<Q, F>,
 }

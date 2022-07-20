@@ -16,21 +16,26 @@ use crate::{component, EntityFetch};
 /// a static entity or component, or a typed relation between two entities.
 ///
 /// # Structure
-
+///
+/// An Entity is 64 bits in size.
+/// The low bits contain the index, namespace, and kind and is enough to
+/// uniquely identify an entity.
+///
+/// The high bits contain the generation which solves the AABA problem if the
+/// entity is a component or a normal entity.
+///
+/// # Entity
 /// | 16       | 16         | 24    | 8         |
 /// | Reserved | Generation | Index | Namespace |
 ///
-/// The Index is always NonZero.
+/// # Pair:
+/// If the entity is a relation, the high bits stores the subject entity.
+/// | 32       | 32         |
+/// | Subject  | Object     |
 ///
-/// An entity id retains uniqueness if cast to a u32. To allow global static
-/// entities to coexist as the flags are kept.
-///
-/// Pairs
-/// An entity can be associated to another entity. In such a case, the upper
-/// bits store the associated entity.
-/// This means that the generation safeguard is removed. This is not problematic
-/// for storage as pair will be removed when the base is removed. Furthermore,
-/// pairs are often declared statically which means they can't be freed
+/// The one downside of this is that the generation is not stored, though an
+/// entity should never hold an entity that is not alive, and is as such handled
+/// by the world to remove all pairs when either one is despawned.
 #[derive(PartialOrd, Clone, Copy, PartialEq, Eq, Ord, Hash)]
 #[repr(transparent)]
 pub struct Entity(NonZeroU64);
@@ -39,17 +44,13 @@ pub struct Entity(NonZeroU64);
 #[repr(transparent)]
 pub struct StrippedEntity(NonZeroU32);
 
-const INDEX_MASK: u64 = /*      */ 0x00000000FFFFFF00;
-const GENERATION_MASK: u64 = /* */ 0x0000FFFF00000000;
-// A simple u8 cast will suffice
-const _NAMESPACE_MASK: u64 = /* */ 0x00000000000000FF;
-
 static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
 pub type Generation = u16;
 pub type EntityIndex = NonZeroU32;
 pub type Namespace = u8;
 
+/// An entity namespace in which entites can be spawned using [`Entity::acquire_static_id`] and will never despawn.
 pub const STATIC_NAMESPACE: Namespace = 255;
 
 component! {
@@ -64,15 +65,20 @@ impl Entity {
         Entity::from_parts(NonZeroU32::new(index).unwrap(), 0, STATIC_NAMESPACE)
     }
 
+    #[inline]
     pub fn index(self) -> EntityIndex {
         // Can only be constructed from parts
-        NonZeroU32::new(((self.0.get() & INDEX_MASK) >> 8) as u32).unwrap()
+        NonZeroU32::new(self.0.get() as u32 >> 8).unwrap()
     }
 
+    #[inline]
+    /// Extract the generation from the entity
     pub fn generation(self) -> Generation {
-        ((self.0.get() & GENERATION_MASK) >> 32) as Generation
+        (self.0.get() >> 32) as u16
     }
 
+    #[inline]
+    /// Extract the namespace from the entity
     pub fn namespace(self) -> Namespace {
         self.0.get() as u8
     }
@@ -81,24 +87,30 @@ impl Entity {
         let bits = self.0.get();
 
         (
-            NonZeroU32::new(((bits & INDEX_MASK) >> 8) as u32).unwrap(),
-            ((bits & GENERATION_MASK) >> 32) as Generation,
+            NonZeroU32::new(bits as u32 >> 8).unwrap(),
+            (bits >> 32) as Generation,
             bits as u8,
         )
+    }
+
+    pub(crate) fn zero_gen(self) -> Self {
+        Self::from_bits(NonZeroU64::new(self.0.get() & 0xFFFFFFFF).unwrap())
     }
 
     pub fn from_parts(index: EntityIndex, gen: Generation, namespace: Namespace) -> Self {
         assert!(index.get() < (u32::MAX >> 1));
         let bits =
-            (((index.get() as u64) << 8) & INDEX_MASK) | ((gen as u64) << 32) | (namespace as u64);
+            ((index.get() as u64 & 0xFFFFFF) << 8) | ((gen as u64) << 32) | (namespace as u64);
 
         Self(NonZeroU64::new(bits).unwrap())
     }
 
+    #[inline]
     pub fn from_bits(bits: NonZeroU64) -> Self {
         Self(bits)
     }
 
+    #[inline]
     pub fn to_bits(&self) -> NonZeroU64 {
         self.0
     }
@@ -131,7 +143,7 @@ impl Entity {
 impl StrippedEntity {
     pub fn index(self) -> EntityIndex {
         // Can only be constructed from parts
-        NonZeroU32::new(((self.0.get() & INDEX_MASK as u32) >> 8) as u32).unwrap()
+        NonZeroU32::new(self.0.get() as u32 >> 8).unwrap()
     }
 
     pub fn namespace(self) -> Namespace {

@@ -1,8 +1,12 @@
+use flax::components::name;
+use flax::Debug;
 use flax::{
-    component, util::TupleCloned, visitors::DebugVisitor, wildcard, EntityBuilder, Query, World,
+    component, debug_visitor, util::TupleCloned, visitors::DebugVisitor, wildcard, EntityBuilder,
+    Query, World,
 };
 use itertools::Itertools;
 
+#[derive(Debug, Clone)]
 pub struct Countdown<const C: usize>(usize);
 
 impl<const C: usize> Countdown<C> {
@@ -25,17 +29,13 @@ impl<const C: usize> Countdown<C> {
     }
 }
 
-component! {
-    debug: DebugVisitor,
-}
-
 #[test]
 fn visitors() {
+    use flax::Debug;
     component! {
-        name: String,
-        health: f32,
+        health: f32 => [Debug],
         // Then shalt count to three, no more no less
-        count: Countdown<3>,
+        count: Countdown<3> => [Debug],
     }
 
     let mut world = World::new();
@@ -53,17 +53,9 @@ fn visitors() {
             .spawn(&mut world);
     }
 
-    // Add the `debug` component to `name`
-    world
-        .set(name(), debug(), DebugVisitor::new(name()))
-        .unwrap();
-    world
-        .set(health(), debug(), DebugVisitor::new(health()))
-        .unwrap();
-
     let mut buf = String::new();
 
-    world.visit(debug(), &mut buf);
+    world.visit(debug_visitor(), &mut buf);
 
     eprintln!("{buf}");
 }
@@ -77,66 +69,53 @@ fn relations() {
     }
 
     component! {
-        name: &'static str,
-        hobby: &'static str,
-        child_of(e): RelationKind,
+        hobby: &'static str => [ Debug ],
+        child_of(e): RelationKind => [ Debug ],
     }
 
     let mut world = World::new();
 
-    world
-        .set(name(), debug(), DebugVisitor::new(name()))
-        .unwrap();
-
     let parent = EntityBuilder::new()
-        .set(name(), "Jessica")
+        .set(name(), "Jessica".to_string())
         .set(hobby(), "Reading")
         .spawn(&mut world);
 
-    world
-        .set(
-            child_of(parent),
-            debug(),
-            DebugVisitor::new(child_of(parent)),
-        )
-        .unwrap();
-
     let parent2 = EntityBuilder::new()
-        .set(name(), "Jack")
+        .set(name(), "Jack".to_string())
         .set(hobby(), "Crocheting")
         .spawn(&mut world);
 
-    world
-        .set(
-            child_of(parent2),
-            debug(),
-            DebugVisitor::new(child_of(parent2)),
-        )
-        .unwrap();
-
-    world
-        .set(hobby(), debug(), DebugVisitor::new(hobby()))
-        .unwrap();
-
     let _child = EntityBuilder::new()
-        .set(name(), "John")
+        .set(name(), "John".to_string())
         .set(hobby(), "Studying")
         .set(child_of(parent), RelationKind::Mom)
         .spawn(&mut world);
 
     let _child2 = EntityBuilder::new()
-        .set(name(), "Sally")
+        .set(name(), "Sally".to_string())
         .set(hobby(), "Hockey")
         .set(child_of(parent), RelationKind::Mom)
         .spawn(&mut world);
 
+    assert!(world.get(child_of(parent).id(), debug_visitor()).is_ok());
+    let location = world.location(child_of(parent).id());
+    eprintln!("Location of child_of: {location:?}");
     let _child3 = EntityBuilder::new()
-        .set(name(), "Reacher")
+        .set(name(), "Reacher".to_string())
         .set(hobby(), "Hockey")
         .set(child_of(parent2), RelationKind::Dad)
         .spawn(&mut world);
 
+    let location = world.location(child_of(parent).id());
+
+    eprintln!("Location of child_of: {location:?}");
+
     let mut query = Query::new((name(), child_of(parent)));
+
+    eprintln!("{:#?}", world.component_metadata());
+    assert!(world.get(child_of(parent).id(), debug_visitor()).is_ok());
+    assert!(world.get(child_of(parent2).id(), debug_visitor()).is_ok());
+    panic!("");
 
     let items = query
         .prepare(&world)
@@ -147,20 +126,19 @@ fn relations() {
 
     assert_eq!(
         items,
-        [("John", RelationKind::Mom), ("Sally", RelationKind::Mom)]
+        [
+            ("John".to_string(), RelationKind::Mom),
+            ("Sally".to_string(), RelationKind::Mom)
+        ]
     );
 
     let mut buf = String::new();
-    world.visit(debug(), &mut buf);
-    eprintln!("{buf}");
+
+    world.visit(debug_visitor(), &mut buf);
+
+    eprintln!("Visited: {buf}");
 
     // Visit the first parent of the children
-    {
-        let wild = child_of(wildcard().id()).id().into_pair();
-        let wildcard = wildcard().id().strip_gen();
-
-        dbg!(wild, wildcard);
-    }
     let mut query = Query::new((name(), child_of(wildcard().id()).relation(0)));
     let mut query = query.prepare(&world);
 
@@ -169,9 +147,9 @@ fn relations() {
     assert_eq!(
         items,
         [
-            (&"John", (parent, &RelationKind::Mom)),
-            (&"Reacher", (parent2, &RelationKind::Dad)),
-            (&"Sally", (parent, &RelationKind::Mom))
+            (&"John".to_string(), (parent, &RelationKind::Mom)),
+            (&"Reacher".to_string(), (parent2, &RelationKind::Dad)),
+            (&"Sally".to_string(), (parent, &RelationKind::Mom))
         ]
     )
 }
