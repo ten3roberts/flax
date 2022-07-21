@@ -55,7 +55,8 @@ macro_rules! component {
                     _buffer
                 }
 
-                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name), meta).into_pair($obj)
+                use $crate::EntityKind;
+                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name), EntityKind::COMPONENT | EntityKind::RELATION, meta).into_pair($obj)
             }
         }
 
@@ -84,7 +85,8 @@ macro_rules! component {
 
                     _buffer
                 }
-                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name), meta)
+                use $crate::EntityKind;
+                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name), EntityKind::COMPONENT, meta)
             }
         }
 

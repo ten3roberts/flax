@@ -159,14 +159,14 @@ where
     type Prepared = PreparedPair<'a, T>;
 
     fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
-        let (sub, obj) = self.component.id().into_pair();
+        let (sub, obj) = self.component.id().split_pair();
         if obj == wildcard().id().strip_gen() {
             let (obj, borrow) = archetype
                 .components()
                 .filter(|v| v.id().strip_gen() == sub)
                 .skip(self.index)
                 .map(|v| {
-                    let (sub1, obj) = v.id().into_pair();
+                    let (sub1, obj) = v.id().split_pair();
                     assert_eq!(sub1, sub);
                     let borrow = archetype.storage_dyn::<T>(v.id()).unwrap();
                     let obj = world.reconstruct(obj).unwrap();
@@ -181,7 +181,7 @@ where
     }
 
     fn matches(&self, _: &'a World, archetype: &'a Archetype) -> bool {
-        let (sub, obj) = self.component.id().into_pair();
+        let (sub, obj) = self.component.id().split_pair();
         if obj == wildcard().id().strip_gen() {
             archetype
                 .components()
@@ -199,7 +199,7 @@ where
     }
 
     fn difference(&self, archetype: &Archetype) -> Vec<String> {
-        let (sub, obj) = self.component.id().into_pair();
+        let (sub, obj) = self.component.id().split_pair();
         if obj == wildcard().id().strip_gen() {
             if archetype
                 .components()
@@ -220,7 +220,7 @@ where
     }
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        let (sub, obj) = self.component.id().into_pair();
+        let (sub, obj) = self.component.id().split_pair();
         if obj == wildcard().id().strip_gen() {
             let borrow = archetype
                 .components()

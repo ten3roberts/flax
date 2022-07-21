@@ -15,12 +15,11 @@ use crate::{
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, Error, Filter, Namespace,
-    STATIC_NAMESPACE,
+    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error, Filter,
 };
 
 pub struct World {
-    entities: BTreeMap<Namespace, EntityStore>,
+    entities: BTreeMap<EntityKind, EntityStore>,
     archetypes: EntityStore<Archetype>,
     archetype_root: ArchetypeId,
     change_tick: AtomicU32,
@@ -29,7 +28,7 @@ pub struct World {
 
 impl World {
     pub fn new() -> Self {
-        let mut archetypes = EntityStore::new(255);
+        let mut archetypes = EntityStore::new(EntityKind::ARCHETYPE);
         let root = archetypes.spawn(Archetype::empty());
 
         Self {
@@ -41,13 +40,13 @@ impl World {
         }
     }
 
-    pub fn get_namespace(&self, namespace: Namespace) -> Result<&EntityStore> {
+    pub fn get_namespace(&self, namespace: EntityKind) -> Result<&EntityStore> {
         self.entities
             .get(&namespace)
-            .ok_or(Error::NoSuchNamespace(namespace))
+            .ok_or(Error::NoSuchKind(namespace))
     }
 
-    pub fn init_namespace(&mut self, namespace: Namespace) -> &mut EntityStore {
+    pub fn init_store(&mut self, namespace: EntityKind) -> &mut EntityStore {
         self.entities
             .entry(namespace)
             .or_insert_with(|| EntityStore::new(namespace))
@@ -107,19 +106,19 @@ impl World {
 
     /// Spawn a new empty entity into the default namespace
     pub fn spawn(&mut self) -> Entity {
-        self.spawn_in(0)
+        self.spawn_with_kind(EntityKind::empty())
     }
 
-    pub fn spawn_in(&mut self, namespace: Namespace) -> Entity {
+    fn spawn_with_kind(&mut self, kind: EntityKind) -> Entity {
         // Place at root
         let arch = self.archetype_root;
-        let ns = self.init_namespace(namespace);
+        let ns = self.init_store(kind);
         let id = ns.spawn(EntityLocation { arch, slot: 0 });
 
         let slot = self.archetype_mut(self.archetype_root).allocate(id);
 
         // This is safe as `root` does not contain any components
-        self.init_namespace(namespace).get_mut(id).unwrap().slot = slot;
+        self.init_store(kind).get_mut(id).unwrap().slot = slot;
         id
     }
 
@@ -128,8 +127,8 @@ impl World {
         let slot = self.archetype_mut(root).allocate(id);
         let location = EntityLocation { arch: root, slot };
 
-        let namespace = id.namespace();
-        let ns = self.init_namespace(namespace);
+        let kind = id.kind();
+        let ns = self.init_store(kind);
         ns.spawn_at(id.index(), id.generation(), location).copied()
     }
 
@@ -146,7 +145,7 @@ impl World {
     /// Spawn an entity with the given components.
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
-    pub fn spawn_with(&mut self, namespace: Namespace, components: &mut ComponentBuffer) -> Entity {
+    pub fn spawn_with(&mut self, components: &mut ComponentBuffer) -> Entity {
         // Initialize components before all else
         for component in components.components() {
             eprintln!(
@@ -159,7 +158,7 @@ impl World {
         }
         eprintln!("----");
 
-        let id = self.spawn_in(namespace);
+        let id = self.spawn();
 
         let change_tick = self.advance_change_tick();
 
@@ -183,7 +182,7 @@ impl World {
             }
         }
 
-        *self.init_namespace(namespace).get_mut(id).unwrap() = EntityLocation {
+        *self.init_store(id.kind()).get_mut(id).unwrap() = EntityLocation {
             arch: arch_id,
             slot,
         };
@@ -279,14 +278,14 @@ impl World {
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
                 eprintln!("Relocating entity");
-                self.init_namespace(swapped.namespace())
+                self.init_store(swapped.kind())
                     .get_mut(swapped)
                     .expect("Invalid entity id")
                     .slot = slot;
             }
             eprintln!("New slot: {dst_slot}");
 
-            let ns = self.init_namespace(id.namespace());
+            let ns = self.init_store(id.kind());
             *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
                 arch: dst_id,
@@ -303,14 +302,13 @@ impl World {
     /// Set metadata for a given component if they do not already exist
     fn init_component(&mut self, info: ComponentInfo) -> Result<ComponentInfo> {
         let index = info.id().index();
-        let namespace = info.id().namespace();
-
-        let ns = self.init_namespace(namespace);
+        let id = info.id();
 
         if self.is_alive(info.id()) {
             return Ok(info);
         }
 
+        let ns = self.spawn_at(id).unwrap();
         let mut meta = info.get_meta();
 
         eprintln!("Initializing component: {} {}", info.name(), info.id());
@@ -334,7 +332,7 @@ impl World {
         let src = self.archetype_mut(archetype);
         src.remove_slot_changes(slot);
         let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
-        let ns = self.init_namespace(id.namespace());
+        let ns = self.init_store(id.kind());
         if let Some(swapped) = swapped {
             // The last entity in src was moved into the slot occupied by id
             eprintln!("Relocating entity");
@@ -432,11 +430,11 @@ impl World {
 
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
-                let swapped_ns = self.init_namespace(swapped.namespace());
+                let swapped_ns = self.init_store(swapped.kind());
                 swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
             }
 
-            let ns = self.init_namespace(id.namespace());
+            let ns = self.init_store(id.kind());
             let loc = EntityLocation {
                 slot: dst_slot,
                 arch: dst_id,
@@ -463,7 +461,7 @@ impl World {
         component: ComponentInfo,
         on_drop: impl FnOnce(*mut u8),
     ) -> Result<EntityLocation> {
-        let ns = self.init_namespace(id.namespace());
+        let ns = self.init_store(id.kind());
         let &EntityLocation { arch: src_id, slot } = ns.get(id).unwrap();
 
         let src = self.archetype(src_id);
@@ -518,7 +516,7 @@ impl World {
         if let Some(swapped) = swapped {
             // The last entity in src was moved into the slot occupied by id
             eprintln!("Relocating entity {swapped}");
-            let swapped_ns = self.init_namespace(swapped.namespace());
+            let swapped_ns = self.init_store(swapped.kind());
             swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
@@ -528,7 +526,7 @@ impl World {
         };
 
         *self
-            .init_namespace(id.namespace())
+            .init_store(id.kind())
             .get_mut(id)
             .expect("Entity is not valid") = loc;
 
@@ -612,7 +610,7 @@ impl World {
 
     /// Returns true if the entity is still alive
     pub fn is_alive(&self, id: Entity) -> bool {
-        self.get_namespace(id.namespace())
+        self.get_namespace(id.kind())
             .map(|v| v.is_alive(id))
             .unwrap_or(false)
     }
@@ -629,22 +627,16 @@ impl World {
     /// If the entity is not found and is not in the static namespace an error
     /// will be returned.
     pub(crate) fn init_location(&mut self, id: Entity) -> Result<EntityLocation> {
-        self.init_namespace(id.namespace())
+        self.init_store(id.kind())
             .get(id)
             .ok_or(Error::NoSuchEntity(id))
             .copied()
-            .or_else(|e| {
-                if id.namespace() == STATIC_NAMESPACE {
-                    self.spawn_at(id)
-                } else {
-                    Err(e)
-                }
-            })
+            .or_else(|e| self.spawn_at(id))
     }
 
     /// Returns the location inside an archetype for a given entity
     pub fn location(&self, id: Entity) -> Result<EntityLocation> {
-        self.get_namespace(id.namespace())?
+        self.get_namespace(id.kind())?
             .get(id)
             .ok_or(Error::NoSuchEntity(id))
             .copied()
@@ -707,7 +699,7 @@ impl World {
     }
 
     pub(crate) fn reconstruct(&self, id: crate::StrippedEntity) -> Option<Entity> {
-        let ns = self.get_namespace(id.namespace()).ok()?;
+        let ns = self.get_namespace(id.kind()).ok()?;
 
         ns.reconstruct(id).map(|v| v.0)
     }

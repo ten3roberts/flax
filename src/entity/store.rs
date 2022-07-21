@@ -1,4 +1,4 @@
-use crate::{archetype::ArchetypeId, error::Result, Error, Generation, Namespace, StrippedEntity};
+use crate::{archetype::ArchetypeId, error::Result, EntityGen, EntityKind, Error, StrippedEntity};
 use std::{iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
 
 use super::{Entity, EntityIndex};
@@ -25,7 +25,7 @@ impl<T> Slot<T> {
     }
 }
 
-pub fn to_slot_gen(gen: Generation) -> u32 {
+pub fn to_slot_gen(gen: EntityGen) -> u32 {
     ((gen as u32) << 1) | 1
 }
 
@@ -42,27 +42,30 @@ pub struct EntityLocation {
 pub struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
     free_head: Option<NonZeroU32>,
-    namespace: Namespace,
+    kind: EntityKind,
 }
 
 impl<V> EntityStore<V> {
-    pub fn new(namespace: Namespace) -> Self {
-        Self::with_capacity(namespace, 0)
+    /// Create a new EntityStore which will spawn entities with a specific kind
+    pub fn new(kind: EntityKind) -> Self {
+        Self::with_capacity(kind, 0)
     }
 
-    pub fn with_capacity(namespace: Namespace, cap: usize) -> Self {
+    pub fn with_capacity(kind: EntityKind, cap: usize) -> Self {
         Self {
             slots: Vec::with_capacity(cap),
             free_head: None,
-            namespace,
+            kind,
         }
     }
 
     pub fn spawn(&mut self, value: V) -> Entity {
         if let Some(index) = self.free_head.take() {
             let free = self.slot_mut(index).unwrap();
-            assert!(free.gen & 1 == 0);
-            free.gen = free.gen | 1;
+            debug_assert!(free.gen & 1 == 0);
+
+            free.gen |= 1;
+
             let gen = from_slot_gen(free.gen);
 
             // Update free head
@@ -70,7 +73,7 @@ impl<V> EntityStore<V> {
                 self.free_head = free.val.vacant.next;
             }
 
-            Entity::from_parts(index, gen, self.namespace)
+            Entity::from_parts(index, gen, self.kind)
         } else {
             // Push
             let gen = 1;
@@ -82,11 +85,7 @@ impl<V> EntityStore<V> {
                 gen: to_slot_gen(gen),
             });
 
-            Entity::from_parts(
-                NonZeroU32::new(index + 1).unwrap(),
-                gen as u16,
-                self.namespace,
-            )
+            Entity::from_parts(NonZeroU32::new(index + 1).unwrap(), gen as u16, self.kind)
         }
     }
 
@@ -115,44 +114,48 @@ impl<V> EntityStore<V> {
 
     #[inline]
     pub fn get_mut(&mut self, id: Entity) -> Option<&mut V> {
-        let ns = self.namespace;
-        Some(unsafe {
-            &mut self
-                .slot_mut(id.index())
-                .filter(|v| ns == id.namespace() && (v.gen == to_slot_gen(id.generation())))?
-                .val
-                .occupied
-        })
+        let ns = self.kind;
+        assert_eq!(ns, id.kind());
+
+        unsafe {
+            self.slot_mut(id.index())
+                .filter(|v| v.is_alive())
+                .filter(|v| {
+                    v.gen == to_slot_gen(id.generation())
+                        || id.kind().contains(EntityKind::RELATION)
+                })
+                .map(|v| &mut *v.val.occupied)
+        }
     }
 
     #[inline]
     pub fn get(&self, id: Entity) -> Option<&V> {
-        let ns = self.namespace;
-        Some(unsafe {
-            &self
-                .slot(id.index())
-                .filter(|v| ns == id.namespace() && v.gen == to_slot_gen(id.generation()))?
-                .val
-                .occupied
-        })
+        let ns = self.kind;
+        assert_eq!(ns, id.kind());
+
+        unsafe {
+            self.slot(id.index())
+                .filter(|v| v.is_alive())
+                .filter(|v| {
+                    v.gen == to_slot_gen(id.generation())
+                        || id.kind().contains(EntityKind::RELATION)
+                })
+                .map(|v| &*v.val.occupied)
+        }
     }
 
     /// Return the entity at a given index
     pub fn at(&self, index: EntityIndex) -> Option<Entity> {
         let slot = self.slot(index)?;
 
-        Some(Entity::from_parts(
-            index,
-            (slot.gen >> 1) as u16,
-            self.namespace,
-        ))
+        Some(Entity::from_parts(index, (slot.gen >> 1) as u16, self.kind))
     }
 
     #[inline]
     pub fn reconstruct(&self, id: StrippedEntity) -> Option<(Entity, &V)> {
-        let ns = self.namespace;
+        let ns = self.kind;
 
-        assert_eq!(ns, id.namespace());
+        assert_eq!(ns, id.kind());
 
         let slot = self.slot(id.index())?;
 
@@ -166,9 +169,14 @@ impl<V> EntityStore<V> {
 
     #[inline]
     pub fn is_alive(&self, id: Entity) -> bool {
-        let ns = self.namespace;
+        let ns = self.kind;
+        assert_eq!(ns, id.kind());
+
         self.slot(id.index())
-            .filter(|v| ns == id.namespace() && v.gen == to_slot_gen(id.generation()))
+            .filter(|v| v.is_alive())
+            .filter(|v| {
+                v.gen == to_slot_gen(id.generation()) || id.kind().contains(EntityKind::RELATION)
+            })
             .is_some()
     }
 
@@ -176,7 +184,7 @@ impl<V> EntityStore<V> {
         if !self.is_alive(id) {
             return Err(Error::NoSuchEntity(id));
         }
-        eprintln!("Despawning: {id} in {}", self.namespace);
+        eprintln!("Despawning: {id}");
 
         let index = id.index();
 
@@ -199,7 +207,7 @@ impl<V> EntityStore<V> {
     pub fn iter(&self) -> EntityStoreIter<V> {
         EntityStoreIter {
             iter: self.slots.iter().enumerate(),
-            namespace: self.namespace,
+            namespace: self.kind,
         }
     }
 
@@ -209,7 +217,7 @@ impl<V> EntityStore<V> {
     pub(crate) fn spawn_at(
         &mut self,
         index: EntityIndex,
-        generation: Generation,
+        generation: EntityGen,
         value: V,
     ) -> Result<&V> {
         // Init slot
@@ -280,7 +288,7 @@ impl<V> EntityStore<V> {
 
 impl Default for EntityStore {
     fn default() -> Self {
-        Self::new(1)
+        Self::new(EntityKind::empty())
     }
 }
 
@@ -298,7 +306,7 @@ impl<V> Drop for EntityStore<V> {
 
 pub struct EntityStoreIter<'a, V> {
     iter: Enumerate<slice::Iter<'a, Slot<V>>>,
-    namespace: Namespace,
+    namespace: EntityKind,
 }
 
 impl<'a, V> Iterator for EntityStoreIter<'a, V> {

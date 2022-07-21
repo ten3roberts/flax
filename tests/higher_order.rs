@@ -115,7 +115,6 @@ fn relations() {
     eprintln!("{:#?}", world.component_metadata());
     assert!(world.get(child_of(parent).id(), debug_visitor()).is_ok());
     assert!(world.get(child_of(parent2).id(), debug_visitor()).is_ok());
-    panic!("");
 
     let items = query
         .prepare(&world)

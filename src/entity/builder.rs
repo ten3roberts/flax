@@ -1,24 +1,17 @@
 use std::mem;
 
-use crate::{CommandBuffer, Component, ComponentBuffer, ComponentValue, Entity, Namespace, World};
+use crate::{CommandBuffer, Component, ComponentBuffer, ComponentValue, Entity, World};
 
 #[derive(Debug)]
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
-    namespace: Namespace,
 }
 
 impl EntityBuilder {
     pub fn new() -> Self {
         Self {
             buffer: ComponentBuffer::new(),
-            namespace: 0,
         }
-    }
-
-    pub fn with_namespace(&mut self, namespace: Namespace) -> &mut Self {
-        self.namespace = namespace;
-        self
     }
 
     /// Sets the component of the entity.
@@ -55,7 +48,7 @@ impl EntityBuilder {
     /// Clears the builder and allows it to be used again, reusing the builder
     /// will reuse the inner storage, even for different components.
     pub fn spawn(&mut self, world: &mut World) -> Entity {
-        world.spawn_with(self.namespace, &mut self.buffer)
+        world.spawn_with(&mut self.buffer)
     }
 
     /// Spawns the entity into the world through a commandbuffer
@@ -68,7 +61,6 @@ impl EntityBuilder {
     pub fn take(&mut self) -> Self {
         Self {
             buffer: mem::take(&mut self.buffer),
-            namespace: self.namespace,
         }
     }
 }

@@ -1,11 +1,11 @@
 use thiserror::Error;
 
-use crate::{Entity, Namespace};
+use crate::{Entity, EntityKind};
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
-    #[error("The namespace {0} does not exist.")]
-    NoSuchNamespace(Namespace),
+    #[error("No entities exist for {0:?}")]
+    NoSuchKind(EntityKind),
     #[error("The entity {0} does not exist or has been despawned.")]
     NoSuchEntity(Entity),
     #[error("The entity {0} does not have the component {1:?}.")]
