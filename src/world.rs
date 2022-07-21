@@ -1,14 +1,14 @@
 use core::fmt;
 use std::{
     collections::BTreeMap,
-    fmt::{DebugStruct, Formatter, Write},
+    fmt::Formatter,
     mem::{self, MaybeUninit},
     ptr,
     sync::atomic::{AtomicU32, Ordering},
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
-use itertools::{Format, Itertools};
+use itertools::Itertools;
 
 use crate::{
     archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, VisitData, Visitor},
@@ -18,7 +18,7 @@ use crate::{
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    All, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error,
+    All, And, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error,
     Filter, Query, RowFormatter,
 };
 
@@ -663,10 +663,13 @@ impl World {
     }
 
     /// Formats the world using the debug visitor.
-    pub fn format_debug(&self) -> WorldFormatter<All> {
+    pub fn format_debug<F>(&self, filter: F) -> WorldFormatter<F>
+    where
+        for<'x, 'y> F: Filter<'x, 'y>,
+    {
         WorldFormatter {
             world: self,
-            filter: All,
+            filter,
         }
     }
 
@@ -768,13 +771,17 @@ pub struct WorldFormatter<'a, F> {
 
 impl<'a, F> std::fmt::Debug for WorldFormatter<'a, F>
 where
-    F: for<'x, 'y> Filter<'x, 'y>,
+    F: for<'x, 'y> Filter<'x, 'y> + Clone,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut meta = BTreeMap::new();
         let mut list = f.debug_map();
 
-        for (_, arch) in self.world.archetypes.iter() {
+        let mut query = Query::with_components(()).filter(self.filter.clone());
+        let mut query = query.prepare(self.world);
+
+        for batch in query.iter_batched() {
+            let arch = batch.arch();
             meta.clear();
             meta.extend(arch.components().flat_map(|info| {
                 Some((
@@ -786,7 +793,7 @@ where
                 ))
             }));
 
-            for slot in arch.slots().iter() {
+            for slot in batch.slots().iter() {
                 let row = RowFormatter::new(arch, slot, &meta);
                 list.entry(&arch.entity(slot).unwrap(), &row);
             }
@@ -804,7 +811,7 @@ impl Default for World {
 
 impl std::fmt::Debug for World {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.format_debug().fmt(f)
+        self.format_debug(All).fmt(f)
     }
 }
 

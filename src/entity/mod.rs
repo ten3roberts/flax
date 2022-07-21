@@ -177,9 +177,9 @@ impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (index, generation, kind) = self.into_parts();
         if kind.is_empty() {
-            write!(f, "{index}:{generation}")
+            write!(f, "{index}v{generation}")
         } else {
-            write!(f, "{index}:{generation}{{{kind:?}}}")
+            write!(f, "{index}v{generation} [{kind:?}]")
         }
     }
 }

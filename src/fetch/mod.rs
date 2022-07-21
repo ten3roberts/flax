@@ -36,6 +36,38 @@ pub trait Fetch<'w> {
     fn difference(&self, archetype: &Archetype) -> Vec<String>;
 }
 
+impl<'w> Fetch<'w> for () {
+    const MUTABLE: bool = false;
+
+    type Prepared = ();
+
+    fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
+        Some(())
+    }
+
+    fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool {
+        true
+    }
+
+    fn describe(&self) -> String {
+        "()".to_string()
+    }
+
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        vec![]
+    }
+
+    fn difference(&self, archetype: &Archetype) -> Vec<String> {
+        vec![]
+    }
+}
+
+impl<'q> PreparedFetch<'q> for () {
+    type Item = ();
+
+    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {}
+}
+
 /// A preborrowed fetch
 pub trait PreparedFetch<'q>
 where
