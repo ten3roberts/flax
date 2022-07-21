@@ -168,7 +168,7 @@ where
                 .map(|v| {
                     let (sub1, obj) = v.id().split_pair();
                     assert_eq!(sub1, sub);
-                    let borrow = archetype.storage_dyn::<T>(v.id()).unwrap();
+                    let borrow = archetype.storage_from_id::<T>(v.id()).unwrap();
                     let obj = world.reconstruct(obj).unwrap();
                     (obj, borrow)
                 })

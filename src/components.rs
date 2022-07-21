@@ -8,7 +8,7 @@ use crate::Debug;
 
 component! {
     /// A name for an entity of component
-    pub name: String,
+    pub name: String => [ Debug ],
     /// The default parent relationship
     pub parent: (),
     /// Tag for anything which is a component.

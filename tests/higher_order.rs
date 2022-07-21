@@ -1,3 +1,5 @@
+use std::fmt::Formatter;
+
 use flax::components::name;
 use flax::Debug;
 use flax::{
@@ -54,8 +56,6 @@ fn visitors() {
     }
 
     let mut buf = String::new();
-
-    world.visit(debug_visitor(), &mut buf);
 
     eprintln!("{buf}");
 }
@@ -133,9 +133,7 @@ fn relations() {
 
     let mut buf = String::new();
 
-    world.visit(debug_visitor(), &mut buf);
-
-    eprintln!("Visited: {buf}");
+    eprintln!("World: {world:#?}");
 
     // Visit the first parent of the children
     let mut query = Query::new((name(), child_of(wildcard().id()).relation(0)));

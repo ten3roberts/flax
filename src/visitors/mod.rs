@@ -1,13 +1,21 @@
-use std::{fmt::Write, slice};
+use core::fmt;
+use core::fmt::Write;
+use std::{
+    collections::BTreeMap,
+    fmt::{Debug, Formatter},
+    ops::Add,
+};
+
+use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{VisitData, Visitor},
-    component, ComponentValue,
+    archetype::{Slot, VisitData, Visitor},
+    component, Archetype, ComponentId, ComponentValue,
 };
 
 /// Format a component with debug
 pub struct DebugVisitor {
-    func: unsafe fn(&mut dyn Write, VisitData),
+    visit: unsafe fn(VisitData<'_>) -> &'_ dyn Debug,
 }
 
 impl DebugVisitor {
@@ -16,25 +24,60 @@ impl DebugVisitor {
         T: ComponentValue + std::fmt::Debug,
     {
         Self {
-            func: |f, visit| unsafe {
-                let val = slice::from_raw_parts(visit.data.cast::<T>(), visit.len);
-                // if !val.is_empty() {
-                writeln!(f, "{}: {:#?}", visit.component.name(), val).expect("Failed to write");
-                // }
+            visit: |visit| unsafe {
+                visit
+                    .data
+                    .at(visit.slot)
+                    .expect("Out of bounds")
+                    .cast::<T>()
+                    .as_ref()
+                    .expect("Not null")
             },
         }
     }
 }
 
-impl<W> Visitor<W> for DebugVisitor
-where
-    W: Write,
-{
-    unsafe fn visit(&mut self, ctx: &mut W, visit: VisitData) {
-        (self.func)(ctx, visit)
+impl<'a> Visitor<'a> for DebugVisitor {
+    type Visited = &'a dyn Debug;
+
+    unsafe fn visit(&'a self, visit: VisitData<'a>) -> Self::Visited {
+        (self.visit)(visit)
     }
 }
 
 component! {
     pub debug_visitor: DebugVisitor,
+}
+
+pub struct RowFormatter<'a> {
+    pub arch: &'a Archetype,
+    pub slot: Slot,
+    pub meta: &'a BTreeMap<ComponentId, (AtomicRef<'a, DebugVisitor>, AtomicRef<'a, String>)>,
+}
+
+impl<'a> RowFormatter<'a> {
+    pub fn new(
+        arch: &'a Archetype,
+        slot: Slot,
+        meta: &'a BTreeMap<ComponentId, (AtomicRef<'a, DebugVisitor>, AtomicRef<'a, String>)>,
+    ) -> Self {
+        Self { arch, slot, meta }
+    }
+}
+
+impl<'a> Debug for RowFormatter<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut map = f.debug_map();
+        for storage in self.arch.storages() {
+            if let Some((visitor, name)) = self.meta.get(&storage.info().id()) {
+                unsafe {
+                    let data = VisitData::new(&storage, self.slot);
+
+                    map.entry(name, visitor.visit(data));
+                };
+            }
+        }
+
+        map.finish()
+    }
 }

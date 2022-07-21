@@ -175,19 +175,18 @@ impl StrippedEntity {
 
 impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, generation, namespace) = self.into_parts();
-        f.debug_tuple("Entity")
-            .field(&index)
-            .field(&generation)
-            .field(&namespace)
-            .finish()
+        let (index, generation, kind) = self.into_parts();
+        if kind.is_empty() {
+            write!(f, "{index}:{generation}")
+        } else {
+            write!(f, "{index}:{generation}{{{kind:?}}}")
+        }
     }
 }
 
 impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, generation, kind) = self.into_parts();
-        write!(f, "{kind:?}:{index}:{generation}")
+        fmt::Debug::fmt(self, f)
     }
 }
 

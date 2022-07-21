@@ -1,15 +1,19 @@
-use std::{fmt::Write, slice};
+use std::{marker::PhantomData, ptr::NonNull};
 
-use crate::{Component, ComponentValue};
+use atomic_refcell::AtomicRef;
 
-use super::ComponentInfo;
+use super::{ComponentInfo, Slot, StorageBorrowDyn};
 
-#[derive(PartialEq)]
-/// The current component being visited.
-pub struct VisitData {
-    pub len: usize,
-    pub data: *const u8,
-    pub component: ComponentInfo,
+#[non_exhaustive]
+pub struct VisitData<'a> {
+    pub data: &'a StorageBorrowDyn<'a>,
+    pub slot: Slot,
+}
+
+impl<'a> VisitData<'a> {
+    pub fn new(data: &'a StorageBorrowDyn<'a>, slot: Slot) -> Self {
+        Self { data, slot }
+    }
 }
 
 /// A visitor is a kind of component which is added to another component to
@@ -20,6 +24,8 @@ pub struct VisitData {
 /// component.
 ///
 /// **Note**: This is a low level API.
-pub trait Visitor<Ctx> {
-    unsafe fn visit(&mut self, ctx: &mut Ctx, visit: VisitData);
+pub trait Visitor<'a> {
+    /// The artefact after visiting a value
+    type Visited;
+    unsafe fn visit(&'a self, visit: VisitData<'a>) -> Self::Visited;
 }
