@@ -7,7 +7,7 @@ use crate::{
     PreparedFetch, World,
 };
 
-use super::iter::QueryIter;
+use super::iter::{BatchedIter, QueryIter};
 
 pub struct PreparedArchetype<'w, Q> {
     pub(crate) id: ArchetypeId,
@@ -41,34 +41,7 @@ where
     type IntoIter = QueryIter<'q, 'w, Q, F>;
 
     fn into_iter(self) -> Self::IntoIter {
-        // Prepare all archetypes only if it is not already done
-        // Clear previous borrows
-        if self.prepared.len() != self.archetypes.len() {
-            self.prepared.clear();
-            self.prepared = self
-                .archetypes
-                .iter()
-                .map(|&v| {
-                    let arch = self.world.archetype(v);
-                    PreparedArchetype {
-                        id: v,
-                        arch,
-                        fetch: self
-                            .fetch
-                            .prepare(self.world, arch)
-                            .expect("Mismathed archetype"),
-                    }
-                })
-                .collect();
-        }
-
-        QueryIter {
-            old_tick: self.old_tick,
-            new_tick: self.new_tick,
-            filter: self.filter,
-            archetypes: self.prepared.iter_mut(),
-            current: None,
-        }
+        self.iter()
     }
 }
 
@@ -108,7 +81,44 @@ where
         'w: 'q,
         F: Filter<'q, 'w>,
     {
-        self.into_iter()
+        QueryIter {
+            inner: self.iter_batched().flatten(),
+        }
+    }
+
+    /// Iterate all items matched by query and filter.
+    pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'q, 'w, Q, F>
+    where
+        'w: 'q,
+        F: Filter<'q, 'w>,
+    {
+        // Prepare all archetypes only if it is not already done
+        // Clear previous borrows
+        if self.prepared.len() != self.archetypes.len() {
+            self.prepared.clear();
+            self.prepared = self
+                .archetypes
+                .iter()
+                .map(|&v| {
+                    let arch = self.world.archetype(v);
+                    PreparedArchetype {
+                        id: v,
+                        arch,
+                        fetch: self
+                            .fetch
+                            .prepare(self.world, arch)
+                            .expect("Mismathed archetype"),
+                    }
+                })
+                .collect();
+        }
+
+        BatchedIter::new(
+            self.old_tick,
+            self.new_tick,
+            self.filter,
+            self.prepared.iter_mut(),
+        )
     }
 
     fn prepare_archetype(&mut self, arch: ArchetypeId) -> Option<usize> {

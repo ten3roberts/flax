@@ -101,7 +101,6 @@ impl Slice {
         if other.start < self.start || other.end > self.end {
             None
         } else {
-            dbg!(self, other);
             Some((
                 Self::new(self.start, other.start),
                 *other,
