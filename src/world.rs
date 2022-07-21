@@ -1,21 +1,25 @@
+use core::fmt;
 use std::{
     collections::BTreeMap,
+    fmt::{DebugStruct, Formatter, Write},
     mem::{self, MaybeUninit},
     ptr,
     sync::atomic::{AtomicU32, Ordering},
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
-use itertools::Itertools;
+use itertools::{Format, Itertools};
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, Visitor},
-    components::component,
+    archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, VisitData, Visitor},
+    components::{component, name},
+    debug_visitor,
     entity::{EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error, Filter,
+    All, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error,
+    Filter, Query, RowFormatter,
 };
 
 pub struct World {
@@ -658,22 +662,30 @@ impl World {
         self.change_tick.fetch_add(1, Ordering::Relaxed) + 1
     }
 
-    /// Visit all components which have the visitor components and use the
-    /// associated visitor for each slot
-    pub fn visit<C, V>(&self, visitor: Component<V>, ctx: &mut C)
-    where
-        V: Visitor<C> + ComponentValue,
-    {
-        for (_, arch) in self.archetypes.iter() {
-            for component in arch.components() {
-                // eprintln!("Traversing: {}:{}", component.name(), component.id());
-                if let Ok(mut v) = self.get_mut(component.id(), visitor) {
-                    // eprintln!("Visiting {}{}", component.name(), component.id());
-                    arch.visit(component.id(), &mut *v, ctx);
-                }
-            }
+    /// Formats the world using the debug visitor.
+    pub fn format_debug(&self) -> WorldFormatter<All> {
+        WorldFormatter {
+            world: self,
+            filter: All,
         }
     }
+
+    // /// Visit all components which have the visitor components and use the
+    // /// associated visitor for each slot
+    // pub fn visit<C, V, Ret>(&self, visitor: Component<V>, ctx: &mut C) -> impl Iterator<Item = Ret>
+    // where
+    //     V: Visitor<C, Ret> + ComponentValue,
+    // {
+    //     for (_, arch) in self.archetypes.iter() {
+    //         for component in arch.components() {
+    //             // eprintln!("Traversing: {}:{}", component.name(), component.id());
+    //             if let Ok(mut v) = self.get_mut(component.id(), visitor) {
+    //                 // eprintln!("Visiting {}{}", component.name(), component.id());
+    //                 arch.visit(component.id(), &mut *v, ctx);
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn component_metadata(&self) -> BTreeMap<ComponentInfo, Vec<String>> {
         let filter = component().with();
@@ -728,11 +740,11 @@ impl World {
     /// in-place manipulation, insertion or removal.
     ///
     /// Fails if the entity is not valid.
-    pub fn entry<'a, T: ComponentValue>(
-        &'a mut self,
+    pub fn entry<T: ComponentValue>(
+        &mut self,
         id: Entity,
         component: Component<T>,
-    ) -> Result<Entry<'a, T>> {
+    ) -> Result<Entry<T>> {
         let loc = self.location(id)?;
         let arch = self.archetype(loc.arch);
         if arch.has(component.id()) {
@@ -749,9 +761,50 @@ impl World {
     }
 }
 
+pub struct WorldFormatter<'a, F> {
+    world: &'a World,
+    filter: F,
+}
+
+impl<'a, F> std::fmt::Debug for WorldFormatter<'a, F>
+where
+    F: for<'x, 'y> Filter<'x, 'y>,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut meta = BTreeMap::new();
+        let mut list = f.debug_map();
+
+        for (_, arch) in self.world.archetypes.iter() {
+            meta.clear();
+            meta.extend(arch.components().flat_map(|info| {
+                Some((
+                    info.id(),
+                    (
+                        self.world.get(info.id(), debug_visitor()).ok()?,
+                        self.world.get(info.id(), name()).ok()?,
+                    ),
+                ))
+            }));
+
+            for slot in arch.slots().iter() {
+                let row = RowFormatter::new(arch, slot, &meta);
+                list.entry(&arch.entity(slot).unwrap(), &row);
+            }
+        }
+
+        list.finish()
+    }
+}
+
 impl Default for World {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl std::fmt::Debug for World {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.format_debug().fmt(f)
     }
 }
 
