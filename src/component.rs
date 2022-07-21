@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::{
-    archetype::ComponentInfo, entity::EntityIndex, ComponentBuffer, Entity, InsertedFilter,
-    MetaData, ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without, STATIC_NAMESPACE,
+    archetype::ComponentInfo, entity::EntityIndex, ComponentBuffer, Entity, EntityKind,
+    InsertedFilter, MetaData, ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without,
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
@@ -91,13 +91,18 @@ impl<T: ComponentValue> Component<T> {
     pub fn static_init(
         id: &AtomicU32,
         name: &'static str,
+        kind: EntityKind,
         meta: fn(ComponentInfo) -> ComponentBuffer,
     ) -> Self {
         let index = match id.fetch_update(Acquire, Relaxed, |v| {
             if v != 0 {
                 None
             } else {
-                Some(ComponentId::acquire_static_id().index().get())
+                Some(
+                    ComponentId::acquire_static_id(kind | EntityKind::STATIC)
+                        .index()
+                        .get(),
+                )
             }
         }) {
             Ok(_) => id.load(Acquire),
@@ -105,7 +110,11 @@ impl<T: ComponentValue> Component<T> {
         };
 
         Self::new(
-            Entity::from_parts(EntityIndex::new(index).unwrap(), 1, STATIC_NAMESPACE),
+            Entity::from_parts(
+                EntityIndex::new(index).unwrap(),
+                1,
+                EntityKind::COMPONENT | EntityKind::STATIC | kind,
+            ),
             name,
             meta,
         )

@@ -46,12 +46,17 @@ pub struct StrippedEntity(NonZeroU32);
 
 static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
-pub type Generation = u16;
-pub type EntityIndex = NonZeroU32;
-pub type Namespace = u8;
+bitflags::bitflags! {
+    pub struct EntityKind: u8 {
+        const COMPONENT = 1;
+        const STATIC = 2;
+        const RELATION = 4;
+        const ARCHETYPE = 8;
+    }
+}
 
-/// An entity namespace in which entites can be spawned using [`Entity::acquire_static_id`] and will never despawn.
-pub const STATIC_NAMESPACE: Namespace = 255;
+pub type EntityGen = u16;
+pub type EntityIndex = NonZeroU32;
 
 component! {
     /// The object for a pair component which will match anything.
@@ -60,9 +65,13 @@ component! {
 
 impl Entity {
     /// Generate a new static id
-    pub fn acquire_static_id() -> Entity {
+    pub fn acquire_static_id(kind: EntityKind) -> Entity {
         let index = STATIC_IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Entity::from_parts(NonZeroU32::new(index).unwrap(), 0, STATIC_NAMESPACE)
+        Entity::from_parts(
+            NonZeroU32::new(index).unwrap(),
+            0,
+            kind | EntityKind::STATIC,
+        )
     }
 
     #[inline]
@@ -73,23 +82,23 @@ impl Entity {
 
     #[inline]
     /// Extract the generation from the entity
-    pub fn generation(self) -> Generation {
+    pub fn generation(self) -> EntityGen {
         (self.0.get() >> 32) as u16
     }
 
     #[inline]
     /// Extract the namespace from the entity
-    pub fn namespace(self) -> Namespace {
-        self.0.get() as u8
+    pub fn kind(self) -> EntityKind {
+        EntityKind::from_bits(self.0.get() as u8).expect("Invalid kind bits")
     }
 
-    pub fn into_parts(self) -> (EntityIndex, Generation, Namespace) {
+    pub fn into_parts(self) -> (EntityIndex, EntityGen, EntityKind) {
         let bits = self.0.get();
 
         (
             NonZeroU32::new(bits as u32 >> 8).unwrap(),
-            (bits >> 32) as Generation,
-            bits as u8,
+            (bits >> 32) as EntityGen,
+            EntityKind::from_bits(bits as u8).expect("Invalid kind bits"),
         )
     }
 
@@ -97,10 +106,10 @@ impl Entity {
         Self::from_bits(NonZeroU64::new(self.0.get() & 0xFFFFFFFF).unwrap())
     }
 
-    pub fn from_parts(index: EntityIndex, gen: Generation, namespace: Namespace) -> Self {
+    pub fn from_parts(index: EntityIndex, gen: EntityGen, kind: EntityKind) -> Self {
         assert!(index.get() < (u32::MAX >> 1));
         let bits =
-            ((index.get() as u64 & 0xFFFFFF) << 8) | ((gen as u64) << 32) | (namespace as u64);
+            ((index.get() as u64 & 0xFFFFFF) << 8) | ((gen as u64) << 32) | (kind.bits() as u64);
 
         Self(NonZeroU64::new(bits).unwrap())
     }
@@ -115,14 +124,22 @@ impl Entity {
         self.0
     }
 
-    pub fn pair(subject: Entity, object: Entity) -> Self {
-        let a = subject.to_bits().get();
+    /// Construct a new pair entity with the given relation.
+    ///
+    /// # Panics:
+    /// If the `relation` does not have the [`EntityKind::RELATION`] flag set.
+    pub fn pair(relation: Entity, object: Entity) -> Self {
+        if !relation.kind().contains(EntityKind::RELATION) {
+            panic!("Relation {relation} does not contain the relation flag")
+        }
+
+        let a = relation.to_bits().get();
         let b = object.to_bits().get();
 
         Self(NonZeroU64::new((a & 0xFFFFFFFF) | (b << 32)).unwrap())
     }
 
-    pub fn into_pair(self) -> (StrippedEntity, StrippedEntity) {
+    pub fn split_pair(self) -> (StrippedEntity, StrippedEntity) {
         let bits = self.to_bits().get();
         let subject = StrippedEntity(NonZeroU32::new(bits as u32).unwrap());
         let object = StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap());
@@ -146,12 +163,12 @@ impl StrippedEntity {
         NonZeroU32::new(self.0.get() as u32 >> 8).unwrap()
     }
 
-    pub fn namespace(self) -> Namespace {
-        self.0.get() as u8
+    pub fn kind(self) -> EntityKind {
+        EntityKind::from_bits(self.0.get() as u8).unwrap()
     }
 
     /// Reconstruct a generationless entity with a generation
-    pub fn reconstruct(self, gen: Generation) -> Entity {
+    pub fn reconstruct(self, gen: EntityGen) -> Entity {
         Entity(NonZeroU64::new((self.0.get() as u64) | ((gen as u64) << 32)).unwrap())
     }
 }
@@ -169,15 +186,15 @@ impl fmt::Debug for Entity {
 
 impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, generation, namespace) = self.into_parts();
-        write!(f, "{namespace}:{index}:{generation}")
+        let (index, generation, kind) = self.into_parts();
+        write!(f, "{kind:?}:{index}:{generation}")
     }
 }
 
 impl fmt::Debug for StrippedEntity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let index = self.index();
-        let namespace = self.namespace();
+        let namespace = self.kind();
 
         f.debug_tuple("StrippedEntity")
             .field(&namespace)
@@ -190,8 +207,8 @@ impl fmt::Debug for StrippedEntity {
 impl fmt::Display for StrippedEntity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let index = self.index();
-        let namespace = self.namespace();
-        write!(f, "{namespace}:{index}:_")
+        let kind = self.kind();
+        write!(f, "{kind:?}:{index}:_")
     }
 }
 
@@ -204,13 +221,13 @@ pub fn entities() -> EntityFetch {
 mod tests {
     use std::num::NonZeroU32;
 
-    use crate::{archetype::Archetype, entity::EntityLocation, Entity};
+    use crate::{archetype::Archetype, entity::EntityLocation, Entity, EntityKind};
 
     use super::EntityStore;
     #[test]
     fn entity_store() {
-        let mut entities = EntityStore::new(1);
-        let arch = EntityStore::new(2).spawn(Archetype::empty());
+        let mut entities = EntityStore::new(EntityKind::COMPONENT);
+        let arch = EntityStore::new(EntityKind::ARCHETYPE).spawn(Archetype::empty());
 
         let a = entities.spawn(EntityLocation { arch, slot: 4 });
         let b = entities.spawn(EntityLocation { arch, slot: 2 });
@@ -228,7 +245,7 @@ mod tests {
 
     #[test]
     fn entity_id() {
-        let parts = (NonZeroU32::new(23298).unwrap(), 30, 1);
+        let parts = (NonZeroU32::new(23298).unwrap(), 30, EntityKind::COMPONENT);
 
         let a = Entity::from_parts(parts.0, parts.1, parts.2);
 

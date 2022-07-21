@@ -666,7 +666,7 @@ impl Storage {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{component, ComponentBuffer};
+    use crate::{component, ComponentBuffer, EntityKind};
 
     use super::*;
     use std::num::NonZeroU32;
@@ -692,8 +692,8 @@ mod tests {
         buffer.set(b(), "Foo".to_string());
         buffer.set(c(), shared.clone());
 
-        let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2, 0);
-        let id_2 = Entity::from_parts(NonZeroU32::new(5).unwrap(), 2, 0);
+        let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2, EntityKind::empty());
+        let id_2 = Entity::from_parts(NonZeroU32::new(5).unwrap(), 2, EntityKind::empty());
 
         let slot = arch.insert(id, &mut buffer);
         eprintln!("Slot: {slot}");
