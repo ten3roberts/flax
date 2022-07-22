@@ -1,10 +1,12 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
     collections::BTreeMap,
+    mem,
     ptr::NonNull,
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+use itertools::Itertools;
 
 use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 
@@ -24,9 +26,7 @@ pub struct Archetype {
     storage: BTreeMap<Entity, Storage>,
     changes: BTreeMap<ComponentId, AtomicRefCell<Changes>>,
     /// Slot to entity id
-    entities: Box<[Option<Entity>]>,
-    // Number of entities in the archetype
-    len: usize,
+    entities: Vec<Entity>,
     // Number of slots
     cap: usize,
 
@@ -44,19 +44,29 @@ impl Archetype {
         Self {
             storage: BTreeMap::new(),
             changes: BTreeMap::new(),
-            len: 0,
             cap: 0,
             edges: BTreeMap::new(),
-            entities: Box::new([]),
+            entities: Vec::new(),
         }
     }
 
     /// Returns the components with the specified relation type.
-    pub fn relations_like(&self, rel: Entity) -> impl Iterator<Item = Entity> + '_ {
-        let rel = rel.strip_gen();
+    pub fn relations_like(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
+        let relation = relation.strip_gen();
+
         self.storage
             .keys()
-            .filter(move |k| k.strip_gen() == rel)
+            .filter(move |k| k.strip_gen() == relation)
+            .copied()
+    }
+
+    /// Returns the components with the specified relation subject.
+    pub fn relations_of(&self, subject: Entity) -> impl Iterator<Item = Entity> + '_ {
+        let subject = subject.strip_gen();
+
+        self.storage
+            .keys()
+            .filter(move |k| k.split_pair().1 == subject)
             .copied()
     }
 
@@ -80,17 +90,16 @@ impl Archetype {
             .unzip();
 
         Self {
-            len: 0,
             cap: 0,
             storage,
             changes,
             edges: BTreeMap::new(),
-            entities: Box::new([]),
+            entities: Vec::new(),
         }
     }
 
     pub fn slots(&self) -> Slice {
-        Slice::new(0, self.len)
+        Slice::new(0, self.len())
     }
 
     /// Returns true if the archtype has `component`
@@ -117,7 +126,7 @@ impl Archetype {
         &self,
         component: Component<T>,
     ) -> Option<StorageBorrowMut<T>> {
-        let len = self.len;
+        let len = self.len();
         let storage = self.storage.get(&component.id())?;
 
         // Type is guaranteed by `map`
@@ -187,7 +196,7 @@ impl Archetype {
             .unwrap();
 
         let data = AtomicRef::map(data, |v| unsafe {
-            std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
+            std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len())
         });
 
         Some(StorageBorrow { data })
@@ -201,7 +210,7 @@ impl Archetype {
         // Type is guaranteed by `map`
         let data = storage.data.borrow();
         let data = AtomicRef::map(data, |v| unsafe {
-            std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
+            std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len())
         });
 
         Some(StorageBorrow { data })
@@ -220,7 +229,7 @@ impl Archetype {
         Some(StorageBorrowDyn {
             data,
             info: storage.info(),
-            len: self.len,
+            len: self.len(),
         })
     }
 
@@ -229,9 +238,10 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<&mut T> {
+        let len = self.len();
         let storage = self.storage.get_mut(&component.id())?;
 
-        if slot < self.len {
+        if slot < len {
             let v = storage.data.get_mut();
             unsafe { Some(&mut *(v.as_ptr().cast::<T>().add(slot))) }
         } else {
@@ -247,7 +257,7 @@ impl Archetype {
     ) -> Option<AtomicRefMut<T>> {
         let storage = self.storage.get(&component.id())?;
 
-        if slot < self.len {
+        if slot < self.len() {
             Some(AtomicRefMut::map(storage.data.borrow_mut(), |v| unsafe {
                 &mut *(v.as_ptr().cast::<T>().add(slot))
             }))
@@ -258,10 +268,11 @@ impl Archetype {
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
     pub fn get_dyn(&mut self, slot: Slot, component: ComponentId) -> Option<*mut u8> {
+        let len = self.len();
         let storage = self.storage.get_mut(&component)?;
         let info = &storage.info;
 
-        if slot < self.len {
+        if slot < len {
             let data = storage.data.get_mut();
             unsafe { Some(data.as_ptr().add(slot * info.size())) }
         } else {
@@ -277,7 +288,7 @@ impl Archetype {
     ) -> Option<AtomicRef<T>> {
         let storage = self.storage.get(&component.id())?;
 
-        if slot < self.len {
+        if slot < self.len() {
             Some(AtomicRef::map(storage.data.borrow(), |v| unsafe {
                 &*(v.as_ptr().cast::<T>().add(slot))
             }))
@@ -308,18 +319,33 @@ impl Archetype {
     }
 
     /// Allocated space for a new slot.
+    /// The slot will always be greater than any previous call.
     /// # Safety
     /// All components of slot are uninitialized. `pub_dyn` needs to be called for
     /// all components in archetype.
-    pub fn allocate(&mut self, id: Entity) -> Slot {
+    pub(crate) fn allocate(&mut self, id: Entity) -> Slot {
         self.reserve(1);
 
-        let slot = self.len;
+        let slot = self.len();
 
-        self.len += 1;
-        self.entities[slot] = Some(id);
+        self.entities.push(id);
 
         slot
+    }
+
+    /// Allocates consecutive slots.
+    /// Returns the new slots
+    ///
+    /// # Safety
+    /// All components of the new slots are left uninitialized.
+    fn allocate_n(&mut self, ids: &[Entity]) -> Slice {
+        self.reserve(ids.len());
+
+        let last = self.len();
+
+        self.entities.extend(ids);
+
+        Slice::new(last, self.len())
     }
 
     /// Put a type erased component info a slot.
@@ -358,7 +384,7 @@ impl Archetype {
     ) -> (Slot, Option<Entity>) {
         let entity = self.entity(slot).expect("Invalid entity");
         let dst_slot = dst.allocate(entity);
-        let last = self.len - 1;
+        let last = self.len() - 1;
 
         for storage in self.storage.values_mut() {
             let p = storage.at_mut(slot);
@@ -373,15 +399,11 @@ impl Archetype {
             }
         }
 
-        self.len -= 1;
-
         if slot != last {
             self.entities[slot] = self.entities[last];
-            (
-                dst_slot,
-                Some(std::mem::take(&mut self.entities[last]).expect("Invalid entity at last pos")),
-            )
+            (dst_slot, Some(self.entities.pop().unwrap()))
         } else {
+            self.entities.pop().unwrap();
             (dst_slot, None)
         }
     }
@@ -399,7 +421,7 @@ impl Archetype {
         mut on_take: impl FnMut(ComponentInfo, *mut u8),
     ) -> Option<Entity> {
         let _ = self.entity(slot).expect("Invalid entity");
-        let last = self.len - 1;
+        let last = self.len() - 1;
 
         for storage in self.storage.values_mut() {
             let src = storage.at_mut(slot);
@@ -412,21 +434,65 @@ impl Archetype {
             }
         }
 
-        self.len -= 1;
-
         if slot != last {
             self.entities[slot] = self.entities[last];
-            Some(std::mem::take(&mut self.entities[last]).expect("Invalid entity at last pos"))
+            Some(self.entities.pop().unwrap())
         } else {
+            self.entities.pop().unwrap();
             None
         }
     }
+
+    /// Move all entities from one archetype to another.
+    ///
+    /// Leaves `self` empty.
+    /// Returns the new location of all entities
+    pub fn move_all(&mut self, dst: &mut Self) -> Vec<(Entity, Slot)> {
+        let len = self.len();
+        let entities = mem::take(&mut self.entities);
+
+        let dst_slots = dst.allocate_n(&self.entities);
+
+        // Migrate all changes before doing anything
+        for (src_slot, dst_slot) in self.slots().iter().zip(dst_slots) {
+            self.migrate_slot(dst, src_slot, dst_slot)
+        }
+
+        for (id, storage) in &mut self.storage {
+            if let Some(dst_storage) = dst.storage_raw(*id) {
+                // Copy this storage to the end of dst
+                unsafe {
+                    let src = storage.data.get_mut().as_ptr();
+                    let dst = dst_storage.at_mut(dst_slots.start);
+                    std::ptr::copy_nonoverlapping(src, dst, len)
+                }
+            } else {
+                // Drop this whole column
+                eprintln!("Dropping all data in {:?}", storage.info());
+
+                for slot in 0..len {
+                    unsafe {
+                        let value = storage.at_mut(slot);
+                        (storage.info.drop)(value);
+                    }
+                }
+            }
+        }
+
+        eprintln!("Completed move");
+
+        assert_eq!(self.len(), 0);
+
+        entities.iter().cloned().zip(dst_slots.iter()).collect_vec()
+    }
+
     /// Reserves space for atleast `additional` entities.
     /// Does nothing if the remaining capacity < additional.
     /// len remains unchanged, as does the internal order
     pub fn reserve(&mut self, additional: usize) {
+        let len = self.len();
         let old_cap = self.cap;
-        let new_cap = (self.len + additional).next_power_of_two();
+        let new_cap = (len + additional).next_power_of_two();
 
         if new_cap <= old_cap {
             return;
@@ -448,7 +514,7 @@ impl Archetype {
                 let data = storage.data.get_mut().as_ptr();
                 if old_cap > 0 {
                     // Copy over the previous contiguous data
-                    std::ptr::copy_nonoverlapping(data, new_data, storage.info.size() * self.len);
+                    std::ptr::copy_nonoverlapping(data, new_data, storage.info.size() * len);
 
                     dealloc(
                         data,
@@ -465,20 +531,21 @@ impl Archetype {
         }
 
         // Copy over entity ids
-        let mut new_entities = vec![None; new_cap].into_boxed_slice();
-        new_entities[0..self.len].copy_from_slice(&self.entities[0..self.len]);
-        self.entities = new_entities;
+        // let mut new_entities = vec![None; new_cap].into_boxed_slice();
+        // new_entities[0..self.len].copy_from_slice(&self.entities[0..self.len]);
+        // self.entities = new_entities;
         self.cap = new_cap;
     }
 
     pub fn entity(&self, slot: Slot) -> Option<Entity> {
-        self.entities[slot]
+        self.entities.get(slot).copied()
     }
 
     /// Drops all components while keeping the storage intact
     pub fn clear(&mut self) {
+        let len = self.len();
         for storage in self.storage.values_mut() {
-            for slot in 0..self.len {
+            for slot in 0..len {
                 unsafe {
                     let value = storage.at_mut(slot);
                     (storage.info.drop)(value);
@@ -486,18 +553,18 @@ impl Archetype {
             }
         }
 
-        self.len = 0;
+        self.entities.clear();
     }
 
-    /// Get the archetype's len.
     #[must_use]
+    // Number of entities in the archetype
     pub fn len(&self) -> usize {
-        self.len
+        self.entities.len()
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.entities.is_empty()
     }
 
     /// Get the archetype's cap.
@@ -517,7 +584,7 @@ impl Archetype {
 
     /// Access the entities in the archetype for each slot. Entity is None if
     /// the slot is not occupied, only for the last slots.
-    pub fn entities(&self) -> &[Option<Entity>] {
+    pub fn entities(&self) -> &[Entity] {
         self.entities.as_ref()
     }
 }
@@ -525,6 +592,7 @@ impl Archetype {
 impl Drop for Archetype {
     fn drop(&mut self) {
         self.clear();
+
         if self.cap > 0 {
             for storage in self.storage.values_mut() {
                 // Handle ZST
@@ -608,12 +676,6 @@ pub(crate) struct Storage {
 }
 
 impl Storage {
-    // # Safety
-    // slot must be within range
-    pub(crate) unsafe fn at(&mut self, slot: Slot) -> *mut u8 {
-        self.data.get_mut().as_ptr().add(self.info.size() * slot)
-    }
-
     pub(crate) unsafe fn at_mut(&mut self, slot: Slot) -> *mut u8 {
         self.data.get_mut().as_ptr().add(self.info.size() * slot)
     }

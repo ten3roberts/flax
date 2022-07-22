@@ -69,6 +69,7 @@ fn relations() {
 
     component! {
         hobby: &'static str => [ Debug ],
+        profession: &'static str => [ Debug ],
         child_of(e): RelationKind => [ Debug ],
     }
 
@@ -84,16 +85,17 @@ fn relations() {
         .set(hobby(), "Crocheting")
         .spawn(&mut world);
 
-    let _child = EntityBuilder::new()
+    let child = EntityBuilder::new()
         .set(name(), "John".to_string())
         .set(hobby(), "Studying")
         .set(child_of(parent), RelationKind::Mom)
         .spawn(&mut world);
 
-    let _child2 = EntityBuilder::new()
+    let child2 = EntityBuilder::new()
         .set(name(), "Sally".to_string())
         .set(hobby(), "Hockey")
         .set(child_of(parent), RelationKind::Mom)
+        .set(profession(), "Student")
         .spawn(&mut world);
 
     assert!(world.get(child_of(parent).id(), debug_visitor()).is_ok());
@@ -144,5 +146,13 @@ fn relations() {
             (&"Reacher".to_string(), (parent2, &RelationKind::Dad)),
             (&"Sally".to_string(), (parent, &RelationKind::Mom))
         ]
-    )
+    );
+
+    drop(query);
+
+    // If we remove a parent, the children will be detached.
+    // world.detach(parent);
+
+    // assert!(world.get(child, child_of(parent)).is_err());
+    // assert!(world.get(child2, child_of(parent)).is_err());
 }

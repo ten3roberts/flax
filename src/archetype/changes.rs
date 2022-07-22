@@ -167,6 +167,7 @@ impl Changes {
         }
     }
 
+    /// Removes a slot from the change list
     pub fn remove(&mut self, slot: Slot) -> Vec<Change> {
         let slice = Slice::single(slot);
         let mut result = Vec::new();

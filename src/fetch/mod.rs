@@ -97,7 +97,7 @@ where
 #[derive(Debug, Clone)]
 pub struct EntityFetch;
 pub struct PreparedEntities<'a> {
-    entities: &'a [Option<Entity>],
+    entities: &'a [Entity],
 }
 
 impl<'w> Fetch<'w> for EntityFetch {
@@ -132,7 +132,7 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
     type Item = Entity;
 
     unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        self.entities[slot].unwrap()
+        self.entities[slot]
     }
 }
 

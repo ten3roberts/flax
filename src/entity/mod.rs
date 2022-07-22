@@ -30,8 +30,8 @@ use crate::{component, EntityFetch};
 ///
 /// # Pair:
 /// If the entity is a relation, the high bits stores the subject entity.
-/// | 32       | 32         |
-/// | Subject  | Object     |
+/// | 32       | 32       |
+/// | Subject  | Relation |
 ///
 /// The one downside of this is that the generation is not stored, though an
 /// entity should never hold an entity that is not alive, and is as such handled
@@ -125,23 +125,24 @@ impl Entity {
     ///
     /// # Panics:
     /// If the `relation` does not have the [`EntityKind::RELATION`] flag set.
-    pub fn pair(relation: Entity, object: Entity) -> Self {
+    pub fn pair(relation: Entity, subject: Entity) -> Self {
         if !relation.kind().contains(EntityKind::RELATION) {
             panic!("Relation {relation} does not contain the relation flag")
         }
 
-        let a = relation.to_bits().get();
-        let b = object.to_bits().get();
+        let relation = relation.to_bits().get();
+        let subject = subject.to_bits().get();
 
-        Self(NonZeroU64::new((a & 0xFFFFFFFF) | (b << 32)).unwrap())
+        Self(NonZeroU64::new((relation & 0xFFFFFFFF) | (subject << 32)).unwrap())
     }
 
+    /// Returns the subject and relation
     pub fn split_pair(self) -> (StrippedEntity, StrippedEntity) {
         let bits = self.to_bits().get();
-        let subject = StrippedEntity(NonZeroU32::new(bits as u32).unwrap());
-        let object = StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap());
+        let relation = StrippedEntity(NonZeroU32::new(bits as u32).unwrap());
+        let subject = StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap());
 
-        (subject, object)
+        (relation, subject)
     }
 
     #[inline]
