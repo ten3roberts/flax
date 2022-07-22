@@ -112,7 +112,6 @@ fn relations() {
 
     let mut query = Query::new((name(), child_of(parent)));
 
-    eprintln!("{:#?}", world.component_metadata());
     assert!(world.get(child_of(parent).id(), debug_visitor()).is_ok());
     assert!(world.get(child_of(parent2).id(), debug_visitor()).is_ok());
 
