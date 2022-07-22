@@ -140,6 +140,7 @@ mod test {
         assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".to_string()));
 
         entity.set(health(), 100.0).unwrap();
+        // panic!("");
 
         assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".to_string()));
         assert_eq!(entity.get(health()).as_deref(), Ok(&100.0));

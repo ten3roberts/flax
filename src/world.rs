@@ -183,7 +183,7 @@ impl World {
                     .storage_raw(component.id)
                     .unwrap();
 
-                std::ptr::copy_nonoverlapping(src, storage.at(slot), component.size());
+                std::ptr::copy_nonoverlapping(src, storage.at_mut(slot), component.size());
             }
         }
 
@@ -278,7 +278,7 @@ impl World {
             assert_eq!(dst.entity(dst_slot), Some(id));
 
             // Migrate all changes
-            // src.migrate_slot(dst, slot, dst_slot);
+            src.migrate_slot(dst, slot, dst_slot);
 
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
@@ -325,6 +325,8 @@ impl World {
 
     /// Despawn an entity.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
+        self.detach(id);
+
         let EntityLocation {
             arch: archetype,
             slot,
@@ -341,6 +343,43 @@ impl World {
         }
 
         ns.despawn(id)
+    }
+
+    /// Removes all instances of the component from entities in the world.
+    /// Does not despawn any entities.
+    pub fn detach(&mut self, component: ComponentId) {
+        // The archetypes to remove
+        let archetypes = self
+            .archetypes()
+            .filter(|v| v.1.has(component) || v.1.relations_of(component).count() > 0)
+            .map(|v| {
+                let subject = component.strip_gen();
+                (
+                    v.0,
+                    v.1.components()
+                        .filter(|c| c.id() != component && c.id().split_pair().1 != subject)
+                        .copied()
+                        .collect_vec(),
+                )
+            })
+            .collect_vec();
+
+        eprintln!("Detaching: {archetypes:#?}");
+
+        for (src_id, components) in archetypes {
+            let (dst_id, _) = self.fetch_archetype(self.archetype_root, &components);
+            let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
+
+            for (id, slot) in src.move_all(dst) {
+                eprintln!("Moved entity: {id} to {slot}");
+                *self
+                    .init_store(id.kind())
+                    .get_mut(id)
+                    .expect("Entity id was not valid") = EntityLocation { slot, arch: dst_id }
+            }
+
+            self.archetypes.despawn(src_id).unwrap();
+        }
     }
 
     pub fn set<T: ComponentValue>(
@@ -403,6 +442,7 @@ impl World {
             }
         };
 
+        eprintln!("Moving {}", component.name());
         unsafe {
             assert_ne!(src_id, dst_id);
             // Borrow disjoint
