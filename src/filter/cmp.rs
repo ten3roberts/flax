@@ -202,12 +202,10 @@ where
             .take_while(cmp)
             .count();
 
-        let res = Slice {
+        Slice {
             start,
             end: start + count,
-        };
-
-        res
+        }
     }
 }
 
@@ -305,12 +303,10 @@ where
             .take_while(cmp)
             .count();
 
-        let res = Slice {
+        Slice {
             start,
             end: start + count,
-        };
-
-        res
+        }
     }
 }
 

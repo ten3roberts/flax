@@ -1,6 +1,6 @@
 use crate::components::name;
 use crate::visitors::debug_visitor;
-use crate::{visitors::DebugVisitor, Component, ComponentBuffer, ComponentInfo, ComponentValue};
+use crate::{visitors::DebugVisitor, ComponentBuffer, ComponentInfo, ComponentValue};
 
 /// Additional data that can attach itself to a component
 ///
@@ -31,7 +31,7 @@ impl<T> MetaData<T> for Debug
 where
     T: std::fmt::Debug + ComponentValue,
 {
-    fn attach(component: ComponentInfo, buffer: &mut ComponentBuffer) {
+    fn attach(_: ComponentInfo, buffer: &mut ComponentBuffer) {
         buffer.set(debug_visitor(), DebugVisitor::new::<T>());
     }
 }

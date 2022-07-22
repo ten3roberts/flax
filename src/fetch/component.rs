@@ -21,7 +21,7 @@ pub struct PreparedComponent<'a, T> {
 impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
     type Item = &'q T;
 
-    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         self.borrow.at(slot)
     }
 }
@@ -74,7 +74,7 @@ where
 #[derive(Debug, Clone)]
 pub struct Mutable<T: ComponentValue>(pub(crate) Component<T>);
 
-impl<'w, 'b, T> Fetch<'w> for Mutable<T>
+impl<'w, T> Fetch<'w> for Mutable<T>
 where
     T: ComponentValue,
 {
@@ -124,11 +124,13 @@ where
 impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
     type Item = &'q mut T;
 
-    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
-        &mut *(self.borrow.at(slot) as *const T as *mut T)
+        (self.borrow.at_mut(slot) as *mut T)
+            .as_mut()
+            .expect("Non null")
     }
 
     unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {
@@ -186,8 +188,7 @@ where
             archetype
                 .components()
                 .filter(|component| component.id().strip_gen() == sub)
-                .skip(self.index)
-                .next()
+                .nth(self.index)
                 .is_some()
         } else {
             archetype.has(self.component.id())
@@ -204,8 +205,7 @@ where
             if archetype
                 .components()
                 .filter(|component| component.id().strip_gen() == sub)
-                .skip(self.index)
-                .next()
+                .nth(self.index)
                 .is_some()
             {
                 vec![]
@@ -257,7 +257,7 @@ where
 {
     type Item = (Entity, &'q T);
 
-    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         let item = self.borrow.at(slot);
         (self.obj, item)

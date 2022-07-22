@@ -47,9 +47,7 @@ macro_rules! tuple_impl {
 impl TupleCloned for () {
     type Cloned = ();
 
-    fn cloned(self) -> Self::Cloned {
-        ()
-    }
+    fn cloned(self) -> Self::Cloned {}
 }
 
 impl<T> TupleCombine<T> for () {

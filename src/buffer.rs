@@ -243,7 +243,7 @@ impl ComponentBuffer {
     /// The yielded pointers needs to be dropped manually.
     /// If the returned iterator is dropped before being fully consumed, the
     /// remaining values will be safely dropped.
-    pub fn take_all<'a>(&'a mut self) -> ComponentBufferIter<'a> {
+    pub fn take_all(&mut self) -> ComponentBufferIter {
         let components = &mut self.components;
         let storage = &mut self.storage;
         ComponentBufferIter {
@@ -262,12 +262,10 @@ impl<'a> Iterator for ComponentBufferIter<'a> {
     type Item = (ComponentInfo, *mut u8);
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let (_, (offset, component)) = self.components.next()?;
-            unsafe {
-                let data = self.storage.take_dyn(offset);
-                return Some((component, data));
-            }
+        let (_, (offset, component)) = self.components.next()?;
+        unsafe {
+            let data = self.storage.take_dyn(offset);
+            Some((component, data))
         }
     }
 }

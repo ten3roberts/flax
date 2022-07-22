@@ -51,7 +51,8 @@ bitflags::bitflags! {
         const COMPONENT = 1;
         const STATIC = 2;
         const RELATION = 4;
-        const ARCHETYPE = 8;
+        /// Used when the entity ids are already known
+        const REMOTE = 5;
     }
 }
 
@@ -100,10 +101,6 @@ impl Entity {
             (bits >> 32) as EntityGen,
             EntityKind::from_bits(bits as u8).expect("Invalid kind bits"),
         )
-    }
-
-    pub(crate) fn zero_gen(self) -> Self {
-        Self::from_bits(NonZeroU64::new(self.0.get() & 0xFFFFFFFF).unwrap())
     }
 
     pub fn from_parts(index: EntityIndex, gen: EntityGen, kind: EntityKind) -> Self {
@@ -226,7 +223,7 @@ mod tests {
     #[test]
     fn entity_store() {
         let mut entities = EntityStore::new(EntityKind::COMPONENT);
-        let arch = EntityStore::new(EntityKind::ARCHETYPE).spawn(Archetype::empty());
+        let arch = EntityStore::new(EntityKind::empty()).spawn(Archetype::empty());
 
         let a = entities.spawn(EntityLocation { arch, slot: 4 });
         let b = entities.spawn(EntityLocation { arch, slot: 2 });

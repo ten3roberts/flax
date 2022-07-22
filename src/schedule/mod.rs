@@ -1,14 +1,40 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, mem};
 
 use itertools::Itertools;
 
-use crate::{system::SystemContext, BoxedSystem, CommandBuffer, System, World, Writable, Write};
+use crate::{
+    system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World, Writable, Write,
+};
+
+enum Systems {
+    Unbatched(Vec<BoxedSystem>),
+    Batched(Vec<Vec<BoxedSystem>>),
+}
+
+impl Systems {
+    fn as_unbatched(&mut self) -> &mut Vec<BoxedSystem> {
+        match self {
+            Systems::Unbatched(v) => v,
+            Systems::Batched(v) => {
+                let v = mem::take(v);
+                *self = Self::Unbatched(v.into_iter().flatten().collect_vec());
+                self.as_unbatched()
+            }
+        }
+    }
+
+    fn as_batched(&mut self) -> Option<&mut Vec<Vec<BoxedSystem>>> {
+        if let Self::Batched(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
 
 /// A collection of systems to run on the world
 pub struct Schedule {
-    systems: Vec<BoxedSystem>,
-
-    batches: Option<Vec<Vec<usize>>>,
+    systems: Systems,
 
     archetype_gen: u32,
 }
@@ -16,8 +42,7 @@ pub struct Schedule {
 impl Schedule {
     pub fn new() -> Self {
         Self {
-            systems: Vec::new(),
-            batches: None,
+            systems: Systems::Unbatched(Vec::new()),
             archetype_gen: 0,
         }
     }
@@ -25,8 +50,7 @@ impl Schedule {
     /// Add a new system to the schedule.
     /// Respects order.
     pub fn with_system(&mut self, system: impl Into<BoxedSystem>) -> &mut Self {
-        self.batches = None;
-        self.systems.push(system.into());
+        self.systems.as_unbatched().push(system.into());
         self
     }
 
@@ -40,7 +64,7 @@ impl Schedule {
                 .with(Write::<CommandBuffer>::new())
                 .build(
                     |mut world: Writable<World>, mut cmd: Writable<CommandBuffer>| {
-                        cmd.apply(&mut *world)
+                        cmd.apply(&mut world)
                             .wrap_err("Failed to flush commandbuffer in schedule\n")
                     },
                 ),
@@ -53,6 +77,7 @@ impl Schedule {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
         self.systems
+            .as_unbatched()
             .iter_mut()
             .try_for_each(|system| system.execute(&ctx))?;
 
@@ -61,41 +86,39 @@ impl Schedule {
 
     #[cfg(feature = "parallel")]
     pub fn execute_par(&mut self, world: &mut World) -> eyre::Result<()> {
-        use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+        use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
         let w_gen = world.archetype_gen();
         // New archetypes
         if self.archetype_gen != w_gen {
-            self.batches = None;
+            self.systems.as_unbatched();
             self.archetype_gen = w_gen;
         }
 
-        let systems = &mut self.systems[..];
+        // let systems = &mut self.systems[..];
 
-        let batches = self
-            .batches
-            .get_or_insert_with(|| Self::build_dependencies(systems, world));
+        let batches = match &mut self.systems {
+            Systems::Unbatched(systems) => {
+                let systems = Self::build_dependencies(systems, world);
+                self.systems = Systems::Batched(systems);
+                self.systems.as_batched().unwrap()
+            }
+            Systems::Batched(v) => v,
+        };
 
-        dbg!(&batches);
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
 
-        let systems = &self.systems;
-        let result = batches.iter().try_for_each(|batch| {
-            batch.par_iter().try_for_each(|&idx| {
-                // SAFETY
-                // The idx is guaranteed to be disjoint by sort_topo
-                let system =
-                    unsafe { &mut *(&systems[idx] as *const BoxedSystem as *mut BoxedSystem) };
-
-                system.execute(&ctx)
-            })
+        let result = batches.iter_mut().try_for_each(|batch| {
+            batch
+                .par_iter_mut()
+                .try_for_each(|system| system.execute(&ctx))
         });
 
         result
     }
 
-    fn build_dependencies(systems: &mut [BoxedSystem], world: &mut World) -> Vec<Vec<usize>> {
+    fn build_dependencies(systems: &mut [BoxedSystem], world: &mut World) -> Vec<Vec<BoxedSystem>> {
         eprintln!("Building batches");
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
@@ -130,7 +153,17 @@ impl Schedule {
         dbg!(&deps);
 
         // Topo sort
-        topo_sort(systems, &deps)
+        let depths = topo_sort(systems, &deps);
+
+        depths
+            .into_iter()
+            .map(|depth| {
+                depth
+                    .into_iter()
+                    .map(|idx| mem::replace(&mut systems[idx], BoxedSystem::new(NeverSystem)))
+                    .collect_vec()
+            })
+            .collect_vec()
     }
 }
 
@@ -186,12 +219,10 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
         _ => unreachable!(),
     });
 
-    let result = groups
+    groups
         .into_iter()
         .map(|(_, v)| v.collect_vec())
-        .collect_vec();
-
-    result
+        .collect_vec()
 }
 
 impl Default for Schedule {

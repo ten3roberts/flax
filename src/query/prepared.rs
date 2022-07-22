@@ -1,4 +1,4 @@
-use std::mem::MaybeUninit;
+use std::mem::{self, MaybeUninit};
 
 use smallvec::SmallVec;
 
@@ -171,13 +171,19 @@ where
 
         // Fetch all
         // All items will be initialized
-        let mut items: [_; C] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut items: [MaybeUninit<_>; C] = unsafe { MaybeUninit::uninit().assume_init() };
         for i in 0..C {
             let (idx, slot) = idxs[i];
-            items[i] = unsafe { self.prepared[idx].fetch.fetch(slot) };
+
+            // All entities are disjoint at this point
+            let fetch = unsafe { &mut *(&mut self.prepared[idx].fetch as *mut Q::Prepared) };
+            items[i].write(unsafe { fetch.fetch(slot) });
         }
 
-        Ok(items)
+        unsafe {
+            let items = mem::transmute_copy::<_, [<Q::Prepared as PreparedFetch>::Item; C]>(&items);
+            Ok(items)
+        }
     }
 
     /// Get the fetch items for an entity.
@@ -191,7 +197,7 @@ where
         })?;
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
-        let p = &self.prepared[idx];
+        let p = &mut self.prepared[idx];
         let item = unsafe { p.fetch.fetch(slot) };
 
         Ok(item)

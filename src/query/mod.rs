@@ -85,7 +85,7 @@ where
 
     /// Prepare the next change tick and return the old one for the last time
     /// the query ran
-    fn prepare_tick<'w>(&mut self, world: &'w World) -> (u32, u32) {
+    fn prepare_tick(&mut self, world: &World) -> (u32, u32) {
         // The tick of the last iteration
         let old_tick = self.change_tick;
 
@@ -225,7 +225,7 @@ where
     ///
     /// The same query can be prepared multiple times, though not
     /// simultaneously.
-    pub fn prepare<'w>(&'w mut self) -> PreparedQuery<'w, Q, F> {
+    pub fn prepare(&mut self) -> PreparedQuery<Q, F> {
         self.query.prepare(&self.world)
     }
 }

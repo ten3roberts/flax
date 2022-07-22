@@ -1,11 +1,6 @@
-use std::fmt::Formatter;
-
 use flax::components::name;
 use flax::Debug;
-use flax::{
-    component, debug_visitor, util::TupleCloned, visitors::DebugVisitor, wildcard, EntityBuilder,
-    Query, World,
-};
+use flax::{component, debug_visitor, util::TupleCloned, wildcard, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 #[derive(Debug, Clone)]
@@ -28,6 +23,12 @@ impl<const C: usize> Countdown<C> {
                 true
             }
         }
+    }
+}
+
+impl<const C: usize> Default for Countdown<C> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -55,9 +56,7 @@ fn visitors() {
             .spawn(&mut world);
     }
 
-    let mut buf = String::new();
-
-    eprintln!("{buf}");
+    eprintln!("World: {world:#?}");
 }
 
 #[test]
@@ -129,8 +128,6 @@ fn relations() {
             ("Sally".to_string(), RelationKind::Mom)
         ]
     );
-
-    let mut buf = String::new();
 
     eprintln!("World: {world:#?}");
 
