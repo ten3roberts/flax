@@ -10,7 +10,9 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Slot, VisitData, Visitor},
-    component, Archetype, ComponentId, ComponentValue,
+    component,
+    components::name,
+    Archetype, ComponentId, ComponentValue,
 };
 
 /// Format a component with debug
@@ -52,14 +54,26 @@ component! {
 pub struct RowFormatter<'a> {
     pub arch: &'a Archetype,
     pub slot: Slot,
-    pub meta: &'a BTreeMap<ComponentId, (AtomicRef<'a, DebugVisitor>, AtomicRef<'a, String>)>,
+    pub meta:
+        &'a BTreeMap<ComponentId, (Option<AtomicRef<'a, DebugVisitor>>, AtomicRef<'a, String>)>,
+}
+
+struct MissingDebug;
+
+impl Debug for MissingDebug {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "_")
+    }
 }
 
 impl<'a> RowFormatter<'a> {
     pub fn new(
         arch: &'a Archetype,
         slot: Slot,
-        meta: &'a BTreeMap<ComponentId, (AtomicRef<'a, DebugVisitor>, AtomicRef<'a, String>)>,
+        meta: &'a BTreeMap<
+            ComponentId,
+            (Option<AtomicRef<'a, DebugVisitor>>, AtomicRef<'a, String>),
+        >,
     ) -> Self {
         Self { arch, slot, meta }
     }
@@ -70,11 +84,17 @@ impl<'a> Debug for RowFormatter<'a> {
         let mut map = f.debug_map();
         for storage in self.arch.storages() {
             if let Some((visitor, name)) = self.meta.get(&storage.info().id()) {
-                unsafe {
-                    let data = VisitData::new(&storage, self.slot);
+                if let Some(visitor) = visitor {
+                    unsafe {
+                        let data = VisitData::new(&storage, self.slot);
 
-                    map.entry(name, visitor.visit(data));
+                        map.entry(name, visitor.visit(data));
+                    }
+                } else {
+                    map.entry(name, &MissingDebug);
                 };
+            } else {
+                map.entry(&storage.info().name(), &MissingDebug);
             }
         }
 

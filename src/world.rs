@@ -12,7 +12,7 @@ use itertools::Itertools;
 
 use crate::{
     archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, VisitData, Visitor},
-    components::{component, name},
+    components::{self, component, name},
     debug_visitor,
     entity::{EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
@@ -44,16 +44,14 @@ impl World {
         }
     }
 
-    pub fn get_namespace(&self, namespace: EntityKind) -> Result<&EntityStore> {
-        self.entities
-            .get(&namespace)
-            .ok_or(Error::NoSuchKind(namespace))
+    pub fn get_store(&self, kind: EntityKind) -> Result<&EntityStore> {
+        self.entities.get(&kind).ok_or(Error::NoSuchKind(kind))
     }
 
-    pub fn init_store(&mut self, namespace: EntityKind) -> &mut EntityStore {
+    pub fn init_store(&mut self, kind: EntityKind) -> &mut EntityStore {
         self.entities
-            .entry(namespace)
-            .or_insert_with(|| EntityStore::new(namespace))
+            .entry(kind)
+            .or_insert_with(|| EntityStore::new(kind))
     }
 
     /// Get the archetype which has `components`.
@@ -162,7 +160,10 @@ impl World {
         }
         eprintln!("----");
 
-        let id = self.spawn();
+        let arch = self.archetype_root;
+        let ns = self.init_store(EntityKind::empty());
+
+        let id = ns.spawn(EntityLocation { arch, slot: 0 });
 
         let change_tick = self.advance_change_tick();
 
@@ -614,7 +615,7 @@ impl World {
 
     /// Returns true if the entity is still alive
     pub fn is_alive(&self, id: Entity) -> bool {
-        self.get_namespace(id.kind())
+        self.get_store(id.kind())
             .map(|v| v.is_alive(id))
             .unwrap_or(false)
     }
@@ -640,7 +641,7 @@ impl World {
 
     /// Returns the location inside an archetype for a given entity
     pub fn location(&self, id: Entity) -> Result<EntityLocation> {
-        self.get_namespace(id.kind())?
+        self.get_store(id.kind())?
             .get(id)
             .ok_or(Error::NoSuchEntity(id))
             .copied()
@@ -714,7 +715,7 @@ impl World {
     }
 
     pub(crate) fn reconstruct(&self, id: crate::StrippedEntity) -> Option<Entity> {
-        let ns = self.get_namespace(id.kind()).ok()?;
+        let ns = self.get_store(id.kind()).ok()?;
 
         ns.reconstruct(id).map(|v| v.0)
     }
@@ -787,7 +788,7 @@ where
                 Some((
                     info.id(),
                     (
-                        self.world.get(info.id(), debug_visitor()).ok()?,
+                        self.world.get(info.id(), debug_visitor()).ok(),
                         self.world.get(info.id(), name()).ok()?,
                     ),
                 ))
@@ -811,7 +812,7 @@ impl Default for World {
 
 impl std::fmt::Debug for World {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.format_debug(All).fmt(f)
+        self.format_debug(component().without()).fmt(f)
     }
 }
 
