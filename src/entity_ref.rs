@@ -145,10 +145,10 @@ mod test {
         assert_eq!(entity.get(health()).as_deref(), Ok(&100.0));
 
         assert!(entity.remove(pos()).is_err());
-        assert_eq!(entity.has(health()), true);
+        assert!(entity.has(health()));
         let h = entity.remove(health()).unwrap();
         assert_eq!(h, 100.0);
-        assert_eq!(entity.has(health()), false);
+        assert!(!entity.has(health()));
 
         let entity = world.entity(id).unwrap();
 
@@ -156,7 +156,7 @@ mod test {
 
         assert!(entity.get(pos()).is_err());
         assert!(entity.get(health()).is_err());
-        assert_eq!(entity.has(health()), false);
+        assert!(!entity.has(health()));
 
         let mut entity = world.entity_mut(id).unwrap();
 

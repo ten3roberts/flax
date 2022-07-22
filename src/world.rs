@@ -11,15 +11,15 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice, VisitData, Visitor},
-    components::{self, component, name},
+    archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice},
+    components::{component, name},
     debug_visitor,
     entity::{EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    All, And, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error,
-    Filter, Query, RowFormatter,
+    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error, Filter,
+    Query, RowFormatter,
 };
 
 pub struct World {
@@ -32,7 +32,7 @@ pub struct World {
 
 impl World {
     pub fn new() -> Self {
-        let mut archetypes = EntityStore::new(EntityKind::ARCHETYPE);
+        let mut archetypes = EntityStore::new(EntityKind::empty());
         let root = archetypes.spawn(Archetype::empty());
 
         Self {
@@ -306,14 +306,10 @@ impl World {
 
     /// Set metadata for a given component if they do not already exist
     fn init_component(&mut self, info: ComponentInfo) -> Result<ComponentInfo> {
-        let index = info.id().index();
-        let id = info.id();
-
         if self.is_alive(info.id()) {
             return Ok(info);
         }
 
-        let ns = self.spawn_at(id).unwrap();
         let mut meta = info.get_meta();
 
         eprintln!("Initializing component: {} {}", info.name(), info.id());
@@ -636,7 +632,7 @@ impl World {
             .get(id)
             .ok_or(Error::NoSuchEntity(id))
             .copied()
-            .or_else(|e| self.spawn_at(id))
+            .or_else(|_| self.spawn_at(id))
     }
 
     /// Returns the location inside an archetype for a given entity
@@ -864,7 +860,7 @@ mod tests {
             world.get(id, b()).as_deref(),
             Err(&Error::MissingComponent(id, "b"))
         );
-        assert_eq!(world.has(id, c()), false);
+        assert!(!world.has(id, c()));
 
         let id2 = world.spawn();
         world.set(id2, a(), 7).unwrap();
@@ -879,7 +875,8 @@ mod tests {
             Err(&Error::MissingComponent(id, "b"))
         );
 
-        assert_eq!(world.has(id, c()), false);
+        assert!(!world.has(id, c()));
+
         assert_eq!(world.get(id2, a()).as_deref(), Ok(&7));
         assert_eq!(world.get(id2, c()).as_deref(), Ok(&"Foo".to_string()));
         world.set(id, e(), shared.clone()).unwrap();

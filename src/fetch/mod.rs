@@ -41,11 +41,11 @@ impl<'w> Fetch<'w> for () {
 
     type Prepared = ();
 
-    fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
+    fn prepare(&'w self, _: &'w World, _: &'w Archetype) -> Option<Self::Prepared> {
         Some(())
     }
 
-    fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool {
+    fn matches(&self, _: &'w World, _: &'w Archetype) -> bool {
         true
     }
 
@@ -53,11 +53,11 @@ impl<'w> Fetch<'w> for () {
         "()".to_string()
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 
-    fn difference(&self, archetype: &Archetype) -> Vec<String> {
+    fn difference(&self, _: &Archetype) -> Vec<String> {
         vec![]
     }
 }
@@ -65,7 +65,7 @@ impl<'w> Fetch<'w> for () {
 impl<'q> PreparedFetch<'q> for () {
     type Item = ();
 
-    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {}
+    unsafe fn fetch(&'q mut self, _: Slot) -> Self::Item {}
 }
 
 /// A preborrowed fetch
@@ -80,17 +80,17 @@ where
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item;
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item;
 
-    // Do something for a a slice of entity slots which have been visited, such
-    // as updating change tracking for mutable queries. The current change tick
-    // is passed.
-    //
-    // # Safety
-    // The function can not modify any data which is returned by fetch.
-    // References to `Self::Item` are still alive when this function is called.
-    // As such, only disjoint data such as a separate Change borrow can be
-    // accessed
+    /// Do something for a a slice of entity slots which have been visited, such
+    /// as updating change tracking for mutable queries. The current change tick
+    /// is passed.
+    ///
+    /// # Safety
+    /// The function can not modify any data which is returned by fetch.
+    /// References to `Self::Item` are still alive when this function is called.
+    /// As such, only disjoint data such as a separate Change borrow can be
+    /// accessed
     unsafe fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
 }
 
@@ -131,7 +131,7 @@ impl<'w> Fetch<'w> for EntityFetch {
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
     type Item = Entity;
 
-    unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         self.entities[slot].unwrap()
     }
 }
@@ -182,7 +182,7 @@ macro_rules! tuple_impl {
         {
             type Item = ($(<$ty as PreparedFetch<'q>>::Item,)*);
 
-            unsafe fn fetch(&'q self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)

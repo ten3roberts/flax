@@ -57,11 +57,8 @@ where
 {
     type Item = Option<<F as PreparedFetch<'q>>::Item>;
 
-    unsafe fn fetch(&'q self, slot: crate::archetype::Slot) -> Self::Item {
-        match self.inner {
-            Some(ref v) => Some(v.fetch(slot)),
-            None => None,
-        }
+    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
+        self.inner.as_mut().map(|v| v.fetch(slot))
     }
 }
 
@@ -128,9 +125,9 @@ where
 {
     type Item = &'q V;
 
-    unsafe fn fetch(&'q self, slot: crate::archetype::Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         match self.inner {
-            Some(ref v) => v.fetch(slot),
+            Some(ref mut v) => v.fetch(slot),
             None => self.or,
         }
     }

@@ -25,7 +25,7 @@ macro_rules! gen_bitops {
             }
         }
 
-        impl<'a, R, $($p),*> std::ops::BitAnd<R> for $ty<$($p),*>
+        impl<R, $($p),*> std::ops::BitAnd<R> for $ty<$($p),*>
         where
             Self: for<'x, 'y> Filter<'x, 'y>,
             R: for<'x,'y> Filter<'x, 'y>,
@@ -472,7 +472,7 @@ where
     }
 }
 
-impl<'a, T> Neg for Not<T>
+impl<T> Neg for Not<T>
 where
     T: for<'x, 'y> Filter<'x, 'y>,
 {

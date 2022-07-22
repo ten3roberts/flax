@@ -139,6 +139,12 @@ impl<T> Write<T> {
     }
 }
 
+impl<T> Default for Write<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> SystemData<'a> for Write<World> {
     type Data = Writable<'a, World>;
 

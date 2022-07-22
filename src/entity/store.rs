@@ -313,20 +313,16 @@ impl<'a, V> Iterator for EntityStoreIter<'a, V> {
     type Item = (Entity, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some((index, slot)) = self.iter.next() {
-                if slot.gen & 1 == 1 {
-                    let val = unsafe { &slot.val.occupied };
-                    let id = Entity::from_parts(
-                        NonZeroU32::new(index as u32 + 1).unwrap(),
-                        (slot.gen >> 1) as u16,
-                        self.namespace,
-                    );
+        if let Some((index, slot)) = self.iter.next() {
+            if slot.gen & 1 == 1 {
+                let val = unsafe { &slot.val.occupied };
+                let id = Entity::from_parts(
+                    NonZeroU32::new(index as u32 + 1).unwrap(),
+                    (slot.gen >> 1) as u16,
+                    self.namespace,
+                );
 
-                    return Some((id, val));
-                }
-            } else {
-                break;
+                return Some((id, val));
             }
         }
 

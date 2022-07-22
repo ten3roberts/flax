@@ -23,6 +23,12 @@ impl SystemBuilder<()> {
     }
 }
 
+impl Default for SystemBuilder<()> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Args> SystemBuilder<Args> {
     /// Add a new query to the system
     pub fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight>
@@ -204,8 +210,26 @@ impl Access {
         } else if self.kind != other.kind {
             true
         } else {
-            self.mutable == false && other.mutable == false
+            !self.mutable && !other.mutable
         }
+    }
+}
+
+/// A system which should never be run.
+/// Is essentially a `None` variant system.
+pub(crate) struct NeverSystem;
+
+impl<'a> SystemFn<'a, &'a SystemContext<'a>, (), eyre::Result<()>> for NeverSystem {
+    fn execute(&'a mut self, _: &'a SystemContext<'a>) -> eyre::Result<()> {
+        panic!("This system should never be executed as it is a placeholde");
+    }
+
+    fn describe(&self, f: &mut dyn std::fmt::Write) {
+        write!(f, "NeverSystem").unwrap();
+    }
+
+    fn access(&'a mut self, _: &'a SystemContext<'a>) -> Vec<Access> {
+        vec![]
     }
 }
 
@@ -230,7 +254,7 @@ impl BoxedSystem {
         self.inner.execute(ctx)
     }
 
-    pub fn describe<'a>(&self, f: &mut dyn std::fmt::Write) {
+    pub fn describe(&self, f: &mut dyn std::fmt::Write) {
         self.inner.describe(f)
     }
 
@@ -251,7 +275,7 @@ where
 #[cfg(test)]
 mod test {
 
-    use crate::{component, All, CommandBuffer, Component, EntityBuilder, Query, QueryData, World};
+    use crate::{component, CommandBuffer, Component, EntityBuilder, Query, QueryData, World};
 
     use super::*;
 

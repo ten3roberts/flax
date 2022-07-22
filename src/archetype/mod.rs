@@ -51,8 +51,7 @@ impl Archetype {
         }
     }
 
-    /// Returns relations which are like [`rel`]. I.e, the relation matches,
-    /// but the associated object may differ.
+    /// Returns the components with the specified relation type.
     pub fn relations_like(&self, rel: Entity) -> impl Iterator<Item = Entity> + '_ {
         let rel = rel.strip_gen();
         self.storage
@@ -63,7 +62,7 @@ impl Archetype {
 
     /// Create a new archetype.
     /// Assumes `components` are sorted by id.
-    pub fn new(components: impl IntoIterator<Item = ComponentInfo>) -> Self {
+    pub(crate) fn new(components: impl IntoIterator<Item = ComponentInfo>) -> Self {
         let (storage, changes) = components
             .into_iter()
             .map(|component| {
@@ -326,6 +325,7 @@ impl Archetype {
     /// Put a type erased component info a slot.
     /// `src` shall be considered moved.
     /// `component` must match the type of data.
+    /// # Safety
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
     /// The component must be Send + Sync
     pub unsafe fn put_dyn(
@@ -345,6 +345,7 @@ impl Archetype {
 
     /// Move all components in `slot` to archetype of `dst`. The components not
     /// in self will be left uninitialized.
+    /// # Safety
     /// `dst.put_dyn` must be called immediately after for each missing
     /// component.
     ///
@@ -361,9 +362,8 @@ impl Archetype {
 
         for storage in self.storage.values_mut() {
             let p = storage.at_mut(slot);
-            match dst.put_dyn(dst_slot, &storage.info, p) {
-                Err(p) => (on_drop)(storage.info, p),
-                _ => {}
+            if let Err(p) = dst.put_dyn(dst_slot, &storage.info, p) {
+                (on_drop)(storage.info, p)
             };
 
             // Move back in to fill the gap
@@ -387,6 +387,12 @@ impl Archetype {
     }
 
     /// Move all components of an entity out of an archetype
+    ///
+    /// Returns the entity which filled the now empty slot
+    ///
+    /// # Safety
+    /// The callee is responsible to store or drop the returned components using
+    /// the `on_take` function.
     pub unsafe fn take(
         &mut self,
         slot: Slot,
@@ -727,9 +733,7 @@ mod tests {
         assert_eq!(arch.get(slot, b()).as_deref(), Some(&"Foo".to_string()));
         assert_eq!(arch.get(slot_2, b()).as_deref(), Some(&"Bar".to_string()));
 
-        arch.get_mut(slot, b())
-            .unwrap()
-            .push_str(&"Bar".to_string());
+        arch.get_mut(slot, b()).unwrap().push_str("Bar");
 
         assert_eq!(arch.get(slot, b()).as_deref(), Some(&"FooBar".to_string()));
         assert_eq!(arch.entity(slot), Some(id));

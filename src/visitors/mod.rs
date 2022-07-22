@@ -1,18 +1,14 @@
 use core::fmt;
-use core::fmt::Write;
 use std::{
     collections::BTreeMap,
     fmt::{Debug, Formatter},
-    ops::Add,
 };
 
 use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Slot, VisitData, Visitor},
-    component,
-    components::name,
-    Archetype, ComponentId, ComponentValue,
+    component, Archetype, ComponentId, ComponentValue,
 };
 
 /// Format a component with debug

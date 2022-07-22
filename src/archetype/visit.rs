@@ -1,8 +1,4 @@
-use std::{marker::PhantomData, ptr::NonNull};
-
-use atomic_refcell::AtomicRef;
-
-use super::{ComponentInfo, Slot, StorageBorrowDyn};
+use super::{Slot, StorageBorrowDyn};
 
 #[non_exhaustive]
 pub struct VisitData<'a> {

@@ -11,13 +11,13 @@ use super::prepared::PreparedArchetype;
 /// In essence, this is the unflattened version of [crate::QueryIter].
 pub struct Batch<'q, Q> {
     arch: &'q Archetype,
-    fetch: &'q Q,
+    fetch: &'q mut Q,
     pos: Slot,
     end: Slot,
 }
 
 impl<'q, Q> Batch<'q, Q> {
-    pub fn new(arch: &'q Archetype, fetch: &'q Q, slice: Slice) -> Self {
+    pub fn new(arch: &'q Archetype, fetch: &'q mut Q, slice: Slice) -> Self {
         Self {
             arch,
             fetch,
@@ -48,7 +48,8 @@ where
         if self.pos == self.end {
             None
         } else {
-            let item = unsafe { self.fetch.fetch(self.pos) };
+            let fetch = unsafe { &mut *(self.fetch as *mut Q) };
+            let item = unsafe { fetch.fetch(self.pos) };
             self.pos += 1;
             Some(item)
         }
@@ -74,13 +75,13 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         // Fetch will never change and all calls are disjoint
-        let fetch = unsafe { &*(self.fetch as *mut Q as *const Q) };
+        let fetch = unsafe { &mut *(self.fetch as *mut Q) };
 
         // Get the next chunk
         let chunk = self.filter.next()?;
 
         // Set the chunk as visited
-        unsafe { self.fetch.set_visited(chunk, self.new_tick) }
+        unsafe { fetch.set_visited(chunk, self.new_tick) }
         let chunk = Batch::new(self.arch, fetch, chunk);
 
         Some(chunk)
