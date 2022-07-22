@@ -2,9 +2,7 @@ use std::{collections::BTreeMap, mem};
 
 use itertools::Itertools;
 
-use crate::{
-    system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World, Writable, Write,
-};
+use crate::{system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World, Write};
 
 enum Systems {
     Unbatched(Vec<BoxedSystem>),
@@ -60,14 +58,12 @@ impl Schedule {
         self.with_system(
             System::builder()
                 .with_name("flush")
-                .with(Write::<World>::new())
-                .with(Write::<CommandBuffer>::new())
-                .build(
-                    |mut world: Writable<World>, mut cmd: Writable<CommandBuffer>| {
-                        cmd.apply(&mut world)
-                            .wrap_err("Failed to flush commandbuffer in schedule\n")
-                    },
-                ),
+                .with_world()
+                .with_cmd()
+                .build(|mut world: Write<World>, mut cmd: Write<CommandBuffer>| {
+                    cmd.apply(&mut world)
+                        .wrap_err("Failed to flush commandbuffer in schedule\n")
+                }),
         )
     }
 
@@ -293,7 +289,7 @@ mod test {
     fn schedule_par() {
         use crate::{
             components::name, entities, CmpExt, CommandBuffer, Component, EntityFetch, Mutable,
-            Writable, Write,
+            Write,
         };
 
         #[derive(Debug, Clone)]
@@ -361,9 +357,9 @@ mod test {
 
         let cleanup = System::builder()
             .with(Query::new(entities()).filter(health().lte(0.0)))
-            .with(Write::<CommandBuffer>::new())
+            .with_cmd()
             .with_name("cleanup")
-            .build(|mut q: QueryData<_, _>, mut cmd: Writable<CommandBuffer>| {
+            .build(|mut q: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
                 q.prepare().iter().for_each(|id| {
                     eprintln!("Cleaning up: {id}");
                     cmd.despawn(id);
