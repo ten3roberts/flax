@@ -3,7 +3,7 @@ mod traits;
 
 use std::marker::PhantomData;
 
-use crate::{util::TupleCombine, ArchetypeId, ComponentId};
+use crate::{util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, World};
 
 pub use cell::*;
 pub use traits::*;
@@ -40,6 +40,24 @@ impl<Args> SystemBuilder<Args> {
             name: self.name,
             data: self.data.push_right(other),
         }
+    }
+
+    /// Access the world mutably in the query.
+    /// This adds a `Write<World>` argument
+    pub fn with_world(self) -> SystemBuilder<Args::PushRight>
+    where
+        Args: TupleCombine<Writable<World>>,
+    {
+        self.with(Writable::<World>::default())
+    }
+
+    /// Access the commandbuffer mutably in the query.
+    /// This adds a `Write<CommandBuffer>` argument
+    pub fn with_cmd(self) -> SystemBuilder<Args::PushRight>
+    where
+        Args: TupleCombine<Writable<CommandBuffer>>,
+    {
+        self.with(Writable::<CommandBuffer>::default())
     }
 
     /// Set the systems name
