@@ -1,5 +1,10 @@
 use crate::{archetype::ArchetypeId, error::Result, EntityGen, EntityKind, Error, StrippedEntity};
-use std::{iter::Enumerate, mem::ManuallyDrop, num::NonZeroU32, slice};
+use std::{
+    iter::Enumerate,
+    mem::{self, ManuallyDrop},
+    num::NonZeroU32,
+    slice,
+};
 
 use super::{Entity, EntityIndex};
 
@@ -180,7 +185,7 @@ impl<V> EntityStore<V> {
             .is_some()
     }
 
-    pub fn despawn(&mut self, id: Entity) -> Result<()> {
+    pub fn despawn(&mut self, id: Entity) -> Result<V> {
         if !self.is_alive(id) {
             return Err(Error::NoSuchEntity(id));
         }
@@ -193,15 +198,19 @@ impl<V> EntityStore<V> {
 
         slot.gen = slot.gen.wrapping_add(1);
 
-        unsafe {
-            ManuallyDrop::<V>::drop(&mut slot.val.occupied);
-        }
+        let inner = mem::replace(
+            &mut slot.val,
+            SlotValue {
+                vacant: Vacant { next },
+            },
+        );
+        let val = unsafe { ManuallyDrop::<V>::into_inner(inner.occupied) };
 
         slot.val.vacant = Vacant { next };
 
         self.free_head = Some(index);
 
-        Ok(())
+        Ok(val)
     }
 
     pub fn iter(&self) -> EntityStoreIter<V> {
@@ -295,7 +304,7 @@ impl Default for EntityStore {
 impl<V> Drop for EntityStore<V> {
     fn drop(&mut self) {
         for slot in &mut self.slots {
-            if slot.gen & 1 == 1 {
+            if slot.is_alive() {
                 unsafe {
                     ManuallyDrop::<V>::drop(&mut slot.val.occupied);
                 }
