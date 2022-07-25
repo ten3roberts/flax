@@ -449,9 +449,16 @@ impl Archetype {
     /// Returns the new location of all entities
     pub fn move_all(&mut self, dst: &mut Self) -> Vec<(Entity, Slot)> {
         let len = self.len();
-        let entities = mem::take(&mut self.entities);
+        // Storage is dangling
+        if len == 0 {
+            return Vec::new();
+        }
 
-        let dst_slots = dst.allocate_n(&self.entities);
+        let entities = mem::take(&mut self.entities);
+        eprintln!("Entities: {entities:?}");
+
+        let dst_slots = dst.allocate_n(&entities);
+        eprintln!("Allocated {dst_slots:?} for move all");
 
         // Migrate all changes before doing anything
         for (src_slot, dst_slot) in self.slots().iter().zip(dst_slots) {
@@ -459,27 +466,35 @@ impl Archetype {
         }
 
         for (id, storage) in &mut self.storage {
+            eprintln!(
+                "Moving: {} {}",
+                storage.info().name(),
+                storage.info().size()
+            );
             if let Some(dst_storage) = dst.storage_raw(*id) {
                 // Copy this storage to the end of dst
-                unsafe {
-                    let src = storage.data.get_mut().as_ptr();
-                    let dst = dst_storage.at_mut(dst_slots.start);
-                    std::ptr::copy_nonoverlapping(src, dst, len)
+                if storage.info.size() > 0 {
+                    unsafe {
+                        let src = storage.data.get_mut().as_ptr();
+                        let dst = dst_storage.at_mut(dst_slots.start);
+                        dbg!(dst, dst_storage.data.get_mut());
+                        std::ptr::copy_nonoverlapping(src, dst, len * storage.info().size())
+                    }
                 }
             } else {
                 // Drop this whole column
                 eprintln!("Dropping all data in {:?}", storage.info());
 
                 for slot in 0..len {
-                    unsafe {
-                        let value = storage.at_mut(slot);
-                        (storage.info.drop)(value);
+                    if storage.info.size() > 0 {
+                        unsafe {
+                            let value = storage.at_mut(slot);
+                            (storage.info.drop)(value);
+                        }
                     }
                 }
             }
         }
-
-        eprintln!("Completed move");
 
         assert_eq!(self.len(), 0);
 
@@ -498,6 +513,7 @@ impl Archetype {
             return;
         }
 
+        assert_ne!(additional, 0, "Length is: {len}");
         unsafe {
             for storage in self.storage.values_mut() {
                 if storage.info.size() == 0 {

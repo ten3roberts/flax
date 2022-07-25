@@ -136,12 +136,14 @@ impl World {
 
     /// Access an archetype by id
     pub fn archetype(&self, id: ArchetypeId) -> &Archetype {
-        self.archetypes.get(id).unwrap()
+        self.archetypes.get(id).expect("Archetype does not exist")
     }
 
     /// Access an archetype by id
     pub fn archetype_mut(&mut self, id: ArchetypeId) -> &mut Archetype {
-        self.archetypes.get_mut(id).unwrap()
+        self.archetypes
+            .get_mut(id)
+            .expect("Archetype does not exist")
     }
 
     /// Spawn an entity with the given components.
@@ -342,7 +344,8 @@ impl World {
             ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
-        ns.despawn(id)
+        ns.despawn(id)?;
+        Ok(())
     }
 
     /// Removes all instances of the component from entities in the world.
@@ -364,20 +367,19 @@ impl World {
             })
             .collect_vec();
 
-        eprintln!("Detaching: {archetypes:#?}");
-
-        for (src_id, components) in archetypes {
-            let (dst_id, _) = self.fetch_archetype(self.archetype_root, &components);
-            let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
+        for (src_id, components) in &archetypes {
+            let (dst_id, _) = self.fetch_archetype(self.archetype_root, components);
+            let (src, dst) = self.archetypes.get_disjoint(*src_id, dst_id).unwrap();
 
             for (id, slot) in src.move_all(dst) {
-                eprintln!("Moved entity: {id} to {slot}");
                 *self
                     .init_store(id.kind())
                     .get_mut(id)
                     .expect("Entity id was not valid") = EntityLocation { slot, arch: dst_id }
             }
+        }
 
+        for (src_id, _) in archetypes {
             self.archetypes.despawn(src_id).unwrap();
         }
     }

@@ -151,8 +151,8 @@ fn relations() {
     drop(query);
 
     // If we remove a parent, the children will be detached.
-    // world.detach(parent);
+    world.detach(parent);
 
-    // assert!(world.get(child, child_of(parent)).is_err());
-    // assert!(world.get(child2, child_of(parent)).is_err());
+    assert!(world.get(child, child_of(parent)).is_err());
+    assert!(world.get(child2, child_of(parent)).is_err());
 }
