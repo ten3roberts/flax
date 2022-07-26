@@ -87,6 +87,12 @@ impl World {
                 Some(id) => id,
                 None => {
                     let new = Archetype::new(cur.components().copied().chain([*head]));
+
+                    tracing::debug!(
+                        "Creating new archetype: {:#?}",
+                        new.components().collect_vec()
+                    );
+
                     // Increase gen
                     self.archetype_gen.fetch_add(1, Ordering::Relaxed);
                     let id = self.archetypes.spawn(new);
@@ -120,7 +126,7 @@ impl World {
         let slot = self.archetype_mut(self.archetype_root).allocate(id);
 
         // This is safe as `root` does not contain any components
-        self.init_store(kind).get_mut(id).unwrap().slot = slot;
+        self.location_mut(id).unwrap().slot = slot;
         id
     }
 
@@ -189,12 +195,38 @@ impl World {
             }
         }
 
-        *self.init_store(id.kind()).get_mut(id).unwrap() = EntityLocation {
+        *self.location_mut(id).unwrap() = EntityLocation {
             arch: arch_id,
             slot,
         };
 
         id
+    }
+
+    /// Removes all components from an entity without despawning the entity
+    pub fn clear(&mut self, id: Entity) -> Result<()> {
+        let EntityLocation { arch, slot } = self.location(id)?;
+
+        let src = self.archetype_mut(arch);
+        src.remove_slot_changes(slot);
+
+        let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
+        let ns = self.init_store(id.kind());
+        if let Some(swapped) = swapped {
+            // The last entity in src was moved into the slot occupied by id
+            ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+        }
+
+        let dst_id = self.archetype_root;
+        let dst = self.archetype_mut(dst_id);
+
+        *self.location_mut(id).unwrap() = EntityLocation {
+            slot: dst.allocate(id),
+            arch: dst_id,
+        };
+
+        self.detach(id);
+        Ok(())
     }
 
     /// Sets a group of components for a single entity using an iterator of type
@@ -292,8 +324,7 @@ impl World {
             }
             eprintln!("New slot: {dst_slot}");
 
-            let ns = self.init_store(id.kind());
-            *ns.get_mut(id).expect("Entity is not valid") = EntityLocation {
+            *self.location_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
                 arch: dst_id,
             };
@@ -327,8 +358,6 @@ impl World {
 
     /// Despawn an entity.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
-        self.detach(id);
-
         let EntityLocation {
             arch: archetype,
             slot,
@@ -345,6 +374,7 @@ impl World {
         }
 
         ns.despawn(id)?;
+        self.detach(id);
         Ok(())
     }
 
@@ -356,31 +386,31 @@ impl World {
             .archetypes()
             .filter(|v| v.1.has(component) || v.1.relations_of(component).count() > 0)
             .map(|v| {
-                let subject = component.strip_gen();
-                (
-                    v.0,
-                    v.1.components()
-                        .filter(|c| c.id() != component && c.id().split_pair().1 != subject)
-                        .copied()
-                        .collect_vec(),
-                )
+                v.0
+                // v.1.components()
+                //     .filter(|c| c.id() != component && c.id().split_pair().1 != subject)
+                //     .copied()
+                //     .collect_vec(),
             })
             .collect_vec();
 
-        for (src_id, components) in &archetypes {
-            let (dst_id, _) = self.fetch_archetype(self.archetype_root, components);
-            let (src, dst) = self.archetypes.get_disjoint(*src_id, dst_id).unwrap();
+        let subject = component.strip_gen();
+        eprintln!("Detaching: {:#?}", archetypes);
+        for src in archetypes {
+            let mut src = self.archetypes.despawn(src).unwrap();
+
+            let components = src
+                .components()
+                .filter(|c| c.id() != component && c.id().split_pair().1 != subject);
+
+            let (dst_id, dst) = self.fetch_archetype(self.archetype_root, components);
+
+            eprintln!("{:?} => {dst_id}", src.component_names().collect_vec());
 
             for (id, slot) in src.move_all(dst) {
-                *self
-                    .init_store(id.kind())
-                    .get_mut(id)
-                    .expect("Entity id was not valid") = EntityLocation { slot, arch: dst_id }
+                *self.location_mut(id).expect("Entity id was not valid") =
+                    EntityLocation { slot, arch: dst_id }
             }
-        }
-
-        for (src_id, _) in archetypes {
-            self.archetypes.despawn(src_id).unwrap();
         }
     }
 
@@ -568,10 +598,7 @@ impl World {
             arch: dst_id,
         };
 
-        *self
-            .init_store(id.kind())
-            .get_mut(id)
-            .expect("Entity is not valid") = loc;
+        *self.location_mut(id).expect("Entity is not valid") = loc;
 
         Ok(loc)
     }
@@ -683,6 +710,12 @@ impl World {
             .get(id)
             .ok_or(Error::NoSuchEntity(id))
             .copied()
+    }
+
+    fn location_mut(&mut self, id: Entity) -> Result<&mut EntityLocation> {
+        self.init_store(id.kind())
+            .get_mut(id)
+            .ok_or(Error::NoSuchEntity(id))
     }
 
     /// Get a reference to the world's archetype generation

@@ -67,6 +67,7 @@ impl Archetype {
         self.storage
             .keys()
             .filter(move |k| k.split_pair().1 == subject)
+            .inspect(|v| eprintln!("Looking at: {v}"))
             .copied()
     }
 
@@ -466,11 +467,6 @@ impl Archetype {
         }
 
         for (id, storage) in &mut self.storage {
-            eprintln!(
-                "Moving: {} {}",
-                storage.info().name(),
-                storage.info().size()
-            );
             if let Some(dst_storage) = dst.storage_raw(*id) {
                 // Copy this storage to the end of dst
                 if storage.info.size() > 0 {
@@ -483,7 +479,7 @@ impl Archetype {
                 }
             } else {
                 // Drop this whole column
-                eprintln!("Dropping all data in {:?}", storage.info());
+                // eprintln!("Dropping all data in {:?}", storage.info());
 
                 for slot in 0..len {
                     if storage.info.size() > 0 {
@@ -559,6 +555,7 @@ impl Archetype {
 
     /// Drops all components while keeping the storage intact
     pub fn clear(&mut self) {
+        // eprintln!("Clearing archetype {:#?}", self.components().collect_vec());
         let len = self.len();
         for storage in self.storage.values_mut() {
             for slot in 0..len {
@@ -592,6 +589,10 @@ impl Archetype {
     /// Get a reference to the archetype's components.
     pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
         self.storage.values().map(|v| &v.info)
+    }
+
+    pub fn component_names(&self) -> impl Iterator<Item = &str> {
+        self.storage.values().map(|v| v.info.name())
     }
 
     pub fn storages(&self) -> impl Iterator<Item = StorageBorrowDyn> {
@@ -701,13 +702,23 @@ impl Storage {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Clone, PartialEq, Eq, Copy)]
 pub struct ComponentInfo {
     pub(crate) layout: Layout,
     pub(crate) id: ComponentId,
     pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
     meta: fn(Self) -> ComponentBuffer,
+}
+
+impl std::fmt::Debug for ComponentInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ComponentInfo")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("layout", &self.layout)
+            .finish()
+    }
 }
 
 impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
