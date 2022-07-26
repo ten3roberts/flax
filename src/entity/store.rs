@@ -19,7 +19,7 @@ union SlotValue<T> {
 }
 
 struct Slot<T> {
-    val: SlotValue<T>,
+    value: SlotValue<T>,
     // even = dead, odd = alive
     gen: u32,
 }
@@ -66,16 +66,21 @@ impl<V> EntityStore<V> {
 
     pub fn spawn(&mut self, value: V) -> Entity {
         if let Some(index) = self.free_head.take() {
-            let free = self.slot_mut(index).unwrap();
-            debug_assert!(free.gen & 1 == 0);
+            let slot = self.slot_mut(index).unwrap();
+            debug_assert!(slot.gen & 1 == 0);
 
-            free.gen |= 1;
+            // Make the slot generation odd again which means this slot is
+            // alive.
+            slot.gen |= 1;
+            slot.value = SlotValue {
+                occupied: ManuallyDrop::new(value),
+            };
 
-            let gen = from_slot_gen(free.gen);
+            let gen = from_slot_gen(slot.gen);
 
             // Update free head
             unsafe {
-                self.free_head = free.val.vacant.next;
+                self.free_head = slot.value.vacant.next;
             }
 
             Entity::from_parts(index, gen, self.kind)
@@ -84,7 +89,7 @@ impl<V> EntityStore<V> {
             let gen = 1;
             let index = self.slots.len() as u32;
             self.slots.push(Slot {
-                val: SlotValue {
+                value: SlotValue {
                     occupied: ManuallyDrop::new(value),
                 },
                 gen: to_slot_gen(gen),
@@ -129,7 +134,7 @@ impl<V> EntityStore<V> {
                     v.gen == to_slot_gen(id.generation())
                         || id.kind().contains(EntityKind::RELATION)
                 })
-                .map(|v| &mut *v.val.occupied)
+                .map(|v| &mut *v.value.occupied)
         }
     }
 
@@ -139,13 +144,15 @@ impl<V> EntityStore<V> {
         assert_eq!(ns, id.kind());
 
         unsafe {
-            self.slot(id.index())
-                .filter(|v| v.is_alive())
-                .filter(|v| {
-                    v.gen == to_slot_gen(id.generation())
-                        || id.kind().contains(EntityKind::RELATION)
-                })
-                .map(|v| &*v.val.occupied)
+            let val = self.slot(id.index());
+
+            let val = val.filter(|v| v.is_alive()).filter(|v| {
+                v.gen == to_slot_gen(id.generation()) || id.kind().contains(EntityKind::RELATION)
+            })?;
+
+            let val = &val.value.occupied;
+
+            Some(&*val)
         }
     }
 
@@ -165,7 +172,7 @@ impl<V> EntityStore<V> {
         let slot = self.slot(id.index())?;
 
         if slot.is_alive() {
-            let val = unsafe { &slot.val.occupied };
+            let val = unsafe { &slot.value.occupied };
             Some((id.reconstruct(from_slot_gen(slot.gen)), val))
         } else {
             None
@@ -189,6 +196,7 @@ impl<V> EntityStore<V> {
         if !self.is_alive(id) {
             return Err(Error::NoSuchEntity(id));
         }
+
         eprintln!("Despawning: {id}");
 
         let index = id.index();
@@ -199,14 +207,14 @@ impl<V> EntityStore<V> {
         slot.gen = slot.gen.wrapping_add(1);
 
         let inner = mem::replace(
-            &mut slot.val,
+            &mut slot.value,
             SlotValue {
                 vacant: Vacant { next },
             },
         );
         let val = unsafe { ManuallyDrop::<V>::into_inner(inner.occupied) };
 
-        slot.val.vacant = Vacant { next };
+        slot.value.vacant = Vacant { next };
 
         self.free_head = Some(index);
 
@@ -250,7 +258,7 @@ impl<V> EntityStore<V> {
                     let next = free_head.replace(current);
 
                     Slot {
-                        val: SlotValue {
+                        value: SlotValue {
                             vacant: Vacant { next },
                         },
                         gen: 0,
@@ -266,11 +274,11 @@ impl<V> EntityStore<V> {
             dbg!(current);
             let slot = self.slot(current).expect("Invalid free list node");
 
-            let next_free = unsafe { slot.val.vacant.next };
+            let next_free = unsafe { slot.value.vacant.next };
             assert!(!slot.is_alive());
             if current == index {
                 if let Some(prev) = prev {
-                    self.slot_mut(prev).unwrap().val.vacant = Vacant { next: next_free }
+                    self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
                 } else {
                     self.free_head = next_free;
                 }
@@ -278,12 +286,12 @@ impl<V> EntityStore<V> {
                 let slot = self.slot_mut(current).unwrap();
                 *slot = Slot {
                     gen: to_slot_gen(generation),
-                    val: SlotValue {
+                    value: SlotValue {
                         occupied: ManuallyDrop::new(value),
                     },
                 };
 
-                return unsafe { Ok(&*slot.val.occupied) };
+                return unsafe { Ok(&*slot.value.occupied) };
             }
 
             prev = Some(current);
@@ -306,7 +314,7 @@ impl<V> Drop for EntityStore<V> {
         for slot in &mut self.slots {
             if slot.is_alive() {
                 unsafe {
-                    ManuallyDrop::<V>::drop(&mut slot.val.occupied);
+                    ManuallyDrop::<V>::drop(&mut slot.value.occupied);
                 }
             }
         }
@@ -322,9 +330,9 @@ impl<'a, V> Iterator for EntityStoreIter<'a, V> {
     type Item = (Entity, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some((index, slot)) = self.iter.next() {
-            if slot.gen & 1 == 1 {
-                let val = unsafe { &slot.val.occupied };
+        for (index, slot) in self.iter.by_ref() {
+            if slot.is_alive() {
+                let val = unsafe { &slot.value.occupied };
                 let id = Entity::from_parts(
                     NonZeroU32::new(index as u32 + 1).unwrap(),
                     (slot.gen >> 1) as u16,

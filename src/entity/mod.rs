@@ -25,8 +25,8 @@ use crate::{component, EntityFetch};
 /// entity is a component or a normal entity.
 ///
 /// # Entity
-/// | 16       | 16         | 24    | 8         |
-/// | Reserved | Generation | Index | Namespace |
+/// | 16       | 16         | 24    | 8    |
+/// | Reserved | Generation | Index | Kind |
 ///
 /// # Pair:
 /// If the entity is a relation, the high bits stores the subject entity.
@@ -51,8 +51,7 @@ bitflags::bitflags! {
         const COMPONENT = 1;
         const STATIC = 2;
         const RELATION = 4;
-        /// Used when the entity ids are already known
-        const REMOTE = 5;
+        const REMOTE = 8;
     }
 }
 
@@ -174,7 +173,10 @@ impl StrippedEntity {
 impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (index, generation, kind) = self.into_parts();
-        if kind.is_empty() {
+        if kind.contains(EntityKind::RELATION) {
+            let (rel, sub) = self.split_pair();
+            write!(f, "{rel}({sub})")
+        } else if kind.is_empty() {
             write!(f, "{index}v{generation}")
         } else {
             write!(f, "{index}v{generation} [{kind:?}]")
@@ -191,21 +193,18 @@ impl fmt::Display for Entity {
 impl fmt::Debug for StrippedEntity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let index = self.index();
-        let namespace = self.kind();
-
-        f.debug_tuple("StrippedEntity")
-            .field(&namespace)
-            .field(&index)
-            .field(&"_")
-            .finish()
+        let kind = self.kind();
+        if kind.is_empty() {
+            write!(f, "{index}")
+        } else {
+            write!(f, "{index} [{kind:?}]")
+        }
     }
 }
 
 impl fmt::Display for StrippedEntity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let index = self.index();
-        let kind = self.kind();
-        write!(f, "{kind:?}:{index}:_")
+        fmt::Debug::fmt(self, f)
     }
 }
 
@@ -218,26 +217,31 @@ pub fn entities() -> EntityFetch {
 mod tests {
     use std::num::NonZeroU32;
 
-    use crate::{archetype::Archetype, entity::EntityLocation, Entity, EntityKind};
+    use crate::{Entity, EntityKind};
 
     use super::EntityStore;
     #[test]
     fn entity_store() {
-        let mut entities = EntityStore::new(EntityKind::COMPONENT);
-        let arch = EntityStore::new(EntityKind::empty()).spawn(Archetype::empty());
+        let mut store = EntityStore::new(EntityKind::COMPONENT);
 
-        let a = entities.spawn(EntityLocation { arch, slot: 4 });
-        let b = entities.spawn(EntityLocation { arch, slot: 2 });
-        let c = entities.spawn(EntityLocation { arch, slot: 3 });
+        let a = store.spawn("a");
+        let b = store.spawn("b");
+        let c = store.spawn("c");
 
-        entities.despawn(b).unwrap();
+        store.despawn(b).unwrap();
 
         eprintln!("Despawning: {b:?}");
-        assert!(entities.is_alive(a));
-        assert!(!entities.is_alive(b));
-        assert!(entities.is_alive(c));
-        assert_eq!(entities.get(c), Some(&EntityLocation { arch, slot: 3 }));
-        assert_eq!(entities.get(b), None);
+        assert!(store.is_alive(a));
+        assert!(!store.is_alive(b));
+        assert!(store.is_alive(c));
+        assert_eq!(store.get(c), Some(&"c"));
+        assert_eq!(store.get(b), None);
+
+        let d = store.spawn("d");
+        assert_eq!(d.index(), b.index());
+
+        assert!(store.get(b).is_none());
+        assert_eq!(store.get(d), Some(&"d"));
     }
 
     #[test]
