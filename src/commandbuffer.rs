@@ -100,6 +100,7 @@ impl CommandBuffer {
 
     /// Applies all contents of the command buffer to the world.
     /// The commandbuffer is cleared and can be reused.
+    #[tracing::instrument(skip(world))]
     pub fn apply(&mut self, world: &mut World) -> Result<()> {
         let groups = self
             .insert_locations

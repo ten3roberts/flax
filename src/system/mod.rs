@@ -129,6 +129,7 @@ where
     Args: SystemData<'a> + 'a,
     F: SystemFn<'a, (&'a SystemContext<'a>, &'a mut Args), Args::Data, ()>,
 {
+    #[tracing::instrument(skip_all, fields(name = self.name))]
     fn execute(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<()> {
         self.func.execute((ctx, &mut self.data));
         Ok(())
