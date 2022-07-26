@@ -1,6 +1,8 @@
+use eyre::WrapErr;
 use std::{collections::BTreeMap, mem};
 
 use itertools::Itertools;
+use tracing::debug;
 
 use crate::{system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World, Write};
 
@@ -54,7 +56,6 @@ impl Schedule {
 
     /// Applies the commands inside of the commandbuffer
     pub fn flush(&mut self) -> &mut Self {
-        use eyre::WrapErr;
         self.with_system(
             System::builder()
                 .with_name("flush")
@@ -69,6 +70,7 @@ impl Schedule {
 
     /// Execute all systems in the schedule sequentially on the world.
     /// Returns the first error and aborts if the execution fails.
+    #[tracing::instrument(skip(self, world))]
     pub fn execute_seq(&mut self, world: &mut World) -> eyre::Result<()> {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
@@ -81,6 +83,7 @@ impl Schedule {
     }
 
     #[cfg(feature = "parallel")]
+    #[tracing::instrument(skip(self, world))]
     pub fn execute_par(&mut self, world: &mut World) -> eyre::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
@@ -114,8 +117,9 @@ impl Schedule {
         result
     }
 
+    #[tracing::instrument(skip_all)]
     fn build_dependencies(systems: &mut [BoxedSystem], world: &mut World) -> Vec<Vec<BoxedSystem>> {
-        eprintln!("Building batches");
+        debug!("Building batches");
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
 
@@ -123,10 +127,8 @@ impl Schedule {
 
         let mut deps = BTreeMap::new();
 
-        eprintln!("Accesses: {accesses:?}");
-
         for (dst_idx, dst) in accesses.iter().enumerate() {
-            eprintln!("Generating deps for {dst_idx}");
+            debug!("Generating deps for {dst_idx}");
             let accesses = &accesses;
             let dst_deps = dst
                 .iter()
@@ -145,8 +147,6 @@ impl Schedule {
 
             deps.insert(dst_idx, dst_deps);
         }
-
-        dbg!(&deps);
 
         // Topo sort
         let depths = topo_sort(systems, &deps);

@@ -19,9 +19,11 @@ paste = "1.0.7"
 rayon = { version = "1.5.3", optional = true }
 smallvec = "1.8.0"
 thiserror = "1.0.31"
+tracing = "0.1.35"
 
 [dev-dependencies]
 itertools = "0.10.3"
+tracing-subscriber = "0.3.15"
 
 [features]
 default = ["parallel"]
