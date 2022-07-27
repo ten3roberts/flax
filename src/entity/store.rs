@@ -228,6 +228,13 @@ impl<V> EntityStore<V> {
         }
     }
 
+    pub fn iter_mut(&mut self) -> EntityStoreIterMut<V> {
+        EntityStoreIterMut {
+            iter: self.slots.iter_mut().enumerate(),
+            namespace: self.kind,
+        }
+    }
+
     /// Spawns an entity at the provided id.
     ///
     /// Fails if the index is occupied.
@@ -333,6 +340,32 @@ impl<'a, V> Iterator for EntityStoreIter<'a, V> {
         for (index, slot) in self.iter.by_ref() {
             if slot.is_alive() {
                 let val = unsafe { &slot.value.occupied };
+                let id = Entity::from_parts(
+                    NonZeroU32::new(index as u32 + 1).unwrap(),
+                    (slot.gen >> 1) as u16,
+                    self.namespace,
+                );
+
+                return Some((id, val));
+            }
+        }
+
+        None
+    }
+}
+
+pub struct EntityStoreIterMut<'a, V> {
+    iter: Enumerate<slice::IterMut<'a, Slot<V>>>,
+    namespace: EntityKind,
+}
+
+impl<'a, V> Iterator for EntityStoreIterMut<'a, V> {
+    type Item = (Entity, &'a mut V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for (index, slot) in self.iter.by_ref() {
+            if slot.is_alive() {
+                let val = unsafe { &mut slot.value.occupied };
                 let id = Entity::from_parts(
                     NonZeroU32::new(index as u32 + 1).unwrap(),
                     (slot.gen >> 1) as u16,

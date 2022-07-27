@@ -56,7 +56,7 @@ macro_rules! component {
                 }
 
                 use $crate::EntityKind;
-                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name), EntityKind::COMPONENT | EntityKind::RELATION, meta).into_pair($obj)
+                $crate::Component::new($crate::Entity::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT | EntityKind::RELATION), stringify!($name), meta).into_pair($obj)
             }
         }
 
@@ -86,7 +86,21 @@ macro_rules! component {
                     _buffer
                 }
                 use $crate::EntityKind;
-                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], stringify!($name), EntityKind::COMPONENT, meta)
+                $crate::Component::new($crate::Entity::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT), stringify!($name), meta)
+            }
+        }
+
+        $crate::component!{ $($rest)* }
+    };
+
+    // Entity
+    ($(#[$outer:meta])* $vis: vis $name: ident, $($rest:tt)*) => {
+        $crate::paste! {
+            #[allow(dead_code)]
+            static [<ENTITY_ $name:snake:upper _ID>]: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            $(#[$outer])*
+            $vis fn $name() -> $crate::Entity {
+                $crate::Entity::static_init(&[<ENTITY_ $name:snake:upper _ID>], EntityKind::empty())
             }
         }
 

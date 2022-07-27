@@ -1,6 +1,6 @@
-use flax::components::name;
-use flax::Debug;
+use flax::components::{name, parent};
 use flax::{component, debug_visitor, util::TupleCloned, wildcard, EntityBuilder, Query, World};
+use flax::{entities, Debug, Entity};
 use itertools::Itertools;
 
 #[derive(Debug, Clone)]
@@ -59,9 +59,8 @@ fn visitors() {
     eprintln!("World: {world:#?}");
 }
 
-#[test]
+#[test_log::test]
 fn relations() {
-    tracing_subscriber::fmt::init();
     #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
     enum RelationKind {
         Mom,
@@ -135,7 +134,7 @@ fn relations() {
     eprintln!("World: {world:#?}");
 
     // Visit the first parent of the children
-    let mut query = Query::new((name(), child_of(wildcard().id()).relation(0)));
+    let mut query = Query::new((name(), child_of(wildcard()).relation(0)));
     let mut query = query.prepare(&world);
 
     let items = query.iter().sorted().collect_vec();
@@ -172,4 +171,58 @@ fn relations() {
 
     assert!(world.get(parent2, name()).is_err());
     assert!(world.get(child3, child_of(parent2)).is_err());
+}
+
+#[test_log::test]
+fn build_hierarchy() {
+    // tracing_subscriber::fmt::init();
+
+    #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+    enum RelationKind {
+        Dad,
+    }
+
+    component! {
+        hobby: &'static str => [ Debug ],
+        profession: &'static str => [ Debug ],
+        child_of(e): RelationKind => [ Debug ],
+    }
+
+    let mut world = World::new();
+
+    let parent = Entity::builder()
+        .set(name(), "Alex".into())
+        .set(hobby(), "Sewing")
+        .attach_with(
+            child_of,
+            RelationKind::Dad,
+            Entity::builder()
+                .set(name(), "Eric".into())
+                .set(hobby(), "Gaming"),
+        )
+        .attach_with(
+            child_of,
+            RelationKind::Dad,
+            Entity::builder()
+                .set(name(), "Vanessa".into())
+                .set(hobby(), "Climbing"),
+        )
+        .spawn(&mut world);
+
+    assert_eq!(
+        world.get(parent, name()).as_deref(),
+        Ok(&"Alex".to_string())
+    );
+
+    let mut query = Query::new((name(), child_of(parent)));
+    let mut query = query.prepare(&world);
+    let children = query.iter().sorted().collect_vec();
+
+    assert_eq!(
+        children,
+        [
+            (&"Eric".to_string(), &RelationKind::Dad),
+            (&"Vanessa".to_string(), &RelationKind::Dad)
+        ]
+    );
 }

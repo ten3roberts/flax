@@ -162,10 +162,10 @@ where
 
     fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
         let (sub, obj) = self.component.id().split_pair();
-        if obj == wildcard().id().strip_gen() {
+        if obj == wildcard().low() {
             let (obj, borrow) = archetype
                 .components()
-                .filter(|v| v.id().strip_gen() == sub)
+                .filter(|v| v.id().low() == sub)
                 .skip(self.index)
                 .map(|v| {
                     let (sub1, obj) = v.id().split_pair();
@@ -184,10 +184,10 @@ where
 
     fn matches(&self, _: &'a World, archetype: &'a Archetype) -> bool {
         let (sub, obj) = self.component.id().split_pair();
-        if obj == wildcard().id().strip_gen() {
+        if obj == wildcard().low() {
             archetype
                 .components()
-                .filter(|component| component.id().strip_gen() == sub)
+                .filter(|component| component.id().low() == sub)
                 .nth(self.index)
                 .is_some()
         } else {
@@ -201,10 +201,10 @@ where
 
     fn difference(&self, archetype: &Archetype) -> Vec<String> {
         let (sub, obj) = self.component.id().split_pair();
-        if obj == wildcard().id().strip_gen() {
+        if obj == wildcard().low() {
             if archetype
                 .components()
-                .filter(|component| component.id().strip_gen() == sub)
+                .filter(|component| component.id().low() == sub)
                 .nth(self.index)
                 .is_some()
             {
@@ -221,10 +221,10 @@ where
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
         let (sub, obj) = self.component.id().split_pair();
-        if obj == wildcard().id().strip_gen() {
+        if obj == wildcard().low() {
             let borrow = archetype
                 .components()
-                .filter(|v| v.id().strip_gen() == sub)
+                .filter(|v| v.id().low() == sub)
                 .skip(self.index)
                 .map(|v| Access {
                     kind: AccessKind::Archetype {

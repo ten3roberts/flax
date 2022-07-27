@@ -187,6 +187,16 @@ pub struct ComponentBuffer {
     storage: BufferStorage,
 }
 
+impl<'a> IntoIterator for &'a mut ComponentBuffer {
+    type Item = (ComponentInfo, *mut u8);
+
+    type IntoIter = ComponentBufferIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.take_all()
+    }
+}
+
 impl std::fmt::Debug for ComponentBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list()
