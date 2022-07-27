@@ -23,7 +23,10 @@ tracing = "0.1.35"
 
 [dev-dependencies]
 itertools = "0.10.3"
-tracing-subscriber = "0.3.15"
+tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
+test-log = { version = "0.2.11", default_features = false, features = [
+    "trace",
+] }
 
 [features]
 default = ["parallel"]

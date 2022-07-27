@@ -8,11 +8,39 @@ use std::{
 };
 
 use crate::{
-    archetype::ComponentInfo, entity::EntityIndex, ComponentBuffer, Entity, EntityKind,
+    archetype::ComponentInfo, entity::EntityIndex, wildcard, ComponentBuffer, Entity, EntityKind,
     InsertedFilter, MetaData, ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without,
 };
 
 pub trait ComponentValue: Send + Sync + 'static {}
+
+/// Extension trait for component functions
+pub trait RelationExt {
+    type Value: ComponentValue;
+    fn with(&self, subject: Entity) -> Component<Self::Value>;
+    fn with_id(&self, subject: Entity) -> ComponentId;
+    fn wildcard(&self) -> Component<Self::Value>;
+}
+
+impl<T> RelationExt for fn(Entity) -> Component<T>
+where
+    T: ComponentValue,
+{
+    type Value = T;
+
+    fn with(&self, subject: Entity) -> Component<Self::Value> {
+        (self)(subject)
+    }
+
+    fn with_id(&self, subject: Entity) -> ComponentId {
+        (self)(subject).id()
+    }
+
+    fn wildcard(&self) -> Component<Self::Value> {
+        (self)(wildcard())
+    }
+}
+
 pub type ComponentId = Entity;
 
 impl<T> ComponentValue for T where T: Send + Sync + 'static {}
@@ -94,30 +122,9 @@ impl<T: ComponentValue> Component<T> {
         kind: EntityKind,
         meta: fn(ComponentInfo) -> ComponentBuffer,
     ) -> Self {
-        let index = match id.fetch_update(Acquire, Relaxed, |v| {
-            if v != 0 {
-                None
-            } else {
-                Some(
-                    ComponentId::acquire_static_id(kind | EntityKind::STATIC)
-                        .index()
-                        .get(),
-                )
-            }
-        }) {
-            Ok(_) => id.load(Acquire),
-            Err(old) => old,
-        };
+        let id = Entity::static_init(id, kind);
 
-        Self::new(
-            Entity::from_parts(
-                EntityIndex::new(index).unwrap(),
-                1,
-                EntityKind::COMPONENT | EntityKind::STATIC | kind,
-            ),
-            name,
-            meta,
-        )
+        Self::new(id, name, meta)
     }
 
     /// Attaches a function to generate component metadata

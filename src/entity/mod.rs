@@ -3,8 +3,8 @@ mod store;
 
 use core::fmt;
 use core::num::NonZeroU64;
-use std::num::NonZeroU32;
 use std::sync::atomic::AtomicU32;
+use std::{num::NonZeroU32, sync::atomic::Ordering};
 
 pub use builder::*;
 pub use store::*;
@@ -60,7 +60,7 @@ pub type EntityIndex = NonZeroU32;
 
 component! {
     /// The object for a pair component which will match anything.
-    pub wildcard: (),
+    pub wildcard,
 }
 
 impl Entity {
@@ -71,6 +71,30 @@ impl Entity {
             NonZeroU32::new(index).unwrap(),
             0,
             kind | EntityKind::STATIC,
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn static_init(id: &AtomicU32, kind: EntityKind) -> Self {
+        let index = match id.fetch_update(Ordering::Acquire, Ordering::Relaxed, |v| {
+            if v != 0 {
+                None
+            } else {
+                Some(
+                    Self::acquire_static_id(kind | EntityKind::STATIC)
+                        .index()
+                        .get(),
+                )
+            }
+        }) {
+            Ok(_) => id.load(Ordering::Acquire),
+            Err(old) => old,
+        };
+
+        Self::from_parts(
+            EntityIndex::new(index).unwrap(),
+            1,
+            EntityKind::COMPONENT | EntityKind::STATIC | kind,
         )
     }
 
@@ -125,14 +149,17 @@ impl Entity {
     /// # Panics:
     /// If the `relation` does not have the [`EntityKind::RELATION`] flag set.
     pub fn pair(relation: Entity, subject: Entity) -> Self {
-        if !relation.kind().contains(EntityKind::RELATION) {
-            panic!("Relation {relation} does not contain the relation flag")
-        }
+        Self::join_pair(relation.low(), subject.low())
+    }
 
-        let relation = relation.to_bits().get();
-        let subject = subject.to_bits().get();
+    pub(crate) fn high(self) -> StrippedEntity {
+        let bits = self.to_bits().get();
+        StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap())
+    }
 
-        Self(NonZeroU64::new((relation & 0xFFFFFFFF) | (subject << 32)).unwrap())
+    pub(crate) fn low(self) -> StrippedEntity {
+        let bits = self.to_bits().get();
+        StrippedEntity(NonZeroU32::new(bits as u32).unwrap())
     }
 
     /// Returns the subject and relation
@@ -144,9 +171,15 @@ impl Entity {
         (relation, subject)
     }
 
-    #[inline]
-    pub fn strip_gen(self) -> StrippedEntity {
-        StrippedEntity(NonZeroU32::new(self.to_bits().get() as u32).unwrap())
+    pub(crate) fn join_pair(relation: StrippedEntity, subject: StrippedEntity) -> Self {
+        if !relation.kind().contains(EntityKind::RELATION) {
+            panic!("Relation {relation} does not contain the relation flag")
+        }
+
+        let relation = relation.0.get() as u64;
+        let subject = subject.0.get() as u64;
+
+        Self(NonZeroU64::new(relation | (subject << 32)).unwrap())
     }
 
     pub fn builder() -> EntityBuilder {

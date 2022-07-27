@@ -13,7 +13,7 @@ use itertools::Itertools;
 use crate::{
     archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice},
     components::{component, name},
-    debug_visitor,
+    debug_visitor, entities,
     entity::{EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
@@ -155,50 +155,15 @@ impl World {
     /// Spawn an entity with the given components.
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
-    pub fn spawn_with(&mut self, components: &mut ComponentBuffer) -> Entity {
-        // Initialize components before all else
-        for component in components.components() {
-            eprintln!(
-                "Spawning component: {}:{}",
-                component.name(),
-                component.id()
-            );
-            self.init_component(*component)
-                .expect("Failed to initialize component: {component:?}");
-        }
-        eprintln!("----");
-
-        let arch = self.archetype_root;
-        let ns = self.init_store(EntityKind::empty());
-
-        let id = ns.spawn(EntityLocation { arch, slot: 0 });
-
-        let change_tick = self.advance_change_tick();
-
-        let (arch_id, arch) = self.fetch_archetype(self.archetype_root, components.components());
-
-        let slot = arch.allocate(id);
-
-        for component in components.components() {
-            arch.init_changes(component.id)
-                .set(Change::inserted(Slice::single(slot), change_tick));
-        }
+    pub fn spawn_with(
+        &mut self,
+        components: impl IntoIterator<Item = (ComponentInfo, *mut u8)>,
+    ) -> Entity {
+        let id = self.spawn();
 
         unsafe {
-            for (component, src) in components.take_all() {
-                let storage = self
-                    .archetype_mut(arch_id)
-                    .storage_raw(component.id)
-                    .unwrap();
-
-                std::ptr::copy_nonoverlapping(src, storage.at_mut(slot), component.size());
-            }
+            self.set_with(id, components).unwrap();
         }
-
-        *self.location_mut(id).unwrap() = EntityLocation {
-            arch: arch_id,
-            slot,
-        };
 
         id
     }
@@ -251,6 +216,7 @@ impl World {
         let mut new_components = Vec::new();
 
         let src_id = arch;
+
         for (component, data) in components {
             let src = self.archetype_mut(arch);
 
@@ -294,14 +260,6 @@ impl World {
 
             // Insert the missing components
             for &(component, data) in &new_data {
-                eprintln!(
-                    "Inserting: {}{} to {} {}",
-                    component.name(),
-                    component.id(),
-                    dst_id,
-                    dst_slot
-                );
-
                 dst.put_dyn(dst_slot, &component, data)
                     .expect("Insert should not fail");
 
@@ -316,13 +274,11 @@ impl World {
 
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
-                eprintln!("Relocating entity");
                 self.init_store(swapped.kind())
                     .get_mut(swapped)
                     .expect("Invalid entity id")
                     .slot = slot;
             }
-            eprintln!("New slot: {dst_slot}");
 
             *self.location_mut(id).expect("Entity is not valid") = EntityLocation {
                 slot: dst_slot,
@@ -357,6 +313,7 @@ impl World {
     }
 
     /// Despawn an entity.
+    /// Any relations to other entities will be removed.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
         let EntityLocation {
             arch: archetype,
@@ -365,6 +322,7 @@ impl World {
 
         let src = self.archetype_mut(archetype);
         src.remove_slot_changes(slot);
+
         let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
         let ns = self.init_store(id.kind());
         if let Some(swapped) = swapped {
@@ -375,6 +333,43 @@ impl World {
 
         ns.despawn(id)?;
         self.detach(id);
+        Ok(())
+    }
+
+    /// Despawns all components which matches the filter
+    pub fn despawn_all<F>(&mut self, filter: F)
+    where
+        F: for<'x, 'y> Filter<'x, 'y>,
+    {
+        let mut query = Query::new(entities()).filter(filter);
+        let ids = query.prepare(self).iter().collect_vec();
+
+        for id in ids {
+            self.despawn(id).expect("Invalid entity id");
+        }
+    }
+
+    /// Despawns an entity and all connected entities given by the supplied
+    /// relations.
+    pub fn despawn_recursive(
+        &mut self,
+        id: Entity,
+        relations: &[fn(Entity) -> ComponentId],
+    ) -> Result<()> {
+        let mut to_remove = vec![id];
+
+        while let Some(id) = to_remove.pop() {
+            self.despawn(id)?;
+
+            for (_, arch) in self
+                .archetypes
+                .iter_mut()
+                .filter(|(_, arch)| relations.iter().map(|v| v(id)).any(|v| arch.has(v)))
+            {
+                to_remove.extend_from_slice(arch.entities());
+            }
+        }
+
         Ok(())
     }
 
@@ -394,7 +389,7 @@ impl World {
             })
             .collect_vec();
 
-        let subject = component.strip_gen();
+        let subject = component.low();
         eprintln!("Detaching: {:#?}", archetypes);
         for src in archetypes {
             let mut src = self.archetypes.despawn(src).unwrap();

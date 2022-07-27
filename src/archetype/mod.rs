@@ -52,17 +52,17 @@ impl Archetype {
 
     /// Returns the components with the specified relation type.
     pub fn relations_like(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
-        let relation = relation.strip_gen();
+        let relation = relation.low();
 
         self.storage
             .keys()
-            .filter(move |k| k.strip_gen() == relation)
+            .filter(move |k| k.low() == relation)
             .copied()
     }
 
     /// Returns the components with the specified relation subject.
     pub fn relations_of(&self, subject: Entity) -> impl Iterator<Item = Entity> + '_ {
-        let subject = subject.strip_gen();
+        let subject = subject.low();
 
         self.storage
             .keys()
@@ -555,7 +555,6 @@ impl Archetype {
 
     /// Drops all components while keeping the storage intact
     pub fn clear(&mut self) {
-        // eprintln!("Clearing archetype {:#?}", self.components().collect_vec());
         let len = self.len();
         for storage in self.storage.values_mut() {
             for slot in 0..len {

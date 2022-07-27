@@ -1,16 +1,20 @@
 use std::mem;
 
-use crate::{CommandBuffer, Component, ComponentBuffer, ComponentValue, Entity, World};
+use crate::{
+    wildcard, CommandBuffer, Component, ComponentBuffer, ComponentValue, Entity, EntityKind, World,
+};
 
 #[derive(Debug)]
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
+    children: Vec<EntityBuilder>,
 }
 
 impl EntityBuilder {
     pub fn new() -> Self {
         Self {
             buffer: ComponentBuffer::new(),
+            children: Vec::new(),
         }
     }
 
@@ -43,25 +47,65 @@ impl EntityBuilder {
         self.buffer.get(component)
     }
 
+    /// Attach a child with the provided relation and value.
+    /// The child is taken and cleared
+    pub fn attach_with<T: ComponentValue>(
+        &mut self,
+        relation: fn(Entity) -> Component<T>,
+        value: T,
+        other: &mut Self,
+    ) -> &mut Self {
+        other.set(relation(wildcard()), value);
+        self.children.push(mem::take(other));
+        self
+    }
+
+    /// Attach a child with the provided value-less relation
+    pub fn attach(&mut self, relation: fn(Entity) -> Component<()>, other: &mut Self) -> &mut Self {
+        self.attach_with(relation, (), other)
+    }
+
     /// Spawns the built entity into the world.
     ///
     /// Clears the builder and allows it to be used again, reusing the builder
     /// will reuse the inner storage, even for different components.
     pub fn spawn(&mut self, world: &mut World) -> Entity {
-        world.spawn_with(&mut self.buffer)
+        let iter = self.buffer.take_all().map(|(info, val)| {
+            let id = info.id();
+            if id.kind().contains(EntityKind::RELATION) && id.high() == wildcard().low() {
+                panic!("Attempt to build entity with an unknown parent, but entity requires a parent relation")
+            }
+
+            ( info, val )
+        });
+
+        let id = world.spawn_with(iter);
+
+        self.children.drain(..).for_each(|mut child| {
+            child.spawn_with_parent(world, id);
+        });
+
+        id
+    }
+
+    fn spawn_with_parent(&mut self, world: &mut World, parent: Entity) -> Entity {
+        let iter = self.buffer.take_all().map(|(mut info, val)| {
+            let id = info.id();
+            if id.kind().contains(EntityKind::RELATION) && id.high() == wildcard().low() {
+                tracing::info!("Inserting parent component");
+                let rel = id.low();
+                info.id = Entity::join_pair(rel, parent.low())
+            }
+
+            (info, val)
+        });
+
+        world.spawn_with(iter)
     }
 
     /// Spawns the entity into the world through a commandbuffer
     pub fn spawn_into(&mut self, cmd: &mut CommandBuffer) {
-        cmd.spawn(self.take());
-    }
-
-    /// Takes all components from self and stores them in a new builder.
-    /// Effectively stealing everything from the builder by mutable reference.
-    pub fn take(&mut self) -> Self {
-        Self {
-            buffer: mem::take(&mut self.buffer),
-        }
+        cmd.spawn(mem::take(self));
     }
 }
 
