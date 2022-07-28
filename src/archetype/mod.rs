@@ -8,7 +8,7 @@ use std::{
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
+use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind};
 
 pub type ArchetypeId = Entity;
 pub type Slot = usize;
@@ -50,25 +50,18 @@ impl Archetype {
         }
     }
 
+    pub fn relations(&self) -> impl Iterator<Item = ComponentId> + '_ {
+        self.storage
+            .keys()
+            .filter(|v| v.kind().contains(EntityKind::RELATION))
+            .copied()
+    }
+
     /// Returns the components with the specified relation type.
     pub fn relations_like(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
         let relation = relation.low();
 
-        self.storage
-            .keys()
-            .filter(move |k| k.low() == relation)
-            .copied()
-    }
-
-    /// Returns the components with the specified relation subject.
-    pub fn relations_of(&self, subject: Entity) -> impl Iterator<Item = Entity> + '_ {
-        let subject = subject.low();
-
-        self.storage
-            .keys()
-            .filter(move |k| k.split_pair().1 == subject)
-            .inspect(|v| eprintln!("Looking at: {v}"))
-            .copied()
+        self.relations().filter(move |k| k.low() == relation)
     }
 
     /// Create a new archetype.

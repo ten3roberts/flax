@@ -22,6 +22,7 @@ use crate::{
     Query, RowFormatter,
 };
 
+/// Holds the entities and components of the ECS.
 pub struct World {
     entities: BTreeMap<EntityKind, EntityStore>,
     archetypes: EntityStore<Archetype>,
@@ -115,6 +116,18 @@ impl World {
     /// Spawn a new empty entity into the default namespace
     pub fn spawn(&mut self) -> Entity {
         self.spawn_with_kind(EntityKind::empty())
+    }
+
+    /// Spawn a new component of type `T` which can be attached to an entity.
+    ///
+    /// The given name does not need to be unique.
+    pub fn spawn_component<T: ComponentValue>(
+        &mut self,
+        name: &'static str,
+        meta: fn(ComponentInfo) -> ComponentBuffer,
+    ) -> Component<T> {
+        let id = self.spawn_with_kind(EntityKind::COMPONENT);
+        Component::new(id, name, meta)
     }
 
     fn spawn_with_kind(&mut self, kind: EntityKind) -> Entity {
@@ -376,27 +389,27 @@ impl World {
     /// Removes all instances of the component from entities in the world.
     /// Does not despawn any entities.
     pub fn detach(&mut self, component: ComponentId) {
+        let subject = component.low();
         // The archetypes to remove
         let archetypes = self
             .archetypes()
-            .filter(|v| v.1.has(component) || v.1.relations_of(component).count() > 0)
-            .map(|v| {
-                v.0
-                // v.1.components()
-                //     .filter(|c| c.id() != component && c.id().split_pair().1 != subject)
-                //     .copied()
-                //     .collect_vec(),
+            .filter(|(_, v)| {
+                v.has(component)
+                    || v.relations()
+                        .any(|id| id.low() == subject || id.high() == subject)
             })
+            .map(|v| v.0)
             .collect_vec();
 
-        let subject = component.low();
         eprintln!("Detaching: {:#?}", archetypes);
         for src in archetypes {
             let mut src = self.archetypes.despawn(src).unwrap();
 
-            let components = src
-                .components()
-                .filter(|c| c.id() != component && c.id().split_pair().1 != subject);
+            let components = src.components().filter(|info| {
+                let id = info.id();
+                !(id == component
+                    || (id.is_relation() && (id.low() == subject || id.high() == subject)))
+            });
 
             let (dst_id, dst) = self.fetch_archetype(self.archetype_root, components);
 
@@ -612,9 +625,10 @@ impl World {
     /// Randomly access an entity's component.
     pub fn get<T: ComponentValue>(
         &self,
-        id: Entity,
+        id: impl Into<Entity>,
         component: Component<T>,
     ) -> Result<AtomicRef<T>> {
+        let id = id.into();
         let loc = self.location(id)?;
 
         self.archetype(loc.arch)
@@ -622,7 +636,7 @@ impl World {
             .ok_or_else(|| Error::MissingComponent(id, component.name()))
     }
 
-    pub fn get_at<T: ComponentValue>(
+    pub(crate) fn get_at<T: ComponentValue>(
         &self,
         EntityLocation { arch, slot }: EntityLocation,
         component: Component<T>,

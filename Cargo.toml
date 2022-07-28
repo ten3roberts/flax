@@ -27,6 +27,7 @@ tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 test-log = { version = "0.2.11", default_features = false, features = [
     "trace",
 ] }
+color-eyre = "0.6.2"
 
 [features]
 default = ["parallel"]

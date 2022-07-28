@@ -1,8 +1,23 @@
 {
-  "check": {
-    "cmd": "cargo check --tests --examples"
-  },
-  "build": {
-    "cmd": "cargo build --examples"
-  }
+    "check": {
+        "cmd": "cargo check --tests --examples"
+    },
+    "build": {
+        "cmd": "cargo build --examples"
+    },
+    "mdbook-build": {
+        "cmd": "mdbook build",
+        "interactive": false,
+        "cwd": "guide"
+    },
+    "mdbook-serve": {
+        "cmd": "mdbook serve",
+        "interactive": false,
+        "cwd": "guide"
+    },
+    "example-guide": {
+        "cmd": "cargo run --example guide",
+        "interactive": true,
+        "keep_open": true
+    }
 }
