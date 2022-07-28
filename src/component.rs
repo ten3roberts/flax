@@ -203,6 +203,12 @@ impl<T: ComponentValue> MetaData<T> for Component<T> {
     }
 }
 
+impl<T: ComponentValue> From<Component<T>> for Entity {
+    fn from(v: Component<T>) -> Self {
+        v.id()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;

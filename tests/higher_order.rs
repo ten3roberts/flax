@@ -1,4 +1,4 @@
-use flax::components::{name, parent};
+use flax::components::{child_of, name};
 use flax::{component, debug_visitor, util::TupleCloned, wildcard, EntityBuilder, Query, World};
 use flax::{entities, Debug, Entity};
 use itertools::Itertools;

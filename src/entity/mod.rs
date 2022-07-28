@@ -152,11 +152,14 @@ impl Entity {
         Self::join_pair(relation.low(), subject.low())
     }
 
+    /// Returns the high bits of the relation. Represents the generation or
+    /// subject entity if a relation
     pub(crate) fn high(self) -> StrippedEntity {
         let bits = self.to_bits().get();
         StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap())
     }
 
+    /// Returns the low bits of the entity id, which contains the index and kind
     pub(crate) fn low(self) -> StrippedEntity {
         let bits = self.to_bits().get();
         StrippedEntity(NonZeroU32::new(bits as u32).unwrap())
@@ -184,6 +187,10 @@ impl Entity {
 
     pub fn builder() -> EntityBuilder {
         EntityBuilder::new()
+    }
+
+    pub(crate) fn is_relation(&self) -> bool {
+        self.kind().contains(EntityKind::RELATION)
     }
 }
 
