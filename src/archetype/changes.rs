@@ -114,6 +114,7 @@ impl Changes {
     }
 
     pub fn set(&mut self, change: Change) -> &mut Self {
+        tracing::debug!("Setting change: {change:?}");
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
@@ -148,7 +149,7 @@ impl Changes {
             self.inner.insert(insert_point, change);
         }
 
-        assert_eq!(
+        debug_assert_eq!(
             self.inner
                 .iter()
                 .copied()
@@ -156,6 +157,8 @@ impl Changes {
                 .collect_vec(),
             self.inner
         );
+
+        tracing::debug!("Changes: {self:#?}");
 
         self
     }

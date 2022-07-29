@@ -2,7 +2,7 @@
 
 Flax is an easy to use Entity Component System.
 
-## What is ECS
+## What is an ECS
 
 ECS, or Entity Component System is a design paradigm of where the state of the
 program is structured around multiple *Entities*, where each entity may have

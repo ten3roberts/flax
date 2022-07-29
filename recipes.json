@@ -19,5 +19,13 @@
         "cmd": "cargo run --example guide",
         "interactive": true,
         "keep_open": true
+    },
+    "example-query": {
+        "cmd": "cargo run --example query",
+        "keep_open": true,
+        "term": {
+            "focus": false
+        },
+        "interactive": true
     }
 }
