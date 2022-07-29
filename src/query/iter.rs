@@ -80,6 +80,7 @@ where
         // Get the next chunk
         let chunk = self.filter.next()?;
 
+        tracing::debug!("Got new chunk: {chunk:?}");
         // Set the chunk as visited
         unsafe { fetch.set_visited(chunk, self.new_tick) }
         let chunk = Batch::new(self.arch, fetch, chunk);

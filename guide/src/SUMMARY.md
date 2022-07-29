@@ -5,3 +5,4 @@
     * [World](fundamentals/world.md)
     * [Components](fundamentals/components.md)
     * [Component metadata](fundamentals/metadata.md)
+    * [Query](fundamentals/query.md)

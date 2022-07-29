@@ -3,7 +3,7 @@ use std::{io::stdin, process::id};
 use flax::{
     component,
     components::{component, name},
-    World,
+    Query, World,
 };
 use itertools::Itertools;
 
@@ -103,5 +103,6 @@ pub fn main() -> color_eyre::Result<()> {
     // }
 
     // ANCHOR_END: component_meta
+
     Ok(())
 }
