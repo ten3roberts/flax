@@ -16,6 +16,16 @@ pub struct Batch<'q, Q> {
     end: Slot,
 }
 
+impl<'q, Q> std::fmt::Debug for Batch<'q, Q> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Batch")
+            .field("arch", &self.arch)
+            .field("pos", &self.pos)
+            .field("end", &self.end)
+            .finish()
+    }
+}
+
 impl<'q, Q> Batch<'q, Q> {
     pub fn new(arch: &'q Archetype, fetch: &'q mut Q, slice: Slice) -> Self {
         Self {
@@ -44,6 +54,7 @@ where
 {
     type Item = Q::Item;
 
+    #[tracing::instrument(level = "debug")]
     fn next(&mut self) -> Option<Q::Item> {
         if self.pos == self.end {
             None
@@ -78,9 +89,15 @@ where
         let fetch = unsafe { &mut *(self.fetch as *mut Q) };
 
         // Get the next chunk
-        let chunk = self.filter.next()?;
+        let chunk = self.filter.next();
+        let chunk = if let Some(chunk) = chunk {
+            chunk
+        } else {
+            tracing::debug!("No more in filter");
+            return None;
+        };
 
-        tracing::debug!("Got new chunk: {chunk:?}");
+        tracing::debug!("Got new chunk: {chunk:?}/{:?}", self.arch.slots());
         // Set the chunk as visited
         unsafe { fetch.set_visited(chunk, self.new_tick) }
         let chunk = Batch::new(self.arch, fetch, chunk);

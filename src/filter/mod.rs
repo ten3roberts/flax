@@ -350,11 +350,12 @@ where
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     pub fn current_slice(&mut self) -> Option<Slice> {
         match (self.cur, self.changes.as_mut()) {
             (Some(v), _) => Some(v),
             (None, Some(changes)) => loop {
-                tracing::debug!("Changes: {changes:#?}");
+                tracing::debug!("Change list: {changes:#?}");
                 let v = changes.get(self.index);
                 if let Some(change) = v {
                     self.index += 1;
@@ -376,6 +377,7 @@ impl<'a, F> PreparedFilter for PreparedKindFilter<'a, F>
 where
     F: Fn(&ChangeKind) -> bool,
 {
+    #[tracing::instrument(level = "debug", skip_all)]
     fn filter(&mut self, slots: Slice) -> Slice {
         loop {
             let cur = match self.current_slice() {
@@ -594,6 +596,7 @@ where
 {
     type Item = Slice;
 
+    #[tracing::instrument(level = "debug", skip_all)]
     fn next(&mut self) -> Option<Self::Item> {
         let cur = self.filter.filter(self.slots);
 
@@ -688,9 +691,13 @@ mod tests {
     use crate::{archetype::Change, component};
 
     use super::*;
+    component! {
+        a: (),
+    }
+
     #[test]
     fn filter() {
-        let mut changes = Changes::new();
+        let mut changes = Changes::new(a().info());
 
         changes.set(Change::modified(Slice::new(40, 200), 1));
         changes.set(Change::modified(Slice::new(70, 349), 2));
@@ -724,8 +731,8 @@ mod tests {
 
     #[test]
     fn combinators() {
-        let mut changes_1 = Changes::new();
-        let mut changes_2 = Changes::new();
+        let mut changes_1 = Changes::new(a().info());
+        let mut changes_2 = Changes::new(a().info());
 
         changes_1.set(Change::modified(Slice::new(40, 65), 2));
         changes_1.set(Change::modified(Slice::new(59, 80), 3));

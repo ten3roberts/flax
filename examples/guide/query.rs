@@ -37,20 +37,22 @@ fn main() -> color_eyre::Result<()> {
         distance: f32,
     }
 
+    tracing::info!("Spawning id3");
     let id3 = world.spawn();
     world.set(id3, position(), (5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
+        tracing::info!("Adding distance to {id}");
         world.set(id, distance(), 0.0)?;
     }
 
-    let mut query =
-        Query::new((entities(), position(), distance().as_mut())).filter(position().modified());
+    let mut query = Query::new((entities(), position())).filter(position().modified());
 
-    for (id, pos, dist) in &mut query.prepare(&world) {
+    tracing::info!("Updating distances");
+    for (id, pos) in &mut query.prepare(&world) {
         println!("Updating distance for {id} with position: {pos:?}");
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        // *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
 
     // ANCHOR_END: query_modified

@@ -17,7 +17,7 @@
     },
     "example-guide": {
         "cmd": "cargo run --example guide",
-        "interactive": true,
+        "kind": "term",
         "keep_open": true
     },
     "example-query": {
@@ -26,6 +26,6 @@
         "term": {
             "focus": false
         },
-        "interactive": true
+        "kind": "term"
     }
 }

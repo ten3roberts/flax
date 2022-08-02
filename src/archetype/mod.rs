@@ -78,7 +78,7 @@ impl Archetype {
                             info: component,
                         },
                     ),
-                    (component.id, AtomicRefCell::new(Changes::new())),
+                    (component.id, AtomicRefCell::new(Changes::new(component))),
                 )
             })
             .unzip();
@@ -137,12 +137,12 @@ impl Archetype {
         Some(StorageBorrowMut { data })
     }
 
-    pub fn init_changes(&mut self, component: ComponentId) -> &mut Changes {
+    pub fn init_changes(&mut self, component: ComponentInfo) -> &mut Changes {
         self.changes
-            .entry(component)
+            .entry(component.id())
             .or_insert_with(|| {
-                eprintln!("Initialized changes for {component}");
-                Default::default()
+                tracing::debug!("Initialized changes for {}", component.name);
+                AtomicRefCell::new(Changes::new(component))
             })
             .get_mut()
     }
@@ -154,11 +154,40 @@ impl Archetype {
         }
     }
 
+    /// Removes a slot and swaps in the last slot
+    unsafe fn remove_slot(
+        &mut self,
+        slot: Slot,
+    ) -> (Vec<(ComponentId, Vec<Change>)>, Option<Entity>) {
+        let last = self.len() - 1;
+        if slot != last {
+            let changes = self
+                .changes
+                .iter_mut()
+                .map(|(&id, changes)| {
+                    let changes = changes.get_mut();
+                    (id, changes.swap_out(slot, last))
+                })
+                .collect();
+
+            self.entities[slot] = self.entities[last];
+            (changes, Some(self.entities.pop().unwrap()))
+        } else {
+            (
+                self.changes
+                    .iter_mut()
+                    .map(|(&id, changes)| (id, changes.get_mut().remove(slot)))
+                    .collect(),
+                None,
+            )
+        }
+    }
+
     pub fn migrate_slot(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
-        for (&component, changes) in self.changes.iter_mut() {
-            let other = other.init_changes(component);
-            eprintln!("Migrated: {component}");
-            changes.get_mut().migrate_to(other, src_slot, dst_slot)
+        for (_, changes) in self.changes.iter_mut() {
+            let changes = changes.get_mut();
+            let other = other.init_changes(changes.info());
+            changes.migrate_to(other, src_slot, dst_slot)
         }
     }
 
@@ -375,7 +404,7 @@ impl Archetype {
         dst: &mut Self,
         slot: Slot,
         mut on_drop: impl FnMut(ComponentInfo, *mut u8),
-    ) -> (Slot, Option<Entity>) {
+    ) -> (Slot, Vec<(ComponentId, Vec<Change>)>, Option<Slot>) {
         let entity = self.entity(slot).expect("Invalid entity");
         let dst_slot = dst.allocate(entity);
         let last = self.len() - 1;
@@ -393,13 +422,8 @@ impl Archetype {
             }
         }
 
-        if slot != last {
-            self.entities[slot] = self.entities[last];
-            (dst_slot, Some(self.entities.pop().unwrap()))
-        } else {
-            self.entities.pop().unwrap();
-            (dst_slot, None)
-        }
+        let (changes, swapped) = self.remove_slot(slot);
+        (slotwdst)
     }
 
     /// Move all components of an entity out of an archetype

@@ -58,7 +58,7 @@ struct MissingDebug;
 
 impl Debug for MissingDebug {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "_")
+        write!(f, "...")
     }
 }
 
