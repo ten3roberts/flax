@@ -195,20 +195,22 @@ when an entity moves for every entity which are not dead.</p>
         distance: f32,
     }
 
+    tracing::info!(&quot;Spawning id3&quot;);
     let id3 = world.spawn();
     world.set(id3, position(), (5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
+        tracing::info!(&quot;Adding distance to {id}&quot;);
         world.set(id, distance(), 0.0)?;
     }
 
-    let mut query =
-        Query::new((entities(), position(), distance().as_mut())).filter(position().modified());
+    let mut query = Query::new((entities(), position())).filter(position().modified());
 
-    for (id, pos, dist) in &amp;mut query.prepare(&amp;world) {
+    tracing::info!(&quot;Updating distances&quot;);
+    for (id, pos) in &amp;mut query.prepare(&amp;world) {
         println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        // *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
 
 <span class="boring">}
