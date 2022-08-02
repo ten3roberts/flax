@@ -47,14 +47,36 @@ fn main() -> color_eyre::Result<()> {
         world.set(id, distance(), 0.0)?;
     }
 
-    let mut query = Query::new((entities(), position())).filter(position().modified());
+    let mut query = Query::new((entities(), position(), distance().as_mut()))
+        .filter(position().modified() & health().gt(0.0));
 
     tracing::info!("Updating distances");
-    for (id, pos) in &mut query.prepare(&world) {
-        println!("Updating distance for {id} with position: {pos:?}");
-        // *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+    for (id, pos, dist) in &mut query.prepare(&world) {
+        tracing::info!("Updating distance for {id} with position: {pos:?}");
+        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
 
     // ANCHOR_END: query_modified
+
+    // ANCHOR: query_repeat
+
+    tracing::info!("Running query again");
+    for (id, pos, dist) in &mut query.prepare(&world) {
+        tracing::info!("Updating distance for {id} with position: {pos:?}");
+        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+    }
+    // ANCHOR_END: query_repeat
+
+    // ANCHOR: query_repeat_reboot
+
+    *world.get_mut(id2, position())? = (8.0, 3.0);
+
+    tracing::info!("... and again");
+    for (id, pos, dist) in &mut query.prepare(&world) {
+        tracing::info!("Updating distance for {id} with position: {pos:?}");
+        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+    }
+
+    // ANCHOR_END: query_repeat_reboot
     Ok(())
 }

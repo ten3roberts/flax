@@ -23,10 +23,15 @@ A query accepts any type which implements
   iterated `Entity` ids.
 - ... and many more
 
-# Filters
+## Filters
 
 A query allows for filters, such as skipping entities which have a certain
 components, or where the value of a component satisfies some condition.
+
+The difference between using a query filter and a filter on the iterator is that mutable components are not marked as modified if skipped by a query iterator. This is because the `QueryIter` is not able to determine if a later `filter` skipped the item. In addition, the query filters operate on ranges and can look up modifications and alike for a group of entities, E.g; if all entities next to each other are modified, only one range will be yielded, instead of each entity separately.
+
+**Note**: It is not possible to access a component mutably and filter on it at
+the same time.
 
 Change detection is also supported and allows querying only over the entities
 where a certain component changed.
@@ -37,3 +42,29 @@ when an entity moves for every entity which are not dead.
 ```rust
 {{ #include ../../../examples/guide/query.rs:query_modified }}
 ```
+
+The same query can be run again, but since all changes have been visited, it
+yield nothing.
+
+```rust
+{{ #include ../../../examples/guide/query.rs:query_repeat }}
+```
+
+However, if the position were to be modified, the query would pick up that, and
+only that change.
+
+
+```rust
+{{ #include ../../../examples/guide/query.rs:query_repeat_reboot }}
+```
+
+### Change detection
+- [modified](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) yields components which have been updated **or** inserted.
+- [inserted](https://docs.rs/flax/latest/flax/struct.Component.html#method.inserted) yields new components.
+- [removed](https://docs.rs/flax/latest/flax/struct.Component.html#method.removed) yields each entity for which the component was recently removed.
+
+All change detection is per query and based on when the query last executed.
+
+### Comparative filter
+
+In addition to change detection, filtering on value is also possible. See: [CmpExt](https://docs.rs/flax/latest/flax/trait.CmpExt.html).
