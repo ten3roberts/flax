@@ -2,16 +2,28 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 
+use crate::ComponentInfo;
+
 use super::{Slice, Slot};
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 /// A self compacting change tracking which holds either singular changes or a
 /// range of changes, automatically merging adjacent ones.
 ///
 ///
 /// The changes are always stored in a non-overlapping ascending order.
 pub struct Changes {
+    info: ComponentInfo,
     inner: Vec<Change>,
+}
+
+impl std::fmt::Debug for Changes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Changes")
+            .field("name", &self.info.name())
+            .field("inner", &self.inner)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -88,15 +100,12 @@ impl Change {
     }
 }
 
-impl std::fmt::Debug for Changes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(&self.inner).finish()
-    }
-}
-
 impl Changes {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(info: ComponentInfo) -> Self {
+        Self {
+            info,
+            inner: Default::default(),
+        }
     }
 
     pub fn as_set(&self, f: impl Fn(&Change) -> bool) -> BTreeSet<Slot> {
@@ -113,8 +122,9 @@ impl Changes {
             .collect()
     }
 
+    #[tracing::instrument]
     pub fn set(&mut self, change: Change) -> &mut Self {
-        tracing::debug!("Setting change: {change:?}");
+        tracing::info!("Setting change: {change:?}");
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
@@ -158,16 +168,43 @@ impl Changes {
             self.inner
         );
 
-        tracing::debug!("Changes: {self:#?}");
+        tracing::info!("new changes: {self:#?}");
 
         self
     }
 
-    pub fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
+    #[tracing::instrument(level = "debug")]
+    pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
+        tracing::info!(
+            "Migrating {} from {src_slot} => {dst_slot}",
+            self.info.name()
+        );
+
+        tracing::info!("Before: {:#?}\nnew: {:#?}", self, other);
+
         for mut removed in self.remove(src_slot) {
+            // Change the slot
             removed.slice = Slice::single(dst_slot);
             other.set(removed);
         }
+
+        tracing::info!("After: {self:#?}\n{other:#?}");
+    }
+
+    /// Removes `src` by swapping `dst` into its place
+    pub(crate) fn swap_out(&self, src: Slot, dst: Slot) -> Vec<Change> {
+        tracing::info!("Swapping {src} <=> {dst}");
+
+        let src_changes = self.remove(src);
+        let dst_changes = self.remove(dst);
+
+        for v in dst_changes.into_iter() {
+            assert_eq!(v.slice, Slice::single(dst));
+            v.slice = Slice::single(src);
+            self.set(v);
+        }
+
+        src_changes
     }
 
     /// Removes a slot from the change list
@@ -216,6 +253,10 @@ impl Changes {
     pub fn as_changed_set(&self, tick: u32) -> BTreeSet<Slot> {
         self.as_set(|v| v.kind.is_modified_or_inserted() && v.tick > tick)
     }
+
+    pub fn info(&self) -> ComponentInfo {
+        self.info
+    }
 }
 
 #[cfg(test)]
@@ -223,9 +264,14 @@ mod tests {
     use itertools::Itertools;
 
     use super::*;
+
+    crate::component! {
+        a: (),
+    }
+
     #[test]
     fn changes() {
-        let mut changes = Changes::new();
+        let mut changes = Changes::new(a().info());
 
         changes.set(Change::modified(Slice::new(0, 5), 1));
 
@@ -276,7 +322,7 @@ mod tests {
 
     #[test]
     fn changes_small() {
-        let mut changes = Changes::new();
+        let mut changes = Changes::new(a().info());
 
         for i in 0..239 {
             let perm = (i * (i + 2)) % 300;
@@ -293,7 +339,7 @@ mod tests {
 
     #[test]
     fn adjacent() {
-        let mut changes = Changes::new();
+        let mut changes = Changes::new(a().info());
 
         changes.set(Change::modified(Slice::new(0, 63), 1));
         changes.set(Change::modified(Slice::new(63, 182), 1));
@@ -306,8 +352,8 @@ mod tests {
 
     #[test]
     fn migrate() {
-        let mut changes_1 = Changes::new();
-        let mut changes_2 = Changes::new();
+        let mut changes_1 = Changes::new(a().info());
+        let mut changes_2 = Changes::new(a().info());
 
         changes_1
             .set(Change::modified(Slice::new(20, 48), 1))

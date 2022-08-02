@@ -238,7 +238,7 @@ impl World {
                 (component.drop)(old);
                 ptr::copy_nonoverlapping(data, old, component.size());
 
-                eprintln!("Replacing {component:?}");
+                tracing::debug!("Replacing {component:?}");
 
                 src.changes_mut(component.id())
                     .unwrap()
@@ -276,7 +276,8 @@ impl World {
                 dst.put_dyn(dst_slot, &component, data)
                     .expect("Insert should not fail");
 
-                dst.init_changes(component.id())
+                tracing::debug!("Inserting change for {component:?}");
+                dst.init_changes(component)
                     .set(Change::inserted(Slice::single(dst_slot), change_tick));
             }
 
@@ -449,6 +450,7 @@ impl World {
         let src = self.archetype(src_id);
 
         if let Some(mut val) = src.get_mut(slot, component) {
+            tracing::debug!("Replacing {component:?}");
             src.changes_mut(component.id())
                 .expect("Missing change list")
                 .set(Change::modified(Slice::single(slot), change_tick));
@@ -504,14 +506,16 @@ impl World {
             debug_assert_eq!(dst.entity(dst_slot), Some(id));
 
             // Migrate all changes
+            tracing::info!("Migrating {id}");
             src.migrate_slot(dst, slot, dst_slot);
 
-            dst.init_changes(component.id())
+            dst.init_changes(component.info())
                 .set(Change::inserted(Slice::single(dst_slot), change_tick));
 
             if let Some(swapped) = swapped {
                 // The last entity in src was moved into the slot occupied by id
                 let swapped_ns = self.init_store(swapped.kind());
+                src.migrate_slot(dst, slot, dst_slot);
                 swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
             }
 
@@ -591,7 +595,7 @@ impl World {
 
         // Migrate all changes
         src.migrate_slot(dst, slot, dst_slot);
-        dst.init_changes(component.id())
+        dst.init_changes(component)
             .set(Change::removed(Slice::single(dst_slot), change_tick));
 
         if let Some(swapped) = swapped {

@@ -1,10 +1,7 @@
 use std::{
     fmt::Display,
     marker::PhantomData,
-    sync::atomic::{
-        AtomicU32,
-        Ordering::{Acquire, Relaxed},
-    },
+    sync::atomic::{AtomicU32, Ordering::Relaxed},
 };
 
 use crate::{
