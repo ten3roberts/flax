@@ -418,8 +418,7 @@ mod test {
             .with_system(battle)
             .with_system(remaining);
 
-        // Execute 10 times
-        for _ in 0..10 {
+        for _ in 0..32 {
             eprintln!("--------");
             schedule.execute_par(&mut world).unwrap();
         }

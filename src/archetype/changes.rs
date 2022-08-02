@@ -124,7 +124,6 @@ impl Changes {
 
     #[tracing::instrument]
     pub fn set(&mut self, change: Change) -> &mut Self {
-        tracing::info!("Setting change: {change:?}");
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
@@ -168,37 +167,24 @@ impl Changes {
             self.inner
         );
 
-        tracing::info!("new changes: {self:#?}");
-
         self
     }
 
     #[tracing::instrument(level = "debug")]
     pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
-        tracing::info!(
-            "Migrating {} from {src_slot} => {dst_slot}",
-            self.info.name()
-        );
-
-        tracing::info!("Before: {:#?}\nnew: {:#?}", self, other);
-
         for mut removed in self.remove(src_slot) {
             // Change the slot
             removed.slice = Slice::single(dst_slot);
             other.set(removed);
         }
-
-        tracing::info!("After: {self:#?}\n{other:#?}");
     }
 
     /// Removes `src` by swapping `dst` into its place
-    pub(crate) fn swap_out(&self, src: Slot, dst: Slot) -> Vec<Change> {
-        tracing::info!("Swapping {src} <=> {dst}");
-
+    pub(crate) fn swap_out(&mut self, src: Slot, dst: Slot) -> Vec<Change> {
         let src_changes = self.remove(src);
         let dst_changes = self.remove(dst);
 
-        for v in dst_changes.into_iter() {
+        for mut v in dst_changes.into_iter() {
             assert_eq!(v.slice, Slice::single(dst));
             v.slice = Slice::single(src);
             self.set(v);

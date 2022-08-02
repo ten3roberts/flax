@@ -186,21 +186,19 @@ impl World {
         let EntityLocation { arch, slot } = self.location(id)?;
 
         let src = self.archetype_mut(arch);
-        src.remove_slot_changes(slot);
 
         let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
         let ns = self.init_store(id.kind());
-        if let Some(swapped) = swapped {
+        if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
             ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
-        let dst_id = self.archetype_root;
-        let dst = self.archetype_mut(dst_id);
+        let root = self.archetype_root;
 
         *self.location_mut(id).unwrap() = EntityLocation {
-            slot: dst.allocate(id),
-            arch: dst_id,
+            slot: self.archetype_mut(root).allocate(id),
+            arch: root,
         };
 
         self.detach(id);
@@ -283,10 +281,7 @@ impl World {
 
             assert_eq!(dst.entity(dst_slot), Some(id));
 
-            // Migrate all changes
-            src.migrate_slot(dst, slot, dst_slot);
-
-            if let Some(swapped) = swapped {
+            if let Some((swapped, slot)) = swapped {
                 // The last entity in src was moved into the slot occupied by id
                 self.init_store(swapped.kind())
                     .get_mut(swapped)
@@ -335,11 +330,11 @@ impl World {
         } = self.location(id)?;
 
         let src = self.archetype_mut(archetype);
-        src.remove_slot_changes(slot);
 
         let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
+
         let ns = self.init_store(id.kind());
-        if let Some(swapped) = swapped {
+        if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
             eprintln!("Relocating entity");
             ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
@@ -507,15 +502,13 @@ impl World {
 
             // Migrate all changes
             tracing::info!("Migrating {id}");
-            src.migrate_slot(dst, slot, dst_slot);
 
             dst.init_changes(component.info())
                 .set(Change::inserted(Slice::single(dst_slot), change_tick));
 
-            if let Some(swapped) = swapped {
+            if let Some((swapped, slot)) = swapped {
                 // The last entity in src was moved into the slot occupied by id
                 let swapped_ns = self.init_store(swapped.kind());
-                src.migrate_slot(dst, slot, dst_slot);
                 swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
             }
 
@@ -594,13 +587,12 @@ impl World {
         assert_eq!(dst.entity(dst_slot), Some(id));
 
         // Migrate all changes
-        src.migrate_slot(dst, slot, dst_slot);
         dst.init_changes(component)
             .set(Change::removed(Slice::single(dst_slot), change_tick));
 
-        if let Some(swapped) = swapped {
+        if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
-            eprintln!("Relocating entity {swapped}");
+            tracing::info!("Relocating entity {swapped}");
             let swapped_ns = self.init_store(swapped.kind());
             swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
