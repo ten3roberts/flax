@@ -120,15 +120,26 @@ impl ModifiedFilter {
 }
 
 impl<'this, 'a> Filter<'this, 'a> for ModifiedFilter {
-    type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
+    type Prepared = PreparedOr<
+        PreparedKindFilter<'a, fn(&ChangeKind) -> bool>,
+        PreparedKindFilter<'a, fn(&ChangeKind) -> bool>,
+    >;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedKindFilter::new(
-            archetype,
-            self.component,
-            change_tick,
-            ChangeKind::is_modified_or_inserted,
-        )
+        PreparedOr {
+            left: PreparedKindFilter::new(
+                archetype,
+                self.component,
+                change_tick,
+                ChangeKind::is_modified_or_inserted,
+            ),
+            right: PreparedKindFilter::new(
+                archetype,
+                self.component,
+                change_tick,
+                ChangeKind::is_modified_or_inserted,
+            ),
+        }
     }
 
     fn matches(&self, _: &World, archetype: &Archetype) -> bool {

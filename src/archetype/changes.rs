@@ -130,7 +130,6 @@ impl Changes {
         self.inner.retain_mut(|v| {
             if v.tick < change.tick && v.kind == change.kind {
                 if let Some(diff) = v.slice.difference(&change.slice) {
-                    eprintln!("Diff {v:?} => {diff:?}");
                     v.slice = diff;
                 }
             }
@@ -138,7 +137,6 @@ impl Changes {
             if v.tick == change.tick && v.kind == change.kind {
                 // Merge atop change of the same change
                 if let Some(u) = v.slice.union(&change.slice) {
-                    eprint!("Joined: {u:?}");
                     joined = true;
                     v.slice = u;
                 }
@@ -147,7 +145,6 @@ impl Changes {
             if v.slice.is_empty() {
                 false
             } else if v.slice.start < change.slice.start {
-                eprintln!("Bumping insert insert_point: {insert_point}");
                 insert_point += 1;
                 true
             } else {
@@ -160,7 +157,7 @@ impl Changes {
             self.inner.insert(insert_point, change);
         }
 
-        #[cfg(debug_assertions)]
+        // #[cfg(debug_assertions)]
         {
             let groups = self.inner.iter().copied().group_by(|v| v.kind);
 

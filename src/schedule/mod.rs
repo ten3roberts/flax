@@ -32,11 +32,36 @@ impl Systems {
     }
 }
 
+impl std::fmt::Debug for Systems {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut list = f.debug_list();
+        match self {
+            Self::Unbatched(v) => {
+                list.entries(v.iter());
+            }
+            Self::Batched(v) => {
+                list.entries(v.iter().flatten());
+            }
+        }
+
+        list.finish()
+    }
+}
+
 /// A collection of systems to run on the world
 pub struct Schedule {
     systems: Systems,
 
     archetype_gen: u32,
+}
+
+impl std::fmt::Debug for Schedule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Schedule")
+            .field("systems", &self.systems)
+            .field("archetype_gen", &self.archetype_gen)
+            .finish()
+    }
 }
 
 impl Schedule {
@@ -49,13 +74,13 @@ impl Schedule {
 
     /// Add a new system to the schedule.
     /// Respects order.
-    pub fn with_system(&mut self, system: impl Into<BoxedSystem>) -> &mut Self {
+    pub fn with_system(mut self, system: impl Into<BoxedSystem>) -> Self {
         self.systems.as_unbatched().push(system.into());
         self
     }
 
     /// Applies the commands inside of the commandbuffer
-    pub fn flush(&mut self) -> &mut Self {
+    pub fn flush(self) -> Self {
         self.with_system(
             System::builder()
                 .with_name("flush")
@@ -272,8 +297,7 @@ mod test {
             },
         );
 
-        let mut schedule = Schedule::new();
-        schedule.with_system(system_a).with_system(system_b);
+        let mut schedule = Schedule::new().with_system(system_a).with_system(system_b);
 
         schedule.execute_seq(&mut world).unwrap();
 
@@ -281,7 +305,7 @@ mod test {
         let result: eyre::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
 
         eprintln!("{result:?}");
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     #[test]
@@ -410,8 +434,7 @@ mod test {
                 eprintln!("Remaining: {:?}", q.iter().format(", "));
             });
 
-        let mut schedule = Schedule::new();
-        schedule
+        let mut schedule = Schedule::new()
             .with_system(heal)
             .with_system(cleanup)
             .flush()
