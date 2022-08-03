@@ -1,5 +1,5 @@
 use std::{
-    fmt,
+    fmt::{self, Formatter},
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
@@ -22,7 +22,7 @@ pub trait SystemAccess {
 pub trait SystemFn<'a, Ctx, Args, Ret> {
     fn execute(&'a mut self, ctx: Ctx) -> Ret;
     /// Human friendly description of this system
-    fn describe(&self, f: &mut dyn fmt::Write);
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
     fn access(&'a mut self, ctx: Ctx) -> Vec<Access>;
 }
 
@@ -50,12 +50,15 @@ macro_rules! tuple_impl {
                 (self)($((_data.$idx),)*)
             }
 
-            fn describe(&self, f: &mut dyn fmt::Write) {
+            fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+
                 write!(f, "|").unwrap();
                 $(
                     write!(f, "{},", std::any::type_name::<$ty>()).unwrap();
                 )*
                 write!(f, "| -> {}", std::any::type_name::<Ret>()).unwrap();
+
+                Ok(())
             }
 
             fn access(&'a mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut ($($ty,)*))) -> Vec<Access> {
@@ -107,7 +110,9 @@ pub trait SystemData<'a> {
 
 /// Access part of the context mutably.
 pub struct Writable<T>(PhantomData<T>);
+#[derive(Debug)]
 pub struct Write<'a, T>(AtomicRefMut<'a, &'a mut T>);
+
 #[derive(Debug)]
 pub struct Read<'a, T>(AtomicRef<'a, &'a mut T>);
 

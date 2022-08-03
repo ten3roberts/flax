@@ -6,3 +6,5 @@
     * [Components](fundamentals/components.md)
     * [Component metadata](fundamentals/metadata.md)
     * [Query](fundamentals/query.md)
+    * [Systems](fundamentals/systems.md)
+    * [Schedule](fundamentals/schedule.md)

@@ -1,9 +1,12 @@
 mod cell;
 mod traits;
 
-use std::marker::PhantomData;
+use std::{any::type_name, marker::PhantomData};
 
-use crate::{util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, World};
+use crate::{
+    util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, Fetch, Filter, PreparedFetch,
+    Query, QueryData, World,
+};
 
 pub use cell::*;
 pub use traits::*;
@@ -26,6 +29,51 @@ impl SystemBuilder<()> {
 impl Default for SystemBuilder<()> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[doc(hidden)]
+pub struct ForEach<F> {
+    func: F,
+}
+
+impl<'a, Func, Q, F>
+    SystemFn<'a, (&'a SystemContext<'a>, &'a mut Query<Q, F>), QueryData<'a, Q, F>, ()>
+    for ForEach<Func>
+where
+    for<'x> Q: Fetch<'x> + std::fmt::Debug,
+    for<'x, 'y> F: Filter<'x, 'y> + std::fmt::Debug,
+    for<'x> Func: FnMut(<<Q as Fetch<'x>>::Prepared as PreparedFetch>::Item),
+{
+    fn execute(&mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut Query<Q, F>)) {
+        let mut data = data.get(ctx).expect("Failed to get system data");
+        for item in &mut data.prepare() {
+            (self.func)(item)
+        }
+    }
+
+    fn describe(&self, f: &mut dyn std::fmt::Write) {
+        write!(f, "for_each<{}, {}>", type_name::<Q>(), type_name::<F>()).unwrap();
+    }
+
+    fn access(
+        &'a mut self,
+        (ctx, data): (&'a SystemContext<'a>, &'a mut Query<Q, F>),
+    ) -> Vec<Access> {
+        data.access(&ctx.world().unwrap())
+    }
+}
+
+impl<Q, F> SystemBuilder<(Query<Q, F>,)>
+where
+    for<'x> Q: Fetch<'x> + std::fmt::Debug + 'static,
+    for<'x, 'y> F: Filter<'x, 'y> + std::fmt::Debug + 'static,
+{
+    pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, Query<Q, F>, ()>
+    where
+        for<'x> Func: FnMut(<<Q as Fetch<'x>>::Prepared as PreparedFetch>::Item),
+    {
+        System::new(self.name, ForEach { func }, self.data.0)
     }
 }
 
@@ -129,7 +177,7 @@ where
     Args: SystemData<'a> + 'a,
     F: SystemFn<'a, (&'a SystemContext<'a>, &'a mut Args), Args::Data, ()>,
 {
-    #[tracing::instrument(skip_all, fields(name = self.name))]
+    #[tracing::instrument(skip_all, fields(name = ?self.name))]
     fn execute(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<()> {
         self.func.execute((ctx, &mut self.data));
         Ok(())
@@ -144,6 +192,27 @@ where
 
     fn access(&'a mut self, ctx: &'a SystemContext<'a>) -> Vec<Access> {
         self.func.access((ctx, &mut self.data))
+    }
+}
+
+impl<F, Args, Ret> System<F, Args, Ret> {
+    /// Run the system on the world. Any commands will be applied
+    #[tracing::instrument(skip_all, fields(name = ?self.name))]
+    pub fn run_on(&mut self, world: &mut World) -> Ret
+    where
+        for<'x> Args: SystemData<'x> + 'x,
+        for<'a> F: SystemFn<
+            'a,
+            (&'a SystemContext<'a>, &'a mut Args),
+            <Args as SystemData<'a>>::Data,
+            Ret,
+        >,
+    {
+        let mut cmd = CommandBuffer::new();
+        let ctx = SystemContext::new(world, &mut cmd);
+        let ret = self.func.execute((&ctx, &mut self.data));
+        cmd.apply(world).expect("Failed to apply commandbuffer");
+        ret
     }
 }
 
@@ -257,6 +326,13 @@ pub struct BoxedSystem {
     inner: Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, (), eyre::Result<()>> + Send + Sync>,
 }
 
+impl std::fmt::Debug for BoxedSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.describe(f);
+        Ok(())
+    }
+}
+
 impl BoxedSystem {
     pub fn new(
         system: impl for<'x> SystemFn<'x, &'x SystemContext<'x>, (), eyre::Result<()>>
@@ -271,6 +347,14 @@ impl BoxedSystem {
 
     pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<()> {
         self.inner.execute(ctx)
+    }
+
+    pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> eyre::Result<()> {
+        let mut cmd = CommandBuffer::new();
+        let ctx = SystemContext::new(world, &mut cmd);
+        self.inner.execute(&ctx)?;
+        cmd.apply(world)?;
+        Ok(())
     }
 
     pub fn describe(&self, f: &mut dyn std::fmt::Write) {
@@ -345,6 +429,6 @@ mod test {
         let ctx = SystemContext::new(&mut world, &mut cmd);
         let res = boxed.execute(&ctx);
         eprintln!("{:?}", res.as_ref().unwrap_err());
-        assert!(res.is_err());
+        res.unwrap_err();
     }
 }

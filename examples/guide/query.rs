@@ -1,6 +1,7 @@
-use std::process::id;
-
-use flax::{component, entities, CmpExt, Debug, Query, World};
+use flax::{
+    component, entities, CmpExt, CommandBuffer, Component, Debug, Mutable, Query, QueryData,
+    Schedule, System, SystemContext, World, Write,
+};
 
 fn main() -> color_eyre::Result<()> {
     tracing_subscriber::fmt::init();
@@ -78,5 +79,74 @@ fn main() -> color_eyre::Result<()> {
     }
 
     // ANCHOR_END: query_repeat_reboot
+
+    // ANCHOR: system_basic
+
+    let mut update_dist = System::builder()
+        .with_name("update distance")
+        .with(query)
+        .build(
+            |mut query: QueryData<(_, Component<(f32, f32)>, Mutable<f32>), _>| {
+                for (id, pos, dist) in &mut query.prepare() {
+                    tracing::info!("Updating distance for {id} with position: {pos:?}");
+                    *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+                }
+            },
+        );
+
+    update_dist.run_on(&mut world);
+    // ANCHOR_END: system_basic
+
+    // ANCHOR: system_for_each
+    let mut update_dist = System::builder()
+        .with_name("update distance")
+        .with(
+            Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
+        )
+        .for_each(|(id, pos, dist)| {
+            tracing::info!("Updating distance for {id} with position: {pos:?}");
+            *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        });
+
+    for _ in 0..16 {
+        update_dist.run_on(&mut world);
+    }
+
+    // ANCHOR_END: system_for_each
+
+    // ANCHOR: system_cmd
+    /// Despawn all entities with a distance > 10
+    let mut despawned = System::builder()
+        .with_name("delete outside world")
+        .with(Query::new(entities()).filter(distance().gt(10.0)))
+        .with_cmd()
+        .build(
+            |mut query: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
+                for id in &mut query.prepare() {
+                    tracing::info!("Despawning {id}");
+                    cmd.despawn(id);
+                }
+            },
+        );
+
+    let mut debug_world = System::builder()
+        .with_name("debug world")
+        .with_world()
+        .build(|world: Write<World>| {
+            tracing::info!("World: {world:#?}");
+        });
+
+    // ANCHOR_END: system_cmd
+
+    // ANCHOR: schedule_basic
+    let schedule = Schedule::new()
+        .with_system(update_dist)
+        .with_system(despawned)
+        .with_system(debug_world);
+
+    tracing::info!("Schedule: {schedule:#?}");
+
+    // ANCHOR_END: schedule_basic
+
     Ok(())
 }
