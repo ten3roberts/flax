@@ -66,8 +66,13 @@ impl<V> EntityStore<V> {
 
     pub fn spawn(&mut self, value: V) -> Entity {
         if let Some(index) = self.free_head.take() {
-            let slot = self.slot_mut(index).unwrap();
+            let slot = { self.slots.get_mut(index.get() as usize - 1) }.unwrap();
             debug_assert!(slot.gen & 1 == 0);
+
+            // Update free head
+            unsafe {
+                self.free_head = slot.value.vacant.next;
+            }
 
             // Make the slot generation odd again which means this slot is
             // alive.
@@ -78,16 +83,13 @@ impl<V> EntityStore<V> {
 
             let gen = from_slot_gen(slot.gen);
 
-            // Update free head
-            unsafe {
-                self.free_head = slot.value.vacant.next;
-            }
-
-            Entity::from_parts(index, gen, self.kind)
+            let id = Entity::from_parts(index, gen, self.kind);
+            id
         } else {
             // Push
             let gen = 1;
             let index = self.slots.len() as u32;
+
             self.slots.push(Slot {
                 value: SlotValue {
                     occupied: ManuallyDrop::new(value),
@@ -244,8 +246,6 @@ impl<V> EntityStore<V> {
     ) -> Result<&V> {
         // Init slot
         let free_head = &mut self.free_head;
-
-        eprintln!("Spawning at: {index}");
 
         let diff = (index.get() as usize).saturating_sub(self.slots.len());
 

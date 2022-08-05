@@ -81,18 +81,18 @@ impl CommandBuffer {
 
     /// Despawn an entity by id
     pub fn despawn(&mut self, id: Entity) -> &mut Self {
-        // Drop all inserts for this component
-        self.insert_locations
-            .iter()
-            .skip_while(|((entity, _), _)| *entity != id)
-            .take_while(|((entity, _), _)| *entity == id)
-            .for_each(|((_, component), offset)| unsafe {
-                eprintln!("Removing insert for despawned entity");
-                let ptr = self.inserts.take_dyn(*offset);
-                (component.drop)(ptr);
-            });
+        // // Drop all inserts for this component
+        // self.insert_locations
+        //     .iter()
+        //     .skip_while(|((entity, _), _)| *entity != id)
+        //     .take_while(|((entity, _), _)| *entity == id)
+        //     .for_each(|((_, component), offset)| unsafe {
+        //         eprintln!("Removing insert for despawned entity");
+        //         let ptr = self.inserts.take_dyn(*offset);
+        //         (component.drop)(ptr);
+        //     });
 
-        self.removals.retain(|(entity, _)| *entity != id);
+        // self.removals.retain(|(entity, _)| *entity != id);
 
         self.despawned.push(id);
         self

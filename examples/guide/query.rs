@@ -159,10 +159,10 @@ fn main() -> color_eyre::Result<()> {
         is_static: () => [ flax::Debug ],
     }
 
-    // Spawn 15 static entities, which wont move
+    // Spawn 150 static entities, which wont move
     let mut rng = StdRng::seed_from_u64(42);
 
-    for _ in 0..15 {
+    for _ in 0..150 {
         let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
         Entity::builder()
             .set(position(), pos)
@@ -188,7 +188,7 @@ fn main() -> color_eyre::Result<()> {
     // Spawn a new entity with a random position each frame
     let spawn = System::builder().with_name("spawner").with_cmd().build(
         move |mut cmd: Write<CommandBuffer>| {
-            let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+            let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
             tracing::info!("Spawning new entity at: {pos:?}");
             Entity::builder()
                 .set(position(), pos)
@@ -221,10 +221,10 @@ fn main() -> color_eyre::Result<()> {
 
     tracing::info!("{schedule:#?}");
 
-    for i in 0..20000000 {
+    for i in 0..2000 {
         tracing::info!("Frame: {i}");
         schedule.execute_par(&mut world)?;
-        // sleep(Duration::from_secs_f32(0.1));
+        sleep(Duration::from_secs_f32(0.1));
     }
 
     // ANCHOR_END: schedule_basic
