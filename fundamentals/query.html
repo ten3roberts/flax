@@ -195,7 +195,7 @@ when an entity moves for every entity which are not dead.</p>
 <span class="boring">fn main() {
 </span>    component! {
         /// Distance to origin
-        distance: f32,
+        distance: f32 =&gt; [ flax::Debug ],
     }
 
     tracing::info!(&quot;Spawning id3&quot;);

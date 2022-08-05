@@ -148,12 +148,99 @@ value which is written by another system declared before, they will run in
 sequence.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>    let schedule = Schedule::new()
-        .with_system(update_dist)
-        .with_system(despawned)
-        .with_system(debug_world);
+</span>    let despawn = System::builder()
+        .with_name(&quot;delete outside world&quot;)
+        .with(Query::new((entities(), distance())).filter(distance().gt(20.0)))
+        .with_cmd()
+        .build(
+            |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
+                for (id, &amp;dist) in &amp;mut query.prepare() {
+                    tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
+                    cmd.despawn(id);
+                }
+            },
+        );
 
-    tracing::info!(&quot;Schedule: {schedule:#?}&quot;);
+    let debug_world = System::builder()
+        .with_name(&quot;debug world&quot;)
+        .with_world()
+        .build(|world: Write&lt;World&gt;| {
+            tracing::debug!(&quot;World: {world:#?}&quot;);
+        });
+
+
+    component! {
+        is_static: () =&gt; [ flax::Debug ],
+    }
+
+    // Spawn 15 static entities, which wont move
+
+    let mut rng = StdRng::seed_from_u64(42);
+
+    for _ in 0..15 {
+        let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+        Entity::builder()
+            .set(position(), pos)
+            .set_default(distance())
+            .set_default(is_static())
+            .spawn(&amp;mut world);
+    }
+
+    // Since this system will move non static entities out from the origin, they will
+    // eventually be despawned
+    let move_out = System::builder()
+        .with_name(&quot;move_out&quot;)
+        .with(Query::new(position().as_mut()).filter(is_static().without()))
+        .for_each(|pos| {
+            let mag = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+
+            let dir = (pos.0 / mag, pos.1 / mag);
+
+            pos.0 += dir.0;
+            pos.1 += dir.1;
+        });
+
+    // let mut last_spawn = Instant::now();
+    // let spawn_interval = Duration::from_secs(2);
+
+    let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd().build(
+        move |mut cmd: Write&lt;CommandBuffer&gt;| {
+            let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+            tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
+            Entity::builder()
+                .set(position(), pos)
+                .set_default(distance())
+                .spawn_into(&amp;mut cmd);
+        },
+    );
+
+    let mut frame_count = 0;
+
+    let count = System::builder()
+        .with_name(&quot;count&quot;)
+        .with(Query::new(()))
+        .build(move |mut query: QueryData&lt;()&gt;| {
+            let count: usize = query.prepare().iter_batched().map(|v| v.len()).sum();
+            tracing::info!(&quot;[{frame_count}]: {count}&quot;);
+            frame_count += 1;
+        });
+
+    let mut schedule = Schedule::builder()
+        .with_system(update_dist)
+        .with_system(despawn)
+        .with_system(spawn)
+        .with_system(move_out)
+        .with_system(debug_world)
+        .with_system(count)
+        .build();
+
+    tracing::info!(&quot;{schedule:#?}&quot;);
+
+    for i in 0..200 {
+        tracing::info!(&quot;Frame: {i}&quot;);
+        schedule.execute_par(&amp;mut world)?;
+        sleep(Duration::from_secs_f32(0.1));
+    }
 
 <span class="boring">}
 </span></code></pre></pre>
