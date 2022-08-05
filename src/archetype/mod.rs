@@ -382,7 +382,7 @@ impl Archetype {
     ) -> Result<(), *mut u8> {
         let storage = self.storage.get_mut(&component.id).ok_or(src)?;
 
-        assert_eq!(component, &storage.info);
+        assert_eq!(component.id(), storage.info.id());
         let dst = storage.at_mut(slot);
         std::ptr::copy_nonoverlapping(src, dst, component.size());
 
@@ -717,7 +717,7 @@ impl Storage {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct ComponentInfo {
     pub(crate) layout: Layout,
     pub(crate) id: ComponentId,
@@ -726,14 +726,14 @@ pub struct ComponentInfo {
     meta: fn(Self) -> ComponentBuffer,
 }
 
-impl std::fmt::Debug for ComponentInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ComponentInfo")
-            .field("id", &self.id)
-            .field("name", &self.name)
-            .finish()
-    }
-}
+// impl std::fmt::Debug for ComponentInfo {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("ComponentInfo")
+//             .field("id", &self.id)
+//             .field("name", &self.name)
+//             .finish()
+//     }
+// }
 
 impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
     fn from(v: Component<T>) -> Self {
