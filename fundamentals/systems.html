@@ -224,10 +224,10 @@ used for deferred sets, removes, or spawns.</p>
 as it may access anything.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>    // Despawn all entities with a distance &gt; 20
+</span>    // Despawn all entities with a distance &gt; 50
     let despawn = System::builder()
         .with_name(&quot;delete outside world&quot;)
-        .with(Query::new((entities(), distance())).filter(distance().gt(20.0)))
+        .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
         .with_cmd()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
