@@ -122,19 +122,46 @@ impl Changes {
             .collect()
     }
 
+    #[cfg(debug_assertions)]
+    pub fn assert_ordered(&self, msg: &str) {
+        let groups = self.inner.iter().copied().group_by(|v| v.kind);
+
+        let sorted = groups
+            .into_iter()
+            .flat_map(|v| v.1.sorted_by_key(|v| v.slice.start))
+            .collect_vec();
+
+        if sorted != self.inner {
+            panic!(
+                "Not sorted.\nSorted: {sorted:#?}\nexpected: {:#?}\n\n{msg}",
+                self.inner
+            )
+        }
+    }
+
     pub fn set(&mut self, change: Change) -> &mut Self {
+        tracing::info!("Set change: {change:?}");
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
+        tracing::info!("Before: {:#?}", self.inner);
+
+        #[cfg(debug_assertions)]
+        self.assert_ordered("Not sorted at beginning");
 
         self.inner.retain_mut(|v| {
+            // Remove older changes which are a subset of the newer slots
             if v.tick < change.tick && v.kind == change.kind {
-                if let Some(diff) = v.slice.difference(&change.slice) {
+                if let Some(diff) = v.slice.difference(change.slice) {
+                    tracing::info!("Slicing: {:?} => {:?}", v.slice, diff);
                     v.slice = diff;
                 }
             }
 
-            if v.tick == change.tick && v.kind == change.kind {
+            // Merge the change into an already existing change
+            // Do not change start as that will invalidate ordering
+            if v.slice.start < change.slice.start && v.tick == change.tick && v.kind == change.kind
+            {
                 // Merge atop change of the same change
                 if let Some(u) = v.slice.union(&change.slice) {
                     joined = true;
@@ -143,31 +170,26 @@ impl Changes {
             }
 
             if v.slice.is_empty() {
-                false
-            } else if v.slice.start < change.slice.start {
-                insert_point += 1;
-                true
-            } else {
-                i += 1;
-                true
+                return false;
             }
+
+            i += 1;
+            if v.slice.start < change.slice.start {
+                insert_point = i;
+                tracing::info!("Moving insert point to: {insert_point}");
+            }
+
+            true
         });
 
         if !joined {
+            tracing::info!("Not joined, inserting at: {insert_point}");
             self.inner.insert(insert_point, change);
         }
 
-        // #[cfg(debug_assertions)]
-        {
-            let groups = self.inner.iter().copied().group_by(|v| v.kind);
-
-            let sorted = groups
-                .into_iter()
-                .flat_map(|v| v.1.sorted_by_key(|v| v.slice.start))
-                .collect_vec();
-
-            debug_assert_eq!(sorted, self.inner);
-        }
+        tracing::info!("After: {:#?}", self.inner);
+        #[cfg(debug_assertions)]
+        self.assert_ordered("Not sorted after `set`");
 
         self
     }
@@ -199,12 +221,16 @@ impl Changes {
     pub fn remove(&mut self, slot: Slot) -> Vec<Change> {
         let slice = Slice::single(slot);
         let mut result = Vec::new();
+        tracing::info!("Removing {slot}. Before: {:#?}", self.inner);
 
+        #[cfg(debug_assertions)]
+        self.assert_ordered("Not sorted before `remove`");
         let removed = self
             .inner
             .drain(..)
             .flat_map(|v| {
                 if let Some((l, _, r)) = v.slice.split_with(&slice) {
+                    tracing::info!("Split {:?} into {:?} and {:?}", v, l, r);
                     if !l.is_empty() {
                         result.push(Change::new(l, v.tick, v.kind));
                     }
@@ -221,6 +247,8 @@ impl Changes {
             .collect_vec();
 
         self.inner = result;
+        #[cfg(debug_assertions)]
+        self.assert_ordered("Not sorted after `remove`");
         removed
     }
 
