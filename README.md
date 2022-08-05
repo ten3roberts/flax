@@ -9,7 +9,24 @@ Flax is a performant and easy to use Entity Component System.
 
 The world is organized by simple identifiers known as an `Entity`, which can have any number of components attached to them.
 
-# Usage
+Systems operate and iterate upon entities and their attached components and
+provide the application logic.
+
+## Features
+- Queries
+- Change detection
+- Query filtering
+- System execution
+- Multithreaded system execution through `Schedule`
+- Builtin many to many entity relation and graphs
+- Reflection through component metadata
+- Ergonomic entity builder
+- tracing
+- Runtime registered components
+
+### Consider reading the [User Guide](https://ten3roberts.github.io/flax/)
+
+# Example Usage
 
 ```rust
   // Declare static components
@@ -41,6 +58,7 @@ The world is organized by simple identifiers known as an `Entity`, which can hav
   }
 
 ```
+
 
 # Comparison to other ECS
 
