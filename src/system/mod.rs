@@ -1,6 +1,7 @@
 mod cell;
 mod traits;
 
+use core::fmt;
 use std::{any::type_name, marker::PhantomData};
 
 use crate::{
@@ -52,8 +53,13 @@ where
         }
     }
 
-    fn describe(&self, f: &mut dyn std::fmt::Write) {
-        write!(f, "for_each<{}, {}>", type_name::<Q>(), type_name::<F>()).unwrap();
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "for_each<{}, filter: {}>",
+            tynm::type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
+            tynm::type_name::<F>()
+        )
     }
 
     fn access(
@@ -177,17 +183,18 @@ where
     Args: SystemData<'a> + 'a,
     F: SystemFn<'a, (&'a SystemContext<'a>, &'a mut Args), Args::Data, ()>,
 {
-    #[tracing::instrument(skip_all, fields(name = ?self.name))]
+    #[tracing::instrument(skip_all, fields(name = self.name.as_deref().unwrap_or_default()))]
     fn execute(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<()> {
         self.func.execute((ctx, &mut self.data));
         Ok(())
     }
 
-    fn describe(&self, f: &mut dyn std::fmt::Write) {
+    fn describe(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ref name) = self.name {
-            write!(f, "{name}: ").unwrap();
+            write!(f, "{name}: ")?;
         }
-        self.func.describe(f);
+
+        self.func.describe(f)
     }
 
     fn access(&'a mut self, ctx: &'a SystemContext<'a>) -> Vec<Access> {
@@ -232,11 +239,12 @@ where
         })
     }
 
-    fn describe(&self, f: &mut dyn std::fmt::Write) {
+    fn describe(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ref name) = self.name {
-            write!(f, "{name}: ").unwrap();
+            write!(f, "{name}: ")?;
         }
-        self.func.describe(f);
+
+        self.func.describe(f)
     }
 
     fn access(&'a mut self, ctx: &'a SystemContext<'a>) -> Vec<Access> {
@@ -244,7 +252,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub enum AccessKind {
     /// Borrow a single component of an archetype
     Archetype {
@@ -281,7 +289,8 @@ impl AccessKind {
         matches!(self, Self::CommandBuffer)
     }
 }
-#[derive(Debug, Clone)]
+
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct Access {
     pub kind: AccessKind,
     pub mutable: bool,
@@ -290,16 +299,7 @@ pub struct Access {
 impl Access {
     /// Returns true it both accesses can coexist
     pub fn is_compatible_with(&self, other: &Self) -> bool {
-        // Any access to the whole world breaks concurrency, sadly
-        if (!self.kind.is_command_buffer() && other.kind.is_world())
-            || (!other.kind.is_command_buffer() && self.kind.is_world())
-        {
-            false
-        } else if self.kind != other.kind {
-            true
-        } else {
-            !self.mutable && !other.mutable
-        }
+        self.kind != other.kind || !(self.mutable || other.mutable)
     }
 }
 
@@ -312,8 +312,8 @@ impl<'a> SystemFn<'a, &'a SystemContext<'a>, (), eyre::Result<()>> for NeverSyst
         panic!("This system should never be executed as it is a placeholde");
     }
 
-    fn describe(&self, f: &mut dyn std::fmt::Write) {
-        write!(f, "NeverSystem").unwrap();
+    fn describe(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NeverSystem")
     }
 
     fn access(&'a mut self, _: &'a SystemContext<'a>) -> Vec<Access> {
@@ -357,7 +357,7 @@ impl BoxedSystem {
         Ok(())
     }
 
-    pub fn describe(&self, f: &mut dyn std::fmt::Write) {
+    pub fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.describe(f)
     }
 
@@ -429,6 +429,6 @@ mod test {
         let ctx = SystemContext::new(&mut world, &mut cmd);
         let res = boxed.execute(&ctx);
         eprintln!("{:?}", res.as_ref().unwrap_err());
-        res.unwrap_err();
+        let _ = res.unwrap_err();
     }
 }

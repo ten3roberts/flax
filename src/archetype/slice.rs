@@ -80,7 +80,7 @@ impl Slice {
     /// Returns `None` if `other` is contained within `self` and cannot be
     /// subtracted without splitting.
     #[inline]
-    pub fn difference(&self, other: &Self) -> Option<Self> {
+    pub fn difference(&self, other: Self) -> Option<Self> {
         // Subtract start
         if other.start <= self.start {
             Some(Slice::new(other.end.max(self.start), self.end))
@@ -179,14 +179,14 @@ mod tests {
         let e = Slice::new(30, 121);
 
         dbg!(a);
-        assert_eq!(a.difference(&b), Some(Slice::new(20, 190)));
+        assert_eq!(a.difference(b), Some(Slice::new(20, 190)));
 
-        assert_eq!(a.difference(&c), Some(Slice::new(30, 190)));
+        assert_eq!(a.difference(c), Some(Slice::new(30, 190)));
 
-        assert_eq!(a.difference(&a), Some(Slice::new(190, 190)));
+        assert_eq!(a.difference(a), Some(Slice::new(190, 190)));
 
-        assert_eq!(a.difference(&d), Some(Slice::new(20, 140)));
+        assert_eq!(a.difference(d), Some(Slice::new(20, 140)));
 
-        assert_eq!(a.difference(&e), None);
+        assert_eq!(a.difference(e), None);
     }
 }

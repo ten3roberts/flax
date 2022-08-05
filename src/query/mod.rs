@@ -1,7 +1,7 @@
 mod iter;
 mod prepared;
 
-use std::fmt::Debug;
+use std::{collections::HashSet, fmt::Debug};
 
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
@@ -11,7 +11,7 @@ use crate::{
     fetch::Fetch,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    All, And, Filter, PreparedFetch, Without, World,
+    Access, AccessKind, All, And, Filter, PreparedFetch, Without, World,
 };
 
 pub use self::prepared::PreparedQuery;
@@ -179,7 +179,7 @@ where
 {
     fn access(&mut self, world: &World) -> Vec<crate::system::Access> {
         let (archetypes, fetch, filter) = self.get_archetypes(world);
-        archetypes
+        let accesses = archetypes
             .iter()
             .flat_map(|&id| {
                 let archetype = world.archetype(id);
@@ -187,7 +187,13 @@ where
                 res.append(&mut filter.access(world, id, archetype));
                 res
             })
-            .collect_vec()
+            .chain([Access {
+                kind: AccessKind::World,
+                mutable: false,
+            }])
+            .collect_vec();
+
+        accesses
     }
 }
 

@@ -1,10 +1,26 @@
-use flax::{
-    component, entities, CmpExt, CommandBuffer, Component, Debug, Mutable, Query, QueryData,
-    Schedule, System, SystemContext, World, Write,
+use std::{
+    borrow::BorrowMut,
+    thread::sleep,
+    time::{Duration, Instant},
 };
 
+use flax::{
+    component, entities, CmpExt, CommandBuffer, Component, Debug, Entity, Mutable, Query,
+    QueryData, Schedule, System, SystemContext, World, Write,
+};
+use itertools::Itertools;
+use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
+use tracing_subscriber::{
+    prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, EnvFilter,
+};
+use tracing_tree::HierarchicalLayer;
+
 fn main() -> color_eyre::Result<()> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::registry()
+        .with(EnvFilter::from_default_env())
+        .with(HierarchicalLayer::default().with_indent_lines(true))
+        .init();
+
     // ANCHOR: query_simple
     let mut world = World::new();
 
@@ -35,7 +51,7 @@ fn main() -> color_eyre::Result<()> {
 
     component! {
         /// Distance to origin
-        distance: f32,
+        distance: f32 => [ flax::Debug ],
     }
 
     tracing::info!("Spawning id3");
@@ -115,36 +131,102 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR_END: system_for_each
 
     // ANCHOR: system_cmd
-    /// Despawn all entities with a distance > 10
-    let mut despawned = System::builder()
+    // Despawn all entities with a distance > 20
+    // ANCHOR: schedule_basic
+    let despawn = System::builder()
         .with_name("delete outside world")
-        .with(Query::new(entities()).filter(distance().gt(10.0)))
+        .with(Query::new((entities(), distance())).filter(distance().gt(20.0)))
         .with_cmd()
         .build(
             |mut query: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
-                for id in &mut query.prepare() {
-                    tracing::info!("Despawning {id}");
+                for (id, &dist) in &mut query.prepare() {
+                    tracing::info!("Despawning {id} at: {dist}");
                     cmd.despawn(id);
                 }
             },
         );
 
-    let mut debug_world = System::builder()
+    let debug_world = System::builder()
         .with_name("debug world")
         .with_world()
         .build(|world: Write<World>| {
-            tracing::info!("World: {world:#?}");
+            tracing::debug!("World: {world:#?}");
         });
 
     // ANCHOR_END: system_cmd
 
-    // ANCHOR: schedule_basic
-    let schedule = Schedule::new()
-        .with_system(update_dist)
-        .with_system(despawned)
-        .with_system(debug_world);
+    component! {
+        is_static: () => [ flax::Debug ],
+    }
 
-    tracing::info!("Schedule: {schedule:#?}");
+    // Spawn 15 static entities, which wont move
+
+    let mut rng = StdRng::seed_from_u64(42);
+
+    for _ in 0..15 {
+        let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+        Entity::builder()
+            .set(position(), pos)
+            .set_default(distance())
+            .set_default(is_static())
+            .spawn(&mut world);
+    }
+
+    // Since this system will move non static entities out from the origin, they will
+    // eventually be despawned
+    let move_out = System::builder()
+        .with_name("move_out")
+        .with(Query::new(position().as_mut()).filter(is_static().without()))
+        .for_each(|pos| {
+            let mag = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+
+            let dir = (pos.0 / mag, pos.1 / mag);
+
+            pos.0 += dir.0;
+            pos.1 += dir.1;
+        });
+
+    // let mut last_spawn = Instant::now();
+    // let spawn_interval = Duration::from_secs(2);
+
+    let spawn = System::builder().with_name("spawner").with_cmd().build(
+        move |mut cmd: Write<CommandBuffer>| {
+            let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+            tracing::info!("Spawning new entity at: {pos:?}");
+            Entity::builder()
+                .set(position(), pos)
+                .set_default(distance())
+                .spawn_into(&mut cmd);
+        },
+    );
+
+    let mut frame_count = 0;
+
+    let count = System::builder()
+        .with_name("count")
+        .with(Query::new(()))
+        .build(move |mut query: QueryData<()>| {
+            let count: usize = query.prepare().iter_batched().map(|v| v.len()).sum();
+            tracing::info!("[{frame_count}]: {count}");
+            frame_count += 1;
+        });
+
+    let mut schedule = Schedule::builder()
+        .with_system(update_dist)
+        .with_system(despawn)
+        .with_system(spawn)
+        .with_system(move_out)
+        .with_system(debug_world)
+        .with_system(count)
+        .build();
+
+    tracing::info!("{schedule:#?}");
+
+    for i in 0..200 {
+        tracing::info!("Frame: {i}");
+        schedule.execute_par(&mut world)?;
+        sleep(Duration::from_secs_f32(0.1));
+    }
 
     // ANCHOR_END: schedule_basic
 

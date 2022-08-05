@@ -140,11 +140,9 @@ impl Changes {
     }
 
     pub fn set(&mut self, change: Change) -> &mut Self {
-        tracing::info!("Set change: {change:?}");
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
-        tracing::info!("Before: {:#?}", self.inner);
 
         #[cfg(debug_assertions)]
         self.assert_ordered("Not sorted at beginning");
@@ -153,7 +151,6 @@ impl Changes {
             // Remove older changes which are a subset of the newer slots
             if v.tick < change.tick && v.kind == change.kind {
                 if let Some(diff) = v.slice.difference(change.slice) {
-                    tracing::info!("Slicing: {:?} => {:?}", v.slice, diff);
                     v.slice = diff;
                 }
             }
@@ -176,18 +173,15 @@ impl Changes {
             i += 1;
             if v.slice.start < change.slice.start {
                 insert_point = i;
-                tracing::info!("Moving insert point to: {insert_point}");
             }
 
             true
         });
 
         if !joined {
-            tracing::info!("Not joined, inserting at: {insert_point}");
             self.inner.insert(insert_point, change);
         }
 
-        tracing::info!("After: {:#?}", self.inner);
         #[cfg(debug_assertions)]
         self.assert_ordered("Not sorted after `set`");
 
@@ -221,7 +215,6 @@ impl Changes {
     pub fn remove(&mut self, slot: Slot) -> Vec<Change> {
         let slice = Slice::single(slot);
         let mut result = Vec::new();
-        tracing::info!("Removing {slot}. Before: {:#?}", self.inner);
 
         #[cfg(debug_assertions)]
         self.assert_ordered("Not sorted before `remove`");
@@ -230,7 +223,6 @@ impl Changes {
             .drain(..)
             .flat_map(|v| {
                 if let Some((l, _, r)) = v.slice.split_with(&slice) {
-                    tracing::info!("Split {:?} into {:?} and {:?}", v, l, r);
                     if !l.is_empty() {
                         result.push(Change::new(l, v.tick, v.kind));
                     }

@@ -197,8 +197,6 @@ impl<V> EntityStore<V> {
             return Err(Error::NoSuchEntity(id));
         }
 
-        eprintln!("Despawning: {id}");
-
         let index = id.index();
 
         let next = self.free_head.take();
