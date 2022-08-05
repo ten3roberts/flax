@@ -457,9 +457,7 @@ impl Archetype {
             }
         }
 
-        self.remove_slot(slot, |_, changes| {
-            tracing::info!("Dropping changes: {changes:#?}");
-        })
+        self.remove_slot(slot, |_, _| {})
     }
 
     /// Move all entities from one archetype to another.
@@ -733,7 +731,6 @@ impl std::fmt::Debug for ComponentInfo {
         f.debug_struct("ComponentInfo")
             .field("id", &self.id)
             .field("name", &self.name)
-            .field("layout", &self.layout)
             .finish()
     }
 }

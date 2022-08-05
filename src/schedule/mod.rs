@@ -1,14 +1,22 @@
 use eyre::WrapErr;
-use std::{collections::BTreeMap, mem};
+use std::{borrow::BorrowMut, collections::BTreeMap, mem};
 
 use itertools::Itertools;
 use tracing::debug;
 
-use crate::{system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World, Write};
+use crate::{
+    system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, SystemFn, World, Write,
+};
 
 enum Systems {
     Unbatched(Vec<BoxedSystem>),
     Batched(Vec<Vec<BoxedSystem>>),
+}
+
+impl Default for Systems {
+    fn default() -> Self {
+        Self::Unbatched(Vec::new())
+    }
 }
 
 impl Systems {
@@ -48,7 +56,45 @@ impl std::fmt::Debug for Systems {
     }
 }
 
+fn flush_system() -> BoxedSystem {
+    System::builder()
+        .with_name("flush")
+        .with_world()
+        .with_cmd()
+        .build(|mut world: Write<World>, mut cmd: Write<CommandBuffer>| {
+            cmd.apply(&mut world)
+                .wrap_err("Failed to flush commandbuffer in schedule\n")
+        })
+        .boxed()
+}
+
+#[derive(Debug, Default)]
+pub struct ScheduleBuilder {
+    systems: Vec<BoxedSystem>,
+}
+
+impl ScheduleBuilder {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Set the ScheduleBuilder's system
+    pub fn with_system(&mut self, system: impl Into<BoxedSystem>) -> &mut Self {
+        self.systems.push(system.into());
+        self
+    }
+
+    pub fn flush(&mut self) -> &mut Self {
+        self.with_system(flush_system())
+    }
+
+    pub fn build(&mut self) -> Schedule {
+        Schedule::from_systems(mem::take(&mut self.flush().systems))
+    }
+}
+
 /// A collection of systems to run on the world
+#[derive(Default)]
 pub struct Schedule {
     systems: Systems,
 
@@ -65,11 +111,25 @@ impl std::fmt::Debug for Schedule {
 }
 
 impl Schedule {
+    pub fn builder() -> ScheduleBuilder {
+        ScheduleBuilder::default()
+    }
+
     pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn from_systems(systems: impl Into<Vec<BoxedSystem>>) -> Self {
         Self {
-            systems: Systems::Unbatched(Vec::new()),
+            systems: Systems::Unbatched(systems.into()),
             archetype_gen: 0,
         }
+    }
+
+    pub fn append(&mut self, mut other: Self) {
+        self.systems
+            .as_unbatched()
+            .append(other.systems.as_unbatched())
     }
 
     /// Add a new system to the schedule.
@@ -81,16 +141,7 @@ impl Schedule {
 
     /// Applies the commands inside of the commandbuffer
     pub fn flush(self) -> Self {
-        self.with_system(
-            System::builder()
-                .with_name("flush")
-                .with_world()
-                .with_cmd()
-                .build(|mut world: Write<World>, mut cmd: Write<CommandBuffer>| {
-                    cmd.apply(&mut world)
-                        .wrap_err("Failed to flush commandbuffer in schedule\n")
-                }),
-        )
+        self.with_system(flush_system())
     }
 
     /// Execute all systems in the schedule sequentially on the world.
@@ -153,6 +204,20 @@ impl Schedule {
         let mut deps = BTreeMap::new();
 
         for (dst_idx, dst) in accesses.iter().enumerate() {
+            {
+                for (i, x) in dst.iter().enumerate() {
+                    for y in dst.iter().skip(i + 1) {
+                        if !x.is_compatible_with(y) {
+                            tracing::error!(
+                                "System: {:#?} is not compatible with itself",
+                                systems[dst_idx]
+                            );
+                            panic!("Non self-compatible system");
+                        }
+                    }
+                }
+            }
+
             debug!("Generating deps for {dst_idx}");
             let accesses = &accesses;
             let dst_deps = dst
@@ -244,12 +309,6 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
         .into_iter()
         .map(|(_, v)| v.collect_vec())
         .collect_vec()
-}
-
-impl Default for Schedule {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 #[cfg(test)]

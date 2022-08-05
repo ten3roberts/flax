@@ -507,7 +507,7 @@ where
     fn filter(&mut self, slots: Slice) -> Slice {
         let a = self.0.filter(slots);
 
-        slots.difference(&a).unwrap()
+        slots.difference(a).unwrap()
     }
 }
 

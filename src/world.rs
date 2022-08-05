@@ -397,7 +397,7 @@ impl World {
             .map(|v| v.0)
             .collect_vec();
 
-        eprintln!("Detaching: {:#?}", archetypes);
+        tracing::debug!("Detaching: {:#?}", archetypes);
         for src in archetypes {
             let mut src = self.archetypes.despawn(src).unwrap();
 
@@ -500,9 +500,6 @@ impl World {
 
             debug_assert_eq!(dst.entity(dst_slot), Some(id));
 
-            // Migrate all changes
-            tracing::info!("Migrating {id}");
-
             dst.init_changes(component.info())
                 .set(Change::inserted(Slice::single(dst_slot), change_tick));
 
@@ -592,7 +589,6 @@ impl World {
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
-            tracing::info!("Relocating entity {swapped}");
             let swapped_ns = self.init_store(swapped.kind());
             swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }

@@ -37,12 +37,20 @@ pub trait SystemFn<'a, Ctx, Args, Ret> {
 //     }
 // }
 
+struct Verbatim(String);
+impl fmt::Debug for Verbatim {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         // Fallible
         impl<'a, Func, Ret, $($ty,)* > SystemFn<'a, (&'a SystemContext<'a>, &'a mut ($($ty,)*)), ($($ty::Data,)*), Ret> for Func
         where
             Func: FnMut($($ty::Data,)*) -> Ret,
+            Ret: 'static,
             $($ty: SystemData<'a> + SystemAccess,)*
         {
             fn execute(&mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut ($($ty,)*))) -> Ret {
@@ -51,12 +59,16 @@ macro_rules! tuple_impl {
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                use std::fmt::Debug;
+                f.write_str("Fn")?;
 
-                write!(f, "|").unwrap();
-                $(
-                    write!(f, "{},", std::any::type_name::<$ty>()).unwrap();
-                )*
-                write!(f, "| -> {}", std::any::type_name::<Ret>()).unwrap();
+                ($(
+                        Verbatim(tynm::type_name::<$ty>()),
+                )*).fmt(f)?;
+
+                if std::any::TypeId::of::<Ret>() != std::any::TypeId::of::<()>() {
+                    write!(f, " -> {}", tynm::type_name::<Ret>())?;
+                }
 
                 Ok(())
             }

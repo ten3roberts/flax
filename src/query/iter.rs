@@ -46,6 +46,11 @@ impl<'q, Q> Batch<'q, Q> {
     pub fn arch(&self) -> &Archetype {
         self.arch
     }
+
+    /// Returns the number of items which would be yielded by this batch
+    pub fn len(&self) -> usize {
+        self.slots().len()
+    }
 }
 
 impl<'q, Q> Iterator for Batch<'q, Q>

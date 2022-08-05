@@ -92,7 +92,6 @@ impl EntityBuilder {
         let iter = self.buffer.take_all().map(|(mut info, val)| {
             let id = info.id();
             if id.kind().contains(EntityKind::RELATION) && id.high() == wildcard().low() {
-                tracing::info!("Inserting parent component");
                 let rel = id.low();
                 info.id = Entity::join_pair(rel, parent.low())
             }
