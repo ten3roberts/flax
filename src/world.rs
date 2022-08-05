@@ -245,7 +245,6 @@ impl World {
                 // Component does not exist yet, so defer a move
 
                 // Data will have a lifetime of `components`.
-                eprintln!("Deferring {}", component.name());
                 new_data.push((component, data));
                 new_components.push(component);
             }
