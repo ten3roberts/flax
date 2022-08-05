@@ -335,7 +335,6 @@ impl World {
         let ns = self.init_store(id.kind());
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
-            eprintln!("Relocating entity");
             ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
