@@ -131,11 +131,11 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR_END: system_for_each
 
     // ANCHOR: system_cmd
-    // Despawn all entities with a distance > 20
+    // Despawn all entities with a distance > 50
     // ANCHOR: schedule_basic
     let despawn = System::builder()
         .with_name("delete outside world")
-        .with(Query::new((entities(), distance())).filter(distance().gt(20.0)))
+        .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
         .with_cmd()
         .build(
             |mut query: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
@@ -160,7 +160,6 @@ fn main() -> color_eyre::Result<()> {
     }
 
     // Spawn 15 static entities, which wont move
-
     let mut rng = StdRng::seed_from_u64(42);
 
     for _ in 0..15 {
@@ -186,9 +185,7 @@ fn main() -> color_eyre::Result<()> {
             pos.1 += dir.1;
         });
 
-    // let mut last_spawn = Instant::now();
-    // let spawn_interval = Duration::from_secs(2);
-
+    // Spawn a new entity with a random position each frame
     let spawn = System::builder().with_name("spawner").with_cmd().build(
         move |mut cmd: Write<CommandBuffer>| {
             let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
@@ -202,6 +199,7 @@ fn main() -> color_eyre::Result<()> {
 
     let mut frame_count = 0;
 
+    // Count the number of entities in the world and log it
     let count = System::builder()
         .with_name("count")
         .with(Query::new(()))
@@ -211,6 +209,7 @@ fn main() -> color_eyre::Result<()> {
             frame_count += 1;
         });
 
+    // Assemple the schedule, takes care of dependency management
     let mut schedule = Schedule::builder()
         .with_system(update_dist)
         .with_system(despawn)
@@ -222,10 +221,10 @@ fn main() -> color_eyre::Result<()> {
 
     tracing::info!("{schedule:#?}");
 
-    for i in 0..200 {
+    for i in 0..20000000 {
         tracing::info!("Frame: {i}");
         schedule.execute_par(&mut world)?;
-        sleep(Duration::from_secs_f32(0.1));
+        // sleep(Duration::from_secs_f32(0.1));
     }
 
     // ANCHOR_END: schedule_basic
