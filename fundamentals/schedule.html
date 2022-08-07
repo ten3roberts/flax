@@ -202,12 +202,14 @@ sequence.</p>
     // Spawn a new entity with a random position each frame
     let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd().build(
         move |mut cmd: Write&lt;CommandBuffer&gt;| {
-            let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-            tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
-            Entity::builder()
-                .set(position(), pos)
-                .set_default(distance())
-                .spawn_into(&amp;mut cmd);
+            for _ in 0..10 {
+                let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+                tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
+                Entity::builder()
+                    .set(position(), pos)
+                    .set_default(distance())
+                    .spawn_into(&amp;mut cmd);
+            }
         },
     );
 
@@ -235,7 +237,7 @@ sequence.</p>
 
     tracing::info!(&quot;{schedule:#?}&quot;);
 
-    for i in 0..2000 {
+    for i in 0..200 {
         tracing::info!(&quot;Frame: {i}&quot;);
         schedule.execute_par(&amp;mut world)?;
         sleep(Duration::from_secs_f32(0.1));
