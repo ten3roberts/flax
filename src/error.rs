@@ -1,8 +1,9 @@
 use thiserror::Error;
 
-use crate::{Entity, EntityKind};
+use crate::{ComponentInfo, Entity, EntityKind};
 
 #[derive(Error, Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Error {
     #[error("No entities exist for {0:?}")]
     NoSuchKind(EntityKind),
@@ -23,6 +24,10 @@ pub enum Error {
 
     #[error("Entity {0} already exists")]
     EntityExists(Entity),
+    #[error("The component has already been added in the batch")]
+    DuplicateComponent(ComponentInfo),
+    #[error("Attempt to spawn batch with an insufficient number of components")]
+    IncompleteBatch,
 }
 
 #[derive(Debug, Error)]

@@ -1,8 +1,11 @@
-use std::ptr::NonNull;
+use std::{
+    alloc::{alloc, handle_alloc_error, realloc, Layout},
+    ptr::NonNull,
+};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::ComponentInfo;
+use crate::{ComponentId, ComponentInfo};
 
 use super::Slot;
 
@@ -19,6 +22,54 @@ impl Storage {
             data: AtomicRefCell::new(NonNull::dangling()),
             info,
         }
+    }
+
+    /// Allocates space for storage of `len` components.
+    pub fn new(len: usize, info: ComponentInfo) -> Self {
+        if len == 0 || info.size() == 0 {
+            return Self::new_dangling(info);
+        }
+
+        let layout = Layout::from_size_align(info.size() * len, info.layout.align()).unwrap();
+
+        unsafe {
+            let data = alloc(layout);
+            let data = match NonNull::new(data) {
+                Some(v) => v,
+                None => handle_alloc_error(layout),
+            };
+            Self {
+                data: AtomicRefCell::new(data),
+                info,
+            }
+        }
+    }
+
+    /// Allocates more space for the storage
+    pub unsafe fn realloc(&mut self, old_len: usize, new_len: usize) {
+        assert!(old_len < new_len);
+
+        let old_layout =
+            Layout::from_size_align(self.info.size() * old_len, self.info.layout.align()).unwrap();
+        let new_layout =
+            Layout::from_size_align(self.info.size() * new_len, self.info.layout.align()).unwrap();
+
+        if new_layout.size() == 0 {
+            return;
+        }
+
+        let ptr = if old_len == 0 {
+            assert_eq!(*self.data.get_mut(), NonNull::dangling());
+            alloc(new_layout)
+        } else {
+            let ptr = self.data.get_mut().as_ptr();
+            realloc(ptr, old_layout, new_layout.size())
+        };
+        let ptr = match NonNull::new(ptr) {
+            Some(v) => v,
+            None => handle_alloc_error(new_layout),
+        };
+        *self.data.get_mut() = ptr
     }
 
     #[inline(always)]
