@@ -29,9 +29,9 @@ use crate::{component, EntityFetch};
 /// | Reserved | Generation | Index | Kind |
 ///
 /// # Pair:
-/// If the entity is a relation, the high bits stores the subject entity.
-/// | 32       | 32       |
-/// | Subject  | Relation |
+/// If the entity is a relation, the high bits stores the object entity.
+/// | 32     | 32       |
+/// | Object | Relation |
 ///
 /// The one downside of this is that the generation is not stored, though an
 /// entity should never hold an entity that is not alive, and is as such handled
@@ -153,7 +153,7 @@ impl Entity {
     }
 
     /// Returns the high bits of the relation. Represents the generation or
-    /// subject entity if a relation
+    /// object entity if a relation
     pub(crate) fn high(self) -> StrippedEntity {
         let bits = self.to_bits().get();
         StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap())
@@ -165,7 +165,7 @@ impl Entity {
         StrippedEntity(NonZeroU32::new(bits as u32).unwrap())
     }
 
-    /// Returns the subject and relation
+    /// Returns the relation and object
     pub fn split_pair(self) -> (StrippedEntity, StrippedEntity) {
         let bits = self.to_bits().get();
         let relation = StrippedEntity(NonZeroU32::new(bits as u32).unwrap());
@@ -174,15 +174,15 @@ impl Entity {
         (relation, subject)
     }
 
-    pub(crate) fn join_pair(relation: StrippedEntity, subject: StrippedEntity) -> Self {
+    pub(crate) fn join_pair(relation: StrippedEntity, object: StrippedEntity) -> Self {
         if !relation.kind().contains(EntityKind::RELATION) {
             panic!("Relation {relation} does not contain the relation flag")
         }
 
         let relation = relation.0.get() as u64;
-        let subject = subject.0.get() as u64;
+        let object = object.0.get() as u64;
 
-        Self(NonZeroU64::new(relation | (subject << 32)).unwrap())
+        Self(NonZeroU64::new(relation | (object << 32)).unwrap())
     }
 
     pub fn builder() -> EntityBuilder {

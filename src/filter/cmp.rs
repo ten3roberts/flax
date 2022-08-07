@@ -133,12 +133,12 @@ where
         }
     }
 
-    fn matches(&self, _: &World, archetype: &crate::Archetype) -> bool {
+    fn matches(&self, archetype: &crate::Archetype) -> bool {
         archetype.has(self.component.id())
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(world, archetype) {
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(archetype) {
             vec![Access {
                 kind: crate::AccessKind::Archetype {
                     id,
@@ -244,12 +244,12 @@ where
         }
     }
 
-    fn matches(&self, _: &World, archetype: &crate::Archetype) -> bool {
+    fn matches(&self, archetype: &crate::Archetype) -> bool {
         archetype.has(self.component.id())
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(world, archetype) {
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(archetype) {
             vec![Access {
                 kind: crate::AccessKind::Archetype {
                     id,

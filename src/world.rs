@@ -380,8 +380,9 @@ impl World {
         Ok(())
     }
 
-    /// Removes all instances of the component from entities in the world.
-    /// Does not despawn any entities.
+    /// Removes all instances of relations and component of the given entities
+    /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
+    /// on all the children.
     pub fn detach(&mut self, component: ComponentId) {
         let subject = component.low();
         // The archetypes to remove
@@ -765,7 +766,7 @@ impl World {
         let filter = component().with();
         self.archetypes
             .iter()
-            .filter(|(_, arch)| filter.matches(self, arch))
+            .filter(|(_, arch)| filter.matches(arch))
             .map(|(_, arch)| {
                 (
                     arch.slots(),

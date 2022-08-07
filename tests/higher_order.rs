@@ -226,3 +226,45 @@ fn build_hierarchy() {
         ]
     );
 }
+
+#[test]
+fn hierarchy_manipulation() {
+    let mut world = World::new();
+
+    let a = Entity::builder()
+        .set(name(), "a".into())
+        .attach(child_of, Entity::builder().set(name(), "a.a".into()))
+        .spawn(&mut world);
+
+    let b = Entity::builder()
+        .set(name(), "b".into())
+        .attach(child_of, Entity::builder().set(name(), "b.a".into()))
+        .attach(child_of, Entity::builder().set(name(), "b.b".into()))
+        .spawn(&mut world);
+
+    // Query all entities with no `child_of` relation
+    let mut q = Query::new(entities()).without(child_of(wildcard()));
+
+    let roots = q.prepare(&world).iter().sorted().collect_vec();
+    assert_eq!(roots, [a, b]);
+
+    // Attach a under b
+    world.set(a, child_of(b), ()).unwrap();
+    let roots = q.prepare(&world).iter().sorted().collect_vec();
+    assert_eq!(roots, [b]);
+
+    world.detach(b);
+    assert_eq!(world.get(b, name()).as_deref(), Ok(&"b".to_string()));
+
+    let mut q = Query::new(name()).without(child_of(wildcard()));
+    let mut roots = q.prepare(&world);
+    let roots = roots.iter().sorted().collect_vec();
+
+    assert_eq!(roots, ["a", "b", "b.a", "b.b"]);
+
+    let children_of_a = Query::new(name()).with(child_of(a)).as_vec(&world);
+    let children_of_b = Query::new(name()).with(child_of(b)).as_vec(&world);
+
+    assert_eq!(children_of_a, ["a.a"]);
+    assert_eq!(children_of_b, [""; 0]);
+}
