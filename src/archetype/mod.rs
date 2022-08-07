@@ -16,6 +16,7 @@ pub type ArchetypeId = Entity;
 pub type Slot = usize;
 
 mod changes;
+mod insert;
 mod slice;
 mod storage;
 mod visit;
@@ -23,6 +24,7 @@ pub use storage::*;
 
 pub use changes::*;
 pub use slice::*;
+pub use visit::*;
 pub use visit::*;
 
 #[derive(Debug)]
@@ -504,35 +506,36 @@ impl Archetype {
         }
 
         assert_ne!(additional, 0, "Length is: {len}");
-        unsafe {
-            for storage in self.storage.values_mut() {
-                if storage.info().size() == 0 {
-                    continue;
-                }
+        for storage in self.storage.values_mut() {
+            unsafe {
+                storage.realloc(old_cap, new_cap);
+                // if storage.info().size() == 0 {
+                //     continue;
+                // }
 
-                let new_layout = Layout::from_size_align(
-                    storage.info().size() * new_cap,
-                    storage.info().layout.align(),
-                )
-                .unwrap();
-                let new_data = alloc(new_layout);
+                // let new_layout = Layout::from_size_align(
+                //     storage.info().size() * new_cap,
+                //     storage.info().layout.align(),
+                // )
+                // .unwrap();
+                // let new_data = alloc(new_layout);
 
-                let data = storage.as_ptr();
-                if old_cap > 0 {
-                    // Copy over the previous contiguous data
-                    std::ptr::copy_nonoverlapping(data, new_data, storage.info().size() * len);
+                // let data = storage.as_ptr();
+                // if old_cap > 0 {
+                //     // Copy over the previous contiguous data
+                //     std::ptr::copy_nonoverlapping(data, new_data, storage.info().size() * len);
 
-                    dealloc(
-                        data,
-                        Layout::from_size_align(
-                            storage.info().size() * old_cap,
-                            storage.info().layout.align(),
-                        )
-                        .unwrap(),
-                    );
-                }
+                //     dealloc(
+                //         data,
+                //         Layout::from_size_align(
+                //             storage.info().size() * old_cap,
+                //             storage.info().layout.align(),
+                //         )
+                //         .unwrap(),
+                //     );
+                // }
 
-                *storage.get_mut() = NonNull::new(new_data).unwrap();
+                // *storage.get_mut() = NonNull::new(new_data).unwrap();
             }
         }
 
