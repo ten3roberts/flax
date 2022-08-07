@@ -11,7 +11,8 @@ use crate::{
     fetch::Fetch,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, All, And, Filter, PreparedFetch, Without, World,
+    Access, AccessKind, All, And, Component, ComponentValue, Filter, PreparedFetch, With, Without,
+    World,
 };
 
 pub use self::prepared::PreparedQuery;
@@ -81,6 +82,16 @@ where
             archetype_gen: self.archetype_gen,
             fetch: self.fetch,
         }
+    }
+
+    /// Shortcut for filter(without)
+    pub fn without<T: ComponentValue>(self, component: Component<T>) -> Query<Q, And<F, Without>> {
+        self.filter(component.without())
+    }
+
+    /// Shortcut for filter(with)
+    pub fn with<T: ComponentValue>(self, component: Component<T>) -> Query<Q, And<F, With>> {
+        self.filter(component.with())
     }
 
     /// Prepare the next change tick and return the old one for the last time
@@ -158,7 +169,7 @@ where
             self.archetypes.clear();
             self.archetypes
                 .extend(world.archetypes().filter_map(|(id, arch)| {
-                    if self.fetch.matches(world, arch) && self.filter.matches(world, arch) {
+                    if self.fetch.matches(world, arch) && self.filter.matches(arch) {
                         Some(id)
                     } else {
                         None
@@ -184,7 +195,7 @@ where
             .flat_map(|&id| {
                 let archetype = world.archetype(id);
                 let mut res = fetch.access(id, archetype);
-                res.append(&mut filter.access(world, id, archetype));
+                res.append(&mut filter.access(id, archetype));
                 res
             })
             .chain([Access {

@@ -8,7 +8,9 @@ use std::{
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::{Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind};
+use crate::{
+    wildcard, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind,
+};
 
 pub type ArchetypeId = Entity;
 pub type Slot = usize;
@@ -62,6 +64,17 @@ impl Archetype {
         let relation = relation.low();
 
         self.relations().filter(move |k| k.low() == relation)
+    }
+
+    /// Returns all relations matching the relation type if the object is a
+    /// wildcard, otherwise, returns an exact match
+    pub fn matches_relation(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
+        let (rel, obj) = relation.split_pair();
+        let is_wild = obj == wildcard().low();
+        self.relations().filter(move |&v| {
+            let (low, high) = v.split_pair();
+            is_wild && low == rel || !is_wild && v == relation
+        })
     }
 
     /// Create a new archetype.

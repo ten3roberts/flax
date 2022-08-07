@@ -63,7 +63,7 @@ gen_bitops! {
 
 /// A filter which does not depend upon any state, such as a `with` filter
 pub trait StaticFilter: for<'x> Filter<'x> {
-    fn static_matches(&self, world: &World, arch: &Archetype) -> bool;
+    fn static_matches(&self, arch: &Archetype) -> bool;
 }
 
 /// A filter over a query which will be prepared for an archetype, yielding
@@ -86,9 +86,9 @@ where
     ///
     /// Returns false if an entity will never yield, such as a mismatched
     /// archetype
-    fn matches(&self, world: &World, arch: &Archetype) -> bool;
+    fn matches(&self, arch: &Archetype) -> bool;
     /// Returns which components and how will be accessed for an archetype.
-    fn access(&self, world: &World, id: ArchetypeId, arch: &Archetype) -> Vec<Access>;
+    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access>;
 }
 
 pub trait PreparedFilter {
@@ -127,12 +127,12 @@ impl<'a> Filter<'a> for ModifiedFilter {
         }
     }
 
-    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
+    fn matches(&self, archetype: &Archetype) -> bool {
         archetype.has(self.component)
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(world, archetype) {
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(archetype) {
             vec![Access {
                 kind: crate::AccessKind::Archetype {
                     id,
@@ -164,12 +164,12 @@ impl<'a> Filter<'a> for InsertedFilter {
         PreparedKindFilter::new(archetype, self.component, change_tick, ChangeKind::Inserted)
     }
 
-    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
+    fn matches(&self, archetype: &Archetype) -> bool {
         archetype.has(self.component)
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(world, archetype) {
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(archetype) {
             vec![Access {
                 kind: crate::AccessKind::Archetype {
                     id,
@@ -201,12 +201,12 @@ impl<'a> Filter<'a> for RemovedFilter {
         PreparedKindFilter::new(archetype, self.component, change_tick, ChangeKind::Removed)
     }
 
-    fn matches(&self, _: &World, _: &Archetype) -> bool {
+    fn matches(&self, _: &Archetype) -> bool {
         true
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(world, archetype) {
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        if self.matches(archetype) {
             vec![Access {
                 kind: crate::AccessKind::Archetype {
                     id,
@@ -246,13 +246,13 @@ where
         }
     }
 
-    fn matches(&self, world: &World, archetype: &Archetype) -> bool {
-        self.left.matches(world, archetype) && self.right.matches(world, archetype)
+    fn matches(&self, archetype: &Archetype) -> bool {
+        self.left.matches(archetype) && self.right.matches(archetype)
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        let mut res = self.left.access(world, id, archetype);
-        res.append(&mut self.right.access(world, id, archetype));
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        let mut res = self.left.access(id, archetype);
+        res.append(&mut self.right.access(id, archetype));
         res
     }
 }
@@ -262,8 +262,8 @@ where
     L: StaticFilter,
     R: StaticFilter,
 {
-    fn static_matches(&self, world: &World, archetype: &Archetype) -> bool {
-        self.left.matches(world, archetype) && self.right.matches(world, archetype)
+    fn static_matches(&self, archetype: &Archetype) -> bool {
+        self.left.matches(archetype) && self.right.matches(archetype)
     }
 }
 
@@ -293,13 +293,13 @@ where
         }
     }
 
-    fn matches(&self, world: &World, archetype: &Archetype) -> bool {
-        self.left.matches(world, archetype) || self.right.matches(world, archetype)
+    fn matches(&self, archetype: &Archetype) -> bool {
+        self.left.matches(archetype) || self.right.matches(archetype)
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        let mut accesses = self.left.access(world, id, archetype);
-        accesses.append(&mut self.right.access(world, id, archetype));
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        let mut accesses = self.left.access(id, archetype);
+        accesses.append(&mut self.right.access(id, archetype));
         accesses
     }
 }
@@ -309,8 +309,8 @@ where
     L: StaticFilter,
     R: StaticFilter,
 {
-    fn static_matches(&self, world: &World, archetype: &Archetype) -> bool {
-        self.left.matches(world, archetype) || self.right.matches(world, archetype)
+    fn static_matches(&self, archetype: &Archetype) -> bool {
+        self.left.matches(archetype) || self.right.matches(archetype)
     }
 }
 
@@ -442,12 +442,12 @@ where
         PreparedNot(self.0.prepare(archetype, change_tick))
     }
 
-    fn matches(&self, world: &World, archetype: &Archetype) -> bool {
-        !self.0.matches(world, archetype)
+    fn matches(&self, archetype: &Archetype) -> bool {
+        !self.0.matches(archetype)
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        self.0.access(world, id, archetype)
+    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+        self.0.access(id, archetype)
     }
 }
 
@@ -455,8 +455,8 @@ impl<T> StaticFilter for Not<T>
 where
     T: StaticFilter,
 {
-    fn static_matches(&self, world: &World, archetype: &Archetype) -> bool {
-        !self.0.matches(world, archetype)
+    fn static_matches(&self, archetype: &Archetype) -> bool {
+        !self.0.matches(archetype)
     }
 }
 
@@ -557,17 +557,17 @@ impl<'a> Filter<'a> for Nothing {
         BooleanFilter(false)
     }
 
-    fn matches(&self, _: &World, _: &Archetype) -> bool {
+    fn matches(&self, _: &Archetype) -> bool {
         false
     }
 
-    fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }
 
 impl StaticFilter for Nothing {
-    fn static_matches(&self, _: &World, _: &Archetype) -> bool {
+    fn static_matches(&self, _: &Archetype) -> bool {
         false
     }
 }
@@ -583,17 +583,17 @@ impl<'a> Filter<'a> for All {
         BooleanFilter(true)
     }
 
-    fn matches(&self, _: &World, _: &Archetype) -> bool {
+    fn matches(&self, _: &Archetype) -> bool {
         true
     }
 
-    fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }
 
 impl StaticFilter for All {
-    fn static_matches(&self, _: &World, _: &Archetype) -> bool {
+    fn static_matches(&self, _: &Archetype) -> bool {
         true
     }
 }
@@ -648,7 +648,7 @@ impl With {
 }
 
 impl StaticFilter for With {
-    fn static_matches(&self, _: &World, arch: &Archetype) -> bool {
+    fn static_matches(&self, arch: &Archetype) -> bool {
         arch.has(self.component)
     }
 }
@@ -656,15 +656,19 @@ impl StaticFilter for With {
 impl<'a> Filter<'a> for With {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, archetype: &Archetype, _: u32) -> Self::Prepared {
-        BooleanFilter(archetype.has(self.component))
+    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(arch))
     }
 
-    fn matches(&self, _: &World, arch: &Archetype) -> bool {
-        arch.has(self.component)
+    fn matches(&self, arch: &Archetype) -> bool {
+        if self.component.is_relation() {
+            arch.matches_relation(self.component).next().is_some()
+        } else {
+            arch.has(self.component)
+        }
     }
 
-    fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }
@@ -683,21 +687,25 @@ impl Without {
 impl<'a> Filter<'a> for Without {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, archetype: &Archetype, _: u32) -> Self::Prepared {
-        BooleanFilter(!archetype.has(self.component))
+    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(arch))
     }
 
-    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
-        !archetype.has(self.component)
+    fn matches(&self, archetype: &Archetype) -> bool {
+        if self.component.is_relation() {
+            archetype.matches_relation(self.component).next().is_none()
+        } else {
+            !archetype.has(self.component)
+        }
     }
 
-    fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }
 
 impl StaticFilter for Without {
-    fn static_matches(&self, _: &World, arch: &Archetype) -> bool {
+    fn static_matches(&self, arch: &Archetype) -> bool {
         !arch.has(self.component)
     }
 }
@@ -724,12 +732,12 @@ where
         (*self).prepare(archetype, change_tick)
     }
 
-    fn matches(&self, world: &World, arch: &Archetype) -> bool {
-        (*self).matches(world, arch)
+    fn matches(&self, arch: &Archetype) -> bool {
+        (*self).matches(arch)
     }
 
-    fn access(&self, world: &World, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
-        (*self).access(world, id, arch)
+    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
+        (*self).access(id, arch)
     }
 }
 
