@@ -21,6 +21,7 @@ smallvec = "1.8.0"
 thiserror = "1.0.31"
 tracing = "0.1.35"
 tynm = "0.1.6"
+serde = { version = "1.0", features = ["derive"], optional = true }
 
 [dev-dependencies]
 itertools = "0.10.3"
@@ -35,6 +36,7 @@ tracing-tree = "0.2"
 
 [features]
 default = ["parallel"]
+serde = ["dep:serde"]
 parallel = ["rayon"]
 
 [[example]]
