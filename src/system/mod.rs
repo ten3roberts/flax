@@ -2,7 +2,7 @@ mod cell;
 mod traits;
 
 use core::fmt;
-use std::{any::type_name, marker::PhantomData};
+use std::marker::PhantomData;
 
 use crate::{
     util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, Fetch, Filter, PreparedFetch,
@@ -43,7 +43,7 @@ impl<'a, Func, Q, F>
     for ForEach<Func>
 where
     for<'x> Q: Fetch<'x> + std::fmt::Debug,
-    for<'x, 'y> F: Filter<'x, 'y> + std::fmt::Debug,
+    for<'x> F: Filter<'x> + std::fmt::Debug,
     for<'x> Func: FnMut(<<Q as Fetch<'x>>::Prepared as PreparedFetch>::Item),
 {
     fn execute(&mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut Query<Q, F>)) {
@@ -73,7 +73,7 @@ where
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
     for<'x> Q: Fetch<'x> + std::fmt::Debug + 'static,
-    for<'x, 'y> F: Filter<'x, 'y> + std::fmt::Debug + 'static,
+    for<'x> F: Filter<'x> + std::fmt::Debug + 'static,
 {
     pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, Query<Q, F>, ()>
     where

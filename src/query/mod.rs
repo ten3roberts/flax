@@ -69,13 +69,13 @@ impl<Q> Query<Q, All> {
 impl<Q, F> Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x, 'y> Filter<'x, 'y>,
+    F: for<'x> Filter<'x>,
 {
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<'w, G: for<'x> Filter<'x, 'w>>(self, filter: G) -> Query<Q, And<F, G>> {
+    pub fn filter<G: for<'x> Filter<'x>>(self, filter: G) -> Query<Q, And<F, G>> {
         Query {
-            filter: self.filter.and(filter),
+            filter: And::new(self.filter, filter),
             archetypes: Vec::new(),
             change_tick: self.change_tick,
             archetype_gen: self.archetype_gen,
@@ -175,7 +175,7 @@ where
 impl<Q, F> SystemAccess for Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x, 'y> Filter<'x, 'y>,
+    F: for<'x> Filter<'x>,
 {
     fn access(&mut self, world: &World) -> Vec<crate::system::Access> {
         let (archetypes, fetch, filter) = self.get_archetypes(world);
@@ -222,7 +222,7 @@ where
 impl<'a, Q, F> QueryData<'a, Q, F>
 where
     for<'x> Q: Fetch<'x>,
-    for<'x, 'y> F: Filter<'x, 'y>,
+    for<'x> F: Filter<'x>,
 {
     /// Prepare the query.
     ///

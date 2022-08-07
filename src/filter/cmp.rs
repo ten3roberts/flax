@@ -119,16 +119,16 @@ where
     }
 }
 
-impl<'this, 'w, T> Filter<'this, 'w> for OrdCmp<T>
+impl<'w, T> Filter<'w> for OrdCmp<T>
 where
     T: ComponentValue + PartialOrd,
 {
-    type Prepared = PreparedOrdCmp<'this, 'w, T>;
+    type Prepared = PreparedOrdCmp<'w, T>;
 
-    fn prepare(&'this self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&'w self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
         PreparedOrdCmp {
             borrow: archetype.storage(self.component),
-            method: &self.method,
+            method: self.method,
             other: &self.other,
         }
     }
@@ -152,13 +152,13 @@ where
     }
 }
 
-pub struct PreparedOrdCmp<'this, 'w, T> {
+pub struct PreparedOrdCmp<'w, T> {
     borrow: Option<StorageBorrow<'w, T>>,
-    method: &'this CmpMethod,
-    other: &'this T,
+    method: CmpMethod,
+    other: &'w T,
 }
 
-impl<'this, 'w, T> PreparedFilter for PreparedOrdCmp<'this, 'w, T>
+impl<'w, T> PreparedFilter for PreparedOrdCmp<'w, T>
 where
     T: ComponentValue + PartialOrd,
 {
@@ -230,14 +230,14 @@ where
     }
 }
 
-impl<'this, 'w, T, F> Filter<'this, 'w> for Cmp<T, F>
+impl<'w, T, F> Filter<'w> for Cmp<T, F>
 where
     T: ComponentValue,
     F: Fn(&T) -> bool + Send + Sync + 'static,
 {
-    type Prepared = PreparedCmp<'this, 'w, T, F>;
+    type Prepared = PreparedCmp<'w, T, F>;
 
-    fn prepare(&'this self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&'w self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
         PreparedCmp {
             borrow: archetype.storage(self.component),
             func: &self.func,
@@ -263,15 +263,15 @@ where
     }
 }
 
-pub struct PreparedCmp<'f, 'w, T, F>
+pub struct PreparedCmp<'w, T, F>
 where
     T: ComponentValue,
 {
     borrow: Option<StorageBorrow<'w, T>>,
-    func: &'f F,
+    func: &'w F,
 }
 
-impl<'f, 'w, T, F> PreparedFilter for PreparedCmp<'f, 'w, T, F>
+impl<'w, T, F> PreparedFilter for PreparedCmp<'w, T, F>
 where
     T: ComponentValue,
     F: Fn(&T) -> bool + Send + Sync + 'static,
@@ -312,33 +312,33 @@ where
 
 impl<R, T> std::ops::BitOr<R> for OrdCmp<T>
 where
-    Self: for<'x, 'y> Filter<'x, 'y>,
+    Self: for<'x> Filter<'x>,
+    R: for<'x> Filter<'x>,
     T: ComponentValue + PartialOrd,
-    R: for<'x, 'y> Filter<'x, 'y>,
 {
     type Output = Or<Self, R>;
 
     fn bitor(self, rhs: R) -> Self::Output {
-        self.or(rhs)
+        Or::new(self, rhs)
     }
 }
 
 impl<R, T> std::ops::BitAnd<R> for OrdCmp<T>
 where
-    Self: for<'x, 'y> Filter<'x, 'y>,
+    Self: for<'x> Filter<'x>,
     T: ComponentValue + PartialOrd,
-    R: for<'x, 'y> Filter<'x, 'y>,
+    R: for<'x> Filter<'x>,
 {
     type Output = And<Self, R>;
 
     fn bitand(self, rhs: R) -> Self::Output {
-        self.and(rhs)
+        And::new(self, rhs)
     }
 }
 
 impl<T> std::ops::Neg for OrdCmp<T>
 where
-    Self: for<'x, 'y> Filter<'x, 'y>,
+    Self: for<'x> Filter<'x>,
     T: ComponentValue + PartialOrd,
 {
     type Output = Not<Self>;
@@ -350,35 +350,35 @@ where
 
 impl<R, T, F> std::ops::BitOr<R> for Cmp<T, F>
 where
-    Self: for<'x, 'y> Filter<'x, 'y>,
+    Self: for<'x> Filter<'x>,
     F: Fn(&T) -> bool + Send + Sync + 'static,
     T: ComponentValue + PartialOrd,
-    R: for<'x, 'y> Filter<'x, 'y>,
+    R: for<'x> Filter<'x>,
 {
     type Output = Or<Self, R>;
 
     fn bitor(self, rhs: R) -> Self::Output {
-        self.or(rhs)
+        Or::new(self, rhs)
     }
 }
 
 impl<R, T, F> std::ops::BitAnd<R> for Cmp<T, F>
 where
-    Self: for<'x, 'y> Filter<'x, 'y>,
+    Self: for<'x> Filter<'x>,
     F: Fn(&T) -> bool + Send + Sync + 'static,
     T: ComponentValue + PartialOrd,
-    R: for<'x, 'y> Filter<'x, 'y>,
+    R: for<'x> Filter<'x>,
 {
     type Output = And<Self, R>;
 
     fn bitand(self, rhs: R) -> Self::Output {
-        self.and(rhs)
+        And::new(self, rhs)
     }
 }
 
 impl<T, F> std::ops::Neg for Cmp<T, F>
 where
-    Self: for<'x, 'y> Filter<'x, 'y>,
+    Self: for<'x> Filter<'x>,
     F: Fn(&T) -> bool + Send + Sync + 'static,
     T: ComponentValue + PartialOrd,
 {
