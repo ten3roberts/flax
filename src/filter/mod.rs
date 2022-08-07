@@ -714,6 +714,25 @@ impl PreparedFilter for BooleanFilter {
     }
 }
 
+impl<'w, F> Filter<'w> for &F
+where
+    F: Filter<'w>,
+{
+    type Prepared = F::Prepared;
+
+    fn prepare(&'w self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared {
+        (*self).prepare(archetype, change_tick)
+    }
+
+    fn matches(&self, world: &World, arch: &Archetype) -> bool {
+        (*self).matches(world, arch)
+    }
+
+    fn access(&self, world: &World, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
+        (*self).access(world, id, arch)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

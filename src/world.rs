@@ -19,7 +19,7 @@ use crate::{
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error, Filter,
-    Query, RowFormatter,
+    Query, RowFormatter, StaticFilter,
 };
 
 /// Holds the entities and components of the ECS.
@@ -346,7 +346,7 @@ impl World {
     /// Despawns all components which matches the filter
     pub fn despawn_all<F>(&mut self, filter: F)
     where
-        F: for<'x> Filter<'x>,
+        F: StaticFilter,
     {
         let mut query = Query::new(entities()).filter(filter);
         let ids = query.prepare(self).iter().collect_vec();
@@ -736,7 +736,7 @@ impl World {
     /// Formats the world using the debug visitor.
     pub fn format_debug<F>(&self, filter: F) -> WorldFormatter<F>
     where
-        for<'x> F: Filter<'x>,
+        F: StaticFilter,
     {
         WorldFormatter {
             world: self,
@@ -842,13 +842,13 @@ pub struct WorldFormatter<'a, F> {
 
 impl<'a, F> std::fmt::Debug for WorldFormatter<'a, F>
 where
-    F: for<'x> Filter<'x> + Clone,
+    F: StaticFilter,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut meta = BTreeMap::new();
         let mut list = f.debug_map();
 
-        let mut query = Query::with_components(()).filter(self.filter.clone());
+        let mut query = Query::with_components(()).filter(&self.filter);
         let mut query = query.prepare(self.world);
 
         for batch in query.iter_batched() {
