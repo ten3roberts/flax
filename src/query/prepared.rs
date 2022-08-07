@@ -33,7 +33,7 @@ where
 impl<'w, 'q, Q, F> IntoIterator for &'q mut PreparedQuery<'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q, 'w>,
+    F: Filter<'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -79,7 +79,7 @@ where
     pub fn iter<'q>(&'q mut self) -> QueryIter<'q, 'w, Q, F>
     where
         'w: 'q,
-        F: Filter<'q, 'w>,
+        F: Filter<'w>,
     {
         QueryIter {
             inner: self.iter_batched().flatten(),
@@ -90,7 +90,7 @@ where
     pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'q, 'w, Q, F>
     where
         'w: 'q,
-        F: Filter<'q, 'w>,
+        F: Filter<'w>,
     {
         // Prepare all archetypes only if it is not already done
         // Clear previous borrows

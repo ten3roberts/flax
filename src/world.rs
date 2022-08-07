@@ -346,7 +346,7 @@ impl World {
     /// Despawns all components which matches the filter
     pub fn despawn_all<F>(&mut self, filter: F)
     where
-        F: for<'x, 'y> Filter<'x, 'y>,
+        F: for<'x> Filter<'x>,
     {
         let mut query = Query::new(entities()).filter(filter);
         let ids = query.prepare(self).iter().collect_vec();
@@ -736,7 +736,7 @@ impl World {
     /// Formats the world using the debug visitor.
     pub fn format_debug<F>(&self, filter: F) -> WorldFormatter<F>
     where
-        for<'x, 'y> F: Filter<'x, 'y>,
+        for<'x> F: Filter<'x>,
     {
         WorldFormatter {
             world: self,
@@ -842,7 +842,7 @@ pub struct WorldFormatter<'a, F> {
 
 impl<'a, F> std::fmt::Debug for WorldFormatter<'a, F>
 where
-    F: for<'x, 'y> Filter<'x, 'y> + Clone,
+    F: for<'x> Filter<'x> + Clone,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut meta = BTreeMap::new();

@@ -114,7 +114,7 @@ where
 pub struct QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q, 'w>,
+    F: Filter<'w>,
 {
     pub(crate) inner: Flatten<BatchedIter<'q, 'w, Q, F>>,
 }
@@ -122,12 +122,12 @@ where
 impl<'q, 'w, Q, F> QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q, 'w>,
+    F: Filter<'w>,
 {
     pub fn new(
         old_tick: u32,
         new_tick: u32,
-        filter: &'q F,
+        filter: &'w F,
         archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
     ) -> Self {
         Self {
@@ -146,7 +146,7 @@ where
 impl<'w, 'q, Q, F> Iterator for QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q, 'w>,
+    F: Filter<'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -161,11 +161,11 @@ where
 pub struct BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q, 'w>,
+    F: Filter<'w>,
 {
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
-    pub(crate) filter: &'q F,
+    pub(crate) filter: &'w F,
     pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
     pub(crate) current: Option<Chunks<'q, Q::Prepared, F::Prepared>>,
 }
@@ -173,12 +173,12 @@ where
 impl<'q, 'w, Q, F> BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q, 'w>,
+    F: Filter<'w>,
 {
     pub fn new(
         old_tick: u32,
         new_tick: u32,
-        filter: &'q F,
+        filter: &'w F,
         archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
     ) -> Self {
         Self {
@@ -194,7 +194,7 @@ where
 impl<'w, 'q, Q, F> Iterator for BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q, 'w>,
+    F: Filter<'w>,
     'w: 'q,
 {
     type Item = Batch<'q, Q::Prepared>;

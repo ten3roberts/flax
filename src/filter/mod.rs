@@ -14,32 +14,24 @@ pub use cmp::CmpExt;
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
         impl<R, $($p),*> std::ops::BitOr<R> for $ty<$($p),*>
-        where
-            Self: for<'x, 'y> Filter<'x, 'y>,
-            R: for<'x,'y> Filter<'x, 'y>,
         {
             type Output = Or<Self, R>;
 
             fn bitor(self, rhs: R) -> Self::Output {
-                self.or(rhs)
+                Or::new(self, rhs)
             }
         }
 
         impl<R, $($p),*> std::ops::BitAnd<R> for $ty<$($p),*>
-        where
-            Self: for<'x, 'y> Filter<'x, 'y>,
-            R: for<'x,'y> Filter<'x, 'y>,
         {
             type Output = And<Self, R>;
 
             fn bitand(self, rhs: R) -> Self::Output {
-                self.and(rhs)
+                And::new(self, rhs)
             }
         }
 
         impl<$($p),*> std::ops::Neg for $ty<$($p),*>
-        where
-            Self: for<'x, 'y> Filter<'x, 'y>
         {
             type Output = Not<Self>;
 
@@ -69,34 +61,25 @@ gen_bitops! {
     Without[];
 }
 
+/// A filter which does not depend upon any state, such as a `with` filter
+pub trait StaticFilter: for<'x> Filter<'x> {
+    fn static_matches(&self, world: &World, arch: &Archetype) -> bool;
+}
+
 /// A filter over a query which will be prepared for an archetype, yielding
 /// subsets of slots.
 ///
 /// A filter requires Debug for error messages for user conveniance
-pub trait Filter<'this, 'w>
+pub trait Filter<'w>
 where
     Self: Sized + std::fmt::Debug,
 {
-    type Prepared: PreparedFilter;
+    type Prepared: PreparedFilter + 'w;
 
     /// Prepare the filter for an archetype.
     /// `change_tick` refers to the last time this query was run. Useful for
     /// change detection.
-    fn prepare(&'this self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared;
-
-    fn or<F: for<'x> Filter<'x, 'w>>(self, other: F) -> Or<Self, F> {
-        Or {
-            left: self,
-            right: other,
-        }
-    }
-
-    fn and<F: for<'x> Filter<'x, 'w>>(self, other: F) -> And<Self, F> {
-        And {
-            left: self,
-            right: other,
-        }
-    }
+    fn prepare(&'w self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared;
 
     /// Returns true if the filter will yield at least one entity from the
     /// archetype.
@@ -106,6 +89,11 @@ where
     fn matches(&self, world: &World, arch: &Archetype) -> bool;
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, world: &World, id: ArchetypeId, arch: &Archetype) -> Vec<Access>;
+}
+
+pub trait PreparedFilter {
+    /// Filters a slice of entity slots and returns a subset of the slice
+    fn filter(&mut self, slots: Slice) -> Slice;
 }
 
 #[derive(Debug, Clone)]
@@ -119,25 +107,22 @@ impl ModifiedFilter {
     }
 }
 
-impl<'this, 'a> Filter<'this, 'a> for ModifiedFilter {
-    type Prepared = PreparedOr<
-        PreparedKindFilter<'a, fn(&ChangeKind) -> bool>,
-        PreparedKindFilter<'a, fn(&ChangeKind) -> bool>,
-    >;
+impl<'a> Filter<'a> for ModifiedFilter {
+    type Prepared = PreparedOr<PreparedKindFilter<'a>, PreparedKindFilter<'a>>;
 
-    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedOr {
             left: PreparedKindFilter::new(
                 archetype,
                 self.component,
                 change_tick,
-                ChangeKind::is_modified_or_inserted,
+                ChangeKind::Modified,
             ),
             right: PreparedKindFilter::new(
                 archetype,
                 self.component,
                 change_tick,
-                ChangeKind::is_modified_or_inserted,
+                ChangeKind::Inserted,
             ),
         }
     }
@@ -172,16 +157,11 @@ impl InsertedFilter {
     }
 }
 
-impl<'this, 'a> Filter<'this, 'a> for InsertedFilter {
-    type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
+impl<'a> Filter<'a> for InsertedFilter {
+    type Prepared = PreparedKindFilter<'a>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedKindFilter::new(
-            archetype,
-            self.component,
-            change_tick,
-            ChangeKind::is_inserted,
-        )
+        PreparedKindFilter::new(archetype, self.component, change_tick, ChangeKind::Inserted)
     }
 
     fn matches(&self, _: &World, archetype: &Archetype) -> bool {
@@ -214,16 +194,11 @@ impl RemovedFilter {
     }
 }
 
-impl<'this, 'a> Filter<'this, 'a> for RemovedFilter {
-    type Prepared = PreparedKindFilter<'a, fn(&ChangeKind) -> bool>;
+impl<'a> Filter<'a> for RemovedFilter {
+    type Prepared = PreparedKindFilter<'a>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedKindFilter::new(
-            archetype,
-            self.component,
-            change_tick,
-            ChangeKind::is_removed,
-        )
+        PreparedKindFilter::new(archetype, self.component, change_tick, ChangeKind::Removed)
     }
 
     fn matches(&self, _: &World, _: &Archetype) -> bool {
@@ -257,14 +232,14 @@ impl<L, R> And<L, R> {
     }
 }
 
-impl<'this, 'a, L, R> Filter<'this, 'a> for And<L, R>
+impl<'a, L, R> Filter<'a> for And<L, R>
 where
-    L: Filter<'this, 'a>,
-    R: Filter<'this, 'a>,
+    L: Filter<'a>,
+    R: Filter<'a>,
 {
     type Prepared = PreparedAnd<L::Prepared, R::Prepared>;
 
-    fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedAnd {
             left: self.left.prepare(archetype, change_tick),
             right: self.right.prepare(archetype, change_tick),
@@ -282,6 +257,16 @@ where
     }
 }
 
+impl<L, R> StaticFilter for And<L, R>
+where
+    L: StaticFilter,
+    R: StaticFilter,
+{
+    fn static_matches(&self, world: &World, archetype: &Archetype) -> bool {
+        self.left.matches(world, archetype) && self.right.matches(world, archetype)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Or<L, R> {
     left: L,
@@ -294,14 +279,14 @@ impl<L, R> Or<L, R> {
     }
 }
 
-impl<'this, 'a, L, R> Filter<'this, 'a> for Or<L, R>
+impl<'a, L, R> Filter<'a> for Or<L, R>
 where
-    L: Filter<'this, 'a>,
-    R: Filter<'this, 'a>,
+    L: Filter<'a>,
+    R: Filter<'a>,
 {
     type Prepared = PreparedOr<L::Prepared, R::Prepared>;
 
-    fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedOr {
             left: self.left.prepare(archetype, change_tick),
             right: self.right.prepare(archetype, change_tick),
@@ -319,45 +304,52 @@ where
     }
 }
 
-pub trait PreparedFilter {
-    /// Filters a slice of entity slots and returns a subset of the slice
-    fn filter(&mut self, slots: Slice) -> Slice;
+impl<L, R> StaticFilter for Or<L, R>
+where
+    L: StaticFilter,
+    R: StaticFilter,
+{
+    fn static_matches(&self, world: &World, archetype: &Archetype) -> bool {
+        self.left.matches(world, archetype) || self.right.matches(world, archetype)
+    }
 }
 
 #[derive(Debug)]
-pub struct PreparedKindFilter<'a, F> {
+pub struct PreparedKindFilter<'a> {
     changes: Option<AtomicRef<'a, Changes>>,
     cur: Option<Slice>,
     // The current change group.
     // Starts at the end and decrements
     index: usize,
     tick: u32,
-    filter: F,
+    kind: ChangeKind,
 }
 
-impl<'a, F> PreparedKindFilter<'a, F>
-where
-    F: Fn(&ChangeKind) -> bool,
-{
-    pub fn new(archetype: &'a Archetype, component: ComponentId, tick: u32, filter: F) -> Self {
+impl<'a> PreparedKindFilter<'a> {
+    pub fn new(
+        archetype: &'a Archetype,
+        component: ComponentId,
+        tick: u32,
+        kind: ChangeKind,
+    ) -> Self {
         let changes = archetype.changes(component);
         Self {
             changes,
             cur: None,
             index: 0,
             tick,
-            filter,
+            kind,
         }
     }
 
     #[cfg(test)]
-    fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32, filter: F) -> Self {
+    fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32, kind: ChangeKind) -> Self {
         Self {
             changes: Some(changes),
             cur: None,
             index: 0,
             tick,
-            filter,
+            kind,
         }
     }
 
@@ -371,7 +363,7 @@ where
                 if let Some(change) = v {
                     self.index += 1;
                     tracing::debug!("change: {:?} tick: {}", change, self.tick);
-                    if change.tick > self.tick && (self.filter)(&change.kind) {
+                    if change.tick > self.tick && self.kind == change.kind {
                         break Some(*self.cur.get_or_insert(change.slice));
                     }
                 } else {
@@ -384,11 +376,7 @@ where
     }
 }
 
-impl<'a, F> PreparedFilter for PreparedKindFilter<'a, F>
-where
-    F: Fn(&ChangeKind) -> bool,
-{
-    #[tracing::instrument(level = "debug", skip_all)]
+impl<'a> PreparedFilter for PreparedKindFilter<'a> {
     fn filter(&mut self, slots: Slice) -> Slice {
         loop {
             let cur = match self.current_slice() {
@@ -444,13 +432,13 @@ where
 #[derive(Debug, Clone)]
 pub struct Not<T>(pub T);
 
-impl<'this, 'a, T> Filter<'this, 'a> for Not<T>
+impl<'a, T> Filter<'a> for Not<T>
 where
-    T: Filter<'this, 'a>,
+    T: Filter<'a>,
 {
     type Prepared = PreparedNot<T::Prepared>;
 
-    fn prepare(&'this self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         PreparedNot(self.0.prepare(archetype, change_tick))
     }
 
@@ -463,10 +451,19 @@ where
     }
 }
 
+impl<T> StaticFilter for Not<T>
+where
+    T: StaticFilter,
+{
+    fn static_matches(&self, world: &World, archetype: &Archetype) -> bool {
+        !self.0.matches(world, archetype)
+    }
+}
+
 impl<R, T> std::ops::BitOr<R> for Not<T>
 where
-    Self: for<'x, 'y> Filter<'x, 'y>,
-    R: for<'x, 'y> Filter<'x, 'y>,
+    Self: for<'x> Filter<'x>,
+    R: for<'x> Filter<'x>,
 {
     type Output = Or<Self, R>;
 
@@ -477,8 +474,8 @@ where
 
 impl<R, T> std::ops::BitAnd<R> for Not<T>
 where
-    Self: for<'x, 'y> Filter<'x, 'y>,
-    R: for<'x, 'y> Filter<'x, 'y>,
+    Self: for<'x> Filter<'x>,
+    R: for<'x> Filter<'x>,
 {
     type Output = And<Self, R>;
 
@@ -489,7 +486,7 @@ where
 
 impl<T> Neg for Not<T>
 where
-    T: for<'x, 'y> Filter<'x, 'y>,
+    T: for<'x> Filter<'x>,
 {
     type Output = T;
 
@@ -553,10 +550,10 @@ where
 #[derive(Debug, Clone)]
 pub struct Nothing;
 
-impl<'this, 'a> Filter<'this, 'a> for Nothing {
+impl<'a> Filter<'a> for Nothing {
     type Prepared = BooleanFilter;
 
-    fn prepare(&'this self, _: &'a Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(false)
     }
 
@@ -569,14 +566,20 @@ impl<'this, 'a> Filter<'this, 'a> for Nothing {
     }
 }
 
+impl StaticFilter for Nothing {
+    fn static_matches(&self, _: &World, _: &Archetype) -> bool {
+        false
+    }
+}
+
 /// Filter all entities
 #[derive(Debug, Clone)]
 pub struct All;
 
-impl<'this, 'a> Filter<'this, 'a> for All {
+impl<'a> Filter<'a> for All {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&self, _: &Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(true)
     }
 
@@ -586,6 +589,12 @@ impl<'this, 'a> Filter<'this, 'a> for All {
 
     fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
+    }
+}
+
+impl StaticFilter for All {
+    fn static_matches(&self, _: &World, _: &Archetype) -> bool {
+        true
     }
 }
 
@@ -638,15 +647,21 @@ impl With {
     }
 }
 
-impl<'this, 'a> Filter<'this, 'a> for With {
+impl StaticFilter for With {
+    fn static_matches(&self, _: &World, arch: &Archetype) -> bool {
+        arch.has(self.component)
+    }
+}
+
+impl<'a> Filter<'a> for With {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, archetype: &'a Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&self, archetype: &Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(archetype.has(self.component))
     }
 
-    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
-        archetype.has(self.component)
+    fn matches(&self, _: &World, arch: &Archetype) -> bool {
+        arch.has(self.component)
     }
 
     fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
@@ -665,10 +680,10 @@ impl Without {
     }
 }
 
-impl<'this, 'a> Filter<'this, 'a> for Without {
+impl<'a> Filter<'a> for Without {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, archetype: &'a Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&self, archetype: &Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(!archetype.has(self.component))
     }
 
@@ -678,6 +693,12 @@ impl<'this, 'a> Filter<'this, 'a> for Without {
 
     fn access(&self, _: &World, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
+    }
+}
+
+impl StaticFilter for Without {
+    fn static_matches(&self, _: &World, arch: &Archetype) -> bool {
+        !arch.has(self.component)
     }
 }
 
@@ -719,11 +740,7 @@ mod tests {
 
         let changes = AtomicRefCell::new(changes);
 
-        let filter = PreparedKindFilter::from_borrow(
-            changes.borrow(),
-            2,
-            ChangeKind::is_modified_or_inserted,
-        );
+        let filter = PreparedKindFilter::from_borrow(changes.borrow(), 2, ChangeKind::Modified);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -761,16 +778,8 @@ mod tests {
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedKindFilter::from_borrow(
-            changes_1.borrow(),
-            1,
-            ChangeKind::is_modified_or_inserted,
-        );
-        let b = PreparedKindFilter::from_borrow(
-            changes_2.borrow(),
-            2,
-            ChangeKind::is_modified_or_inserted,
-        );
+        let a = PreparedKindFilter::from_borrow(changes_1.borrow(), 1, ChangeKind::Modified);
+        let b = PreparedKindFilter::from_borrow(changes_2.borrow(), 2, ChangeKind::Modified);
 
         let filter = PreparedOr::new(a, b);
 
@@ -786,16 +795,9 @@ mod tests {
 
         // And
 
-        let a = PreparedKindFilter::from_borrow(
-            changes_1.borrow(),
-            1,
-            ChangeKind::is_modified_or_inserted,
-        );
-        let b = PreparedKindFilter::from_borrow(
-            changes_2.borrow(),
-            2,
-            ChangeKind::is_modified_or_inserted,
-        );
+        let a = PreparedKindFilter::from_borrow(changes_1.borrow(), 1, ChangeKind::Modified);
+        let b = PreparedKindFilter::from_borrow(changes_2.borrow(), 2, ChangeKind::Modified);
+
         let filter = PreparedAnd::new(a, b);
 
         // Use a brute force BTreeSet for solving it
