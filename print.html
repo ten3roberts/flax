@@ -526,7 +526,7 @@ single query.</p>
             Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
-            tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+            // tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
             *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
         });
 
@@ -639,7 +639,7 @@ sequence.</p>
     // Spawn a new entity with a random position each frame
     let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd().build(
         move |mut cmd: Write&lt;CommandBuffer&gt;| {
-            for _ in 0..10 {
+            for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
                 Entity::builder()

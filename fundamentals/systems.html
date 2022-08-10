@@ -202,7 +202,7 @@ single query.</p>
             Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
-            tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+            // tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
             *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
         });
 

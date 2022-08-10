@@ -202,7 +202,7 @@ sequence.</p>
     // Spawn a new entity with a random position each frame
     let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd().build(
         move |mut cmd: Write&lt;CommandBuffer&gt;| {
-            for _ in 0..10 {
+            for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
                 Entity::builder()
