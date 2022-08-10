@@ -115,7 +115,7 @@ pub mod util;
 pub mod visitors;
 
 #[cfg(feature = "serde")]
-pub mod serialize;
+pub mod serde;
 
 // Required due to macro
 pub use paste::paste;

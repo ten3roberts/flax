@@ -48,6 +48,7 @@ pub struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
     free_head: Option<NonZeroU32>,
     kind: EntityKind,
+    len: usize,
 }
 
 impl<V> EntityStore<V> {
@@ -61,7 +62,12 @@ impl<V> EntityStore<V> {
             slots: Vec::with_capacity(cap),
             free_head: None,
             kind,
+            len: 0,
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
     }
 
     pub fn spawn(&mut self, value: V) -> Entity {
@@ -84,6 +90,7 @@ impl<V> EntityStore<V> {
             let gen = from_slot_gen(slot.gen);
 
             let id = Entity::from_parts(index, gen, self.kind);
+            self.len += 1;
             id
         } else {
             // Push
@@ -97,6 +104,7 @@ impl<V> EntityStore<V> {
                 gen: to_slot_gen(gen),
             });
 
+            self.len += 1;
             Entity::from_parts(NonZeroU32::new(index + 1).unwrap(), gen as u16, self.kind)
         }
     }
@@ -217,6 +225,7 @@ impl<V> EntityStore<V> {
         slot.value.vacant = Vacant { next };
 
         self.free_head = Some(index);
+        self.len += 1;
 
         Ok(val)
     }
@@ -282,6 +291,8 @@ impl<V> EntityStore<V> {
             let next_free = unsafe { slot.value.vacant.next };
             assert!(!slot.is_alive());
             if current == index {
+                self.len += 1;
+
                 if let Some(prev) = prev {
                     self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
                 } else {

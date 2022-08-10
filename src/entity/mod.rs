@@ -39,6 +39,68 @@ use crate::{component, EntityFetch};
 #[derive(PartialOrd, Clone, Copy, PartialEq, Eq, Ord, Hash)]
 #[repr(transparent)]
 pub struct Entity(NonZeroU64);
+
+#[cfg(feature = "serde")]
+mod serde_impl {
+    use serde::{
+        de::{self, Visitor},
+        ser::SerializeTupleStruct,
+        Deserialize, Serialize,
+    };
+
+    use super::Entity;
+
+    impl Serialize for Entity {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let (index, gen, kind) = self.into_parts();
+            let mut state = serializer.serialize_tuple_struct("Entity", 3)?;
+            state.serialize_field(&index)?;
+            state.serialize_field(&gen)?;
+            state.serialize_field(&kind)?;
+            state.end()
+        }
+    }
+
+    struct EntityVisitor;
+
+    impl<'de> Deserialize<'de> for Entity {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_tuple_struct("Entity", 3, EntityVisitor)
+        }
+    }
+
+    impl<'de> Visitor<'de> for EntityVisitor {
+        type Value = Entity;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(formatter, "a sequence of entity parts")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let index = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+            let gen = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+            let kind = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+
+            Ok(Entity::from_parts(index, gen, kind))
+        }
+    }
+}
+
 /// Same as [crate::Entity] but without generation.
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 #[repr(transparent)]
@@ -47,6 +109,7 @@ pub struct StrippedEntity(NonZeroU32);
 static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
 bitflags::bitflags! {
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct EntityKind: u8 {
         const COMPONENT = 1;
         const STATIC = 2;
