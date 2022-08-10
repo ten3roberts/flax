@@ -3,9 +3,7 @@ use std::{
     iter::Enumerate,
     mem::{self, ManuallyDrop},
     num::NonZeroU32,
-    ops::Range,
     slice,
-    sync::atomic::{AtomicIsize, AtomicUsize, Ordering::Relaxed},
 };
 
 use super::{Entity, EntityIndex};
@@ -46,60 +44,11 @@ pub struct EntityLocation {
     pub(crate) arch: ArchetypeId,
 }
 
-pub struct ReservedIter<'a, V> {
-    free: FreeIter<'a, V>,
-    alloc: Range<usize>,
-    kind: EntityKind,
-}
-
-impl<'a, V> Iterator for ReservedIter<'a, V> {
-    type Item = Entity;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(free) = self.free.next() {
-            Some(free)
-        } else if let Some(index) = self.alloc.next() {
-            let id = Entity::from_parts(NonZeroU32::new(index as u32 + 1).unwrap(), 1, self.kind);
-            Some(id)
-        } else {
-            None
-        }
-    }
-}
-
-pub struct FreeIter<'a, V> {
-    cursor: Option<EntityIndex>,
-    store: &'a EntityStore<V>,
-}
-
-impl<'a, V> Iterator for FreeIter<'a, V> {
-    type Item = Entity;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let cur = self.cursor?;
-        let slot = self.store.slot(cur).expect("Invalid free list");
-
-        assert!(!slot.is_alive());
-        self.cursor = unsafe { slot.value.vacant.next };
-
-        Some(Entity::from_parts(
-            cur,
-            from_slot_gen(slot.gen),
-            self.store.kind,
-        ))
-    }
-}
-
 pub struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
     free_head: Option<NonZeroU32>,
     kind: EntityKind,
     len: usize,
-
-    // If positive, the number of entities in the free list.
-    // If negative, the number of reserved indices outside the current slot
-    // length.
-    cursor: AtomicIsize,
 }
 
 impl<V> EntityStore<V> {
@@ -114,37 +63,15 @@ impl<V> EntityStore<V> {
             free_head: None,
             kind,
             len: 0,
-            cursor: Default::default(),
         }
     }
 
-    pub fn reserve(&mut self, count: usize) -> ReservedIter<V> {
-        let end = self.cursor.fetch_sub(count as _, Relaxed);
-        let start = end - count as isize;
-
-        let free = start.max(0) as u32..end.max(0) as u32;
-        let alloc = self.slots.len()..self.slots.len() + (start - end).max(0) as _;
-        ReservedIter {
-            free: FreeIter {
-                cursor: self.free_head,
-                store: self,
-            },
-            alloc,
-            kind: self.kind,
-        }
+    pub fn len(&self) -> usize {
+        self.len
     }
 
-    // pub fn len(&self) -> usize {
-    //     self.len
-    // }
-
-    /// Spawns an entity directly
     pub fn spawn(&mut self, value: V) -> Entity {
-        if self.cursor.load(Relaxed) < 0 {
-            panic!("Failed to spawn entity due to reserved ids");
-        }
-
-        if let Some(index) = self.free_head. {
+        if let Some(index) = self.free_head.take() {
             let slot = { self.slots.get_mut(index.get() as usize - 1) }.unwrap();
             debug_assert!(slot.gen & 1 == 0);
 
@@ -168,7 +95,7 @@ impl<V> EntityStore<V> {
         } else {
             // Push
             let gen = 1;
-            let index: u32 = (self.slots.len()).try_into().expect("Too many entities");
+            let index = self.slots.len() as u32;
 
             self.slots.push(Slot {
                 value: SlotValue {
@@ -313,7 +240,7 @@ impl<V> EntityStore<V> {
     pub fn iter_mut(&mut self) -> EntityStoreIterMut<V> {
         EntityStoreIterMut {
             iter: self.slots.iter_mut().enumerate(),
-            kind: self.kind,
+            namespace: self.kind,
         }
     }
 
@@ -325,7 +252,7 @@ impl<V> EntityStore<V> {
         index: EntityIndex,
         generation: EntityGen,
         value: V,
-    ) -> Result<&mut V> {
+    ) -> Result<&V> {
         // Init slot
         let free_head = &mut self.free_head;
 
@@ -380,7 +307,7 @@ impl<V> EntityStore<V> {
                     },
                 };
 
-                return unsafe { Ok(&mut *slot.value.occupied) };
+                return unsafe { Ok(&*slot.value.occupied) };
             }
 
             prev = Some(current);
@@ -438,7 +365,7 @@ impl<'a, V> Iterator for EntityStoreIter<'a, V> {
 
 pub struct EntityStoreIterMut<'a, V> {
     iter: Enumerate<slice::IterMut<'a, Slot<V>>>,
-    kind: EntityKind,
+    namespace: EntityKind,
 }
 
 impl<'a, V> Iterator for EntityStoreIterMut<'a, V> {
@@ -451,7 +378,7 @@ impl<'a, V> Iterator for EntityStoreIterMut<'a, V> {
                 let id = Entity::from_parts(
                     NonZeroU32::new(index as u32 + 1).unwrap(),
                     (slot.gen >> 1) as u16,
-                    self.kind,
+                    self.namespace,
                 );
 
                 return Some((id, val));
