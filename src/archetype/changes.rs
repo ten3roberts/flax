@@ -188,7 +188,6 @@ impl Changes {
         self
     }
 
-    #[tracing::instrument(level = "debug")]
     pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
         for mut removed in self.remove(src_slot) {
             // Change the slot

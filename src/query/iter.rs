@@ -59,7 +59,6 @@ where
 {
     type Item = Q::Item;
 
-    #[tracing::instrument(level = "debug")]
     fn next(&mut self) -> Option<Q::Item> {
         if self.pos == self.end {
             None
@@ -98,11 +97,9 @@ where
         let chunk = if let Some(chunk) = chunk {
             chunk
         } else {
-            tracing::debug!("No more in filter");
             return None;
         };
 
-        tracing::debug!("Got new chunk: {chunk:?}/{:?}", self.arch.slots());
         // Set the chunk as visited
         unsafe { fetch.set_visited(chunk, self.new_tick) }
         let chunk = Batch::new(self.arch, fetch, chunk);

@@ -10,13 +10,24 @@ use crate::{
 /// Records commands into the world.
 /// Allows insertion and removal of components when the world is not available
 /// mutably, such as in systems or during iteration.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct CommandBuffer {
     inserts: BufferStorage,
     insert_locations: BTreeMap<(Entity, ComponentInfo), usize>,
     spawned: Vec<EntityBuilder>,
     despawned: Vec<Entity>,
     removals: Vec<(Entity, ComponentInfo)>,
+}
+
+impl std::fmt::Debug for CommandBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommandBuffer")
+            .field("inserts", &self.insert_locations.len())
+            .field("spawned", &self.spawned.len())
+            .field("despawned", &self.despawned)
+            .field("removals", &self.removals)
+            .finish()
+    }
 }
 
 /// Since all components are Send + Sync, the commandbuffer is as well
@@ -132,7 +143,7 @@ impl CommandBuffer {
             .try_for_each(|id| world.despawn(id))?;
 
         self.clear();
-
+        tracing::info!("Applied commandbuffer");
         Ok(())
     }
 

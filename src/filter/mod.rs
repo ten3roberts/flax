@@ -353,16 +353,13 @@ impl<'a> PreparedKindFilter<'a> {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
     pub fn current_slice(&mut self) -> Option<Slice> {
         match (self.cur, self.changes.as_mut()) {
             (Some(v), _) => Some(v),
             (None, Some(changes)) => loop {
-                tracing::debug!("Change list: {changes:#?}");
                 let v = changes.get(self.index);
                 if let Some(change) = v {
                     self.index += 1;
-                    tracing::debug!("change: {:?} tick: {}", change, self.tick);
                     if change.tick > self.tick && self.kind == change.kind {
                         break Some(*self.cur.get_or_insert(change.slice));
                     }
@@ -616,7 +613,6 @@ where
 {
     type Item = Slice;
 
-    #[tracing::instrument(level = "debug", skip_all)]
     fn next(&mut self) -> Option<Self::Item> {
         let cur = self.filter.filter(self.slots);
 

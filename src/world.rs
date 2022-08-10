@@ -11,7 +11,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, Change, ComponentInfo, Slice},
+    archetype::{Archetype, ArchetypeId, Change, ComponentBatch, ComponentInfo, Slice},
     components::{component, name},
     debug_visitor, entities,
     entity::{EntityLocation, EntityStore},
@@ -25,7 +25,7 @@ use crate::{
 /// Holds the entities and components of the ECS.
 pub struct World {
     entities: BTreeMap<EntityKind, EntityStore>,
-    archetypes: EntityStore<Archetype>,
+    pub(crate) archetypes: EntityStore<Archetype>,
     archetype_root: ArchetypeId,
     change_tick: AtomicU32,
     archetype_gen: AtomicU32,
@@ -77,10 +77,9 @@ impl World {
     /// `components` must be sorted.
     pub(crate) fn fetch_archetype<'a>(
         &mut self,
-        root: ArchetypeId,
         components: impl IntoIterator<Item = &'a ComponentInfo>,
     ) -> (ArchetypeId, &mut Archetype) {
-        let mut cursor = root;
+        let mut cursor = self.archetype_root;
 
         for head in components {
             let cur = &mut self.archetypes.get(cursor).unwrap();
@@ -116,6 +115,26 @@ impl World {
     /// Spawn a new empty entity into the default namespace
     pub fn spawn(&mut self) -> Entity {
         self.spawn_with_kind(EntityKind::empty())
+    }
+
+    pub fn spawn_batch(&mut self, batch: ComponentBatch) -> Vec<Entity> {
+        let ids = self.spawn_many().take(batch.len()).collect_vec();
+        self.spawn_batch_at(&ids, batch);
+        ids
+    }
+
+    pub fn spawn_batch_at(&mut self, ids: &[Entity], batch: ComponentBatch) {
+        assert_eq!(
+            ids.len(),
+            batch.len(),
+            "The length of ids must match the number of slots in `batch`"
+        );
+
+        let (arch_id, arch) = self.fetch_archetype(batch.components());
+
+        let slots = arch.allocate_n(ids);
+
+        // for (id, storage) in batch.storages() {}
     }
 
     /// Spawn a new component of type `T` which can be attached to an entity.
@@ -236,8 +255,6 @@ impl World {
                 (component.drop)(old);
                 ptr::copy_nonoverlapping(data, old, component.size());
 
-                tracing::debug!("Replacing {component:?}");
-
                 src.changes_mut(component.id())
                     .unwrap()
                     .set(Change::modified(Slice::single(slot), change_tick));
@@ -260,7 +277,7 @@ impl World {
 
             let components = new_components;
 
-            let (dst_id, _) = self.fetch_archetype(self.archetype_root, components.iter());
+            let (dst_id, _) = self.fetch_archetype(components.iter());
 
             // Borrow disjoint
             let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
@@ -270,10 +287,9 @@ impl World {
 
             // Insert the missing components
             for &(component, data) in &new_data {
-                dst.put_dyn(dst_slot, &component, data)
+                dst.push(component.id, data)
                     .expect("Insert should not fail");
 
-                tracing::debug!("Inserting change for {component:?}");
                 dst.init_changes(component)
                     .set(Change::inserted(Slice::single(dst_slot), change_tick));
             }
@@ -309,12 +325,10 @@ impl World {
 
         let mut meta = info.get_meta();
 
-        eprintln!("Initializing component: {} {}", info.name(), info.id());
         let loc = self.init_location(info.id())?;
 
         debug_assert_eq!(Ok(loc), self.location(info.id()));
 
-        eprintln!("Meta: {meta:?}");
         unsafe { self.set_with(info.id(), meta.take_all()).unwrap() }
 
         Ok(info)
@@ -396,7 +410,6 @@ impl World {
             .map(|v| v.0)
             .collect_vec();
 
-        tracing::debug!("Detaching: {:#?}", archetypes);
         for src in archetypes {
             let mut src = self.archetypes.despawn(src).unwrap();
 
@@ -406,7 +419,7 @@ impl World {
                     || (id.is_relation() && (id.low() == subject || id.high() == subject)))
             });
 
-            let (dst_id, dst) = self.fetch_archetype(self.archetype_root, components);
+            let (dst_id, dst) = self.fetch_archetype(components);
 
             eprintln!("{:?} => {dst_id}", src.component_names().collect_vec());
 
@@ -444,7 +457,6 @@ impl World {
         let src = self.archetype(src_id);
 
         if let Some(mut val) = src.get_mut(slot, component) {
-            tracing::debug!("Replacing {component:?}");
             src.changes_mut(component.id())
                 .expect("Missing change list")
                 .set(Change::modified(Slice::single(slot), change_tick));
@@ -472,7 +484,7 @@ impl World {
                 let components: Vec<_> = left.chain([component_info]).chain(right).collect();
 
                 // assert in order
-                let (dst_id, _) = self.fetch_archetype(self.archetype_root, &components);
+                let (dst_id, _) = self.fetch_archetype(&components);
 
                 dst_id
             }
@@ -491,7 +503,7 @@ impl World {
             src.add_edge_to(dst, dst_id, src_id, component.id());
 
             // Insert the missing component
-            dst.put_dyn(dst_slot, &component_info, &mut value as *mut T as *mut u8)
+            dst.push(component_info.id, &mut value as *mut T as *mut u8)
                 .expect("Insert should not fail");
 
             // And don't forget to forget to drop it
@@ -553,7 +565,7 @@ impl World {
                     .copied()
                     .collect_vec();
 
-                let (dst_id, _) = self.fetch_archetype(self.archetype_root, &components);
+                let (dst_id, _) = self.fetch_archetype(&components);
 
                 dst_id
             }
@@ -778,7 +790,7 @@ impl World {
             })
             .flat_map(|(slots, keys, values)| {
                 slots.iter().map(move |v| {
-                    let &info = keys.at(v);
+                    let info = keys[v];
                     (info, values.clone())
                 })
             })
@@ -907,17 +919,15 @@ mod tests {
     fn world_archetype_graph() {
         let mut world = World::new();
 
-        let root = world.archetype_root;
-
         // () -> (a) -> (ab) -> (abc)
-        let (_, archetype) = world.fetch_archetype(root, &[a().info(), b().info(), c().info()]);
+        let (_, archetype) = world.fetch_archetype(&[a().info(), b().info(), c().info()]);
         assert!(!archetype.has(d().id()));
         assert!(archetype.has(a().id()));
         assert!(archetype.has(b().id()));
 
         // () -> (a) -> (ab) -> (abc)
         //                   -> (abd)
-        let (_, archetype) = world.fetch_archetype(root, &[a().info(), b().info(), d().info()]);
+        let (_, archetype) = world.fetch_archetype(&[a().info(), b().info(), d().info()]);
         assert!(archetype.has(d().id()));
         assert!(!archetype.has(c().id()));
     }

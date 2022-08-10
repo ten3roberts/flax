@@ -1,28 +1,28 @@
 use core::slice;
 
-use atomic_refcell::AtomicRefMut;
+use atomic_refcell::{AtomicRef, AtomicRefMut};
 
 use crate::{
-    archetype::{Archetype, Changes, Slice, Slot, StorageBorrow, StorageBorrowMut},
+    archetype::{Archetype, Changes, Slice, Slot},
     wildcard, AccessKind, ArchetypeId, Change, Component, ComponentValue,
 };
 
 use super::*;
 
 pub struct PreparedComponentMut<'a, T> {
-    borrow: StorageBorrowMut<'a, T>,
+    borrow: AtomicRefMut<'a, [T]>,
     changes: AtomicRefMut<'a, Changes>,
 }
 
 pub struct PreparedComponent<'a, T> {
-    borrow: StorageBorrow<'a, T>,
+    borrow: AtomicRef<'a, [T]>,
 }
 
 impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
     type Item = &'q T;
 
     unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        self.borrow.at(slot)
+        &self.borrow[slot]
     }
 }
 
@@ -128,7 +128,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
-        (self.borrow.at_mut(slot) as *mut T)
+        (&mut self.borrow[slot] as *mut T)
             .as_mut()
             .expect("Non null")
     }
@@ -170,7 +170,7 @@ where
                 .map(|v| {
                     let (sub1, obj) = v.id().split_pair();
                     assert_eq!(sub1, sub);
-                    let borrow = archetype.storage::<T>(v.id()).unwrap();
+                    let borrow = archetype.storage::<T, _>(v.id()).unwrap();
                     let obj = world.reconstruct(obj).unwrap();
                     (obj, borrow)
                 })
@@ -247,7 +247,7 @@ where
 }
 
 pub struct PreparedPair<'a, T> {
-    borrow: StorageBorrow<'a, T>,
+    borrow: AtomicRef<'a, [T]>,
     obj: Entity,
 }
 
@@ -259,13 +259,13 @@ where
 
     unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         // Perform a reborrow
-        let item = self.borrow.at(slot);
+        let item = &self.borrow[slot];
         (self.obj, item)
     }
 }
 
 pub struct PairMatchIter<'a, T> {
-    borrow: slice::Iter<'a, (Entity, StorageBorrow<'a, T>)>,
+    borrow: slice::Iter<'a, (Entity, AtomicRef<'a, [T]>)>,
     slot: Slot,
 }
 
@@ -274,7 +274,7 @@ impl<'a, T> Iterator for PairMatchIter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let (id, borrow) = self.borrow.next()?;
-        let item = unsafe { &*(borrow.at(self.slot) as *const T) };
+        let item = unsafe { &*(&borrow[self.slot] as *const T) };
         Some((*id, item))
     }
 }

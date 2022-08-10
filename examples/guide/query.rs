@@ -120,7 +120,7 @@ fn main() -> color_eyre::Result<()> {
             Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
-            tracing::info!("Updating distance for {id} with position: {pos:?}");
+            // tracing::info!("Updating distance for {id} with position: {pos:?}");
             *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
         });
 
@@ -188,7 +188,7 @@ fn main() -> color_eyre::Result<()> {
     // Spawn a new entity with a random position each frame
     let spawn = System::builder().with_name("spawner").with_cmd().build(
         move |mut cmd: Write<CommandBuffer>| {
-            for _ in 0..10 {
+            for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!("Spawning new entity at: {pos:?}");
                 Entity::builder()

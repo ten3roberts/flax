@@ -8,9 +8,11 @@
 
 use std::{any::type_name, cmp::Ordering, fmt::Debug};
 
+use atomic_refcell::AtomicRef;
+
 use crate::{
-    archetype::{ArchetypeId, Slice, Slot, StorageBorrow},
-    Access, And, Archetype, Component, ComponentValue, Filter, Not, Or, PreparedFilter, World,
+    archetype::{ArchetypeId, Slice, Slot},
+    Access, And, Archetype, Component, ComponentValue, Filter, Not, Or, PreparedFilter,
 };
 
 pub trait CmpExt<T>
@@ -153,7 +155,7 @@ where
 }
 
 pub struct PreparedOrdCmp<'w, T> {
-    borrow: Option<StorageBorrow<'w, T>>,
+    borrow: Option<AtomicRef<'w, [T]>>,
     method: CmpMethod,
     other: &'w T,
 }
@@ -171,7 +173,7 @@ where
         let method = &self.method;
         let other = &self.other;
         let cmp = |&slot: &Slot| {
-            let val = borrow.at(slot);
+            let val = &borrow[slot];
 
             let ord = val.partial_cmp(other);
             if let Some(ord) = ord {
@@ -267,7 +269,7 @@ pub struct PreparedCmp<'w, T, F>
 where
     T: ComponentValue,
 {
-    borrow: Option<StorageBorrow<'w, T>>,
+    borrow: Option<AtomicRef<'w, [T]>>,
     func: &'w F,
 }
 
@@ -282,11 +284,7 @@ where
             None => return Slice::empty(),
         };
 
-        let cmp = |&slot: &Slot| {
-            let val = borrow.at(slot);
-
-            (self.func)(val)
-        };
+        let cmp = |&slot: &Slot| (self.func)(&borrow[slot]);
 
         // How many entities yielded true
         let mut start = slots.start;
