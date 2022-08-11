@@ -46,28 +46,9 @@ impl ComponentBatch {
             Entry::Vacant(slot) => {
                 let storage = slot.insert(Storage::with_capacity(info, self.len));
 
-                for mut item in iter.into_iter() {
-                    unsafe {
-                        storage.extend(&mut item as *mut _ as *mut u8, 1);
-                        mem::forget(item);
-                    }
+                for item in iter.into_iter().take(self.len) {
+                    storage.push(item)
                 }
-
-                // let iter = iter.into_iter();
-
-                // let ptr = storage.as_ptr().cast::<T>();
-                // let stride = storage.info().size();
-
-                // let mut count = 0;
-
-                // for item in iter.into_iter().take(self.len) {
-                //     unsafe {
-                //         let base = ptr.add(count * stride);
-                //         base.write(item)
-                //     }
-
-                //     count += 1;
-                // }
 
                 if storage.len() != self.len {
                     Err(Error::IncompleteBatch)
@@ -80,5 +61,43 @@ impl ComponentBatch {
 
     pub(crate) fn take_all(mut self) -> impl Iterator<Item = (ComponentId, Storage)> {
         mem::take(&mut self.storage).into_iter()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{component, components::name, World};
+
+    use super::*;
+    #[test]
+    fn component_batch() {
+        component! {
+            pos: (f32, f32),
+        }
+
+        let mut batch = ComponentBatch::new(8);
+
+        batch
+            .set(
+                pos(),
+                [
+                    (1.0, 3.0),
+                    (5.0, 2.9),
+                    (6.7, 9.3),
+                    (7.0, 3.4),
+                    (6.7, 9.3),
+                    (5.6, 1.3),
+                    (4.7, 8.1),
+                    (5.3, 3.5),
+                ],
+            )
+            .unwrap();
+
+        batch
+            .set(name(), ('a'..'z').map(|v| v.to_string()))
+            .unwrap();
+
+        let mut world = World::new();
+        let ids = world.spawn_batch(batch);
     }
 }

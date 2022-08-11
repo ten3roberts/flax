@@ -1,8 +1,6 @@
 use std::mem;
 
-use crate::{
-    wildcard, CommandBuffer, Component, ComponentBuffer, ComponentValue, Entity, EntityKind, World,
-};
+use crate::{wildcard, CommandBuffer, Component, ComponentBuffer, ComponentValue, Entity, World};
 
 #[derive(Debug)]
 pub struct EntityBuilder {
@@ -70,16 +68,14 @@ impl EntityBuilder {
     /// Clears the builder and allows it to be used again, reusing the builder
     /// will reuse the inner storage, even for different components.
     pub fn spawn(&mut self, world: &mut World) -> Entity {
-        let iter = self.buffer.take_all().map(|(info, val)| {
+        self.buffer.components_mut().for_each(|info| {
             let id = info.id();
-            if id.kind().contains(EntityKind::RELATION) && id.high() == wildcard().low() {
+            if id.is_relation() && id.high() == wildcard().low() {
                 panic!("Attempt to build entity with an unknown parent, but entity requires a parent relation")
             }
-
-            ( info, val )
         });
 
-        let id = world.spawn_with(iter);
+        let id = world.spawn_with(&mut self.buffer);
 
         self.children.drain(..).for_each(|mut child| {
             child.spawn_with_parent(world, id);
@@ -89,17 +85,15 @@ impl EntityBuilder {
     }
 
     fn spawn_with_parent(&mut self, world: &mut World, parent: Entity) -> Entity {
-        let iter = self.buffer.take_all().map(|(mut info, val)| {
+        self.buffer.components_mut().for_each(|info| {
             let id = info.id();
-            if id.kind().contains(EntityKind::RELATION) && id.high() == wildcard().low() {
+            if id.is_relation() && id.high() == wildcard().low() {
                 let rel = id.low();
                 info.id = Entity::join_pair(rel, parent.low())
             }
-
-            (info, val)
         });
 
-        world.spawn_with(iter)
+        world.spawn_with(&mut self.buffer)
     }
 
     /// Spawns the entity into the world through a commandbuffer

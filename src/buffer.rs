@@ -230,6 +230,10 @@ impl ComponentBuffer {
         self.components.values().map(|v| &v.1)
     }
 
+    pub(crate) fn components_mut(&mut self) -> impl Iterator<Item = &mut ComponentInfo> {
+        self.components.values_mut().map(|v| &mut v.1)
+    }
+
     pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Option<T> {
         let (offset, _) = self.components.remove(&component.id())?;
 

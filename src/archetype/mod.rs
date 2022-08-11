@@ -307,7 +307,13 @@ impl Archetype {
     pub unsafe fn push(&mut self, component: ComponentId, src: *mut u8) -> Result<(), *mut u8> {
         let storage = self.storage.get_mut(&component).ok_or(src)?;
         storage.extend(src, 1);
-        assert!(storage.len() <= self.len());
+
+        assert!(
+            storage.len() <= self.entities.len(),
+            "Attempt to insert more values than entities {} > {}",
+            storage.len(),
+            self.entities.len()
+        );
 
         Ok(())
     }
