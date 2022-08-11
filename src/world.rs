@@ -114,7 +114,7 @@ impl World {
 
     /// Spawn a new empty entity into the default namespace
     pub fn spawn(&mut self) -> Entity {
-        self.spawn_with_kind(EntityKind::empty())
+        self.spawn_inner(self.archetype_root, EntityKind::empty()).0
     }
 
     pub fn spawn_batch(&mut self, batch: ComponentBatch) -> Vec<Entity> {
@@ -123,18 +123,30 @@ impl World {
         ids
     }
 
-    pub fn spawn_batch_at(&mut self, ids: &[Entity], batch: ComponentBatch) {
+    /// Batch spawn multiple components with prespecified ids.
+    pub fn spawn_batch_at(&mut self, ids: &[Entity], batch: ComponentBatch) -> Result<()> {
         assert_eq!(
             ids.len(),
             batch.len(),
             "The length of ids must match the number of slots in `batch`"
         );
 
+        // for id in ids {
+        //     self.spawn_at(id)?;
+        // }
+
         let (arch_id, arch) = self.fetch_archetype(batch.components());
 
         let slots = arch.allocate_n(ids);
 
-        // for (id, storage) in batch.storages() {}
+        for (id, mut storage) in batch.take_all() {
+            unsafe {
+                arch.extend(&mut storage)
+                    .expect("Component not in archetype");
+            }
+        }
+
+        Ok(())
     }
 
     /// Spawn a new component of type `T` which can be attached to an entity.
@@ -145,31 +157,70 @@ impl World {
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
     ) -> Component<T> {
-        let id = self.spawn_with_kind(EntityKind::COMPONENT);
+        let (id, _) = self.spawn_inner(self.archetype_root, EntityKind::COMPONENT);
         Component::new(id, name, meta)
     }
 
-    fn spawn_with_kind(&mut self, kind: EntityKind) -> Entity {
+    fn spawn_inner(&mut self, arch_id: ArchetypeId, kind: EntityKind) -> (Entity, EntityLocation) {
         // Place at root
-        let arch = self.archetype_root;
-        let ns = self.init_store(kind);
-        let id = ns.spawn(EntityLocation { arch, slot: 0 });
+        let ns = {
+            self.entities
+                .entry(kind)
+                .or_insert_with(|| EntityStore::new(kind))
+        };
 
-        let slot = self.archetype_mut(self.archetype_root).allocate(id);
+        let arch = {
+            self.archetypes
+                .get_mut(arch_id)
+                .expect("Archetype does not exist")
+        };
 
-        // This is safe as `root` does not contain any components
-        self.location_mut(id).unwrap().slot = slot;
-        id
+        let slot = arch.len();
+
+        let loc = EntityLocation {
+            arch: arch_id,
+            slot,
+        };
+        let id = ns.spawn(loc);
+
+        arch.allocate(id);
+
+        (id, loc)
     }
 
-    pub fn spawn_at(&mut self, id: Entity) -> Result<EntityLocation> {
-        let root = self.archetype_root;
-        let slot = self.archetype_mut(root).allocate(id);
-        let location = EntityLocation { arch: root, slot };
+    /// Spawns an entitiy with a specific id.
+    /// Fails if an entity with the same index already exists.
+    pub fn spawn_at(&mut self, id: Entity) -> Result<()> {
+        self.spawn_inner_at(id, self.archetype_root)?;
+        Ok(())
+    }
 
+    fn spawn_inner_at(&mut self, id: Entity, arch_id: ArchetypeId) -> Result<EntityLocation> {
         let kind = id.kind();
-        let ns = self.init_store(kind);
-        ns.spawn_at(id.index(), id.generation(), location).copied()
+        let ns = {
+            self.entities
+                .entry(kind)
+                .or_insert_with(|| EntityStore::new(kind))
+        };
+
+        let arch = {
+            self.archetypes
+                .get_mut(arch_id)
+                .expect("Archetype does not exist")
+        };
+        let slot = arch.len();
+
+        let location = ns.spawn_at(
+            id.index(),
+            id.generation(),
+            EntityLocation {
+                slot,
+                arch: arch_id,
+            },
+        )?;
+
+        arch.allocate(id);
+        Ok(*location)
     }
 
     /// Access an archetype by id
@@ -187,14 +238,26 @@ impl World {
     /// Spawn an entity with the given components.
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
-    pub fn spawn_with(
-        &mut self,
-        components: impl IntoIterator<Item = (ComponentInfo, *mut u8)>,
-    ) -> Entity {
-        let id = self.spawn();
+    pub fn spawn_with(&mut self, buffer: &mut ComponentBuffer) -> Entity {
+        let change_tick = self.advance_change_tick();
 
-        unsafe {
-            self.set_with(id, components).unwrap();
+        for component in buffer.components() {
+            self.init_component(*component)
+                .expect("Failed to initialize component");
+        }
+
+        let (arch_id, _) = self.fetch_archetype(buffer.components());
+        let (id, loc) = self.spawn_inner(arch_id, EntityKind::empty());
+
+        let arch = self.archetype_mut(arch_id);
+        for (component, src) in buffer.take_all() {
+            unsafe {
+                arch.push(component.id, src)
+                    .expect("Component not in archetype")
+            }
+
+            arch.init_changes(component)
+                .set(Change::inserted(Slice::single(loc.slot), change_tick));
         }
 
         id
@@ -713,7 +776,7 @@ impl World {
             .get(id)
             .ok_or(Error::NoSuchEntity(id))
             .copied()
-            .or_else(|_| self.spawn_at(id))
+            .or_else(|_| self.spawn_inner_at(id, self.archetype_root))
     }
 
     /// Returns the location inside an archetype for a given entity

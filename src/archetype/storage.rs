@@ -1,7 +1,8 @@
 use core::slice;
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, realloc, Layout},
-    ptr::NonNull,
+    mem,
+    ptr::{self, NonNull},
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
@@ -214,6 +215,13 @@ impl Storage {
 
     pub(crate) fn len(&self) -> usize {
         self.len
+    }
+
+    pub(crate) fn push<T: ComponentValue>(&mut self, mut item: T) {
+        unsafe {
+            self.extend(&mut item as *mut T as *mut u8, 1);
+        }
+        mem::forget(item);
     }
 }
 

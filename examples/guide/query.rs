@@ -226,7 +226,7 @@ fn main() -> color_eyre::Result<()> {
     for i in 0..200 {
         tracing::info!("Frame: {i}");
         schedule.execute_par(&mut world)?;
-        sleep(Duration::from_secs_f32(0.1));
+        // sleep(Duration::from_secs_f32(0.1));
     }
 
     // ANCHOR_END: schedule_basic
