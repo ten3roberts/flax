@@ -24,7 +24,7 @@ provide the application logic.
 - tracing
 - Runtime registered components
 
-### Consider reading the [User Guide](https://ten3roberts.github.io/flax/)
+## Consider reading the [**User Guide**](https://ten3roberts.github.io/flax/)
 
 # Example Usage
 
