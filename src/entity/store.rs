@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::{archetype::ArchetypeId, error::Result, EntityGen, EntityKind, Error, StrippedEntity};
 use std::{
     iter::Enumerate,
@@ -49,6 +51,28 @@ pub struct EntityStore<V = EntityLocation> {
     free_head: Option<NonZeroU32>,
     kind: EntityKind,
     len: usize,
+}
+
+impl<V> std::fmt::Debug for EntityStore<V>
+where
+    V: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EntityStore")
+            .field(
+                "slots",
+                &self
+                    .slots
+                    .iter()
+                    .filter(|v| v.is_alive())
+                    .map(|v| unsafe { &*v.value.occupied })
+                    .collect_vec(),
+            )
+            .field("free_head", &self.free_head)
+            .field("kind", &self.kind)
+            .field("len", &self.len)
+            .finish()
+    }
 }
 
 impl<V> EntityStore<V> {
@@ -252,7 +276,7 @@ impl<V> EntityStore<V> {
         index: EntityIndex,
         generation: EntityGen,
         value: V,
-    ) -> Result<&V> {
+    ) -> Result<&mut V> {
         // Init slot
         let free_head = &mut self.free_head;
 
@@ -307,7 +331,7 @@ impl<V> EntityStore<V> {
                     },
                 };
 
-                return unsafe { Ok(&*slot.value.occupied) };
+                return unsafe { Ok(&mut *slot.value.occupied) };
             }
 
             prev = Some(current);

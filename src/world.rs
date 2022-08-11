@@ -18,50 +18,55 @@ use crate::{
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, Error, Filter,
-    Query, RowFormatter, StaticFilter,
+    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, EntityStoreIter,
+    EntityStoreIterMut, Error, Filter, Query, RowFormatter, StaticFilter,
 };
 
-/// Holds the entities and components of the ECS.
-pub struct World {
-    entities: BTreeMap<EntityKind, EntityStore>,
-    pub(crate) archetypes: EntityStore<Archetype>,
-    archetype_root: ArchetypeId,
-    change_tick: AtomicU32,
-    archetype_gen: AtomicU32,
+#[derive(Debug, Default)]
+struct EntityStores {
+    inner: BTreeMap<EntityKind, EntityStore>,
 }
 
-impl World {
-    pub fn new() -> Self {
-        let mut archetypes = EntityStore::new(EntityKind::empty());
-        let root = archetypes.spawn(Archetype::empty());
-
-        Self {
-            entities: BTreeMap::new(),
-            archetypes,
-            change_tick: AtomicU32::new(0),
-            archetype_gen: AtomicU32::new(0),
-            archetype_root: root,
-        }
-    }
-
-    pub fn get_store(&self, kind: EntityKind) -> Result<&EntityStore> {
-        self.entities.get(&kind).ok_or(Error::NoSuchKind(kind))
-    }
-
-    pub fn init_store(&mut self, kind: EntityKind) -> &mut EntityStore {
-        self.entities
+impl EntityStores {
+    fn init(&mut self, kind: EntityKind) -> &mut EntityStore {
+        self.inner
             .entry(kind)
             .or_insert_with(|| EntityStore::new(kind))
     }
 
+    fn get(&self, kind: EntityKind) -> Option<&EntityStore> {
+        self.inner.get(&kind)
+    }
+}
+
+struct Archetypes {
+    root: ArchetypeId,
+    archetypes: EntityStore<Archetype>,
+    gen: AtomicU32,
+}
+
+impl Archetypes {
+    fn new() -> Self {
+        let mut archetypes = EntityStore::new(EntityKind::empty());
+        let root = archetypes.spawn(Archetype::empty());
+        Self {
+            root,
+            archetypes,
+            gen: AtomicU32::new(0),
+        }
+    }
+
+    fn get(&self, arch_id: ArchetypeId) -> &Archetype {
+        self.archetypes.get(arch_id).expect("Invalid archetype")
+    }
+
+    fn get_mut(&mut self, arch_id: ArchetypeId) -> &mut Archetype {
+        self.archetypes.get_mut(arch_id).expect("Invalid archetype")
+    }
+
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    pub fn find_archetype(
-        &self,
-        root: ArchetypeId,
-        mut components: &[ComponentId],
-    ) -> Option<&Archetype> {
+    pub fn find(&self, root: ArchetypeId, mut components: &[ComponentId]) -> Option<&Archetype> {
         let mut cursor = root;
 
         while let [head, tail @ ..] = components {
@@ -75,11 +80,11 @@ impl World {
 
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    pub(crate) fn fetch_archetype<'a>(
+    pub(crate) fn init<'a>(
         &mut self,
         components: impl IntoIterator<Item = &'a ComponentInfo>,
     ) -> (ArchetypeId, &mut Archetype) {
-        let mut cursor = self.archetype_root;
+        let mut cursor = self.root;
 
         for head in components {
             let cur = &mut self.archetypes.get(cursor).unwrap();
@@ -94,7 +99,7 @@ impl World {
                     );
 
                     // Increase gen
-                    self.archetype_gen.fetch_add(1, Ordering::Relaxed);
+                    self.gen.fetch_add(1, Ordering::Relaxed);
                     let id = self.archetypes.spawn(new);
 
                     let (cur, new) = self.archetypes.get_disjoint(cursor, id).unwrap();
@@ -108,18 +113,92 @@ impl World {
         (cursor, self.archetypes.get_mut(cursor).unwrap())
     }
 
+    fn root(&mut self) -> &mut Archetype {
+        self.get_mut(self.root)
+    }
+
+    pub fn get_disjoint(
+        &mut self,
+        a: Entity,
+        b: Entity,
+    ) -> Option<(&mut Archetype, &mut Archetype)> {
+        self.archetypes.get_disjoint(a, b)
+    }
+
+    pub fn iter(&self) -> EntityStoreIter<Archetype> {
+        self.archetypes.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> EntityStoreIterMut<Archetype> {
+        self.archetypes.iter_mut()
+    }
+
+    pub fn despawn(&mut self, id: Entity) -> Result<Archetype> {
+        self.archetypes.despawn(id)
+    }
+}
+
+/// Holds the entities and components of the ECS.
+pub struct World {
+    entities: EntityStores,
+    archetypes: Archetypes,
+    change_tick: AtomicU32,
+}
+
+impl World {
+    pub fn new() -> Self {
+        Self {
+            entities: EntityStores::default(),
+            archetypes: Archetypes::new(),
+            change_tick: AtomicU32::new(0),
+        }
+    }
+
     pub fn spawn_many(&mut self) -> impl Iterator<Item = Entity> + '_ {
         (0..).map(|_| self.spawn())
     }
 
     /// Spawn a new empty entity into the default namespace
     pub fn spawn(&mut self) -> Entity {
-        self.spawn_inner(self.archetype_root, EntityKind::empty()).0
+        self.spawn_inner(self.archetypes.root, EntityKind::empty())
+            .0
     }
 
     pub fn spawn_batch(&mut self, batch: ComponentBatch) -> Vec<Entity> {
-        let ids = self.spawn_many().take(batch.len()).collect_vec();
-        self.spawn_batch_at(&ids, batch);
+        for &component in batch.components() {
+            self.init_component(component)
+                .expect("failed to initialize component");
+        }
+
+        let change_tick = self.advance_change_tick();
+
+        let (arch_id, arch) = self.archetypes.init(batch.components());
+
+        let base = arch.len();
+        let store = self.entities.init(EntityKind::empty());
+        let ids = (0..batch.len())
+            .map(|idx| {
+                store.spawn(EntityLocation {
+                    slot: base + idx,
+                    arch: arch_id,
+                })
+            })
+            .collect_vec();
+
+        let slots = arch.allocate_n(&ids);
+
+        let arch = self.archetype_mut(arch_id);
+
+        for (_, mut storage) in batch.take_all() {
+            unsafe {
+                arch.extend(&mut storage)
+                    .expect("Component not in archetype");
+            }
+
+            arch.init_changes(*storage.info())
+                .set(Change::inserted(slots, change_tick));
+        }
+
         ids
     }
 
@@ -131,19 +210,41 @@ impl World {
             "The length of ids must match the number of slots in `batch`"
         );
 
-        // for id in ids {
-        //     self.spawn_at(id)?;
-        // }
+        for &component in batch.components() {
+            self.init_component(component)
+                .expect("failed to initialize component");
+        }
 
-        let (arch_id, arch) = self.fetch_archetype(batch.components());
+        let change_tick = self.advance_change_tick();
+
+        let (arch_id, arch) = self.archetypes.init(batch.components());
+
+        let base = arch.len();
+        for (idx, &id) in ids.iter().enumerate() {
+            let kind = id.kind();
+            let store = self.entities.init(kind);
+            store.spawn_at(
+                id.index(),
+                id.generation(),
+                EntityLocation {
+                    slot: base + idx,
+                    arch: arch_id,
+                },
+            )?;
+        }
 
         let slots = arch.allocate_n(ids);
 
-        for (id, mut storage) in batch.take_all() {
+        let arch = self.archetype_mut(arch_id);
+
+        for (_, mut storage) in batch.take_all() {
             unsafe {
                 arch.extend(&mut storage)
                     .expect("Component not in archetype");
             }
+
+            arch.init_changes(*storage.info())
+                .set(Change::inserted(slots, change_tick));
         }
 
         Ok(())
@@ -157,23 +258,19 @@ impl World {
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
     ) -> Component<T> {
-        let (id, _) = self.spawn_inner(self.archetype_root, EntityKind::COMPONENT);
+        let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
         Component::new(id, name, meta)
     }
 
-    fn spawn_inner(&mut self, arch_id: ArchetypeId, kind: EntityKind) -> (Entity, EntityLocation) {
+    fn spawn_inner(
+        &mut self,
+        arch_id: ArchetypeId,
+        kind: EntityKind,
+    ) -> (Entity, EntityLocation, &mut Archetype) {
         // Place at root
-        let ns = {
-            self.entities
-                .entry(kind)
-                .or_insert_with(|| EntityStore::new(kind))
-        };
+        let ns = self.entities.init(kind);
 
-        let arch = {
-            self.archetypes
-                .get_mut(arch_id)
-                .expect("Archetype does not exist")
-        };
+        let arch = self.archetypes.get_mut(arch_id);
 
         let slot = arch.len();
 
@@ -185,54 +282,38 @@ impl World {
 
         arch.allocate(id);
 
-        (id, loc)
+        (id, loc, arch)
     }
 
     /// Spawns an entitiy with a specific id.
     /// Fails if an entity with the same index already exists.
-    pub fn spawn_at(&mut self, id: Entity) -> Result<()> {
-        self.spawn_inner_at(id, self.archetype_root)?;
-        Ok(())
-    }
+    pub fn spawn_at(&mut self, id: Entity) -> Result<Entity> {
+        let store = self.entities.init(id.kind());
+        let arch_id = self.archetypes.root;
+        let arch = self.archetypes.get_mut(arch_id);
 
-    fn spawn_inner_at(&mut self, id: Entity, arch_id: ArchetypeId) -> Result<EntityLocation> {
-        let kind = id.kind();
-        let ns = {
-            self.entities
-                .entry(kind)
-                .or_insert_with(|| EntityStore::new(kind))
-        };
-
-        let arch = {
-            self.archetypes
-                .get_mut(arch_id)
-                .expect("Archetype does not exist")
-        };
-        let slot = arch.len();
-
-        let location = ns.spawn_at(
+        let loc = store.spawn_at(
             id.index(),
             id.generation(),
             EntityLocation {
-                slot,
+                slot: 0,
                 arch: arch_id,
             },
         )?;
 
-        arch.allocate(id);
-        Ok(*location)
+        loc.slot = arch.allocate(id);
+
+        Ok(id)
     }
 
     /// Access an archetype by id
     pub fn archetype(&self, id: ArchetypeId) -> &Archetype {
-        self.archetypes.get(id).expect("Archetype does not exist")
+        self.archetypes.get(id)
     }
 
     /// Access an archetype by id
     pub fn archetype_mut(&mut self, id: ArchetypeId) -> &mut Archetype {
-        self.archetypes
-            .get_mut(id)
-            .expect("Archetype does not exist")
+        self.archetypes.get_mut(id)
     }
 
     /// Spawn an entity with the given components.
@@ -246,10 +327,19 @@ impl World {
                 .expect("Failed to initialize component");
         }
 
-        let (arch_id, _) = self.fetch_archetype(buffer.components());
-        let (id, loc) = self.spawn_inner(arch_id, EntityKind::empty());
+        let (arch_id, arch) = self.archetypes.init(buffer.components());
+        let slot = arch.len();
 
-        let arch = self.archetype_mut(arch_id);
+        let id = self
+            .entities
+            .init(EntityKind::empty())
+            .spawn(EntityLocation {
+                slot,
+                arch: arch_id,
+            });
+
+        arch.allocate(id);
+
         for (component, src) in buffer.take_all() {
             unsafe {
                 arch.push(component.id, src)
@@ -257,7 +347,7 @@ impl World {
             }
 
             arch.init_changes(component)
-                .set(Change::inserted(Slice::single(loc.slot), change_tick));
+                .set(Change::inserted(Slice::single(slot), change_tick));
         }
 
         id
@@ -270,17 +360,15 @@ impl World {
         let src = self.archetype_mut(arch);
 
         let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
-        let ns = self.init_store(id.kind());
+        let ns = self.entities.init(id.kind());
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
             ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
-        let root = self.archetype_root;
-
         *self.location_mut(id).unwrap() = EntityLocation {
-            slot: self.archetype_mut(root).allocate(id),
-            arch: root,
+            slot: self.archetypes.root().allocate(id),
+            arch: self.archetypes.root,
         };
 
         self.detach(id);
@@ -295,7 +383,7 @@ impl World {
     /// instance of the provided ComponentInfo.
     ///
     /// The data is considered moved and can not be used afterwards
-    pub unsafe fn set_with(
+    pub fn set_with(
         &mut self,
         id: impl Into<Entity>,
         components: impl IntoIterator<Item = (ComponentInfo, *mut u8)>,
@@ -314,9 +402,11 @@ impl World {
             let src = self.archetype_mut(arch);
 
             if let Some(old) = src.get_dyn(slot, component.id) {
-                // Drop old
-                (component.drop)(old);
-                ptr::copy_nonoverlapping(data, old, component.size());
+                // Drop old and copy the new value in
+                unsafe {
+                    (component.drop)(old);
+                    ptr::copy_nonoverlapping(data, old, component.size());
+                }
 
                 src.changes_mut(component.id())
                     .unwrap()
@@ -340,41 +430,45 @@ impl World {
 
             let components = new_components;
 
-            let (dst_id, _) = self.fetch_archetype(components.iter());
+            let (dst_id, _) = self.archetypes.init(components.iter());
 
             // Borrow disjoint
             let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
 
-            let (dst_slot, swapped) =
-                src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
+            // dst.push is called immediately
+            unsafe {
+                let (dst_slot, swapped) =
+                    src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
 
-            // Insert the missing components
-            for &(component, data) in &new_data {
-                dst.push(component.id, data)
-                    .expect("Insert should not fail");
+                // Insert the missing components
+                for &(component, data) in &new_data {
+                    dst.push(component.id, data)
+                        .expect("Insert should not fail");
 
-                dst.init_changes(component)
-                    .set(Change::inserted(Slice::single(dst_slot), change_tick));
+                    dst.init_changes(component)
+                        .set(Change::inserted(Slice::single(dst_slot), change_tick));
+                }
+
+                assert_eq!(dst.entity(dst_slot), Some(id));
+
+                if let Some((swapped, slot)) = swapped {
+                    // The last entity in src was moved into the slot occupied by id
+                    self.entities
+                        .init(swapped.kind())
+                        .get_mut(swapped)
+                        .expect("Invalid entity id")
+                        .slot = slot;
+                }
+
+                *self.location_mut(id).expect("Entity is not valid") = EntityLocation {
+                    slot: dst_slot,
+                    arch: dst_id,
+                };
             }
+        }
 
-            assert_eq!(dst.entity(dst_slot), Some(id));
-
-            if let Some((swapped, slot)) = swapped {
-                // The last entity in src was moved into the slot occupied by id
-                self.init_store(swapped.kind())
-                    .get_mut(swapped)
-                    .expect("Invalid entity id")
-                    .slot = slot;
-            }
-
-            *self.location_mut(id).expect("Entity is not valid") = EntityLocation {
-                slot: dst_slot,
-                arch: dst_id,
-            };
-
-            for (component, _) in new_data {
-                self.init_component(component)?;
-            }
+        for (component, _) in new_data {
+            self.init_component(component)?;
         }
 
         Ok(())
@@ -388,11 +482,8 @@ impl World {
 
         let mut meta = info.get_meta();
 
-        let loc = self.init_location(info.id())?;
-
-        debug_assert_eq!(Ok(loc), self.location(info.id()));
-
-        unsafe { self.set_with(info.id(), meta.take_all()).unwrap() }
+        self.spawn_at(info.id()).unwrap();
+        self.set_with(info.id(), meta.take_all()).unwrap();
 
         Ok(info)
     }
@@ -409,13 +500,13 @@ impl World {
 
         let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
 
-        let ns = self.init_store(id.kind());
+        let store = self.entities.init(id.kind());
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
-            ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+            store.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
-        ns.despawn(id)?;
+        store.despawn(id)?;
         self.detach(id);
         Ok(())
     }
@@ -482,7 +573,7 @@ impl World {
                     || (id.is_relation() && (id.low() == subject || id.high() == subject)))
             });
 
-            let (dst_id, dst) = self.fetch_archetype(components);
+            let (dst_id, dst) = self.archetypes.init(components);
 
             eprintln!("{:?} => {dst_id}", src.component_names().collect_vec());
 
@@ -547,7 +638,7 @@ impl World {
                 let components: Vec<_> = left.chain([component_info]).chain(right).collect();
 
                 // assert in order
-                let (dst_id, _) = self.fetch_archetype(&components);
+                let (dst_id, _) = self.archetypes.init(&components);
 
                 dst_id
             }
@@ -579,11 +670,11 @@ impl World {
 
             if let Some((swapped, slot)) = swapped {
                 // The last entity in src was moved into the slot occupied by id
-                let swapped_ns = self.init_store(swapped.kind());
+                let swapped_ns = self.entities.init(swapped.kind());
                 swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
             }
 
-            let ns = self.init_store(id.kind());
+            let ns = self.entities.init(id.kind());
             let loc = EntityLocation {
                 slot: dst_slot,
                 arch: dst_id,
@@ -610,7 +701,7 @@ impl World {
         component: ComponentInfo,
         on_drop: impl FnOnce(*mut u8),
     ) -> Result<EntityLocation> {
-        let ns = self.init_store(id.kind());
+        let ns = self.entities.init(id.kind());
         let &EntityLocation { arch: src_id, slot } = ns.get(id).unwrap();
 
         let src = self.archetype(src_id);
@@ -628,7 +719,7 @@ impl World {
                     .copied()
                     .collect_vec();
 
-                let (dst_id, _) = self.fetch_archetype(&components);
+                let (dst_id, _) = self.archetypes.init(&components);
 
                 dst_id
             }
@@ -663,7 +754,7 @@ impl World {
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
-            let swapped_ns = self.init_store(swapped.kind());
+            let swapped_ns = self.entities.init(swapped.kind());
             swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
 
@@ -755,7 +846,8 @@ impl World {
 
     /// Returns true if the entity is still alive
     pub fn is_alive(&self, id: Entity) -> bool {
-        self.get_store(id.kind())
+        self.entities
+            .get(id.kind())
             .map(|v| v.is_alive(id))
             .unwrap_or(false)
     }
@@ -764,31 +856,18 @@ impl World {
         self.archetypes.iter()
     }
 
-    /// Returns the location of an entity, or spawns it if is in the static
-    /// namespace.
-    ///
-    /// This is often the case when setting components to components.
-    ///
-    /// If the entity is not found and is not in the static namespace an error
-    /// will be returned.
-    pub(crate) fn init_location(&mut self, id: Entity) -> Result<EntityLocation> {
-        self.init_store(id.kind())
-            .get(id)
-            .ok_or(Error::NoSuchEntity(id))
-            .copied()
-            .or_else(|_| self.spawn_inner_at(id, self.archetype_root))
-    }
-
     /// Returns the location inside an archetype for a given entity
     pub fn location(&self, id: Entity) -> Result<EntityLocation> {
-        self.get_store(id.kind())?
-            .get(id)
+        self.entities
+            .get(id.kind())
+            .and_then(|v| v.get(id))
             .ok_or(Error::NoSuchEntity(id))
             .copied()
     }
 
     fn location_mut(&mut self, id: Entity) -> Result<&mut EntityLocation> {
-        self.init_store(id.kind())
+        self.entities
+            .init(id.kind())
             .get_mut(id)
             .ok_or(Error::NoSuchEntity(id))
     }
@@ -796,7 +875,7 @@ impl World {
     /// Get a reference to the world's archetype generation
     #[must_use]
     pub fn archetype_gen(&self) -> u32 {
-        self.archetype_gen.load(Ordering::Relaxed)
+        self.archetypes.gen.load(Ordering::Relaxed)
     }
 
     #[must_use]
@@ -861,7 +940,7 @@ impl World {
     }
 
     pub(crate) fn reconstruct(&self, id: crate::StrippedEntity) -> Option<Entity> {
-        let ns = self.get_store(id.kind()).ok()?;
+        let ns = self.entities.get(id.kind())?;
 
         ns.reconstruct(id).map(|v| v.0)
     }
@@ -983,14 +1062,14 @@ mod tests {
         let mut world = World::new();
 
         // () -> (a) -> (ab) -> (abc)
-        let (_, archetype) = world.fetch_archetype(&[a().info(), b().info(), c().info()]);
+        let (_, archetype) = world.archetypes.init(&[a().info(), b().info(), c().info()]);
         assert!(!archetype.has(d().id()));
         assert!(archetype.has(a().id()));
         assert!(archetype.has(b().id()));
 
         // () -> (a) -> (ab) -> (abc)
         //                   -> (abd)
-        let (_, archetype) = world.fetch_archetype(&[a().info(), b().info(), d().info()]);
+        let (_, archetype) = world.archetypes.init(&[a().info(), b().info(), d().info()]);
         assert!(archetype.has(d().id()));
         assert!(!archetype.has(c().id()));
     }
