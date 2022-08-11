@@ -677,7 +677,7 @@ sequence.</p>
     for i in 0..200 {
         tracing::info!(&quot;Frame: {i}&quot;);
         schedule.execute_par(&amp;mut world)?;
-        sleep(Duration::from_secs_f32(0.1));
+        // sleep(Duration::from_secs_f32(0.1));
     }
 
 <span class="boring">}
