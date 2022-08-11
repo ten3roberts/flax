@@ -99,5 +99,9 @@ mod test {
 
         let mut world = World::new();
         let ids = world.spawn_batch(batch);
+
+        for (&id, n) in ids.iter().zip(('a'..).map(|v| v.to_string())) {
+            assert_eq!(world.get(id, name()).as_deref(), Ok(&n));
+        }
     }
 }
