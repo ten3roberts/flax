@@ -1,19 +1,16 @@
 use std::{collections::BTreeMap, mem};
 
 use crate::{
-    archetype::StorageBorrowDyn, Archetype, Component, ComponentId, ComponentValue, EntityStore,
-    StaticFilter, World,
+    archetype::StorageBorrowDyn, serde::ComponentKey, Archetype, Archetypes, Component,
+    ComponentId, ComponentValue, StaticFilter, World,
 };
 
-use serde::{
-    ser::{SerializeMap, SerializeSeq, SerializeStruct, SerializeTupleStruct},
-    Serialize,
-};
+use serde::ser::{SerializeMap, SerializeSeq, SerializeStruct, SerializeTupleStruct};
 
 #[derive(Clone)]
 struct Slot {
     /// Takes a whole column and returns a serializer for it
-    ser_col: fn(storage: StorageBorrowDyn<'_>) -> &'_ dyn erased_serde::Serialize,
+    ser_col: for<'a> fn(storage: &'a StorageBorrowDyn) -> Box<dyn erased_serde::Serialize>,
     key: ComponentKey,
 }
 
@@ -32,11 +29,11 @@ impl SerializeBuilder {
         key: impl Into<String>,
         component: Component<T>,
     ) -> &mut Self {
-        fn ser_col<T: serde::Serialize + ComponentValue>(
-            storage: StorageBorrowDyn<'_>,
-        ) -> &'_ dyn erased_serde::Serialize {
+        fn ser_col<'a, T: serde::Serialize + ComponentValue>(
+            storage: &'a StorageBorrowDyn<'_>,
+        ) -> Box<dyn erased_serde::Serialize> {
             let data = unsafe { storage.as_slice::<T>() };
-            &data
+            Box::new(data)
         }
 
         let key = key.into();
@@ -99,7 +96,7 @@ where
 }
 
 struct SerializeArchetypes<'a, F> {
-    archetypes: &'a EntityStore<Archetype>,
+    archetypes: &'a Archetypes,
     filter: &'a F,
     context: &'a ColumnSerialize,
 }
@@ -147,7 +144,7 @@ impl<'a> serde::Serialize for SerializeStorage<'a> {
         for storage in self.storage.storages() {
             let id = storage.info().id;
             if let Some(slot) = self.context.serializers.get(&id) {
-                state.serialize_entry(&slot.key, (slot.ser_col)(storage))?;
+                state.serialize_entry(&slot.key, (slot.ser_col)(&storage))?;
             }
         }
 
@@ -160,15 +157,12 @@ impl<'a> serde::Serialize for SerializeArchetype<'a> {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("Arch", 3)?;
-        state.serialize_field("entities", self.arch.entities())?;
-        state.serialize_field(
-            "components",
-            &SerializeStorage {
-                storage: self.arch,
-                context: self.context,
-            },
-        )?;
+        let mut state = serializer.serialize_tuple_struct("Arch", 3)?;
+        state.serialize_field(self.arch.entities())?;
+        state.serialize_field(&SerializeStorage {
+            storage: self.arch,
+            context: self.context,
+        })?;
 
         state.end()
     }

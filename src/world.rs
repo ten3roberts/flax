@@ -39,14 +39,14 @@ impl EntityStores {
     }
 }
 
-struct Archetypes {
+pub(crate) struct Archetypes {
     root: ArchetypeId,
     archetypes: EntityStore<Archetype>,
     gen: AtomicU32,
 }
 
 impl Archetypes {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut archetypes = EntityStore::new(EntityKind::empty());
         let root = archetypes.spawn(Archetype::empty());
         Self {
@@ -56,18 +56,18 @@ impl Archetypes {
         }
     }
 
-    fn get(&self, arch_id: ArchetypeId) -> &Archetype {
+    pub fn get(&self, arch_id: ArchetypeId) -> &Archetype {
         self.archetypes.get(arch_id).expect("Invalid archetype")
     }
 
-    fn get_mut(&mut self, arch_id: ArchetypeId) -> &mut Archetype {
+    pub fn get_mut(&mut self, arch_id: ArchetypeId) -> &mut Archetype {
         self.archetypes.get_mut(arch_id).expect("Invalid archetype")
     }
 
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    pub fn find(&self, root: ArchetypeId, mut components: &[ComponentId]) -> Option<&Archetype> {
-        let mut cursor = root;
+    pub fn find(&self, mut components: &[ComponentId]) -> Option<&Archetype> {
+        let mut cursor = self.root;
 
         while let [head, tail @ ..] = components {
             let next = self.archetypes.get(cursor).unwrap().edge_to(*head)?;
@@ -113,7 +113,7 @@ impl Archetypes {
         (cursor, self.archetypes.get_mut(cursor).unwrap())
     }
 
-    fn root(&mut self) -> &mut Archetype {
+    pub fn root(&mut self) -> &mut Archetype {
         self.get_mut(self.root)
     }
 
@@ -136,12 +136,16 @@ impl Archetypes {
     pub fn despawn(&mut self, id: Entity) -> Result<Archetype> {
         self.archetypes.despawn(id)
     }
+
+    pub fn len(&self) -> usize {
+        self.archetypes.len()
+    }
 }
 
 /// Holds the entities and components of the ECS.
 pub struct World {
     entities: EntityStores,
-    archetypes: Archetypes,
+    pub(crate) archetypes: Archetypes,
     change_tick: AtomicU32,
 }
 
