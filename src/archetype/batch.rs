@@ -59,6 +59,22 @@ impl ComponentBatch {
         }
     }
 
+    /// Inserts a storage directly
+    pub(crate) fn insert(&mut self, storage: Storage) -> crate::error::Result<()> {
+        let info = storage.info();
+        match self.storage.entry(info.id()) {
+            Entry::Occupied(_) => Err(Error::DuplicateComponent(*info)),
+            Entry::Vacant(slot) => {
+                if storage.len() != self.len {
+                    Err(Error::IncompleteBatch)
+                } else {
+                    slot.insert(storage);
+                    Ok(())
+                }
+            }
+        }
+    }
+
     pub(crate) fn take_all(mut self) -> impl Iterator<Item = (ComponentId, Storage)> {
         mem::take(&mut self.storage).into_iter()
     }

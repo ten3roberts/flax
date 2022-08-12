@@ -1,4 +1,5 @@
 mod deserialize;
+mod serialize;
 
 use serde::{de::Visitor, ser::SerializeTupleStruct, Deserialize, Serialize};
 
@@ -14,4 +15,10 @@ impl ComponentKey {
     fn new(key: String, id: ComponentId) -> Self {
         Self { key, id }
     }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+enum WorldFields {
+    #[serde(rename = "archetypes")]
+    Archetypes,
 }
