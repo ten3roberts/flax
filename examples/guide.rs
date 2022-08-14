@@ -2,7 +2,7 @@ use std::{io::stdin, process::id};
 
 use flax::{
     component,
-    components::{component, name},
+    components::{is_component, name},
     Query, World,
 };
 use itertools::Itertools;

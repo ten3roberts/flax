@@ -1,29 +1,50 @@
-use std::{collections::BTreeMap, mem};
+use std::collections::BTreeMap;
 
 use crate::{
-    archetype::StorageBorrowDyn, serde::ComponentKey, Archetype, Archetypes, Component,
-    ComponentId, ComponentValue, StaticFilter, World,
+    archetype::StorageBorrowDyn, components::is_component, And, Archetype, Archetypes, Component,
+    ComponentId, ComponentValue, StaticFilter, Without, World,
 };
 
-use serde::ser::{SerializeMap, SerializeSeq, SerializeStruct, SerializeTupleStruct};
+use serde::{
+    ser::{SerializeMap, SerializeSeq, SerializeStruct, SerializeTupleStruct},
+    Serializer,
+};
 
 #[derive(Clone)]
 struct Slot {
     /// Takes a whole column and returns a serializer for it
-    ser_col: for<'a> fn(storage: &'a StorageBorrowDyn) -> Box<dyn erased_serde::Serialize>,
-    key: ComponentKey,
+    ser_col: for<'x> fn(
+        storage: &'x StorageBorrowDyn<'_>,
+        slot: usize,
+    ) -> &'x dyn erased_serde::Serialize,
+    key: String,
 }
 
-#[derive(Clone, Default)]
-pub struct SerializeBuilder {
-    serializers: BTreeMap<ComponentId, Slot>,
+#[derive(Clone)]
+pub struct SerializeBuilder<F> {
+    slots: BTreeMap<ComponentId, Slot>,
+    filter: F,
 }
 
-impl SerializeBuilder {
+impl SerializeBuilder<Without> {
     pub fn new() -> Self {
-        Default::default()
+        Self {
+            slots: Default::default(),
+            filter: is_component().without(),
+        }
     }
+}
 
+impl Default for SerializeBuilder<Without> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<F> SerializeBuilder<F>
+where
+    F: StaticFilter + 'static + Clone,
+{
     pub fn with<T: ComponentValue + serde::Serialize>(
         &mut self,
         key: impl Into<String>,
@@ -31,17 +52,19 @@ impl SerializeBuilder {
     ) -> &mut Self {
         fn ser_col<'a, T: serde::Serialize + ComponentValue>(
             storage: &'a StorageBorrowDyn<'_>,
-        ) -> Box<dyn erased_serde::Serialize> {
-            let data = unsafe { storage.as_slice::<T>() };
-            Box::new(data)
+            slot: usize,
+        ) -> &'a dyn erased_serde::Serialize {
+            let ptr = storage.at(slot).expect("Slot outside range");
+            unsafe {
+                let val = ptr.cast::<T>().as_ref().expect("not null");
+                val
+            }
         }
 
-        let key = key.into();
-
-        self.serializers.insert(
+        self.slots.insert(
             component.id(),
             Slot {
-                key: ComponentKey::new(key, component.id()),
+                key: key.into(),
                 ser_col: ser_col::<T>,
             },
         );
@@ -49,34 +72,51 @@ impl SerializeBuilder {
         self
     }
 
-    pub fn build(&mut self) -> ColumnSerialize {
-        ColumnSerialize {
-            serializers: mem::take(&mut self.serializers),
+    /// Add a new filter to specify which entities will be serialized.
+    pub fn with_filter<G>(self, filter: G) -> SerializeBuilder<And<F, G>> {
+        SerializeBuilder {
+            slots: self.slots,
+            filter: And::new(self.filter, filter),
+        }
+    }
+
+    pub fn build(&mut self) -> SerializeContext {
+        SerializeContext {
+            slots: self.slots.clone(),
+            filter: Box::new(self.filter.clone()),
         }
     }
 }
 
-/// Describes how to serialize a world into columns.
-pub struct ColumnSerialize {
-    serializers: BTreeMap<ComponentId, Slot>,
+/// Describes how to serialize a world given a group of components to serialize
+/// and an optional filter. Empty entities will be skipped.
+pub struct SerializeContext {
+    slots: BTreeMap<ComponentId, Slot>,
+    filter: Box<dyn StaticFilter>,
 }
 
-impl ColumnSerialize {
-    pub fn builder() -> SerializeBuilder {
+impl SerializeContext {
+    /// Construct a a new serializer context
+    pub fn builder() -> SerializeBuilder<Without> {
         SerializeBuilder::new()
+    }
+
+    /// Serialize the world in a column major format.
+    /// This is more efficient but less human readable.
+    pub fn serialize<'a>(&'a self, world: &'a World) -> WorldSerializer<'a> {
+        WorldSerializer {
+            world,
+            context: self,
+        }
     }
 }
 
-struct WorldSerializer<'a, F> {
+pub struct WorldSerializer<'a> {
     world: &'a World,
-    context: &'a ColumnSerialize,
-    filter: F,
+    context: &'a SerializeContext,
 }
 
-impl<'a, F> serde::Serialize for WorldSerializer<'a, F>
-where
-    F: StaticFilter,
-{
+impl<'a> serde::Serialize for WorldSerializer<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -86,7 +126,6 @@ where
             "archetypes",
             &SerializeArchetypes {
                 archetypes: &self.world.archetypes,
-                filter: &self.filter,
                 context: self.context,
             },
         )?;
@@ -95,16 +134,12 @@ where
     }
 }
 
-struct SerializeArchetypes<'a, F> {
+struct SerializeArchetypes<'a> {
     archetypes: &'a Archetypes,
-    filter: &'a F,
-    context: &'a ColumnSerialize,
+    context: &'a SerializeContext,
 }
 
-impl<'a, F> serde::Serialize for SerializeArchetypes<'a, F>
-where
-    F: StaticFilter,
-{
+impl<'a> serde::Serialize for SerializeArchetypes<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -112,10 +147,15 @@ where
         let mut state = serializer.serialize_seq(Some(self.archetypes.len()))?;
 
         for (_, arch) in self.archetypes.iter() {
-            if self.filter.static_matches(arch) {
-                state.serialize_element(&SerializeStorage {
-                    storage: arch,
+            if !arch.is_empty()
+                && arch
+                    .component_ids()
+                    .any(|id| self.context.slots.contains_key(&id))
+                && self.context.filter.static_matches(arch)
+            {
+                state.serialize_element(&SerializeArchetype {
                     context: self.context,
+                    arch,
                 })?;
             }
         }
@@ -126,15 +166,34 @@ where
 
 struct SerializeArchetype<'a> {
     arch: &'a Archetype,
-    context: &'a ColumnSerialize,
+    context: &'a SerializeContext,
+}
+
+struct SerializeStorages<'a> {
+    storage: &'a Archetype,
+    context: &'a SerializeContext,
 }
 
 struct SerializeStorage<'a> {
-    storage: &'a Archetype,
-    context: &'a ColumnSerialize,
+    storage: &'a StorageBorrowDyn<'a>,
+    slot: &'a Slot,
 }
 
 impl<'a> serde::Serialize for SerializeStorage<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let ser_fn = self.slot.ser_col;
+        let mut seq = serializer.serialize_seq(Some(self.storage.len()))?;
+        for slot in 0..self.storage.len() {
+            seq.serialize_element(ser_fn(self.storage, slot))?;
+        }
+
+        seq.end()
+    }
+}
+impl<'a> serde::Serialize for SerializeStorages<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -143,8 +202,14 @@ impl<'a> serde::Serialize for SerializeStorage<'a> {
 
         for storage in self.storage.storages() {
             let id = storage.info().id;
-            if let Some(slot) = self.context.serializers.get(&id) {
-                state.serialize_entry(&slot.key, (slot.ser_col)(&storage))?;
+            if let Some(slot) = self.context.slots.get(&id) {
+                state.serialize_entry(
+                    &slot.key,
+                    &SerializeStorage {
+                        storage: &storage,
+                        slot,
+                    },
+                )?;
             }
         }
 
@@ -159,7 +224,7 @@ impl<'a> serde::Serialize for SerializeArchetype<'a> {
     {
         let mut state = serializer.serialize_tuple_struct("Arch", 3)?;
         state.serialize_field(self.arch.entities())?;
-        state.serialize_field(&SerializeStorage {
+        state.serialize_field(&SerializeStorages {
             storage: self.arch,
             context: self.context,
         })?;

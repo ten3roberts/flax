@@ -14,5 +14,5 @@ component! {
     /// Tag for anything which is a component.
     /// Added automatically to all components.
     /// This is the basis of the reflection provided by flax
-    pub component: ComponentInfo,
+    pub is_component: ComponentInfo,
 }

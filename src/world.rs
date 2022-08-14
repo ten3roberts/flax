@@ -11,8 +11,8 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, Change, ComponentBatch, ComponentInfo, Slice},
-    components::{component, name},
+    archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ComponentInfo, Slice},
+    components::{is_component, name},
     debug_visitor, entities,
     entity::{EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
@@ -168,7 +168,8 @@ impl World {
             .0
     }
 
-    pub fn spawn_batch(&mut self, batch: ComponentBatch) -> Vec<Entity> {
+    /// Efficiently spawn many entities with the same components at once.
+    pub fn spawn_batch(&mut self, batch: &mut BatchSpawn) -> Vec<Entity> {
         for &component in batch.components() {
             self.init_component(component)
                 .expect("failed to initialize component");
@@ -207,7 +208,7 @@ impl World {
     }
 
     /// Batch spawn multiple components with prespecified ids.
-    pub fn spawn_batch_at(&mut self, ids: &[Entity], batch: ComponentBatch) -> Result<()> {
+    pub fn spawn_batch_at(&mut self, ids: &[Entity], batch: &mut BatchSpawn) -> Result<()> {
         assert_eq!(
             ids.len(),
             batch.len(),
@@ -518,7 +519,7 @@ impl World {
     /// Despawns all components which matches the filter
     pub fn despawn_all<F>(&mut self, filter: F)
     where
-        F: StaticFilter,
+        F: for<'x> Filter<'x>,
     {
         let mut query = Query::new(entities()).filter(filter);
         let ids = query.prepare(self).iter().collect_vec();
@@ -921,14 +922,14 @@ impl World {
     // }
 
     pub fn component_metadata(&self) -> BTreeMap<ComponentInfo, Vec<String>> {
-        let filter = component().with();
+        let filter = is_component().with();
         self.archetypes
             .iter()
             .filter(|(_, arch)| filter.matches(arch))
             .map(|(_, arch)| {
                 (
                     arch.slots(),
-                    arch.storage(component()).unwrap(),
+                    arch.storage(is_component()).unwrap(),
                     arch.components()
                         .map(|v| v.name().to_string())
                         .collect_vec(),
@@ -1001,7 +1002,7 @@ pub struct WorldFormatter<'a, F> {
 
 impl<'a, F> std::fmt::Debug for WorldFormatter<'a, F>
 where
-    F: StaticFilter,
+    F: for<'x> Filter<'x>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut meta = BTreeMap::new();
@@ -1041,7 +1042,7 @@ impl Default for World {
 
 impl std::fmt::Debug for World {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.format_debug(component().without()).fmt(f)
+        self.format_debug(is_component().without()).fmt(f)
     }
 }
 

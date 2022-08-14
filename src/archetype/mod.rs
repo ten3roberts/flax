@@ -507,6 +507,10 @@ impl Archetype {
     pub fn entities(&self) -> &[Entity] {
         self.entities.as_ref()
     }
+
+    pub(crate) fn component_ids(&self) -> impl Iterator<Item = ComponentId> + '_ {
+        self.storage.keys().copied()
+    }
 }
 
 impl Drop for Archetype {

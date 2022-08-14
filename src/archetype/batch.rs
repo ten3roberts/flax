@@ -3,16 +3,16 @@ use std::{
     mem,
 };
 
-use crate::{Component, ComponentId, ComponentInfo, ComponentValue, Error};
+use crate::{Component, ComponentId, ComponentInfo, ComponentValue, Entity, Error};
 
 use super::Storage;
 
-pub struct ComponentBatch {
+pub struct BatchSpawn {
     len: usize,
     storage: BTreeMap<ComponentId, Storage>,
 }
 
-impl ComponentBatch {
+impl BatchSpawn {
     pub fn new(len: usize) -> Self {
         Self {
             len,
@@ -75,8 +75,12 @@ impl ComponentBatch {
         }
     }
 
-    pub(crate) fn take_all(mut self) -> impl Iterator<Item = (ComponentId, Storage)> {
+    pub(crate) fn take_all(&mut self) -> impl Iterator<Item = (ComponentId, Storage)> {
         mem::take(&mut self.storage).into_iter()
+    }
+
+    pub(crate) fn spawn(&mut self, world: &mut crate::World) -> Vec<Entity> {
+        world.spawn_batch(self)
     }
 }
 
@@ -91,7 +95,7 @@ mod test {
             pos: (f32, f32),
         }
 
-        let mut batch = ComponentBatch::new(8);
+        let mut batch = BatchSpawn::new(8);
 
         batch
             .set(
@@ -109,12 +113,10 @@ mod test {
             )
             .unwrap();
 
-        batch
-            .set(name(), ('a'..'z').map(|v| v.to_string()))
-            .unwrap();
+        batch.set(name(), ('a'..).map(|v| v.to_string())).unwrap();
 
         let mut world = World::new();
-        let ids = world.spawn_batch(batch);
+        let ids = world.spawn_batch(&mut batch);
 
         for (&id, n) in ids.iter().zip(('a'..).map(|v| v.to_string())) {
             assert_eq!(world.get(id, name()).as_deref(), Ok(&n));
