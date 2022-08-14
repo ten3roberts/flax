@@ -46,7 +46,7 @@ impl<Q> Query<Q, Without> {
     pub fn new(query: Q) -> Self {
         Self {
             archetypes: Vec::new(),
-            filter: crate::components::component().without(),
+            filter: crate::components::is_component().without(),
             fetch: query,
             change_tick: 0,
             archetype_gen: 0,

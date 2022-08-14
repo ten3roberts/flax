@@ -6,7 +6,7 @@ use serde::{
 };
 
 use crate::{
-    archetype::{ComponentBatch, Storage},
+    archetype::{BatchSpawn, Storage},
     util::TupleCloned,
     Archetype, Archetypes, Component, ComponentInfo, ComponentValue, Entity, World,
 };
@@ -81,13 +81,20 @@ impl DeserializeBuilder {
         );
         self
     }
+
+    pub fn build(&mut self) -> DeserializeContext {
+        DeserializeContext {
+            slots: self.slots.clone(),
+        }
+    }
 }
 
-pub struct ColumnDeserialize {
+/// Describes how to deserialize the world from the described components.
+pub struct DeserializeContext {
     slots: BTreeMap<String, Slot>,
 }
 
-impl ColumnDeserialize {
+impl DeserializeContext {
     /// Deserializes the world from the supplied deserializer.
     pub fn deserialize<'de, D>(&self, deserializer: D) -> std::result::Result<World, D::Error>
     where
@@ -98,7 +105,7 @@ impl ColumnDeserialize {
 }
 
 struct WorldVisitor<'a> {
-    context: &'a ColumnDeserialize,
+    context: &'a DeserializeContext,
 }
 
 impl<'a, 'de> Visitor<'de> for WorldVisitor<'a> {
@@ -142,7 +149,7 @@ impl<'a, 'de> Visitor<'de> for WorldVisitor<'a> {
 
 /// Deserializes a list of archetypes
 struct DeserializeArchetypes<'a> {
-    context: &'a ColumnDeserialize,
+    context: &'a DeserializeContext,
     world: &'a mut World,
 }
 
@@ -161,7 +168,7 @@ impl<'a, 'de> DeserializeSeed<'de> for DeserializeArchetypes<'a> {
 }
 
 struct ArchetypesVisitor<'a> {
-    context: &'a ColumnDeserialize,
+    context: &'a DeserializeContext,
     world: &'a mut World,
 }
 
@@ -177,11 +184,11 @@ impl<'a, 'de> Visitor<'de> for ArchetypesVisitor<'a> {
         A: SeqAccess<'de>,
     {
         let world = self.world;
-        while let Some((ids, batch)) = seq.next_element_seed(DeserializeArchetype {
+        while let Some((ids, mut batch)) = seq.next_element_seed(DeserializeArchetype {
             context: self.context,
         })? {
             world
-                .spawn_batch_at(&ids, batch)
+                .spawn_batch_at(&ids, &mut batch)
                 .expect("Entity ids are not duplicated");
         }
 
@@ -190,11 +197,11 @@ impl<'a, 'de> Visitor<'de> for ArchetypesVisitor<'a> {
 }
 
 struct DeserializeArchetype<'a> {
-    context: &'a ColumnDeserialize,
+    context: &'a DeserializeContext,
 }
 
 impl<'de, 'a> DeserializeSeed<'de> for DeserializeArchetype<'a> {
-    type Value = (Vec<Entity>, ComponentBatch);
+    type Value = (Vec<Entity>, BatchSpawn);
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -211,11 +218,11 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeArchetype<'a> {
 }
 
 struct ArchetypeVisitor<'a> {
-    context: &'a ColumnDeserialize,
+    context: &'a DeserializeContext,
 }
 
 impl<'a, 'de> Visitor<'de> for ArchetypeVisitor<'a> {
-    type Value = (Vec<Entity>, ComponentBatch);
+    type Value = (Vec<Entity>, BatchSpawn);
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(formatter, "an archetype of entities and components")
@@ -242,11 +249,11 @@ impl<'a, 'de> Visitor<'de> for ArchetypeVisitor<'a> {
 
 struct DeserializeStorages<'a> {
     len: usize,
-    context: &'a ColumnDeserialize,
+    context: &'a DeserializeContext,
 }
 
 impl<'de, 'a> DeserializeSeed<'de> for DeserializeStorages<'a> {
-    type Value = ComponentBatch;
+    type Value = BatchSpawn;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -261,11 +268,11 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeStorages<'a> {
 
 struct StoragesVisitor<'a> {
     len: usize,
-    context: &'a ColumnDeserialize,
+    context: &'a DeserializeContext,
 }
 
 impl<'de, 'a> Visitor<'de> for StoragesVisitor<'a> {
-    type Value = ComponentBatch;
+    type Value = BatchSpawn;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(formatter, "a map of component values")
@@ -275,7 +282,7 @@ impl<'de, 'a> Visitor<'de> for StoragesVisitor<'a> {
     where
         A: de::MapAccess<'de>,
     {
-        let mut batch = ComponentBatch::new(self.len);
+        let mut batch = BatchSpawn::new(self.len);
         while let Some(key) = map.next_key::<&'de str>()? {
             let slot = self
                 .context

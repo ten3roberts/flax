@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{ComponentInfo, Entity, EntityKind};
 
-#[derive(Error, Debug, Clone, PartialEq)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Error {
     #[error("No entities exist for {0:?}")]

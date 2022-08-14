@@ -285,4 +285,13 @@ impl<'a> StorageBorrowDyn<'a> {
     pub unsafe fn as_slice<T>(&self) -> &[T] {
         slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
     }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }

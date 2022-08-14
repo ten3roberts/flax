@@ -196,7 +196,7 @@ impl<T: ComponentValue> Component<T> {
 
 impl<T: ComponentValue> MetaData<T> for Component<T> {
     fn attach(info: ComponentInfo, buffer: &mut ComponentBuffer) {
-        buffer.set(crate::components::component(), info);
+        buffer.set(crate::components::is_component(), info);
     }
 }
 

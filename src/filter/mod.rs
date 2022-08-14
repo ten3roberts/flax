@@ -1,6 +1,9 @@
 mod cmp;
 
-use std::{iter::FusedIterator, ops::Neg};
+use std::{
+    iter::FusedIterator,
+    ops::{BitAnd, Neg},
+};
 
 use atomic_refcell::AtomicRef;
 
@@ -62,7 +65,7 @@ gen_bitops! {
 }
 
 /// A filter which does not depend upon any state, such as a `with` filter
-pub trait StaticFilter: for<'x> Filter<'x> {
+pub trait StaticFilter {
     fn static_matches(&self, arch: &Archetype) -> bool;
 }
 
@@ -263,7 +266,7 @@ where
     R: StaticFilter,
 {
     fn static_matches(&self, archetype: &Archetype) -> bool {
-        self.left.matches(archetype) && self.right.matches(archetype)
+        self.left.static_matches(archetype) && self.right.static_matches(archetype)
     }
 }
 
@@ -310,7 +313,7 @@ where
     R: StaticFilter,
 {
     fn static_matches(&self, archetype: &Archetype) -> bool {
-        self.left.matches(archetype) || self.right.matches(archetype)
+        self.left.static_matches(archetype) || self.right.static_matches(archetype)
     }
 }
 
@@ -453,7 +456,7 @@ where
     T: StaticFilter,
 {
     fn static_matches(&self, archetype: &Archetype) -> bool {
-        !self.0.matches(archetype)
+        !self.0.static_matches(archetype)
     }
 }
 
