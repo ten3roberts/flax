@@ -1,17 +1,20 @@
-use std::{collections::BTreeMap, marker::PhantomData};
+use std::{
+    any::Any, borrow::BorrowMut, collections::BTreeMap, hash::BuildHasherDefault,
+    marker::PhantomData,
+};
 
 use serde::{
-    de::{self, DeserializeSeed, SeqAccess, Visitor},
+    de::{self, DeserializeSeed, SeqAccess, VariantAccess, Visitor},
     Deserialize, Deserializer,
 };
 
 use crate::{
     archetype::{BatchSpawn, Storage},
     util::TupleCloned,
-    Archetype, Archetypes, Component, ComponentInfo, ComponentValue, Entity, World,
+    Archetype, Archetypes, Component, ComponentInfo, ComponentValue, Entity, EntityBuilder, World,
 };
 
-use super::{ComponentKey, WorldFields};
+use super::{ComponentKey, SerializeFormat, WorldFields};
 
 #[derive(Clone)]
 struct Slot {
@@ -21,9 +24,15 @@ struct Slot {
         len: usize,
         component: ComponentInfo,
     ) -> erased_serde::Result<Storage>,
+    deser_one: fn(
+        deserializer: &mut dyn erased_serde::Deserializer,
+        component: ComponentInfo,
+        builder: &mut EntityBuilder,
+    ) -> erased_serde::Result<()>,
     info: ComponentInfo,
 }
 
+/// [ T, T, T ]
 struct DeserializeStorage<'a> {
     slot: &'a Slot,
     len: usize,
@@ -38,7 +47,7 @@ impl<'a, 'de> DeserializeSeed<'de> for DeserializeStorage<'a> {
     {
         let mut deserializer = <dyn erased_serde::Deserializer>::erase(deserializer);
         let storage = (self.slot.deser_col)(&mut deserializer, self.len, self.slot.info)
-            .map_err(|err| de::Error::custom(err))?;
+            .map_err(de::Error::custom)?;
 
         Ok(storage)
     }
@@ -70,12 +79,23 @@ impl DeserializeBuilder {
             })
         }
 
+        fn deser_one<T: ComponentValue + for<'x> Deserialize<'x>>(
+            deserializer: &mut dyn erased_serde::Deserializer,
+            info: ComponentInfo,
+            builder: &mut EntityBuilder,
+        ) -> erased_serde::Result<()> {
+            let value = T::deserialize(deserializer)?;
+            builder.set_dyn(info, value);
+            Ok(())
+        }
+
         let key = key.into();
 
         self.slots.insert(
             key,
             Slot {
                 deser_col: deser_col::<T>,
+                deser_one: deser_one::<T>,
                 info: component.info(),
             },
         );
@@ -100,7 +120,13 @@ impl DeserializeContext {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_struct("World", &["archetypes"], WorldVisitor { context: self })
+        deserializer.deserialize_enum("World", &["row", "col"], WorldVisitor { context: self })
+    }
+
+    fn get(&self, key: &str) -> Result<&Slot, String> {
+        self.slots
+            .get(key)
+            .ok_or_else(|| format!("Unknown component key: {key:?}"))
     }
 }
 
@@ -115,9 +141,218 @@ impl<'a, 'de> Visitor<'de> for WorldVisitor<'a> {
         write!(formatter, "A map like structure containing the world")
     }
 
+    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::EnumAccess<'de>,
+    {
+        let (format, variant) = data.variant::<SerializeFormat>()?;
+        let world = match format {
+            SerializeFormat::ColumnMajor => variant.struct_variant(
+                &["archetypes"],
+                WorldColumnVisitor {
+                    context: self.context,
+                },
+            )?,
+            SerializeFormat::RowMajor => variant.struct_variant(
+                &["entities"],
+                WorldRowVisitor {
+                    context: self.context,
+                },
+            )?,
+        };
+        Ok(world)
+    }
+}
+
+struct DeserializeEntities<'a> {
+    context: &'a DeserializeContext,
+    world: &'a mut World,
+}
+
+impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntities<'a> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(self)
+    }
+}
+
+impl<'de, 'a> Visitor<'de> for DeserializeEntities<'a> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "an entity id followed by a map of components")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut builder = EntityBuilder::new();
+        while let Some(()) = seq.next_element_seed(DeserializeEntity {
+            context: self.context,
+            builder: &mut builder,
+        })? {
+            builder.spawn(self.world);
+        }
+
+        Ok(())
+    }
+}
+
+/// (id, components)
+struct DeserializeEntity<'a> {
+    context: &'a DeserializeContext,
+    builder: &'a mut EntityBuilder,
+}
+
+impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntity<'a> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_tuple_struct("Entity", 2, self)
+    }
+}
+
+impl<'de, 'a> Visitor<'de> for DeserializeEntity<'a> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "an entity id followed by a map of components")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let id = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+
+        seq.next_element_seed(DeserializeEntityData {
+            context: self.context,
+            builder: self.builder,
+        })?
+        .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+
+        self.builder.with_id(id);
+        Ok(())
+    }
+}
+
+struct DeserializeEntityData<'a> {
+    context: &'a DeserializeContext,
+    builder: &'a mut EntityBuilder,
+}
+
+impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntityData<'a> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_map(self)
+    }
+}
+
+/// { component: value }
+impl<'de, 'a> Visitor<'de> for DeserializeEntityData<'a> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a map of component values")
+    }
+
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
-        A: serde::de::MapAccess<'de>,
+        A: de::MapAccess<'de>,
+    {
+        while let Some(key) = map.next_key::<&str>()? {
+            let slot = self.context.get(key).map_err(de::Error::custom)?;
+            map.next_value_seed(DeserializeComponent {
+                slot,
+                builder: self.builder,
+            })?;
+        }
+
+        Ok(())
+    }
+}
+
+/// A single component value
+struct DeserializeComponent<'a> {
+    slot: &'a Slot,
+    builder: &'a mut EntityBuilder,
+}
+
+impl<'de, 'a> DeserializeSeed<'de> for DeserializeComponent<'a> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut deserializer = <dyn erased_serde::Deserializer>::erase(deserializer);
+        (self.slot.deser_one)(&mut deserializer, self.slot.info, self.builder)
+            .map_err(de::Error::custom)?;
+
+        Ok(())
+    }
+}
+
+/// Deserializes a list of archetypes
+struct WorldRowVisitor<'a> {
+    context: &'a DeserializeContext,
+}
+
+impl<'de, 'a> Visitor<'de> for WorldRowVisitor<'a> {
+    type Value = World;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a struct containing a sequence of entities")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        let mut world = World::new();
+        while let Some(key) = map.next_key()? {
+            match key {
+                "entities" => map.next_value_seed(DeserializeEntities {
+                    context: self.context,
+                    world: &mut world,
+                })?,
+                key => return Err(de::Error::unknown_field(key, &["entities"])),
+            }
+        }
+
+        Ok(world)
+    }
+}
+
+/// Deserializes a list of archetypes
+struct WorldColumnVisitor<'a> {
+    context: &'a DeserializeContext,
+}
+
+impl<'de, 'a> Visitor<'de> for WorldColumnVisitor<'a> {
+    type Value = World;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a struct containing a sequence of archetypes")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
     {
         let mut world = World::new();
         let mut has_archetypes = false;
@@ -139,9 +374,20 @@ impl<'a, 'de> Visitor<'de> for WorldVisitor<'a> {
             }
         }
 
-        if !has_archetypes {
-            return Err(de::Error::missing_field("archetypes"));
-        }
+        Ok(world)
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut world = World::new();
+
+        seq.next_element_seed(DeserializeArchetypes {
+            context: self.context,
+            world: &mut world,
+        })?
+        .ok_or_else(|| de::Error::invalid_length(0, &self))?;
 
         Ok(world)
     }
@@ -241,7 +487,7 @@ impl<'a, 'de> Visitor<'de> for ArchetypeVisitor<'a> {
                 len: entities.len(),
                 context: self.context,
             })?
-            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
 
         Ok((entities, components))
     }
@@ -284,11 +530,7 @@ impl<'de, 'a> Visitor<'de> for StoragesVisitor<'a> {
     {
         let mut batch = BatchSpawn::new(self.len);
         while let Some(key) = map.next_key::<&'de str>()? {
-            let slot = self
-                .context
-                .slots
-                .get(key)
-                .ok_or_else(|| de::Error::custom(format!("Unknown component key: {key:?}")))?;
+            let slot = self.context.get(key).map_err(de::Error::custom)?;
 
             let storage = map.next_value_seed(DeserializeStorage {
                 slot,

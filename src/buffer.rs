@@ -241,13 +241,16 @@ impl ComponentBuffer {
     }
 
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
+        self.set_dyn(component.info(), value)
+    }
+
+    pub fn set_dyn<T: ComponentValue>(&mut self, component: ComponentInfo, value: T) -> Option<T> {
         if let Some(&(offset, _)) = self.components.get(&component.id()) {
             unsafe { Some(self.storage.swap(offset, value)) }
         } else {
             let offset = self.storage.insert(value);
 
-            self.components
-                .insert(component.id(), (offset, ComponentInfo::of(component)));
+            self.components.insert(component.id(), (offset, component));
 
             None
         }

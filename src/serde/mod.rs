@@ -1,10 +1,8 @@
 mod deserialize;
 mod serialize;
 
-use std::borrow::BorrowMut;
-
 pub use deserialize::*;
-use serde::{de::Visitor, ser::SerializeTupleStruct, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 pub use serialize::*;
 
 use crate::{And, Component, ComponentId, ComponentValue, StaticFilter, Without};
@@ -19,6 +17,21 @@ struct ComponentKey {
 enum WorldFields {
     #[serde(rename = "archetypes")]
     Archetypes,
+}
+
+/// Describes the serialialization format
+#[derive(Debug, Clone, serde::Deserialize)]
+pub enum SerializeFormat {
+    /// Serialize the world in a column major format.
+    /// This is more efficient but less human readable.
+    #[serde(rename = "col")]
+    ColumnMajor,
+    /// Serialize the world in a row major format.
+    /// This is less efficient and uses slightly more space since each entity is
+    /// serialized as a map, though it is more human readable and easier for git
+    /// merges.
+    #[serde(rename = "row")]
+    RowMajor,
 }
 
 /// Allows constructing a serialize and deserialize context with the same
@@ -74,8 +87,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::process::id;
-
     use rand::{
         distributions::{Standard, Uniform},
         rngs::StdRng,
@@ -135,6 +146,33 @@ mod test {
             .or_default()
             .push("Fire".to_string());
 
+        let all_entities = [vec![player], enemies].concat();
+
+        let test_eq = |world: &World, new_world: &World| {
+            // Check that all are identical
+            for &id in &all_entities {
+                assert_eq!(
+                    world.get(id, health()).as_deref(),
+                    new_world.get(id, health()).as_deref()
+                );
+
+                assert_eq!(
+                    world.get(id, pos()).as_deref(),
+                    new_world.get(id, pos()).as_deref()
+                );
+
+                assert_eq!(
+                    world.get(id, items()).as_deref(),
+                    new_world.get(id, items()).as_deref()
+                );
+
+                assert_eq!(
+                    world.get(id, status_effects()).as_deref(),
+                    new_world.get(id, status_effects()).as_deref()
+                );
+            }
+        };
+
         let (serializer, deserializer) = SerdeBuilder::new()
             .with("name", name())
             .with("health", health())
@@ -143,36 +181,28 @@ mod test {
             .with("status_effects", status_effects())
             .build();
 
-        let json = serde_json::to_string_pretty(&serializer.serialize(&world)).unwrap();
+        let json = serde_json::to_string_pretty(
+            &serializer.serialize(&world, SerializeFormat::ColumnMajor),
+        )
+        .unwrap();
         eprintln!("World: {json}");
 
+        let new_world: World = deserializer
+            .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
+            .expect("Failed to deserialize world");
+
+        test_eq(&world, &new_world);
+
+        let json =
+            serde_json::to_string_pretty(&serializer.serialize(&world, SerializeFormat::RowMajor))
+                .unwrap();
+        eprintln!("World: {json}");
+
+        let world = new_world;
         let new_world = deserializer
             .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
             .expect("Failed to deserialize world");
 
-        let all_entities = [vec![player], enemies].concat();
-
-        // Check that all are identical
-        for id in all_entities {
-            assert_eq!(
-                world.get(id, health()).as_deref(),
-                new_world.get(id, health()).as_deref()
-            );
-
-            assert_eq!(
-                world.get(id, pos()).as_deref(),
-                new_world.get(id, pos()).as_deref()
-            );
-
-            assert_eq!(
-                world.get(id, items()).as_deref(),
-                new_world.get(id, items()).as_deref()
-            );
-
-            assert_eq!(
-                world.get(id, status_effects()).as_deref(),
-                new_world.get(id, status_effects()).as_deref()
-            );
-        }
+        test_eq(&world, &new_world)
     }
 }

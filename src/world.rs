@@ -291,24 +291,40 @@ impl World {
     }
 
     /// Spawns an entitiy with a specific id.
-    /// Fails if an entity with the same index already exists.
-    pub fn spawn_at(&mut self, id: Entity) -> Result<Entity> {
+    /// Despawns any existing entity.
+    pub fn spawn_at(&mut self, id: Entity) {
+        self.spawn_at_inner(id, self.archetypes.root);
+    }
+
+    /// Spawns an entitiy with a specific id.
+    /// Despawns any existing entity.
+    pub fn spawn_at_inner(
+        &mut self,
+        id: Entity,
+        arch_id: ArchetypeId,
+    ) -> (EntityLocation, &mut Archetype) {
+        assert!(matches!(
+            self.despawn(id),
+            Err(Error::NoSuchEntity(..)) | Ok(())
+        ));
+
         let store = self.entities.init(id.kind());
-        let arch_id = self.archetypes.root;
         let arch = self.archetypes.get_mut(arch_id);
 
-        let loc = store.spawn_at(
-            id.index(),
-            id.generation(),
-            EntityLocation {
-                slot: 0,
-                arch: arch_id,
-            },
-        )?;
+        let loc = store
+            .spawn_at(
+                id.index(),
+                id.generation(),
+                EntityLocation {
+                    slot: 0,
+                    arch: arch_id,
+                },
+            )
+            .expect("Entity not despawned");
 
         loc.slot = arch.allocate(id);
 
-        Ok(id)
+        (*loc, arch)
     }
 
     /// Access an archetype by id
@@ -324,7 +340,7 @@ impl World {
     /// Spawn an entity with the given components.
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
-    pub fn spawn_with(&mut self, buffer: &mut ComponentBuffer) -> Entity {
+    pub fn spawn_at_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Entity {
         let change_tick = self.advance_change_tick();
 
         for component in buffer.components() {
@@ -332,18 +348,8 @@ impl World {
                 .expect("Failed to initialize component");
         }
 
-        let (arch_id, arch) = self.archetypes.init(buffer.components());
-        let slot = arch.len();
-
-        let id = self
-            .entities
-            .init(EntityKind::empty())
-            .spawn(EntityLocation {
-                slot,
-                arch: arch_id,
-            });
-
-        arch.allocate(id);
+        let (arch_id, _) = self.archetypes.init(buffer.components());
+        let (loc, arch) = self.spawn_at_inner(id, arch_id);
 
         for (component, src) in buffer.take_all() {
             unsafe {
@@ -352,7 +358,35 @@ impl World {
             }
 
             arch.init_changes(component)
-                .set(Change::inserted(Slice::single(slot), change_tick));
+                .set(Change::inserted(Slice::single(loc.slot), change_tick));
+        }
+
+        id
+    }
+
+    /// Spawn an entity with the given components.
+    ///
+    /// For increased ergonomics, prefer [crate::EntityBuilder]
+    pub fn spawn_with(&mut self, buffer: &mut ComponentBuffer) -> Entity {
+        let change_tick = self.advance_change_tick();
+
+        for component in buffer.components() {
+            self.init_component(*component)
+                .expect("Failed to initialize component");
+        }
+
+        let (arch_id, _) = self.archetypes.init(buffer.components());
+
+        let (id, loc, arch) = self.spawn_inner(arch_id, EntityKind::empty());
+
+        for (component, src) in buffer.take_all() {
+            unsafe {
+                arch.push(component.id, src)
+                    .expect("Component not in archetype")
+            }
+
+            arch.init_changes(component)
+                .set(Change::inserted(Slice::single(loc.slot), change_tick));
         }
 
         id
@@ -487,7 +521,7 @@ impl World {
 
         let mut meta = info.get_meta();
 
-        self.spawn_at(info.id()).unwrap();
+        self.spawn_at(info.id());
         self.set_with(info.id(), meta.take_all()).unwrap();
 
         Ok(info)
