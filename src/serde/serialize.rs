@@ -1,19 +1,21 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    archetype::StorageBorrowDyn, components::is_component, And, Archetype, Archetypes, Component,
-    ComponentId, ComponentValue, StaticFilter, Without, World,
+    archetype::StorageBorrowDyn, components::is_component, And, Archetype, ArchetypeId, Component,
+    ComponentId, ComponentValue, Entity, StaticFilter, Without, World,
 };
 
 use serde::{
-    ser::{SerializeMap, SerializeSeq, SerializeStruct, SerializeTupleStruct},
-    Serializer,
+    ser::{SerializeMap, SerializeSeq, SerializeStructVariant, SerializeTupleStruct},
+    Serialize, Serializer,
 };
+
+use super::SerializeFormat;
 
 #[derive(Clone)]
 struct Slot {
     /// Takes a whole column and returns a serializer for it
-    ser_col: for<'x> fn(
+    ser: for<'x> fn(
         storage: &'x StorageBorrowDyn<'_>,
         slot: usize,
     ) -> &'x dyn erased_serde::Serialize,
@@ -65,7 +67,7 @@ where
             component.id(),
             Slot {
                 key: key.into(),
-                ser_col: ser_col::<T>,
+                ser: ser_col::<T>,
             },
         );
 
@@ -103,39 +105,143 @@ impl SerializeContext {
 
     /// Serialize the world in a column major format.
     /// This is more efficient but less human readable.
-    pub fn serialize<'a>(&'a self, world: &'a World) -> WorldSerializer<'a> {
+    pub fn serialize<'a>(
+        &'a self,
+        world: &'a World,
+        format: SerializeFormat,
+    ) -> WorldSerializer<'a> {
         WorldSerializer {
+            format,
             world,
             context: self,
         }
     }
+
+    fn archetypes<'a>(
+        &'a self,
+        world: &'a World,
+    ) -> impl Iterator<Item = (ArchetypeId, &'a Archetype)> {
+        world.archetypes().filter(|(_, arch)| {
+            !arch.is_empty()
+                && arch.component_ids().any(|id| self.slots.contains_key(&id))
+                && self.filter.static_matches(arch)
+        })
+    }
 }
 
 pub struct WorldSerializer<'a> {
+    format: SerializeFormat,
+    context: &'a SerializeContext,
+    world: &'a World,
+}
+
+impl<'a> Serialize for WorldSerializer<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.format {
+            SerializeFormat::RowMajor => {
+                let mut state = serializer.serialize_struct_variant("World", 0, "row", 1)?;
+                state.serialize_field(
+                    "entities",
+                    &SerializeEntities {
+                        world: self.world,
+                        context: self.context,
+                    },
+                )?;
+                state.end()
+            }
+            SerializeFormat::ColumnMajor => {
+                let mut state = serializer.serialize_struct_variant("World", 1, "col", 1)?;
+                state.serialize_field(
+                    "archetypes",
+                    &SerializeArchetypes {
+                        world: self.world,
+                        context: self.context,
+                    },
+                )?;
+                state.end()
+            }
+        }
+    }
+}
+
+struct SerializeEntities<'a> {
     world: &'a World,
     context: &'a SerializeContext,
 }
 
-impl<'a> serde::Serialize for WorldSerializer<'a> {
+impl<'a> Serialize for SerializeEntities<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
-        let mut state = serializer.serialize_struct("World", 3)?;
-        state.serialize_field(
-            "archetypes",
-            &SerializeArchetypes {
-                archetypes: &self.world.archetypes,
-                context: self.context,
-            },
-        )?;
+        let mut seq = serializer.serialize_seq(None)?;
+
+        for (_, arch) in self.context.archetypes(self.world) {
+            for slot in arch.slots() {
+                seq.serialize_element(&SerializeEntity {
+                    slot,
+                    arch,
+                    id: arch.entity(slot).expect("Invalid slot"),
+                    context: self.context,
+                })?;
+            }
+        }
+
+        seq.end()
+    }
+}
+
+struct SerializeEntity<'a> {
+    slot: usize,
+    arch: &'a Archetype,
+    id: Entity,
+    context: &'a SerializeContext,
+}
+
+impl<'a> Serialize for SerializeEntity<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_tuple_struct("Entity", 2)?;
+        state.serialize_field(&self.id)?;
+        state.serialize_field(&SerializeEntityData {
+            slot: self.slot,
+            arch: self.arch,
+            context: self.context,
+        })?;
+
+        state.end()
+    }
+}
+
+struct SerializeEntityData<'a> {
+    slot: usize,
+    arch: &'a Archetype,
+    context: &'a SerializeContext,
+}
+
+impl<'a> Serialize for SerializeEntityData<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_map(None)?;
+        for storage in self.arch.storages() {
+            if let Some(slot) = self.context.slots.get(&storage.info().id()) {
+                state.serialize_entry(&slot.key, (slot.ser)(&storage, self.slot))?;
+            }
+        }
 
         state.end()
     }
 }
 
 struct SerializeArchetypes<'a> {
-    archetypes: &'a Archetypes,
+    world: &'a World,
     context: &'a SerializeContext,
 }
 
@@ -144,20 +250,13 @@ impl<'a> serde::Serialize for SerializeArchetypes<'a> {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_seq(Some(self.archetypes.len()))?;
+        let mut state = serializer.serialize_seq(None)?;
 
-        for (_, arch) in self.archetypes.iter() {
-            if !arch.is_empty()
-                && arch
-                    .component_ids()
-                    .any(|id| self.context.slots.contains_key(&id))
-                && self.context.filter.static_matches(arch)
-            {
-                state.serialize_element(&SerializeArchetype {
-                    context: self.context,
-                    arch,
-                })?;
-            }
+        for (_, arch) in self.context.archetypes(self.world) {
+            state.serialize_element(&SerializeArchetype {
+                context: self.context,
+                arch,
+            })?;
         }
 
         state.end()
@@ -184,7 +283,7 @@ impl<'a> serde::Serialize for SerializeStorage<'a> {
     where
         S: Serializer,
     {
-        let ser_fn = self.slot.ser_col;
+        let ser_fn = self.slot.ser;
         let mut seq = serializer.serialize_seq(Some(self.storage.len()))?;
         for slot in 0..self.storage.len() {
             seq.serialize_element(ser_fn(self.storage, slot))?;

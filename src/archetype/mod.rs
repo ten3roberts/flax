@@ -275,6 +275,12 @@ impl Archetype {
     pub(crate) fn allocate(&mut self, id: Entity) -> Slot {
         // self.reserve(1);
 
+        #[cfg(debug_assertions)]
+        {
+            if self.entities.iter().any(|&v| v == id) {
+                panic!("Entity already in archetype");
+            }
+        }
         let slot = self.len();
 
         self.entities.push(id);
