@@ -35,6 +35,7 @@ unsafe impl Send for CommandBuffer {}
 unsafe impl Sync for CommandBuffer {}
 
 impl CommandBuffer {
+    /// Creates a new commandbuffer
     pub fn new() -> Self {
         Self::default()
     }

@@ -1,7 +1,7 @@
 mod iter;
 mod prepared;
 
-use std::{collections::HashSet, fmt::Debug};
+use std::fmt::Debug;
 
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
@@ -216,8 +216,8 @@ pub struct QueryData<'a, Q, F = Without> {
 
 impl<'a, Q, F> SystemData<'a> for Query<Q, F>
 where
-    Q: Debug + 'a,
-    F: Debug + 'a,
+    Q: for<'x> Fetch<'x> + Debug + 'a,
+    F: for<'x> Filter<'x> + Debug + 'a,
 {
     type Data = QueryData<'a, Q, F>;
 

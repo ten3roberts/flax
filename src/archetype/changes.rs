@@ -27,9 +27,13 @@ impl std::fmt::Debug for Changes {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
+/// Represents a change for a slice of entities for a specific component
 pub enum ChangeKind {
+    /// Component was modified
     Modified,
+    /// Component was inserted
     Inserted,
+    /// Component was removed
     Removed,
 }
 
@@ -64,17 +68,24 @@ impl ChangeKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
+/// Represents a change over a slice of entities in an archetype which ocurred
+/// at a specific time.
 pub struct Change {
+    /// The slice of entities in the archetype which are affected
     pub slice: Slice,
+    /// The world tick of the change event
     pub tick: u32,
+    /// The kind of change
     pub kind: ChangeKind,
 }
 
 impl Change {
+    /// Creates a new change
     pub fn new(slice: Slice, tick: u32, kind: ChangeKind) -> Self {
         Self { slice, tick, kind }
     }
 
+    /// Create a new modification event
     pub fn modified(slice: Slice, tick: u32) -> Change {
         Self {
             slice,
@@ -83,6 +94,7 @@ impl Change {
         }
     }
 
+    /// Create a new insert event
     pub fn inserted(slice: Slice, tick: u32) -> Change {
         Self {
             slice,
@@ -91,6 +103,7 @@ impl Change {
         }
     }
 
+    /// Create a new remove event
     pub fn removed(slice: Slice, tick: u32) -> Change {
         Self {
             slice,

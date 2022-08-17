@@ -2,7 +2,24 @@
 //!
 //! The world is organized by simple identifiers known as an `Entity`, which can have any number of components attached to them.
 //!
-//! # Usage
+//! Systems operate and iterate upon entities and their attached components and
+//! provide the application logic.
+//!
+//! ## Features
+//! - Queries
+//! - Change detection
+//! - Query filtering
+//! - System execution
+//! - Multithreaded system execution through `Schedule`
+//! - Builtin many to many entity relation and graphs
+//! - Reflection through component metadata
+//! - Ergonomic entity builder
+//! - tracing
+//! - Runtime registered components
+//!
+//! ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
+//!
+//! # Example Usage
 //!
 //! ```rust
 //!   // Declare static components
@@ -34,6 +51,7 @@
 //!   }
 //!
 //! ```
+//!
 //!
 //! # Comparison to other ECS
 //!
@@ -92,6 +110,9 @@
 //!
 //! As such, there are tests covering most, if not all of the unsafe parts of the
 //! code, both directly through unit tests and indirectly using integration tests.
+
+#![deny(missing_docs)]
+
 mod archetype;
 mod component;
 mod entity;
@@ -105,16 +126,23 @@ mod world;
 
 pub mod components;
 mod entity_ref;
-pub mod entry;
+mod entry;
+/// Defines the single error type and result alias
 pub mod error;
+/// Traits for fetching multiple component values simultaneously
 pub mod fetch;
-pub mod macros;
+mod macros;
 mod meta;
+/// System execution
 pub mod schedule;
+/// Provides tuple utilities like `cloned`
 pub mod util;
+/// Provides a debug visitor
 pub mod visitors;
 
 #[cfg(feature = "serde")]
+/// Allows for efficient serialization and deserialization of the world and the
+/// entities therein
 pub mod serde;
 
 // Required due to macro

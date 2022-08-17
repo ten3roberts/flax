@@ -1,23 +1,21 @@
 use core::fmt;
-use std::{
-    collections::BTreeMap,
-    fmt::{Debug, Formatter},
-};
+use std::{collections::BTreeMap, fmt::Formatter};
 
 use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Slot, VisitData, Visitor},
-    component, Archetype, ComponentId, ComponentValue,
+    component, Archetype, ComponentBuffer, ComponentId, ComponentInfo, ComponentValue, MetaData,
 };
 
 /// Format a component with debug
 pub struct DebugVisitor {
-    visit: unsafe fn(VisitData<'_>) -> &'_ dyn Debug,
+    visit: unsafe fn(VisitData<'_>) -> &'_ dyn fmt::Debug,
 }
 
 impl DebugVisitor {
-    pub fn new<T>() -> Self
+    /// Creates a new debug visitor visiting values of type `T`
+    fn new<T>() -> Self
     where
         T: ComponentValue + std::fmt::Debug,
     {
@@ -36,7 +34,7 @@ impl DebugVisitor {
 }
 
 impl<'a> Visitor<'a> for DebugVisitor {
-    type Visited = &'a dyn Debug;
+    type Visited = &'a dyn fmt::Debug;
 
     unsafe fn visit(&'a self, visit: VisitData<'a>) -> Self::Visited {
         (self.visit)(visit)
@@ -44,10 +42,23 @@ impl<'a> Visitor<'a> for DebugVisitor {
 }
 
 component! {
+    /// Allows visiting and debug formatting the component
     pub debug_visitor: DebugVisitor,
 }
 
-pub struct RowFormatter<'a> {
+#[derive(Debug, Clone)]
+/// Forward the debug implementation to the component
+pub struct Debug;
+
+impl<T> MetaData<T> for Debug
+where
+    T: std::fmt::Debug + ComponentValue,
+{
+    fn attach(_: ComponentInfo, buffer: &mut ComponentBuffer) {
+        buffer.set(debug_visitor(), DebugVisitor::new::<T>());
+    }
+}
+pub(crate) struct RowFormatter<'a> {
     pub arch: &'a Archetype,
     pub slot: Slot,
     pub meta:
@@ -56,7 +67,7 @@ pub struct RowFormatter<'a> {
 
 struct MissingDebug;
 
-impl Debug for MissingDebug {
+impl fmt::Debug for MissingDebug {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "...")
     }
@@ -75,7 +86,7 @@ impl<'a> RowFormatter<'a> {
     }
 }
 
-impl<'a> Debug for RowFormatter<'a> {
+impl<'a> fmt::Debug for RowFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
         for storage in self.arch.storages() {

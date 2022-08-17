@@ -1,7 +1,9 @@
 /// Transform (&T, &U) -> (T, U)
 pub trait TupleCloned {
+    /// The cloned version of a tuple
     type Cloned: 'static;
 
+    /// Clone the items in the tuple
     fn cloned(self) -> Self::Cloned;
 }
 

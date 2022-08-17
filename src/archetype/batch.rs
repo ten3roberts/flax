@@ -41,37 +41,23 @@ impl BatchSpawn {
         iter: impl IntoIterator<Item = T>,
     ) -> crate::error::Result<()> {
         let info = component.info();
-        match self.storage.entry(component.id()) {
-            Entry::Occupied(_) => Err(Error::DuplicateComponent(info)),
-            Entry::Vacant(slot) => {
-                let storage = slot.insert(Storage::with_capacity(info, self.len));
+        let mut storage = Storage::with_capacity(info, self.len);
 
-                for item in iter.into_iter().take(self.len) {
-                    storage.push(item)
-                }
-
-                if storage.len() != self.len {
-                    Err(Error::IncompleteBatch)
-                } else {
-                    Ok(())
-                }
-            }
+        for item in iter.into_iter().take(self.len) {
+            storage.push(item)
         }
+
+        self.insert(storage)
     }
 
     /// Inserts a storage directly
     pub(crate) fn insert(&mut self, storage: Storage) -> crate::error::Result<()> {
         let info = storage.info();
-        match self.storage.entry(info.id()) {
-            Entry::Occupied(_) => Err(Error::DuplicateComponent(*info)),
-            Entry::Vacant(slot) => {
-                if storage.len() != self.len {
-                    Err(Error::IncompleteBatch)
-                } else {
-                    slot.insert(storage);
-                    Ok(())
-                }
-            }
+        if storage.len() != self.len {
+            Err(Error::IncompleteBatch)
+        } else {
+            self.storage.insert(info.id(), storage);
+            Ok(())
         }
     }
 
@@ -79,7 +65,7 @@ impl BatchSpawn {
         mem::take(&mut self.storage).into_iter()
     }
 
-    pub(crate) fn spawn(&mut self, world: &mut crate::World) -> Vec<Entity> {
+    pub fn spawn(&mut self, world: &mut crate::World) -> Vec<Entity> {
         world.spawn_batch(self)
     }
 }

@@ -15,6 +15,7 @@ use crate::{
     Access, And, Archetype, Component, ComponentValue, Filter, Not, Or, PreparedFilter,
 };
 
+/// A filter which compare a component before yielding an item from the query
 pub trait CmpExt<T>
 where
     T: ComponentValue,

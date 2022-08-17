@@ -42,6 +42,8 @@ pub struct SerdeBuilder<F> {
 }
 
 impl SerdeBuilder<Without> {
+    /// Creates a new builder which simultaneously constructs a serialialization
+    /// and deserialization context
     pub fn new() -> Self {
         Self {
             ser: Default::default(),
@@ -60,6 +62,7 @@ impl<F> SerdeBuilder<F>
 where
     F: StaticFilter + 'static + Clone,
 {
+    /// Register a component for both serialization and deserialiaztion
     pub fn with<T: ComponentValue + Serialize + for<'de> Deserialize<'de>>(
         &mut self,
         key: impl Into<String>,
@@ -79,7 +82,7 @@ where
         }
     }
 
-    /// Construct a serialize and deserialize context.
+    /// Finish constructing the serialize and deserialize context.
     pub fn build(&mut self) -> (SerializeContext, DeserializeContext) {
         (self.ser.build(), self.de.build())
     }

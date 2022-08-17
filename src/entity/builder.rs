@@ -6,6 +6,8 @@ use crate::{
 };
 
 #[derive(Debug)]
+/// Incrementally build a single entity which allows for more efficient
+/// insertion into the world.
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
     children: Vec<EntityBuilder>,
@@ -13,6 +15,7 @@ pub struct EntityBuilder {
 }
 
 impl EntityBuilder {
+    /// Creates a new entity builder
     pub fn new() -> Self {
         Self {
             buffer: ComponentBuffer::new(),

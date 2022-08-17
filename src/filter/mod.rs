@@ -1,15 +1,12 @@
 mod cmp;
 
-use std::{
-    iter::FusedIterator,
-    ops::{BitAnd, Neg},
-};
+use std::{iter::FusedIterator, ops::Neg};
 
 use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Archetype, ChangeKind, Changes, Slice},
-    Access, ArchetypeId, ComponentId, World,
+    Access, ArchetypeId, ComponentId,
 };
 
 pub use cmp::CmpExt;
@@ -66,6 +63,7 @@ gen_bitops! {
 
 /// A filter which does not depend upon any state, such as a `with` filter
 pub trait StaticFilter {
+    /// Returns true if the filter matches the archetype without state
     fn static_matches(&self, arch: &Archetype) -> bool;
 }
 
@@ -77,6 +75,7 @@ pub trait Filter<'w>
 where
     Self: Sized + std::fmt::Debug,
 {
+    /// The filter holding possible borrows
     type Prepared: PreparedFilter + 'w;
 
     /// Prepare the filter for an archetype.
@@ -94,17 +93,20 @@ where
     fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access>;
 }
 
+/// The prepared version of a filter, which can hold borrows from the world
 pub trait PreparedFilter {
     /// Filters a slice of entity slots and returns a subset of the slice
     fn filter(&mut self, slots: Slice) -> Slice;
 }
 
 #[derive(Debug, Clone)]
+/// Filter which only yields modified or inserted components
 pub struct ModifiedFilter {
     component: ComponentId,
 }
 
 impl ModifiedFilter {
+    /// Create a new modified filter
     pub fn new(component: ComponentId) -> Self {
         Self { component }
     }
@@ -150,11 +152,13 @@ impl<'a> Filter<'a> for ModifiedFilter {
 }
 
 #[derive(Debug, Clone)]
+/// Filter which only yields inserted components
 pub struct InsertedFilter {
     component: ComponentId,
 }
 
 impl InsertedFilter {
+    /// Create a new inserted filter
     pub fn new(component: ComponentId) -> Self {
         Self { component }
     }
@@ -187,11 +191,13 @@ impl<'a> Filter<'a> for InsertedFilter {
 }
 
 #[derive(Debug, Clone)]
+/// Filter which only yields removed `components
 pub struct RemovedFilter {
     component: ComponentId,
 }
 
 impl RemovedFilter {
+    /// Create a new removed filter
     pub fn new(component: ComponentId) -> Self {
         Self { component }
     }
@@ -224,12 +230,14 @@ impl<'a> Filter<'a> for RemovedFilter {
 }
 
 #[derive(Debug, Clone)]
+/// And filter combinator
 pub struct And<L, R> {
     left: L,
     right: R,
 }
 
 impl<L, R> And<L, R> {
+    /// Creates a new and filter
     pub fn new(left: L, right: R) -> Self {
         Self { left, right }
     }
@@ -271,12 +279,14 @@ where
 }
 
 #[derive(Debug, Clone)]
+/// Or filter combinator
 pub struct Or<L, R> {
     left: L,
     right: R,
 }
 
 impl<L, R> Or<L, R> {
+    /// Creates a new or filter
     pub fn new(left: L, right: R) -> Self {
         Self { left, right }
     }
@@ -318,6 +328,7 @@ where
 }
 
 #[derive(Debug)]
+#[doc(hidden)]
 pub struct PreparedKindFilter<'a> {
     changes: Option<AtomicRef<'a, Changes>>,
     cur: Option<Slice>,
@@ -397,15 +408,10 @@ impl<'a> PreparedFilter for PreparedKindFilter<'a> {
 }
 
 /// Or filter combinator
+#[doc(hidden)]
 pub struct PreparedOr<L, R> {
     left: L,
     right: R,
-}
-
-impl<L, R> PreparedOr<L, R> {
-    pub fn new(left: L, right: R) -> Self {
-        Self { left, right }
-    }
 }
 
 impl<L, R> PreparedFilter for PreparedOr<L, R>
@@ -430,6 +436,7 @@ where
 }
 
 #[derive(Debug, Clone)]
+/// Negate a filter
 pub struct Not<T>(pub T);
 
 impl<'a, T> Filter<'a> for Not<T>
@@ -495,6 +502,7 @@ where
     }
 }
 
+#[doc(hidden)]
 pub struct PreparedNot<T>(T);
 
 impl<T> PreparedFilter for PreparedNot<T>
@@ -509,6 +517,7 @@ where
 }
 
 /// And filter combinator
+#[doc(hidden)]
 pub struct PreparedAnd<L, R> {
     left: L,
     right: R,
@@ -548,6 +557,7 @@ where
 }
 
 #[derive(Debug, Clone)]
+/// A filter that yields, well, nothing
 pub struct Nothing;
 
 impl<'a> Filter<'a> for Nothing {
@@ -599,12 +609,15 @@ impl StaticFilter for All {
 }
 
 #[derive(Debug, Clone)]
+/// Iterator which yields slices which match the underlying filter
 pub struct FilterIter<F> {
     slots: Slice,
     filter: F,
 }
 
 impl<F> FilterIter<F> {
+    /// Creates a new filter iterator visiting the `slot` of the same archetype
+    /// as `F`
     pub fn new(slots: Slice, filter: F) -> Self {
         Self { slots, filter }
     }
@@ -636,14 +649,9 @@ where
 impl<F: PreparedFilter> FusedIterator for FilterIter<F> {}
 
 #[derive(Debug, Clone)]
+/// Filter which only yields true if the entity has the specified component
 pub struct With {
-    component: ComponentId,
-}
-
-impl With {
-    pub fn new(component: ComponentId) -> Self {
-        Self { component }
-    }
+    pub(crate) component: ComponentId,
 }
 
 impl StaticFilter for With {
@@ -673,14 +681,9 @@ impl<'a> Filter<'a> for With {
 }
 
 #[derive(Debug, Clone)]
+/// Opposite of [crate::Without]
 pub struct Without {
-    component: ComponentId,
-}
-
-impl Without {
-    pub fn new(component: ComponentId) -> Self {
-        Self { component }
-    }
+    pub(crate) component: ComponentId,
 }
 
 impl<'a> Filter<'a> for Without {
@@ -709,7 +712,8 @@ impl StaticFilter for Without {
     }
 }
 
-pub struct BooleanFilter(bool);
+/// Like a bool literal
+pub struct BooleanFilter(pub bool);
 
 impl PreparedFilter for BooleanFilter {
     fn filter(&mut self, slots: Slice) -> Slice {
@@ -807,7 +811,7 @@ mod tests {
         let a = PreparedKindFilter::from_borrow(changes_1.borrow(), 1, ChangeKind::Modified);
         let b = PreparedKindFilter::from_borrow(changes_2.borrow(), 2, ChangeKind::Modified);
 
-        let filter = PreparedOr::new(a, b);
+        let filter = PreparedOr { left: a, right: b };
 
         // Use a brute force BTreeSet for solving it
         let chunks_set = slots
@@ -824,7 +828,7 @@ mod tests {
         let a = PreparedKindFilter::from_borrow(changes_1.borrow(), 1, ChangeKind::Modified);
         let b = PreparedKindFilter::from_borrow(changes_2.borrow(), 2, ChangeKind::Modified);
 
-        let filter = PreparedAnd::new(a, b);
+        let filter = PreparedAnd { left: a, right: b };
 
         // Use a brute force BTreeSet for solving it
         let chunks_set = slots

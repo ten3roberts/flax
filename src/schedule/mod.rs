@@ -1,12 +1,10 @@
 use eyre::WrapErr;
-use std::{borrow::BorrowMut, collections::BTreeMap, mem};
+use std::{collections::BTreeMap, mem};
 
 use itertools::Itertools;
 use tracing::debug;
 
-use crate::{
-    system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, SystemFn, World, Write,
-};
+use crate::{system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World, Write};
 
 enum Systems {
     Unbatched(Vec<BoxedSystem>),
@@ -59,8 +57,8 @@ impl std::fmt::Debug for Systems {
 fn flush_system() -> BoxedSystem {
     System::builder()
         .with_name("flush")
-        .with_world()
-        .with_cmd()
+        .write::<World>()
+        .write::<CommandBuffer>()
         .build(|mut world: Write<World>, mut cmd: Write<CommandBuffer>| {
             cmd.apply(&mut world)
                 .wrap_err("Failed to flush commandbuffer in schedule\n")
@@ -69,11 +67,13 @@ fn flush_system() -> BoxedSystem {
 }
 
 #[derive(Debug, Default)]
+/// Incrementally construct a schedule constisting of systems
 pub struct ScheduleBuilder {
     systems: Vec<BoxedSystem>,
 }
 
 impl ScheduleBuilder {
+    /// Creates a new schedule builder
     pub fn new() -> Self {
         Default::default()
     }
@@ -84,10 +84,13 @@ impl ScheduleBuilder {
         self
     }
 
+    /// Flush the current state of the commandbuffer into the world.
+    /// Is added automatically at the end
     pub fn flush(&mut self) -> &mut Self {
         self.with_system(flush_system())
     }
 
+    /// Build the schedule
     pub fn build(&mut self) -> Schedule {
         Schedule::from_systems(mem::take(&mut self.flush().systems))
     }
@@ -111,14 +114,17 @@ impl std::fmt::Debug for Schedule {
 }
 
 impl Schedule {
+    /// Creates a new schedule builder
     pub fn builder() -> ScheduleBuilder {
         ScheduleBuilder::default()
     }
 
+    /// Creates a new empty schedule, prefer [Self::builder]
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Creates a schedule from a group of existing systems
     pub fn from_systems(systems: impl Into<Vec<BoxedSystem>>) -> Self {
         Self {
             systems: Systems::Unbatched(systems.into()),
@@ -126,6 +132,7 @@ impl Schedule {
         }
     }
 
+    /// Append one schedule onto another
     pub fn append(&mut self, mut other: Self) {
         self.systems
             .as_unbatched()
@@ -160,6 +167,7 @@ impl Schedule {
 
     #[cfg(feature = "parallel")]
     #[tracing::instrument(skip(self, world))]
+    /// Parallel version of [Self::execute_seq]
     pub fn execute_par(&mut self, world: &mut World) -> eyre::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
@@ -364,7 +372,7 @@ mod test {
         let result: eyre::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
 
         eprintln!("{result:?}");
-        result.unwrap_err();
+        eprintln!("Err: {:?}", result.unwrap_err());
     }
 
     #[test]
@@ -440,7 +448,7 @@ mod test {
 
         let cleanup = System::builder()
             .with(Query::new(entities()).filter(health().lte(0.0)))
-            .with_cmd()
+            .write::<CommandBuffer>()
             .with_name("cleanup")
             .build(|mut q: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
                 q.prepare().iter().for_each(|id| {

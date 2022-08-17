@@ -9,11 +9,13 @@ use crate::{
 
 use super::*;
 
+#[doc(hidden)]
 pub struct PreparedComponentMut<'a, T> {
     borrow: AtomicRefMut<'a, [T]>,
     changes: AtomicRefMut<'a, Changes>,
 }
 
+#[doc(hidden)]
 pub struct PreparedComponent<'a, T> {
     borrow: AtomicRef<'a, [T]>,
 }
@@ -72,6 +74,8 @@ where
 }
 
 #[derive(Debug, Clone)]
+/// Mutable component fetch
+/// See [crate::Component::as_mut]
 pub struct Mutable<T: ComponentValue>(pub(crate) Component<T>);
 
 impl<'w, T> Fetch<'w> for Mutable<T>
@@ -147,6 +151,7 @@ pub struct Relation<T: ComponentValue> {
 }
 
 impl<T: ComponentValue> Relation<T> {
+    /// Creates a new relation fetch
     pub fn new(component: Component<T>, index: usize) -> Self {
         Self { component, index }
     }
@@ -246,6 +251,7 @@ where
     }
 }
 
+#[doc(hidden)]
 pub struct PreparedPair<'a, T> {
     borrow: AtomicRef<'a, [T]>,
     obj: Entity,
@@ -261,20 +267,5 @@ where
         // Perform a reborrow
         let item = &self.borrow[slot];
         (self.obj, item)
-    }
-}
-
-pub struct PairMatchIter<'a, T> {
-    borrow: slice::Iter<'a, (Entity, AtomicRef<'a, [T]>)>,
-    slot: Slot,
-}
-
-impl<'a, T> Iterator for PairMatchIter<'a, T> {
-    type Item = (Entity, &'a T);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (id, borrow) = self.borrow.next()?;
-        let item = unsafe { &*(&borrow[self.slot] as *const T) };
-        Some((*id, item))
     }
 }

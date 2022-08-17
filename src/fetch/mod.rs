@@ -12,23 +12,19 @@ use crate::{
     ArchetypeId, Entity, World,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PrepareInfo {
-    /// The current change tick of the world
-    pub old_tick: u32,
-    pub new_tick: u32,
-    pub slots: Slice,
-}
-
 /// Describes a type which can fetch itself from an archetype
 pub trait Fetch<'w> {
+    /// true if the fetch mutates any component and thus needs a change event
     const MUTABLE: bool;
 
+    /// The prepared version of the fetch
     type Prepared: for<'x> PreparedFetch<'x> + 'w;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
     fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
+    /// Returns true if the fetch matches the archetype
     fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool;
+    /// Describes the fetch in a human-readable fashion
     fn describe(&self) -> String;
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access>;
@@ -73,6 +69,7 @@ pub trait PreparedFetch<'q>
 where
     Self: Sized,
 {
+    /// The items yielded by the fetch
     type Item: Sized;
     /// Fetch the item from entity at the slot in the prepared storage.
     /// # Safety
@@ -95,7 +92,9 @@ where
 }
 
 #[derive(Debug, Clone)]
+/// Returns the entity ids
 pub struct EntityFetch;
+#[doc(hidden)]
 pub struct PreparedEntities<'a> {
     entities: &'a [Entity],
 }
