@@ -130,7 +130,7 @@ where
 
     fn prepare(&'w self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
         PreparedOrdCmp {
-            borrow: archetype.storage(self.component),
+            borrow: archetype.borrow(self.component),
             method: self.method,
             other: &self.other,
         }
@@ -242,7 +242,7 @@ where
 
     fn prepare(&'w self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
         PreparedCmp {
-            borrow: archetype.storage(self.component),
+            borrow: archetype.borrow(self.component),
             func: &self.func,
         }
     }

@@ -36,7 +36,10 @@ impl EntityBuilder {
         self
     }
 
-    pub(crate) fn set_dyn<T: ComponentValue>(
+    /// Sets the component value from a type erased component info.
+    /// # Safety
+    /// The underlying type of `component` must match `T`
+    pub unsafe fn set_dyn<T: ComponentValue>(
         &mut self,
         component: ComponentInfo,
         value: T,

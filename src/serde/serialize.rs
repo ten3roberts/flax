@@ -129,7 +129,7 @@ impl SerializeContext {
     ) -> impl Iterator<Item = (ArchetypeId, &'a Archetype)> {
         world.archetypes().filter(|(_, arch)| {
             !arch.is_empty()
-                && arch.component_ids().any(|id| self.slots.contains_key(&id))
+                && arch.storage().keys().any(|id| self.slots.contains_key(&id))
                 && self.filter.static_matches(arch)
         })
     }
@@ -237,7 +237,7 @@ impl<'a> Serialize for SerializeEntityData<'a> {
         S: Serializer,
     {
         let mut state = serializer.serialize_map(None)?;
-        for storage in self.arch.storages() {
+        for storage in self.arch.borrow_all() {
             if let Some(slot) = self.context.slots.get(&storage.info().id()) {
                 state.serialize_entry(&slot.key, (slot.ser)(&storage, self.slot))?;
             }
@@ -306,7 +306,7 @@ impl<'a> serde::Serialize for SerializeStorages<'a> {
     {
         let mut state = serializer.serialize_map(None)?;
 
-        for storage in self.storage.storages() {
+        for storage in self.storage.borrow_all() {
             let id = storage.info().id;
             if let Some(slot) = self.context.slots.get(&id) {
                 state.serialize_entry(

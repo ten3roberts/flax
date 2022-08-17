@@ -1,4 +1,8 @@
+use core::slice;
+
 use atomic_refcell::{AtomicRef, AtomicRefMut};
+use itertools::Itertools;
+use smallvec::SmallVec;
 
 use crate::{
     archetype::{Archetype, Changes, Slice, Slot},
@@ -35,7 +39,7 @@ where
     type Prepared = PreparedComponent<'w, T>;
 
     fn prepare(&self, _: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
-        let borrow = archetype.storage(*self)?;
+        let borrow = archetype.borrow(*self)?;
         Some(PreparedComponent { borrow })
     }
 
@@ -85,7 +89,7 @@ where
     type Prepared = PreparedComponentMut<'w, T>;
 
     fn prepare(&self, _: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
-        let borrow = archetype.storage_mut(self.0)?;
+        let borrow = archetype.borrow_mut(self.0)?;
         let changes = archetype.changes_mut(self.0.id())?;
 
         Some(PreparedComponentMut { borrow, changes })
@@ -140,130 +144,116 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
     }
 }
 
-/// Similar to a component fetch, with the difference that it also yields the
-/// object entity.
-#[derive(Debug, Clone)]
-pub struct Relation<T: ComponentValue> {
-    component: Component<T>,
-    index: usize,
-}
-
-impl<T: ComponentValue> Relation<T> {
-    /// Creates a new relation fetch
-    pub fn new(component: Component<T>, index: usize) -> Self {
-        Self { component, index }
+/// Query all relations of the specified kind
+pub fn relations_like<T: ComponentValue>(relation: fn(Entity) -> Component<T>) -> Relations<T> {
+    Relations {
+        component: relation(wildcard()),
     }
 }
 
-impl<'a, T> Fetch<'a> for Relation<T>
+/// Returns a list of relations with the specified kind
+#[derive(Debug, Clone)]
+pub struct Relations<T: ComponentValue> {
+    component: Component<T>,
+}
+
+impl<'a, T> Fetch<'a> for Relations<T>
 where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedPair<'a, T>;
+    type Prepared = PreparedRelations<'a, T>;
 
-    fn prepare(&self, world: &'a World, archetype: &'a Archetype) -> Option<Self::Prepared> {
-        let (sub, obj) = self.component.id().split_pair();
-        if obj == wildcard().low() {
-            let (obj, borrow) = archetype
-                .components()
-                .filter(|v| v.id().low() == sub)
-                .skip(self.index)
-                .map(|v| {
-                    let (sub1, obj) = v.id().split_pair();
-                    assert_eq!(sub1, sub);
-                    let borrow = archetype.storage::<T, _>(v.id()).unwrap();
-                    let obj = world.reconstruct(obj).unwrap();
-                    (obj, borrow)
+    fn prepare(&self, world: &'a World, arch: &'a Archetype) -> Option<Self::Prepared> {
+        let relation = self.component.id().low();
+        let borrows: SmallVec<[(Entity, AtomicRef<[T]>); 4]> = {
+            arch.storage()
+                .iter()
+                .map(move |(k, v)| {
+                    eprintln!("Looking at: {k:?}");
+                    let (rel, obj) = k.split_pair();
+                    (rel, obj, k, v)
                 })
-                .next()?;
+                .filter(move |(rel, _, k, _)| k.is_relation() && *rel == relation)
+                // Safety:
+                // Since the component is the same except for the object,
+                // the component type is guaranteed to be the same
+                .map(|(_, obj, _, v)| {
+                    (
+                        world
+                            .reconstruct(obj)
+                            .expect("Relation object is not alive"),
+                        unsafe { v.borrow::<T>() },
+                    )
+                })
+                .collect()
+        };
 
-            Some(PreparedPair { borrow, obj })
-        } else {
-            todo!()
-        }
+        eprintln!(
+            "Found borrows: {:?}",
+            borrows.iter().map(|v| v.0).collect_vec()
+        );
+
+        Some(PreparedRelations { borrows })
     }
 
-    fn matches(&self, _: &'a World, archetype: &'a Archetype) -> bool {
-        let (sub, obj) = self.component.id().split_pair();
-        if obj == wildcard().low() {
-            archetype
-                .components()
-                .filter(|component| component.id().low() == sub)
-                .nth(self.index)
-                .is_some()
-        } else {
-            archetype.has(self.component.id())
-        }
+    fn matches(&self, _: &'a World, _: &'a Archetype) -> bool {
+        true
     }
 
     fn describe(&self) -> String {
-        format!("relation({})[{}]", self.component.name(), self.index)
+        format!("relations({})", self.component.name())
     }
 
-    fn difference(&self, archetype: &Archetype) -> Vec<String> {
-        let (sub, obj) = self.component.id().split_pair();
-        if obj == wildcard().low() {
-            if archetype
-                .components()
-                .filter(|component| component.id().low() == sub)
-                .nth(self.index)
-                .is_some()
-            {
-                vec![]
-            } else {
-                vec![self.component.name().to_string()]
-            }
-        } else if archetype.has(self.component.id()) {
-            vec![]
-        } else {
-            vec![self.component.name().to_string()]
-        }
+    fn difference(&self, _: &Archetype) -> Vec<String> {
+        vec![]
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        let (sub, obj) = self.component.id().split_pair();
-        if obj == wildcard().low() {
-            let borrow = archetype
-                .components()
-                .filter(|v| v.id().low() == sub)
-                .skip(self.index)
-                .map(|v| Access {
-                    kind: AccessKind::Archetype {
-                        id,
-                        component: v.id(),
-                    },
-                    mutable: false,
-                })
-                .next();
-
-            if let Some(borrow) = borrow {
-                vec![borrow]
-            } else {
-                vec![]
-            }
-        } else {
-            todo!()
-        }
+    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
+        let relation = self.component.id().low();
+        arch.storage()
+            .keys()
+            .filter(move |k| k.is_relation() && k.low() == relation)
+            .map(|&k| Access {
+                kind: AccessKind::Archetype { id, component: k },
+                mutable: false,
+            })
+            .collect_vec()
     }
 }
 
 #[doc(hidden)]
-pub struct PreparedPair<'a, T> {
-    borrow: AtomicRef<'a, [T]>,
-    obj: Entity,
+pub struct PreparedRelations<'a, T> {
+    borrows: SmallVec<[(Entity, AtomicRef<'a, [T]>); 4]>,
 }
 
-impl<'q, 'w, T> PreparedFetch<'q> for PreparedPair<'w, T>
+impl<'q, 'w, T> PreparedFetch<'q> for PreparedRelations<'w, T>
 where
     T: ComponentValue,
 {
-    type Item = (Entity, &'q T);
+    type Item = RelationsIter<'q, T>;
 
     unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        // Perform a reborrow
-        let item = &self.borrow[slot];
-        (self.obj, item)
+        RelationsIter {
+            borrows: self.borrows.iter(),
+            slot,
+        }
+    }
+}
+
+/// Iterates the relation object and data for the yielded query item
+pub struct RelationsIter<'a, T> {
+    borrows: slice::Iter<'a, (Entity, AtomicRef<'a, [T]>)>,
+    slot: Slot,
+}
+
+impl<'a, T> Iterator for RelationsIter<'a, T> {
+    type Item = (Entity, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (id, borrow) = self.borrows.next()?;
+        let borrow = &borrow[self.slot];
+        Some((*id, borrow))
     }
 }

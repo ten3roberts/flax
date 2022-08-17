@@ -89,7 +89,7 @@ impl<'a> RowFormatter<'a> {
 impl<'a> fmt::Debug for RowFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
-        for storage in self.arch.storages() {
+        for storage in self.arch.borrow_all() {
             if let Some((visitor, name)) = self.meta.get(&storage.info().id()) {
                 if let Some(visitor) = visitor {
                     unsafe {

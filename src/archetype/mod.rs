@@ -3,9 +3,7 @@ use std::{alloc::Layout, collections::BTreeMap, mem};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::{
-    wildcard, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind,
-};
+use crate::{wildcard, Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
 
 /// Unique archetype id
 pub type ArchetypeId = Entity;
@@ -56,10 +54,7 @@ impl Archetype {
 
     /// Returns all the relation components in the archetype
     pub fn relations(&self) -> impl Iterator<Item = ComponentId> + '_ {
-        self.storage
-            .keys()
-            .filter(|v| v.kind().contains(EntityKind::RELATION))
-            .copied()
+        self.storage.keys().filter(|v| v.is_relation()).copied()
     }
 
     /// Returns the components with the specified relation type.
@@ -140,7 +135,7 @@ impl Archetype {
     /// Access a component storage mutably.
     /// # Panics
     /// If the storage is already borrowed
-    pub fn storage_mut<T: ComponentValue>(
+    pub fn borrow_mut<T: ComponentValue>(
         &self,
         component: Component<T>,
     ) -> Option<AtomicRefMut<[T]>> {
@@ -200,7 +195,7 @@ impl Archetype {
         Some(changes)
     }
 
-    pub(crate) fn storage<T: ComponentValue, I: Into<ComponentId>>(
+    pub(crate) fn borrow<T: ComponentValue, I: Into<ComponentId>>(
         &self,
         component: I,
     ) -> Option<AtomicRef<[T]>> {
@@ -211,7 +206,7 @@ impl Archetype {
     ///
     /// # Panics
     /// If the storage is already borrowed mutably
-    pub fn storage_dyn(&self, component: ComponentId) -> Option<StorageBorrowDyn> {
+    pub fn borrow_dyn(&self, component: ComponentId) -> Option<StorageBorrowDyn> {
         Some(unsafe { self.storage.get(&component)?.borrow_dyn() })
     }
 
@@ -517,8 +512,8 @@ impl Archetype {
     }
 
     /// Returns a iterator which borrows each storage in the archetype
-    pub fn storages(&self) -> impl Iterator<Item = StorageBorrowDyn> {
-        self.components().map(|v| self.storage_dyn(v.id()).unwrap())
+    pub fn borrow_all(&self) -> impl Iterator<Item = StorageBorrowDyn> {
+        self.components().map(|v| self.borrow_dyn(v.id()).unwrap())
     }
 
     /// Access the entities in the archetype for each slot. Entity is None if
@@ -527,8 +522,8 @@ impl Archetype {
         self.entities.as_ref()
     }
 
-    pub(crate) fn component_ids(&self) -> impl Iterator<Item = ComponentId> + '_ {
-        self.storage.keys().copied()
+    pub(crate) fn storage(&self) -> &BTreeMap<Entity, Storage> {
+        &self.storage
     }
 }
 

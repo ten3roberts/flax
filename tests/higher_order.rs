@@ -1,6 +1,6 @@
 use flax::components::{child_of, name};
 use flax::{component, debug_visitor, util::TupleCloned, wildcard, EntityBuilder, Query, World};
-use flax::{entities, Debug, Entity};
+use flax::{entities, relations_like, Debug, Entity};
 use itertools::Itertools;
 
 #[derive(Debug, Clone)]
@@ -129,17 +129,23 @@ fn relations() {
     eprintln!("World: {world:#?}");
 
     // Visit the first parent of the children
-    let mut query = Query::new((name(), child_of(wildcard()).relation(0)));
+    let mut query = Query::new((name(), relations_like(child_of)));
     let mut query = query.prepare(&world);
 
-    let items = query.iter().sorted().collect_vec();
+    let items = query
+        .iter()
+        .map(|(name, relations)| (name, relations.collect_vec()))
+        .sorted()
+        .collect_vec();
 
     assert_eq!(
         items,
         [
-            (&"John".to_string(), (parent, &RelationKind::Mom)),
-            (&"Reacher".to_string(), (parent2, &RelationKind::Dad)),
-            (&"Sally".to_string(), (parent, &RelationKind::Mom))
+            (&"Jack".to_string(), vec![]),
+            (&"Jessica".to_string(), vec![]),
+            (&"John".to_string(), vec![(parent, &RelationKind::Mom)]),
+            (&"Reacher".to_string(), vec![(parent2, &RelationKind::Dad)]),
+            (&"Sally".to_string(), vec![(parent, &RelationKind::Mom)])
         ]
     );
 
