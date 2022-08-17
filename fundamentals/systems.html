@@ -202,7 +202,7 @@ single query.</p>
             Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
-            // tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+            tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
             *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
         });
 
@@ -228,7 +228,7 @@ as it may access anything.</p>
     let despawn = System::builder()
         .with_name(&quot;delete outside world&quot;)
         .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
-        .with_cmd()
+        .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
                 for (id, &amp;dist) in &amp;mut query.prepare() {
@@ -240,7 +240,7 @@ as it may access anything.</p>
 
     let debug_world = System::builder()
         .with_name(&quot;debug world&quot;)
-        .with_world()
+        .write::&lt;World&gt;()
         .build(|world: Write&lt;World&gt;| {
             tracing::debug!(&quot;World: {world:#?}&quot;);
         });

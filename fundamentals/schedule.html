@@ -151,7 +151,7 @@ sequence.</p>
 </span>    let despawn = System::builder()
         .with_name(&quot;delete outside world&quot;)
         .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
-        .with_cmd()
+        .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
                 for (id, &amp;dist) in &amp;mut query.prepare() {
@@ -163,7 +163,7 @@ sequence.</p>
 
     let debug_world = System::builder()
         .with_name(&quot;debug world&quot;)
-        .with_world()
+        .write::&lt;World&gt;()
         .build(|world: Write&lt;World&gt;| {
             tracing::debug!(&quot;World: {world:#?}&quot;);
         });
@@ -200,8 +200,10 @@ sequence.</p>
         });
 
     // Spawn a new entity with a random position each frame
-    let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd().build(
-        move |mut cmd: Write&lt;CommandBuffer&gt;| {
+    let spawn = System::builder()
+        .with_name(&quot;spawner&quot;)
+        .write::&lt;CommandBuffer&gt;()
+        .build(move |mut cmd: Write&lt;CommandBuffer&gt;| {
             for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
@@ -210,8 +212,7 @@ sequence.</p>
                     .set_default(distance())
                     .spawn_into(&amp;mut cmd);
             }
-        },
-    );
+        });
 
     let mut frame_count = 0;
 

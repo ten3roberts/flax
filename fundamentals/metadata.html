@@ -165,7 +165,7 @@ When the component is first inserted into the world it can insert so called <em>
     // component is added to the world.
     world.set(id, health(), 100.0)?;
 
-    let component_name = world.get(health(), name())?;
+    let component_name = world.get(health().id(), name())?;
     println!(&quot;The name of the component is {component_name:?}&quot;);
 
     // Print the state of the world

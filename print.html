@@ -286,7 +286,7 @@ When the component is first inserted into the world it can insert so called <em>
     // component is added to the world.
     world.set(id, health(), 100.0)?;
 
-    let component_name = world.get(health(), name())?;
+    let component_name = world.get(health().id(), name())?;
     println!(&quot;The name of the component is {component_name:?}&quot;);
 
     // Print the state of the world
@@ -526,7 +526,7 @@ single query.</p>
             Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
-            // tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+            tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
             *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
         });
 
@@ -552,7 +552,7 @@ as it may access anything.</p>
     let despawn = System::builder()
         .with_name(&quot;delete outside world&quot;)
         .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
-        .with_cmd()
+        .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
                 for (id, &amp;dist) in &amp;mut query.prepare() {
@@ -564,7 +564,7 @@ as it may access anything.</p>
 
     let debug_world = System::builder()
         .with_name(&quot;debug world&quot;)
-        .with_world()
+        .write::&lt;World&gt;()
         .build(|world: Write&lt;World&gt;| {
             tracing::debug!(&quot;World: {world:#?}&quot;);
         });
@@ -588,7 +588,7 @@ sequence.</p>
 </span>    let despawn = System::builder()
         .with_name(&quot;delete outside world&quot;)
         .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
-        .with_cmd()
+        .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
                 for (id, &amp;dist) in &amp;mut query.prepare() {
@@ -600,7 +600,7 @@ sequence.</p>
 
     let debug_world = System::builder()
         .with_name(&quot;debug world&quot;)
-        .with_world()
+        .write::&lt;World&gt;()
         .build(|world: Write&lt;World&gt;| {
             tracing::debug!(&quot;World: {world:#?}&quot;);
         });
@@ -637,8 +637,10 @@ sequence.</p>
         });
 
     // Spawn a new entity with a random position each frame
-    let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd().build(
-        move |mut cmd: Write&lt;CommandBuffer&gt;| {
+    let spawn = System::builder()
+        .with_name(&quot;spawner&quot;)
+        .write::&lt;CommandBuffer&gt;()
+        .build(move |mut cmd: Write&lt;CommandBuffer&gt;| {
             for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
@@ -647,8 +649,7 @@ sequence.</p>
                     .set_default(distance())
                     .spawn_into(&amp;mut cmd);
             }
-        },
-    );
+        });
 
     let mut frame_count = 0;
 
