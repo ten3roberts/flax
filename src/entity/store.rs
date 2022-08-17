@@ -91,10 +91,6 @@ impl<V> EntityStore<V> {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
     pub fn spawn(&mut self, value: V) -> Entity {
         if let Some(index) = self.free_head.take() {
             let slot = { self.slots.get_mut(index.get() as usize - 1) }.unwrap();
@@ -189,13 +185,6 @@ impl<V> EntityStore<V> {
 
             Some(&*val)
         }
-    }
-
-    /// Return the entity at a given index
-    pub fn at(&self, index: EntityIndex) -> Option<Entity> {
-        let slot = self.slot(index)?;
-
-        Some(Entity::from_parts(index, (slot.gen >> 1) as u16, self.kind))
     }
 
     #[inline]

@@ -1,8 +1,8 @@
 use std::{fmt::Display, marker::PhantomData, sync::atomic::AtomicU32};
 
 use crate::{
-    archetype::ComponentInfo, wildcard, ComponentBuffer, Entity, EntityKind, InsertedFilter,
-    MetaData, ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without,
+    archetype::ComponentInfo, ComponentBuffer, Entity, EntityKind, InsertedFilter, MetaData,
+    ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
