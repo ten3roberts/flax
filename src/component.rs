@@ -1,43 +1,17 @@
-use std::{
-    fmt::Display,
-    marker::PhantomData,
-    sync::atomic::{AtomicU32, Ordering::Relaxed},
-};
+use std::{fmt::Display, marker::PhantomData, sync::atomic::AtomicU32};
 
 use crate::{
-    archetype::ComponentInfo, entity::EntityIndex, wildcard, ComponentBuffer, Entity, EntityKind,
-    InsertedFilter, MetaData, ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without,
+    archetype::ComponentInfo, wildcard, ComponentBuffer, Entity, EntityKind, InsertedFilter,
+    MetaData, ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without,
 };
 
+/// Trait alias for a 'static + Send + Sync type which can be used as a
+/// component.
 pub trait ComponentValue: Send + Sync + 'static {}
 
-/// Extension trait for component functions
-pub trait RelationExt {
-    type Value: ComponentValue;
-    fn with(&self, subject: Entity) -> Component<Self::Value>;
-    fn with_id(&self, subject: Entity) -> ComponentId;
-    fn wildcard(&self) -> Component<Self::Value>;
-}
-
-impl<T> RelationExt for fn(Entity) -> Component<T>
-where
-    T: ComponentValue,
-{
-    type Value = T;
-
-    fn with(&self, subject: Entity) -> Component<Self::Value> {
-        (self)(subject)
-    }
-
-    fn with_id(&self, subject: Entity) -> ComponentId {
-        (self)(subject).id()
-    }
-
-    fn wildcard(&self) -> Component<Self::Value> {
-        (self)(wildcard())
-    }
-}
-
+/// A unique component identifier
+/// Is not stable between executions, and should as such not be used for
+/// execution.
 pub type ComponentId = Entity;
 
 impl<T> ComponentValue for T where T: Send + Sync + 'static {}
@@ -103,12 +77,18 @@ impl<T: ComponentValue> Component<T> {
         }
     }
 
-    pub fn into_pair(self, object: Entity) -> Self {
+    /// Creates a new relation component with the specified object entity
+    pub fn new_pair(
+        id: ComponentId,
+        name: &'static str,
+        meta: fn(ComponentInfo) -> ComponentBuffer,
+        object: Entity,
+    ) -> Self {
         Self {
-            id: Entity::pair(self.id, object),
-            name: self.name,
+            id: Entity::pair(id, object),
+            name,
             marker: PhantomData,
-            meta: self.meta,
+            meta,
         }
     }
 
@@ -140,6 +120,7 @@ impl<T: ComponentValue> Component<T> {
         self.id
     }
 
+    /// Returns the type erased component info
     pub fn info(self) -> ComponentInfo {
         ComponentInfo::of(self)
     }
@@ -166,12 +147,16 @@ impl<T: ComponentValue> Component<T> {
 
     /// Construct a new filter yielding entities without this component.
     pub fn without(self) -> Without {
-        Without::new(self.id())
+        Without {
+            component: self.id(),
+        }
     }
 
     /// Construct a new filter yielding entities with this component.
     pub fn with(self) -> With {
-        With::new(self.id())
+        With {
+            component: self.id(),
+        }
     }
 
     /// Construct a fetch which will visit the `index` relation of this
@@ -189,6 +174,7 @@ impl<T: ComponentValue> Component<T> {
         self.name
     }
 
+    /// Returns the component metadata fn
     pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
         self.meta
     }

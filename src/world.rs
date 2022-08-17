@@ -66,20 +66,6 @@ impl Archetypes {
 
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    pub fn find(&self, mut components: &[ComponentId]) -> Option<&Archetype> {
-        let mut cursor = self.root;
-
-        while let [head, tail @ ..] = components {
-            let next = self.archetypes.get(cursor).unwrap().edge_to(*head)?;
-            cursor = next;
-            components = tail;
-        }
-
-        self.archetypes.get(cursor)
-    }
-
-    /// Get the archetype which has `components`.
-    /// `components` must be sorted.
     pub(crate) fn init<'a>(
         &mut self,
         components: impl IntoIterator<Item = &'a ComponentInfo>,
@@ -136,10 +122,6 @@ impl Archetypes {
     pub fn despawn(&mut self, id: Entity) -> Result<Archetype> {
         self.archetypes.despawn(id)
     }
-
-    pub fn len(&self) -> usize {
-        self.archetypes.len()
-    }
 }
 
 /// Holds the entities and components of the ECS.
@@ -150,6 +132,7 @@ pub struct World {
 }
 
 impl World {
+    /// Creates a new empty world
     pub fn new() -> Self {
         Self {
             entities: EntityStores::default(),
@@ -158,6 +141,7 @@ impl World {
         }
     }
 
+    /// Create an iterator to spawn several entities
     pub fn spawn_many(&mut self) -> impl Iterator<Item = Entity> + '_ {
         (0..).map(|_| self.spawn())
     }
@@ -215,6 +199,13 @@ impl World {
             "The length of ids must match the number of slots in `batch`"
         );
 
+        for &id in ids {
+            assert!(matches!(
+                self.despawn(id),
+                Err(Error::NoSuchEntity(..)) | Ok(())
+            ));
+        }
+
         for &component in batch.components() {
             self.init_component(component)
                 .expect("failed to initialize component");
@@ -228,14 +219,16 @@ impl World {
         for (idx, &id) in ids.iter().enumerate() {
             let kind = id.kind();
             let store = self.entities.init(kind);
-            store.spawn_at(
-                id.index(),
-                id.generation(),
-                EntityLocation {
-                    slot: base + idx,
-                    arch: arch_id,
-                },
-            )?;
+            store
+                .spawn_at(
+                    id.index(),
+                    id.generation(),
+                    EntityLocation {
+                        slot: base + idx,
+                        arch: arch_id,
+                    },
+                )
+                .expect("Entity already exists");
         }
 
         let slots = arch.allocate_n(ids);
@@ -298,7 +291,7 @@ impl World {
 
     /// Spawns an entitiy with a specific id.
     /// Despawns any existing entity.
-    pub fn spawn_at_inner(
+    fn spawn_at_inner(
         &mut self,
         id: Entity,
         arch_id: ArchetypeId,
@@ -424,10 +417,10 @@ impl World {
     /// The data is considered moved and can not be used afterwards
     pub fn set_with(
         &mut self,
-        id: impl Into<Entity>,
+        id: Entity,
         components: impl IntoIterator<Item = (ComponentInfo, *mut u8)>,
     ) -> Result<()> {
-        let id: Entity = id.into();
+        let id: Entity = id;
         let change_tick = self.advance_change_tick();
 
         let EntityLocation { arch, slot } = self.location(id)?;
@@ -519,7 +512,7 @@ impl World {
             return Ok(info);
         }
 
-        let mut meta = info.get_meta();
+        let mut meta = info.meta()(info);
 
         self.spawn_at(info.id());
         self.set_with(info.id(), meta.take_all()).unwrap();
@@ -623,9 +616,11 @@ impl World {
         }
     }
 
+    /// Set the value of a component.
+    /// If the component does not exist it will be added.
     pub fn set<T: ComponentValue>(
         &mut self,
-        id: impl Into<Entity>,
+        id: Entity,
         component: Component<T>,
         value: T,
     ) -> Result<Option<T>> {
@@ -807,6 +802,7 @@ impl World {
         Ok(loc)
     }
 
+    /// Remove a a component from the entity
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Result<T> {
         let mut res: MaybeUninit<T> = MaybeUninit::uninit();
         let res = unsafe {
@@ -821,10 +817,9 @@ impl World {
     /// Randomly access an entity's component.
     pub fn get<T: ComponentValue>(
         &self,
-        id: impl Into<Entity>,
+        id: Entity,
         component: Component<T>,
     ) -> Result<AtomicRef<T>> {
-        let id = id.into();
         let loc = self.location(id)?;
 
         self.archetype(loc.arch)
@@ -896,7 +891,7 @@ impl World {
     }
 
     /// Returns the location inside an archetype for a given entity
-    pub fn location(&self, id: Entity) -> Result<EntityLocation> {
+    pub(crate) fn location(&self, id: Entity) -> Result<EntityLocation> {
         self.entities
             .get(id.kind())
             .and_then(|v| v.get(id))
@@ -918,6 +913,7 @@ impl World {
     }
 
     #[must_use]
+    /// Returns the current world change tick
     pub fn change_tick(&self) -> u32 {
         self.change_tick.load(Ordering::Relaxed)
     }
@@ -936,46 +932,6 @@ impl World {
             world: self,
             filter,
         }
-    }
-
-    // /// Visit all components which have the visitor components and use the
-    // /// associated visitor for each slot
-    // pub fn visit<C, V, Ret>(&self, visitor: Component<V>, ctx: &mut C) -> impl Iterator<Item = Ret>
-    // where
-    //     V: Visitor<C, Ret> + ComponentValue,
-    // {
-    //     for (_, arch) in self.archetypes.iter() {
-    //         for component in arch.components() {
-    //             // eprintln!("Traversing: {}:{}", component.name(), component.id());
-    //             if let Ok(mut v) = self.get_mut(component.id(), visitor) {
-    //                 // eprintln!("Visiting {}{}", component.name(), component.id());
-    //                 arch.visit(component.id(), &mut *v, ctx);
-    //             }
-    //         }
-    //     }
-    // }
-
-    pub fn component_metadata(&self) -> BTreeMap<ComponentInfo, Vec<String>> {
-        let filter = is_component().with();
-        self.archetypes
-            .iter()
-            .filter(|(_, arch)| filter.matches(arch))
-            .map(|(_, arch)| {
-                (
-                    arch.slots(),
-                    arch.storage(is_component()).unwrap(),
-                    arch.components()
-                        .map(|v| v.name().to_string())
-                        .collect_vec(),
-                )
-            })
-            .flat_map(|(slots, keys, values)| {
-                slots.iter().map(move |v| {
-                    let info = keys[v];
-                    (info, values.clone())
-                })
-            })
-            .collect()
     }
 
     pub(crate) fn reconstruct(&self, id: crate::StrippedEntity) -> Option<Entity> {
@@ -1029,6 +985,8 @@ impl World {
     }
 }
 
+/// Debug formats the world with the given filter.
+/// Created using [World::format_debug]
 pub struct WorldFormatter<'a, F> {
     world: &'a World,
     filter: F,

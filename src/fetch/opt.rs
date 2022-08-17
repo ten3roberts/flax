@@ -1,15 +1,9 @@
 use crate::{Fetch, PreparedFetch};
 
 /// Transform a fetch into a optional fetch
-pub struct Opt<F> {
-    inner: F,
-}
+pub struct Opt<F>(pub(crate) F);
 
-impl<F> Opt<F> {
-    pub fn new(inner: F) -> Self {
-        Self { inner }
-    }
-}
+impl<F> Opt<F> {}
 
 impl<'w, F> Fetch<'w> for Opt<F>
 where
@@ -25,7 +19,7 @@ where
         archetype: &'w crate::Archetype,
     ) -> Option<Self::Prepared> {
         Some(PreparedOpt {
-            inner: self.inner.prepare(world, archetype),
+            inner: self.0.prepare(world, archetype),
         })
     }
 
@@ -34,11 +28,11 @@ where
     }
 
     fn describe(&self) -> String {
-        format!("opt {}", self.inner.describe())
+        format!("opt {}", self.0.describe())
     }
 
     fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
-        self.inner.access(id, archetype)
+        self.0.access(id, archetype)
     }
 
     fn difference(&self, _: &crate::Archetype) -> Vec<String> {
@@ -69,7 +63,7 @@ pub struct OptOr<F, V> {
 }
 
 impl<F, V> OptOr<F, V> {
-    pub fn new(inner: F, or: V) -> Self {
+    pub(crate) fn new(inner: F, or: V) -> Self {
         Self { inner, or }
     }
 }

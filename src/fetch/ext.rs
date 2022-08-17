@@ -1,14 +1,15 @@
-use crate::{Component, ComponentValue, Fetch, PreparedFetch};
+use crate::{Fetch, PreparedFetch};
 
 use super::opt::{Opt, OptOr};
 
+/// Extension trait for [crate::Fetch]
 pub trait FetchExt: Sized {
-    /// Transform the query into an optional query, yielding Some or None
+    /// Transform the fetch into an optional fetch, yielding Some or None
     fn opt(self) -> Opt<Self> {
-        Opt::new(self)
+        Opt(self)
     }
 
-    /// Transform the query into a query with a provided default.
+    /// Transform the fetch into a fetch with a provided default.
     /// This is useful for default values such as scale or velocity which may
     /// not exist for every entity.
     fn opt_or<V>(self, default: V) -> OptOr<Self, V>
@@ -19,6 +20,8 @@ pub trait FetchExt: Sized {
         OptOr::new(self, default)
     }
 
+    /// Transform the fetch into a fetch which yields the default impl if the
+    /// fetch is not matched.
     fn opt_or_default<V>(self) -> OptOr<Self, V>
     where
         Self: for<'x> Fetch<'x>,
@@ -29,4 +32,4 @@ pub trait FetchExt: Sized {
     }
 }
 
-impl<T> FetchExt for Component<T> where T: ComponentValue {}
+impl<F> FetchExt for F where F: for<'x> Fetch<'x> {}

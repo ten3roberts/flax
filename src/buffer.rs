@@ -210,22 +210,26 @@ unsafe impl Send for ComponentBuffer {}
 unsafe impl Sync for ComponentBuffer {}
 
 impl ComponentBuffer {
+    /// Creates a new component buffer
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Mutably access a component from the buffer
     pub fn get_mut<T: ComponentValue>(&mut self, component: Component<T>) -> Option<&mut T> {
         let &(offset, _) = self.components.get(&component.id())?;
 
         unsafe { Some(self.storage.read_mut(offset)) }
     }
 
+    /// Access a component from the buffer
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
         let &(offset, _) = self.components.get(&component.id())?;
 
         unsafe { Some(self.storage.read(offset)) }
     }
 
+    /// Returns the component in the buffer
     pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
         self.components.values().map(|v| &v.1)
     }
@@ -234,16 +238,19 @@ impl ComponentBuffer {
         self.components.values_mut().map(|v| &mut v.1)
     }
 
+    /// Remove a component from the component buffer
     pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Option<T> {
         let (offset, _) = self.components.remove(&component.id())?;
 
         unsafe { Some(self.storage.take(offset)) }
     }
 
+    /// Set a component in the component buffer
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
         self.set_dyn(component.info(), value)
     }
 
+    /// Set from a type erased component
     pub fn set_dyn<T: ComponentValue>(&mut self, component: ComponentInfo, value: T) -> Option<T> {
         if let Some(&(offset, _)) = self.components.get(&component.id()) {
             unsafe { Some(self.storage.swap(offset, value)) }
@@ -270,6 +277,7 @@ impl ComponentBuffer {
     }
 }
 
+/// Iterate all items in the component buffer
 pub struct ComponentBufferIter<'a> {
     components: hash_map::Drain<'a, ComponentId, (Offset, ComponentInfo)>,
     storage: &'a mut BufferStorage,

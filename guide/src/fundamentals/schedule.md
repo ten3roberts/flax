@@ -15,7 +15,6 @@ archetype and components, they will run in paralell. If an archetype reads a
 value which is written by another system declared before, they will run in
 sequence.
 
-
 ```rust
 {{ #include ../../../examples/guide/query.rs:schedule_basic }}
 ```

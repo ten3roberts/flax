@@ -1,10 +1,4 @@
-use std::{io::stdin, process::id};
-
-use flax::{
-    component,
-    components::{is_component, name},
-    Query, World,
-};
+use flax::{component, components::name, World};
 use itertools::Itertools;
 
 pub fn main() -> color_eyre::Result<()> {
@@ -78,7 +72,7 @@ pub fn main() -> color_eyre::Result<()> {
     // component is added to the world.
     world.set(id, health(), 100.0)?;
 
-    let component_name = world.get(health(), name())?;
+    let component_name = world.get(health().id(), name())?;
     println!("The name of the component is {component_name:?}");
 
     // Print the state of the world

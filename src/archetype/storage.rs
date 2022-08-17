@@ -257,11 +257,11 @@ impl<'a> StorageBorrowDyn<'a> {
         Self { data, info, len }
     }
 
-    pub(crate) unsafe fn downcast<T: ComponentValue>(self) -> AtomicRef<'a, [T]> {
-        AtomicRef::map(self.data, |v| {
-            slice::from_raw_parts(v.as_ptr().cast::<T>(), self.len)
-        })
-    }
+    // pub(crate) unsafe fn downcast<T: ComponentValue>(self) -> AtomicRef<'a, [T]> {
+    //     AtomicRef::map(self.data, |v| {
+    //         slice::from_raw_parts(v.as_ptr().cast::<T>(), self.len)
+    //     })
+    // }
 
     /// Returns a pointer to the value at the given slot.
     ///

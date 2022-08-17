@@ -32,21 +32,22 @@ impl<T> Slot<T> {
     }
 }
 
-pub fn to_slot_gen(gen: EntityGen) -> u32 {
+fn to_slot_gen(gen: EntityGen) -> u32 {
     ((gen as u32) << 1) | 1
 }
 
-pub fn from_slot_gen(gen: u32) -> u16 {
+fn from_slot_gen(gen: u32) -> u16 {
     (gen >> 1) as u16
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct EntityLocation {
+/// An entity's location within an archetype
+pub(crate) struct EntityLocation {
     pub(crate) slot: usize,
     pub(crate) arch: ArchetypeId,
 }
 
-pub struct EntityStore<V = EntityLocation> {
+pub(crate) struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
     free_head: Option<NonZeroU32>,
     kind: EntityKind,
@@ -276,7 +277,7 @@ impl<V> EntityStore<V> {
         index: EntityIndex,
         generation: EntityGen,
         value: V,
-    ) -> Result<&mut V> {
+    ) -> Option<&mut V> {
         // Init slot
         let free_head = &mut self.free_head;
 
@@ -331,7 +332,7 @@ impl<V> EntityStore<V> {
                     },
                 };
 
-                return unsafe { Ok(&mut *slot.value.occupied) };
+                return unsafe { Some(&mut *slot.value.occupied) };
             }
 
             prev = Some(current);
@@ -339,7 +340,7 @@ impl<V> EntityStore<V> {
         }
 
         // It was not free, that means it already exists
-        Err(Error::EntityExists(self.at(index).unwrap()))
+        None
     }
 }
 
@@ -361,7 +362,7 @@ impl<V> Drop for EntityStore<V> {
     }
 }
 
-pub struct EntityStoreIter<'a, V> {
+pub(crate) struct EntityStoreIter<'a, V> {
     iter: Enumerate<slice::Iter<'a, Slot<V>>>,
     namespace: EntityKind,
 }
@@ -387,7 +388,7 @@ impl<'a, V> Iterator for EntityStoreIter<'a, V> {
     }
 }
 
-pub struct EntityStoreIterMut<'a, V> {
+pub(crate) struct EntityStoreIterMut<'a, V> {
     iter: Enumerate<slice::IterMut<'a, Slot<V>>>,
     namespace: EntityKind,
 }

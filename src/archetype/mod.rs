@@ -7,6 +7,7 @@ use crate::{
     wildcard, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind,
 };
 
+/// Unique archetype id
 pub type ArchetypeId = Entity;
 pub type Slot = usize;
 
@@ -23,6 +24,8 @@ pub use storage::*;
 pub use visit::*;
 
 #[derive(Debug)]
+/// A collection of entities with the same components.
+/// Stored as columns of contiguous component data.
 pub struct Archetype {
     storage: BTreeMap<Entity, Storage>,
     changes: BTreeMap<ComponentId, AtomicRefCell<Changes>>,
@@ -41,7 +44,7 @@ unsafe impl Send for Archetype {}
 unsafe impl Sync for Archetype {}
 
 impl Archetype {
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self {
             storage: BTreeMap::new(),
             changes: BTreeMap::new(),
@@ -51,6 +54,7 @@ impl Archetype {
         }
     }
 
+    /// Returns all the relation components in the archetype
     pub fn relations(&self) -> impl Iterator<Item = ComponentId> + '_ {
         self.storage
             .keys()
@@ -98,6 +102,7 @@ impl Archetype {
         }
     }
 
+    /// Returns all the slots in the archetype
     pub fn slots(&self) -> Slice {
         Slice::new(0, self.len())
     }
@@ -107,11 +112,11 @@ impl Archetype {
         self.storage.get(&component).is_some()
     }
 
-    pub fn edge_to(&self, component: ComponentId) -> Option<ArchetypeId> {
+    pub(crate) fn edge_to(&self, component: ComponentId) -> Option<ArchetypeId> {
         self.edges.get(&component).copied()
     }
 
-    pub fn add_edge_to(
+    pub(crate) fn add_edge_to(
         &mut self,
         dst: &mut Archetype,
         dst_id: ArchetypeId,
@@ -122,14 +127,7 @@ impl Archetype {
         dst.edges.insert(component, src_id);
     }
 
-    pub fn storage_mut<T: ComponentValue>(
-        &self,
-        component: Component<T>,
-    ) -> Option<AtomicRefMut<[T]>> {
-        Some(unsafe { self.storage.get(&component.id())?.borrow_mut() })
-    }
-
-    pub fn init_changes(&mut self, info: ComponentInfo) -> &mut Changes {
+    pub(crate) fn init_changes(&mut self, info: ComponentInfo) -> &mut Changes {
         self.changes
             .entry(info.id())
             .or_insert_with(|| {
@@ -137,6 +135,16 @@ impl Archetype {
                 AtomicRefCell::new(Changes::new(info))
             })
             .get_mut()
+    }
+
+    /// Access a component storage mutably.
+    /// # Panics
+    /// If the storage is already borrowed
+    pub fn storage_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Option<AtomicRefMut<[T]>> {
+        Some(unsafe { self.storage.get(&component.id())?.borrow_mut() })
     }
 
     // pub fn remove_slot_changes(&mut self, slot: Slot) {
@@ -199,15 +207,15 @@ impl Archetype {
         Some(unsafe { self.storage.get(&component.into())?.borrow() })
     }
 
-    fn storage_raw(&mut self, component: ComponentId) -> Option<&mut Storage> {
-        self.storage.get_mut(&component)
-    }
-
     /// Borrow a storage dynamically
+    ///
+    /// # Panics
+    /// If the storage is already borrowed mutably
     pub fn storage_dyn(&self, component: ComponentId) -> Option<StorageBorrowDyn> {
         Some(unsafe { self.storage.get(&component)?.borrow_dyn() })
     }
 
+    /// Returns the value of a component from a unique access
     pub fn get_unique<T: ComponentValue>(
         &mut self,
         slot: Slot,
@@ -465,6 +473,7 @@ impl Archetype {
         self.cap = new_cap;
     }
 
+    /// Returns the entity at `slot`
     pub fn entity(&self, slot: Slot) -> Option<Entity> {
         self.entities.get(slot).copied()
     }
@@ -479,18 +488,19 @@ impl Archetype {
     }
 
     #[must_use]
-    // Number of entities in the archetype
+    /// Number of entities in the archetype
     pub fn len(&self) -> usize {
         self.entities.len()
     }
 
     #[must_use]
+    /// Returns true if the archetype contains no entities
     pub fn is_empty(&self) -> bool {
         self.entities.is_empty()
     }
 
-    /// Get the archetype's cap.
     #[must_use]
+    /// Get the archetype's capacity.
     pub fn cap(&self) -> usize {
         self.cap
     }
@@ -500,10 +510,13 @@ impl Archetype {
         self.storage.values().map(|v| v.info())
     }
 
+    /// Returns the names of all components.
+    /// Useful for debug purposes
     pub fn component_names(&self) -> impl Iterator<Item = &str> {
         self.storage.values().map(|v| v.info().name())
     }
 
+    /// Returns a iterator which borrows each storage in the archetype
     pub fn storages(&self) -> impl Iterator<Item = StorageBorrowDyn> {
         self.components().map(|v| self.storage_dyn(v.id()).unwrap())
     }
@@ -526,6 +539,8 @@ impl Drop for Archetype {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
+/// Represents a type erased component along with its memory layout and drop fn.
+/// Is essentially a vtable
 pub struct ComponentInfo {
     pub(crate) layout: Layout,
     pub(crate) id: ComponentId,
@@ -562,6 +577,7 @@ impl Ord for ComponentInfo {
 }
 
 impl ComponentInfo {
+    /// Returns the component info of a types component
     pub fn of<T: ComponentValue>(component: Component<T>) -> Self {
         unsafe fn drop_ptr<T>(x: *mut u8) {
             x.cast::<T>().drop_in_place()
@@ -579,20 +595,19 @@ impl ComponentInfo {
         self.layout.size()
     }
 
+    /// Returns the component name
     pub fn name(&self) -> &'static str {
         self.name
     }
 
+    /// Returns the component id
     pub fn id(&self) -> Entity {
         self.id
     }
 
+    /// Returns the component metadata fn
     pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
         self.meta
-    }
-
-    pub(crate) fn get_meta(&self) -> ComponentBuffer {
-        (self.meta)(*self)
     }
 }
 

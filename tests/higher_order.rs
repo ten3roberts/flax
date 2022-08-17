@@ -99,17 +99,12 @@ fn relations() {
         .spawn(&mut world);
 
     assert!(world.get(child_of(parent).id(), debug_visitor()).is_ok());
-    let location = world.location(child_of(parent).id());
-    eprintln!("Location of child_of: {location:?}");
+
     let child3 = EntityBuilder::new()
         .set(name(), "Reacher".to_string())
         .set(hobby(), "Hockey")
         .set(child_of(parent2), RelationKind::Dad)
         .spawn(&mut world);
-
-    let location = world.location(child_of(parent).id());
-
-    eprintln!("Location of child_of: {location:?}");
 
     let mut query = Query::new((name(), child_of(parent)));
 
@@ -157,11 +152,6 @@ fn relations() {
     assert!(world.get(child2, child_of(parent)).is_err());
 
     assert!(world.get(child3, child_of(parent2)).is_ok());
-    tracing::info!(
-        "child3: {:?} {:?}",
-        world.location(child3),
-        world.get(child3, name())
-    );
 
     eprintln!("Before: {world:#?}");
     world.clear(parent2).unwrap();

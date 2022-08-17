@@ -5,11 +5,16 @@ mod cloned;
 mod fn_args;
 pub use cloned::*;
 
+/// Allows pushing onto a tuple
 pub trait TupleCombine<T> {
+    /// The resulting right push
     type PushRight;
+    /// The resulting left push
     type PushLeft;
 
+    /// Pushes `T` from the right
     fn push_right(self, value: T) -> Self::PushRight;
+    /// Pushes `T` from the left
     fn push_left(self, value: T) -> Self::PushLeft;
 }
 

@@ -1,6 +1,5 @@
 use crate::components::name;
-use crate::visitors::debug_visitor;
-use crate::{visitors::DebugVisitor, ComponentBuffer, ComponentInfo, ComponentValue};
+use crate::{ComponentBuffer, ComponentInfo, ComponentValue};
 
 /// Additional data that can attach itself to a component
 ///
@@ -12,6 +11,7 @@ pub trait MetaData<T: ComponentValue> {
 }
 
 #[derive(Debug, Clone)]
+/// Name metadata
 pub struct Name;
 
 impl<T> MetaData<T> for Name
@@ -23,29 +23,16 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
-/// Forward the debug implementation to the component
-pub struct Debug;
-
-impl<T> MetaData<T> for Debug
-where
-    T: std::fmt::Debug + ComponentValue,
-{
-    fn attach(_: ComponentInfo, buffer: &mut ComponentBuffer) {
-        buffer.set(debug_visitor(), DebugVisitor::new::<T>());
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use crate::component;
+    use crate::{component, debug_visitor};
 
     use super::*;
 
     #[test]
     fn metadata_attach() {
         component! {
-            foo: String => [Debug],
+            foo: String => [crate::Debug],
         }
 
         let meta = foo().get_meta();

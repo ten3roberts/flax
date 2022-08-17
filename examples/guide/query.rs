@@ -1,15 +1,8 @@
-use std::{
-    borrow::BorrowMut,
-    thread::sleep,
-    time::{Duration, Instant},
-};
-
 use flax::{
     component, entities, CmpExt, CommandBuffer, Component, Debug, Entity, Mutable, Query,
-    QueryData, Schedule, System, SystemContext, World, Write,
+    QueryData, Schedule, System, World, Write,
 };
-use itertools::Itertools;
-use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::{
     prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, EnvFilter,
 };
@@ -120,7 +113,7 @@ fn main() -> color_eyre::Result<()> {
             Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
-            // tracing::info!("Updating distance for {id} with position: {pos:?}");
+            tracing::info!("Updating distance for {id} with position: {pos:?}");
             *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
         });
 
@@ -136,7 +129,7 @@ fn main() -> color_eyre::Result<()> {
     let despawn = System::builder()
         .with_name("delete outside world")
         .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
-        .with_cmd()
+        .write::<CommandBuffer>()
         .build(
             |mut query: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
                 for (id, &dist) in &mut query.prepare() {
@@ -148,7 +141,7 @@ fn main() -> color_eyre::Result<()> {
 
     let debug_world = System::builder()
         .with_name("debug world")
-        .with_world()
+        .write::<World>()
         .build(|world: Write<World>| {
             tracing::debug!("World: {world:#?}");
         });
@@ -186,8 +179,10 @@ fn main() -> color_eyre::Result<()> {
         });
 
     // Spawn a new entity with a random position each frame
-    let spawn = System::builder().with_name("spawner").with_cmd().build(
-        move |mut cmd: Write<CommandBuffer>| {
+    let spawn = System::builder()
+        .with_name("spawner")
+        .write::<CommandBuffer>()
+        .build(move |mut cmd: Write<CommandBuffer>| {
             for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!("Spawning new entity at: {pos:?}");
@@ -196,8 +191,7 @@ fn main() -> color_eyre::Result<()> {
                     .set_default(distance())
                     .spawn_into(&mut cmd);
             }
-        },
-    );
+        });
 
     let mut frame_count = 0;
 

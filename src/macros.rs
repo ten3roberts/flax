@@ -1,27 +1,4 @@
 #[macro_export]
-macro_rules! hash {
-    ($s:expr) => {{
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let id = $s;
-
-        let mut s = DefaultHasher::new();
-        id.hash(&mut s);
-        s.finish()
-    }};
-    () => {{
-        let id = concat!(file!(), line!(), column!());
-        hash!(id)
-    }};
-    ($($s:expr),*) => {{
-        let mut s: u128 = 0;
-        $(s += $crate::hash!($s) as u128;)*
-        $crate::hash!(s)
-    }};
-}
-
-#[macro_export]
 /// Generate a new component
 /// usage:
 /// ```rust
@@ -56,7 +33,7 @@ macro_rules! component {
                 }
 
                 use $crate::EntityKind;
-                $crate::Component::new($crate::Entity::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT | EntityKind::RELATION), stringify!($name), meta).into_pair($obj)
+                $crate::Component::new_pair($crate::Entity::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT | EntityKind::RELATION), stringify!($name), meta, $obj)
             }
         }
 

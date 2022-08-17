@@ -23,12 +23,14 @@ struct Slot {
 }
 
 #[derive(Clone)]
+/// Builder for a serialialization context
 pub struct SerializeBuilder<F> {
     slots: BTreeMap<ComponentId, Slot>,
     filter: F,
 }
 
 impl SerializeBuilder<Without> {
+    /// Creates a new SerializeBuilder
     pub fn new() -> Self {
         Self {
             slots: Default::default(),
@@ -47,6 +49,9 @@ impl<F> SerializeBuilder<F>
 where
     F: StaticFilter + 'static + Clone,
 {
+    /// Register a new component to be serialized if encountered.
+    /// And entity will still be serialized if it only contains a non-empty
+    /// subset of the registered components.
     pub fn with<T: ComponentValue + serde::Serialize>(
         &mut self,
         key: impl Into<String>,
@@ -82,6 +87,7 @@ where
         }
     }
 
+    /// Finish constructing the serialization context
     pub fn build(&mut self) -> SerializeContext {
         SerializeContext {
             slots: self.slots.clone(),
@@ -129,6 +135,7 @@ impl SerializeContext {
     }
 }
 
+/// Serializes the world
 pub struct WorldSerializer<'a> {
     format: SerializeFormat,
     context: &'a SerializeContext,

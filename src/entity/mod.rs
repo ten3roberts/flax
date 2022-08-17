@@ -110,15 +110,24 @@ static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
 bitflags::bitflags! {
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    /// Declares the roles an entity id serves
     pub struct EntityKind: u8 {
+        /// The entity is a component
         const COMPONENT = 1;
+        /// The entity is created via static initialization and is never
+        /// despawned
         const STATIC = 2;
+        /// The entity represents a relation kind component
         const RELATION = 4;
+        /// The entity comes from somewhere else, like a server. Used for resolving
+        /// id clashes
         const REMOTE = 8;
     }
 }
 
+/// The entity id version
 pub type EntityGen = u16;
+/// The index of the entity in the entity store
 pub type EntityIndex = NonZeroU32;
 
 component! {
@@ -162,6 +171,7 @@ impl Entity {
     }
 
     #[inline]
+    /// Returns the entity index
     pub fn index(self) -> EntityIndex {
         // Can only be constructed from parts
         NonZeroU32::new(self.0.get() as u32 >> 8).unwrap()
@@ -179,6 +189,7 @@ impl Entity {
         EntityKind::from_bits(self.0.get() as u8).expect("Invalid kind bits")
     }
 
+    /// Convert the entity into its multiple parts
     pub fn into_parts(self) -> (EntityIndex, EntityGen, EntityKind) {
         let bits = self.0.get();
 
@@ -189,6 +200,7 @@ impl Entity {
         )
     }
 
+    /// Create an entity id from parts
     pub fn from_parts(index: EntityIndex, gen: EntityGen, kind: EntityKind) -> Self {
         assert!(index.get() < (u32::MAX >> 1));
         let bits =
@@ -198,11 +210,13 @@ impl Entity {
     }
 
     #[inline]
+    /// Creates an entity id from raw bits
     pub fn from_bits(bits: NonZeroU64) -> Self {
         Self(bits)
     }
 
     #[inline]
+    /// Returns the raw bits of an entity id
     pub fn to_bits(&self) -> NonZeroU64 {
         self.0
     }
@@ -248,6 +262,8 @@ impl Entity {
         Self(NonZeroU64::new(relation | (object << 32)).unwrap())
     }
 
+    /// Creates a new entity builder.
+    /// See [crate::EntityBuilder] for more details.
     pub fn builder() -> EntityBuilder {
         EntityBuilder::new()
     }
@@ -258,11 +274,13 @@ impl Entity {
 }
 
 impl StrippedEntity {
+    /// Same as [Entity::index]
     pub fn index(self) -> EntityIndex {
         // Can only be constructed from parts
         NonZeroU32::new(self.0.get() as u32 >> 8).unwrap()
     }
 
+    /// Same as [Entity::kind]
     pub fn kind(self) -> EntityKind {
         EntityKind::from_bits(self.0.get() as u8).unwrap()
     }

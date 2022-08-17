@@ -1,7 +1,4 @@
-use std::{
-    any::Any, borrow::BorrowMut, collections::BTreeMap, hash::BuildHasherDefault,
-    marker::PhantomData,
-};
+use std::{collections::BTreeMap, marker::PhantomData};
 
 use serde::{
     de::{self, DeserializeSeed, SeqAccess, VariantAccess, Visitor},
@@ -10,11 +7,10 @@ use serde::{
 
 use crate::{
     archetype::{BatchSpawn, Storage},
-    util::TupleCloned,
-    Archetype, Archetypes, Component, ComponentInfo, ComponentValue, Entity, EntityBuilder, World,
+    Component, ComponentInfo, ComponentValue, Entity, EntityBuilder, World,
 };
 
-use super::{ComponentKey, SerializeFormat, WorldFields};
+use super::{SerializeFormat, WorldFields};
 
 #[derive(Clone)]
 struct Slot {
@@ -54,15 +50,18 @@ impl<'a, 'de> DeserializeSeed<'de> for DeserializeStorage<'a> {
 }
 
 #[derive(Clone, Default)]
+/// Incrementally construct a [crate::serialize::DeserializeContext]
 pub struct DeserializeBuilder {
     slots: BTreeMap<String, Slot>,
 }
 
 impl DeserializeBuilder {
+    /// Creates a new DeserializeBuilder
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Register a new component to be deserialized
     pub fn with<T>(&mut self, key: impl Into<String>, component: Component<T>) -> &mut Self
     where
         T: ComponentValue + for<'x> Deserialize<'x>,
@@ -102,6 +101,7 @@ impl DeserializeBuilder {
         self
     }
 
+    /// Finish constructing the deserialization context
     pub fn build(&mut self) -> DeserializeContext {
         DeserializeContext {
             slots: self.slots.clone(),
@@ -116,6 +116,8 @@ pub struct DeserializeContext {
 
 impl DeserializeContext {
     /// Deserializes the world from the supplied deserializer.
+    /// Automatically uses the row or column major format depending on the
+    /// underlying data.
     pub fn deserialize<'de, D>(&self, deserializer: D) -> std::result::Result<World, D::Error>
     where
         D: Deserializer<'de>,

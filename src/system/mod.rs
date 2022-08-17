@@ -12,6 +12,8 @@ use crate::{
 pub use cell::*;
 pub use traits::*;
 
+/// A system builder which allows incrementally adding data to a system
+/// function.
 pub struct SystemBuilder<T> {
     data: T,
     name: Option<String>,
@@ -75,6 +77,7 @@ where
     for<'x> Q: Fetch<'x> + std::fmt::Debug + 'static,
     for<'x> F: Filter<'x> + std::fmt::Debug + 'static,
 {
+    /// Execute a function for each item in the query
     pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, Query<Q, F>, ()>
     where
         for<'x> Func: FnMut(<<Q as Fetch<'x>>::Prepared as PreparedFetch>::Item),
@@ -87,7 +90,7 @@ impl<Args> SystemBuilder<Args> {
     /// Add a new query to the system
     pub fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight>
     where
-        S: SystemAccess + for<'x> SystemData<'x>,
+        S: for<'x> SystemData<'x>,
         Args: TupleCombine<S>,
     {
         SystemBuilder {
@@ -96,22 +99,22 @@ impl<Args> SystemBuilder<Args> {
         }
     }
 
-    /// Access the world mutably in the query.
-    /// This adds a `Write<World>` argument
-    pub fn with_world(self) -> SystemBuilder<Args::PushRight>
+    /// Access data data mutably in the system
+    pub fn write<T>(self) -> SystemBuilder<Args::PushRight>
     where
-        Args: TupleCombine<Writable<World>>,
+        Args: TupleCombine<Writable<T>>,
+        Writable<T>: for<'x> SystemData<'x>,
     {
-        self.with(Writable::<World>::default())
+        self.with(Writable::<T>::default())
     }
 
-    /// Access the commandbuffer mutably in the query.
-    /// This adds a `Write<CommandBuffer>` argument
-    pub fn with_cmd(self) -> SystemBuilder<Args::PushRight>
+    /// Access data data mutably in the system
+    pub fn read<T>(self) -> SystemBuilder<Args::PushRight>
     where
-        Args: TupleCombine<Writable<CommandBuffer>>,
+        Args: TupleCombine<Readable<T>>,
+        Readable<T>: for<'x> SystemData<'x>,
     {
-        self.with(Writable::<CommandBuffer>::default())
+        self.with(Readable::<T>::default())
     }
 
     /// Set the systems name
@@ -120,6 +123,8 @@ impl<Args> SystemBuilder<Args> {
         self
     }
 
+    /// Creates the system by suppling a function to act upon the systems data,
+    /// like queries and world accesses.
     pub fn build<F, Ret>(self, func: F) -> System<F, Args, Ret>
     where
         Args: for<'a> SystemData<'a> + 'static,
@@ -152,7 +157,7 @@ where
         Ret,
     >,
 {
-    pub fn new(name: Option<String>, func: F, data: Args) -> Self {
+    pub(crate) fn new(name: Option<String>, func: F, data: Args) -> Self {
         Self {
             name,
             data,
@@ -173,6 +178,7 @@ where
     }
 }
 impl System<(), (), ()> {
+    /// See [crate::SystemBuilder]
     pub fn builder() -> SystemBuilder<()> {
         SystemBuilder::new()
     }
@@ -253,14 +259,18 @@ where
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
+/// Describes a kind of access
 pub enum AccessKind {
     /// Borrow a single component of an archetype
     Archetype {
+        /// The archetype id
         id: ArchetypeId,
+        /// The accessed component
         component: ComponentId,
     },
     /// Borrow the whole world
     World,
+    /// Borrow the commandbuffer
     CommandBuffer,
 }
 
@@ -291,8 +301,12 @@ impl AccessKind {
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
+/// Describes an access for a system, allowing for dependency resolution and
+/// multithreading
 pub struct Access {
+    /// The kind of access
     pub kind: AccessKind,
+    /// shared or unique/mutable access
     pub mutable: bool,
 }
 
@@ -328,12 +342,12 @@ pub struct BoxedSystem {
 
 impl std::fmt::Debug for BoxedSystem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.inner.describe(f);
-        Ok(())
+        self.inner.describe(f)
     }
 }
 
 impl BoxedSystem {
+    /// Creates a new boxed system from any other kind of system
     pub fn new(
         system: impl for<'x> SystemFn<'x, &'x SystemContext<'x>, (), eyre::Result<()>>
             + Send
@@ -345,10 +359,12 @@ impl BoxedSystem {
         }
     }
 
+    /// Execute the system with the provided context
     pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<()> {
         self.inner.execute(ctx)
     }
 
+    /// Same as execute but creates and applied a temporary commandbuffer
     pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> eyre::Result<()> {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
@@ -357,10 +373,12 @@ impl BoxedSystem {
         Ok(())
     }
 
+    /// Describes the system held within
     pub fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.describe(f)
     }
 
+    /// Returns the accesse of the system held within
     pub fn access<'a>(&'a mut self, ctx: &'a SystemContext<'a>) -> Vec<Access> {
         self.inner.access(ctx)
     }
