@@ -7,7 +7,7 @@ use std::sync::atomic::AtomicU32;
 use std::{num::NonZeroU32, sync::atomic::Ordering};
 
 pub use builder::*;
-pub use store::*;
+pub(super) use store::*;
 
 use crate::{component, EntityFetch};
 

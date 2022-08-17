@@ -1,12 +1,6 @@
-use std::{
-    any::{type_name, TypeId},
-    marker::PhantomData,
-    ptr::NonNull,
-};
-
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{error::Result, CommandBuffer, Error, World};
+use crate::{CommandBuffer, World};
 
 /// Holds external context for system execution.
 /// Contains the world and a commandbuffer

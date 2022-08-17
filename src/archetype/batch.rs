@@ -1,7 +1,4 @@
-use std::{
-    collections::{btree_map::Entry, BTreeMap},
-    mem,
-};
+use std::{collections::BTreeMap, mem};
 
 use crate::{Component, ComponentId, ComponentInfo, ComponentValue, Entity, Error};
 

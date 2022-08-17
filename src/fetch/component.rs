@@ -1,5 +1,3 @@
-use core::slice;
-
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
 use crate::{
