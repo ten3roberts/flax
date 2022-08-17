@@ -2,7 +2,7 @@ use std::{fmt::Display, marker::PhantomData, sync::atomic::AtomicU32};
 
 use crate::{
     archetype::ComponentInfo, ComponentBuffer, Entity, EntityKind, InsertedFilter, MetaData,
-    ModifiedFilter, Mutable, Relation, RemovedFilter, With, Without,
+    ModifiedFilter, Mutable, RemovedFilter, With, Without,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
@@ -157,14 +157,6 @@ impl<T: ComponentValue> Component<T> {
         With {
             component: self.id(),
         }
-    }
-
-    /// Construct a fetch which will visit the `index` relation of this
-    /// component type.
-    /// The index is used since there may be multiple distinct relations of the
-    /// same component types
-    pub fn relation(self, index: usize) -> Relation<T> {
-        Relation::new(self, index)
     }
 
     /// Get the component's name.

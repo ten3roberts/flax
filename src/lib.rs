@@ -140,9 +140,9 @@ pub mod util;
 /// Provides a debug visitor
 pub mod visitors;
 
-#[cfg(feature = "serde")]
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein
+#[cfg(feature = "serde")]
 pub mod serde;
 
 // Required due to macro

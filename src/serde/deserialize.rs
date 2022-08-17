@@ -84,7 +84,11 @@ impl DeserializeBuilder {
             builder: &mut EntityBuilder,
         ) -> erased_serde::Result<()> {
             let value = T::deserialize(deserializer)?;
-            builder.set_dyn(info, value);
+            // Safety
+            // The type is guranteed by the map lookup
+            unsafe {
+                builder.set_dyn(info, value);
+            }
             Ok(())
         }
 
