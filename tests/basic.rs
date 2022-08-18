@@ -32,7 +32,7 @@ fn query() {
 
     let mut query = Query::new((entities(), a()));
     let mut world = World::new();
-    query.prepare(&world).iter().for_each(|_| {});
+    query.iter(&world).iter().for_each(|_| {});
 
     let id1 = world.spawn();
     let id2 = world.spawn();
@@ -45,7 +45,7 @@ fn query() {
     world.set(id3, b(), "foo".to_string()).unwrap();
 
     let items = query
-        .prepare(&world)
+        .iter(&world)
         .iter()
         .map(|(a, b)| (a, *b))
         .inspect(|v| println!("{v:?}"))
@@ -87,7 +87,7 @@ fn builder() {
         .spawn(&mut world);
 
     let mut query = Query::new((a(), c()));
-    let mut query = query.prepare(&world);
+    let mut query = query.iter(&world);
     let components = query.iter().sorted().collect_vec();
 
     assert_eq!(
@@ -104,7 +104,7 @@ fn builder() {
 
     {
         let mut query = Query::new((a(), c().as_mut()));
-        let mut prepared = query.prepare(&world);
+        let mut prepared = query.iter(&world);
         let items = prepared.get(id).unwrap();
         *items.1 = items.1.repeat(*items.0);
     }
@@ -143,7 +143,7 @@ fn tags() {
         .collect_vec();
 
     let mut query = Query::new(health());
-    let mut query = query.prepare(&world);
+    let mut query = query.iter(&world);
     let items = query.into_iter().sorted().collect_vec();
 
     let expected = (&[50; 16]).iter().chain(&[100]).collect_vec();
@@ -169,7 +169,7 @@ fn query_view() {
         .collect_vec();
 
     let mut query = Query::new((pos().as_mut(), vel()));
-    let mut prepared = query.prepare(&world);
+    let mut prepared = query.iter(&world);
 
     // Perform integration
     for (pos, vel) in &mut prepared {

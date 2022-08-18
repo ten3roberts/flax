@@ -26,7 +26,7 @@ provide the application logic.
 
 ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
 
-# Example Usage
+## Example Usage
 
 ```rust
   // Declare static components
@@ -60,7 +60,7 @@ provide the application logic.
 ```
 
 
-# Comparison to other ECS
+## Comparison to other ECS
 
 Compared to other ecs implementations, a component is simply another `Entity`
 identifier to which data is attached. This means the same "type" can be added to
@@ -101,7 +101,7 @@ which leads to subsequent systems not finding the `Type` on the entity.
 Having statically declared componenents makes the rust type system disallow
 these cases and catches these bugs earlier.
 
-# Motivation
+## Motivation
 
 During development of a game in school I used the `hecs` ECS. It is an awesome
 library, and the author [Ralith](https://github.com/Ralith) has been awesome in bringing some pull
@@ -111,7 +111,7 @@ Despite this, I often made subtle bugs with *similar* types. The game engine was
 cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
 coercions in order to coexist.
 
-# Unsafe
+## Unsafe
 This library makes use of unsafe for type erasure and the allocation in storage
 of ComponentBuffers and Archetypes.
 

@@ -368,11 +368,11 @@ impl World {
                 .expect("Failed to initialize component");
         }
 
-        assert_eq!(
-            buffer.components().sorted().collect_vec(),
-            buffer.components().collect_vec(),
-            "Components are not sorted"
-        );
+        // assert_eq!(
+        //     buffer.components().sorted().collect_vec(),
+        //     buffer.components().collect_vec(),
+        //     "Components are not sorted"
+        // );
 
         let (arch_id, _) = self.archetypes.init(buffer.components());
 
@@ -555,7 +555,7 @@ impl World {
         F: for<'x> Filter<'x>,
     {
         let mut query = Query::new(entities()).filter(filter);
-        let ids = query.prepare(self).iter().collect_vec();
+        let ids = query.iter(self).iter().collect_vec();
 
         for id in ids {
             self.despawn(id).expect("Invalid entity id");
@@ -1009,7 +1009,7 @@ where
         let mut list = f.debug_map();
 
         let mut query = Query::with_components(()).filter(&self.filter);
-        let mut query = query.prepare(self.world);
+        let mut query = query.iter(self.world);
 
         for batch in query.iter_batched() {
             let arch = batch.arch();

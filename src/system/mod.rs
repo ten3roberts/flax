@@ -50,7 +50,7 @@ where
 {
     fn execute(&mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut Query<Q, F>)) {
         let mut data = data.get(ctx).expect("Failed to get system data");
-        for item in &mut data.prepare() {
+        for item in &mut data.iter() {
             (self.func)(item)
         }
     }
@@ -189,7 +189,7 @@ where
     Args: SystemData<'a> + 'a,
     F: SystemFn<'a, (&'a SystemContext<'a>, &'a mut Args), Args::Data, ()>,
 {
-    #[tracing::instrument(skip_all, fields(name = self.name.as_deref().unwrap_or_default()))]
+    #[tracing::instrument(skip_all, fields(name = self.name.as_deref().unwrap_or("unnamed")))]
     fn execute(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<()> {
         self.func.execute((ctx, &mut self.data));
         Ok(())
@@ -417,7 +417,7 @@ mod test {
         let mut system = System::builder()
             .with(Query::new(a()))
             // .with(Query::new(b()))
-            .build(|mut a: QueryData<Component<String>>| assert_eq!(a.prepare().iter().count(), 1));
+            .build(|mut a: QueryData<Component<String>>| assert_eq!(a.iter().iter().count(), 1));
 
         let mut fallible = System::builder()
             .with_name("Fallible")
@@ -425,7 +425,7 @@ mod test {
             .build(
                 move |mut query: QueryData<Component<i32>>| -> eyre::Result<()> {
                     // Lock archetypes
-                    let mut query = query.prepare();
+                    let mut query = query.iter();
                     let item: &i32 = query.get(id)?;
                     eprintln!("Item: {item}");
 

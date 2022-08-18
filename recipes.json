@@ -32,5 +32,21 @@
             "auto_close": false
         },
         "kind": "term"
+    },
+    "example-query-advanced": {
+        "cmd": "cargo run --example query_advanced",
+        "opts": {
+            "auto_close": false
+        },
+        "kind": "term"
+    },
+    "debug-query-advanced": {
+        "cmd": "./target/debug/examples/query_advanced",
+        "kind": "dap",
+        "depends_on": [
+            {
+                "cmd": "cargo build --example query_advanced"
+            }
+        ]
     }
 }
