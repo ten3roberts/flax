@@ -60,7 +60,7 @@ fn filters() {
 
     others[3..5].iter().for_each(|id| {
         let mut a = world.get_mut(*id, a()).unwrap();
-        *a = 10.0 * *a;
+        *a *= 10.0;
     });
 
     let items = query.as_vec(&world);
@@ -73,7 +73,7 @@ fn filters() {
     let items = query
         .prepare(&world)
         .iter()
-        .map(|v| v.clone())
+        .copied()
         .sorted_by_key(|v| (v * 256.0) as i64)
         .collect_vec();
 

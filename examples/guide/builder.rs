@@ -76,6 +76,7 @@ fn main() {
             tracing::info!("name: {name}, pos: {pos:?}, health: {health}");
         }
     }
+
     // ANCHOR_END: query
     // ANCHOR: batch
 
@@ -88,7 +89,7 @@ fn main() {
         .set(
             position(),
             (0..).map(|i| {
-                let f = i as f32 / 64.0;
+                let f = i as f32 / 32.0;
                 (f.cos() * (1.0 + f / 2.0), f.sin() * (1.0 + f / 2.0))
             }),
         )
@@ -96,12 +97,7 @@ fn main() {
 
     let trees = trees.spawn(&mut world);
 
-    // tracing::info!("Trees: {trees:?}");
-
-    let mut query = Query::new((name(), position()));
-    for (name, pos) in &mut query.prepare(&world) {
-        // tracing::info!("name: {name}, pos: {pos:?}");
-    }
+    tracing::info!("Trees: {:#?}", world.format_entities(&trees[0..100]));
 
     // ANCHOR_END: batch
 }

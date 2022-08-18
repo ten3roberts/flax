@@ -94,11 +94,7 @@ where
 
         // Get the next chunk
         let chunk = self.filter.next();
-        let chunk = if let Some(chunk) = chunk {
-            chunk
-        } else {
-            return None;
-        };
+        let chunk = chunk?;
 
         // Set the chunk as visited
         unsafe { fetch.set_visited(chunk, self.new_tick) }
