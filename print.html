@@ -76,7 +76,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/builder.html"><strong aria-hidden="true">2.1.</strong> EntityBuilder</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/builder.html"><strong aria-hidden="true">2.1.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">2.2.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="diving_deeper/relations.html"><strong aria-hidden="true">2.3.</strong> Relations</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -363,7 +363,7 @@ a certain filter.</p>
 
     let mut query = Query::new((position(), health()));
 
-    for (pos, health) in &amp;mut query.prepare(&amp;world) {
+    for (pos, health) in &amp;mut query.iter(&amp;world) {
         println!(&quot;pos: {pos:?}, health: {health}&quot;);
     }
 
@@ -415,7 +415,7 @@ when an entity moves for every entity which are not dead.</p>
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);
-    for (id, pos, dist) in &amp;mut query.prepare(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -428,7 +428,7 @@ yield nothing.</p>
 </span>
 <span class="boring">fn main() {
 </span>    tracing::info!(&quot;Running query again&quot;);
-    for (id, pos, dist) in &amp;mut query.prepare(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -442,7 +442,7 @@ only that change.</p>
 </span>    *world.get_mut(id2, position())? = (8.0, 3.0);
 
     tracing::info!(&quot;... and again&quot;);
-    for (id, pos, dist) in &amp;mut query.prepare(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -488,7 +488,7 @@ thrice could be turned into a query.</p>
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);
-    for (id, pos, dist) in &amp;mut query.prepare(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -504,7 +504,7 @@ thrice could be turned into a query.</p>
         .with(query)
         .build(
             |mut query: QueryData&lt;(_, Component&lt;(f32, f32)&gt;, Mutable&lt;f32&gt;), _&gt;| {
-                for (id, pos, dist) in &amp;mut query.prepare() {
+                for (id, pos, dist) in &amp;mut query.iter() {
                     tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
                     *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
                 }
@@ -555,7 +555,7 @@ as it may access anything.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, &amp;dist) in &amp;mut query.prepare() {
+                for (id, &amp;dist) in &amp;mut query.iter() {
                     tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
                     cmd.despawn(id);
                 }
@@ -591,7 +591,7 @@ sequence.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, &amp;dist) in &amp;mut query.prepare() {
+                for (id, &amp;dist) in &amp;mut query.iter() {
                     tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
                     cmd.despawn(id);
                 }
@@ -658,7 +658,7 @@ sequence.</p>
         .with_name(&quot;count&quot;)
         .with(Query::new(()))
         .build(move |mut query: QueryData&lt;()&gt;| {
-            let count: usize = query.prepare().iter_batched().map(|v| v.len()).sum();
+            let count: usize = query.iter().iter_batched().map(|v| v.len()).sum();
             tracing::info!(&quot;[{frame_count}]: {count}&quot;);
             frame_count += 1;
         });
@@ -759,7 +759,7 @@ matching archetype in the world.</p>
 </span>
 <span class="boring">fn main() {
 </span>    let mut query = Query::new((name(), position(), is_player().opt(), health()));
-    for (name, pos, is_player, health) in &amp;mut query.prepare(&amp;world) {
+    for (name, pos, is_player, health) in &amp;mut query.iter(&amp;world) {
         tracing::info!(&quot;name: {name}, pos: {pos:?}, player: {is_player:?}, health: {health}&quot;);
     }
 
@@ -768,7 +768,7 @@ matching archetype in the world.</p>
     {
         let mut query = Query::new((name(), position(), health())).without(is_player());
         info_span!(&quot;enemies&quot;);
-        for (name, pos, health) in &amp;mut query.prepare(&amp;world) {
+        for (name, pos, health) in &amp;mut query.iter(&amp;world) {
             tracing::info!(&quot;name: {name}, pos: {pos:?}, health: {health}&quot;);
         }
     }
@@ -805,6 +805,168 @@ format of the archetype storage and is thus maximally efficient.</p>
 
 <span class="boring">}
 </span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-query"><a class="header" href="#advanced-query">Advanced query</a></h1>
+<p>A query is a combination of a
+<a href="https://docs.rs/flax/latest/flax/traits.Fetch"><code>Fetch</code></a> and a
+<a href="https://docs.rs/flax/latest/flax/traits.Filter"><code>Filter</code></a> in unison with a state.</p>
+<p>The most common kind of <code>Fetch</code> is the component and the tuple fetch. The tuple
+combines multiple fetches into a single one.</p>
+<p>A tuple of components, or any other <code>Fetch</code> will only yield entities which match
+the full tuple, I.e;</p>
+<h2 id="optional-query"><a class="header" href="#optional-query">Optional query</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    // Entities with mass
+    (0..10).for_each(|i| {
+        builder
+            .set(name(), format!(&quot;Entity.{i}&quot;))
+            .set(position(), rng.gen::&lt;Vec3&gt;() * 10.0)
+            .set(velocity(), rng.gen())
+            .set(mass(), rng.gen_range(10..30) as f32)
+            .spawn(&amp;mut world);
+    });
+
+    (0..10).for_each(|i| {
+        builder
+            .set(name(), format!(&quot;Entity.{i}&quot;))
+            .set(position(), rng.gen::&lt;Vec3&gt;() * 10.0)
+            .set(velocity(), rng.gen())
+            .set(mass(), rng.gen_range(10..30) as f32)
+            .spawn(&amp;mut world);
+    });
+
+    // Entities without mass
+    (0..100).for_each(|i| {
+        builder
+            .set(name(), format!(&quot;Entity.{i}&quot;))
+            .set(position(), rng.gen::&lt;Vec3&gt;() * 0.5)
+            .set(velocity(), rng.gen())
+            .spawn(&amp;mut world);
+    });
+
+    // Since this query accessed `position`, `velocity` **and** `mass` only the
+    // first group of entities will be matched
+    for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass())).iter(&amp;world) {
+        tracing::info!(&quot;pos: {pos}, vel: {vel}, mass: {mass}&quot;);
+    }
+
+<span class="boring">}
+</span></code></pre></pre>
+<p>Will only yield entities which have both position and velocity.</p>
+<p>By adding <code>.opt()</code> to any fetch, you convert it to an <code>Option&lt;T&gt;</code> where <code>T</code> is
+the value yielded by the underlying fetch</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    // Use an optional fetch to yield an `Option&lt;T&gt;`, works for any query
+    for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass().opt())).iter(&amp;world) {
+        if mass.is_some() {
+            tracing::info!(&quot;Has mass&quot;);
+        }
+        tracing::info!(&quot;pos: {pos}, vel: {vel}, mass: {mass:?}&quot;);
+    }
+
+<span class="boring">}
+</span></code></pre></pre>
+<p>However, it can still be cumbersome to deal with the option, especially since
+components yield references, which can not be combined with
+<a href="https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap_or_default"><code>Option::unwrap_or_default</code></a></p>
+<p>The <a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or_default"><code>opt_or_default</code></a> combinator can be used, or <a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or"><code>opt_or</code></a> to provide your custom value if the entity does not have the specified component.</p>
+<p>There only work for fetches which return a shared reference, as the provided
+default is also returned by reference. For when there is an owned value, consider using the builting <code>Option::unwrap_or_default</code>.</p>
+<p>This combinator is useful when writing systems which may need to operate on entities which lack some components, such as physics where the entity may not have a rotation.</p>
+<h2 id="change-detection-1"><a class="header" href="#change-detection-1">Change detection</a></h2>
+<p>Every time a component is modified, either through <a href="https://docs.rs/flax/latest/flax/struct.World#method.get_mut"><code>World::get_mut</code></a>, or a query, a <code>Modified</code> event is added to the affected entities.</p>
+<p>Similarly, <code>set</code> when the component did not previously exist, and new entities will create an <code>Inserted</code> event.</p>
+<p><code>Removal</code> events are created by
+<a href="https://docs.rs/flax/latest/flax/struct.World#method.remove"><code>World::remove</code></a>.</p>
+<h3 id="implementation-details"><a class="header" href="#implementation-details">Implementation details</a></h3>
+<pre><code>Each `ChangeEvent` consists of a subslice of adjacent entities in the same
+archetype, the change type, and when the change occurred.
+
+Two change events where the entities are adjacent will be joined into a single
+one will be joined. This means the change list is always rather small compared
+to the number of changing entities (especially compared to using a `HashSet`).
+
+The following example combines optional queries with change detection to create
+a small physic calculation.
+</code></pre>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    component! {
+        rotation: Quat,
+        scale: Vec3,
+        world_matrix: Mat4 =&gt; [Debug],
+    }
+
+    let create_world_matrix = System::builder()
+        .with_name(&quot;add world matrix&quot;)
+        .with(
+            Query::new(entities())
+                .with(position())
+                .without(world_matrix()),
+        )
+        .write::&lt;CommandBuffer&gt;()
+        .build(
+            |mut query: QueryData&lt;EntityFetch, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
+                for id in &amp;mut query.iter() {
+                    tracing::info!(&quot;Adding world matrix to {id}&quot;);
+                    cmd.set(id, world_matrix(), Mat4::IDENTITY);
+                }
+            },
+        );
+
+    let update_world_matrix = System::builder()
+        .with_name(&quot;update world matrix&quot;)
+        .with(
+            Query::new((
+                entities(),
+                world_matrix().as_mut(),
+                position(),
+                rotation().opt_or_default(),
+                scale().opt_or(Vec3::ONE),
+            ))
+            .filter(position().modified() | rotation().modified() | scale().modified()),
+        )
+        .build(
+            |mut query: QueryData&lt;
+                (
+                    EntityFetch,
+                    Mutable&lt;Mat4&gt;,
+                    Component&lt;Vec3&gt;,
+                    OptOr&lt;Component&lt;Quat&gt;, Quat&gt;,
+                    OptOr&lt;Component&lt;Vec3&gt;, Vec3&gt;,
+                ),
+                _,
+            &gt;| {
+                for (id, world_matrix, pos, rot, scale) in &amp;mut query.iter() {
+                    tracing::info!(&quot;Updating world matrix for: {id}&quot;);
+                    *world_matrix = Mat4::from_scale_rotation_translation(*scale, *rot, *pos);
+                }
+            },
+        );
+
+    let mut schedule = Schedule::builder()
+        .with_system(create_world_matrix)
+        .flush()
+        .with_system(update_world_matrix)
+        .build();
+
+    schedule
+        .execute_par(&amp;mut world)
+        .expect(&quot;Failed to execute schedule&quot;);
+
+    schedule
+        .execute_par(&amp;mut world)
+        .expect(&quot;Failed to execute schedule&quot;);
+
+    tracing::info!(&quot;World: {world:#?}&quot;);
+
+<span class="boring">}
+</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="relations"><a class="header" href="#relations">Relations</a></h1>
 
                     </main>
 

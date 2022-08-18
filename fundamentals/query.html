@@ -75,7 +75,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html" class="active"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/builder.html"><strong aria-hidden="true">2.1.</strong> EntityBuilder</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html" class="active"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/builder.html"><strong aria-hidden="true">2.1.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">2.2.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="../diving_deeper/relations.html"><strong aria-hidden="true">2.3.</strong> Relations</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -160,7 +160,7 @@ a certain filter.</p>
 
     let mut query = Query::new((position(), health()));
 
-    for (pos, health) in &amp;mut query.prepare(&amp;world) {
+    for (pos, health) in &amp;mut query.iter(&amp;world) {
         println!(&quot;pos: {pos:?}, health: {health}&quot;);
     }
 
@@ -212,7 +212,7 @@ when an entity moves for every entity which are not dead.</p>
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);
-    for (id, pos, dist) in &amp;mut query.prepare(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -225,7 +225,7 @@ yield nothing.</p>
 </span>
 <span class="boring">fn main() {
 </span>    tracing::info!(&quot;Running query again&quot;);
-    for (id, pos, dist) in &amp;mut query.prepare(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -239,7 +239,7 @@ only that change.</p>
 </span>    *world.get_mut(id2, position())? = (8.0, 3.0);
 
     tracing::info!(&quot;... and again&quot;);
-    for (id, pos, dist) in &amp;mut query.prepare(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
