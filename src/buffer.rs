@@ -1,5 +1,6 @@
 use std::alloc::alloc;
-use std::collections::{hash_map, HashMap};
+use std::collections::{btree_map, BTreeMap, HashMap};
+use std::mem;
 use std::{
     alloc::{dealloc, Layout},
     ptr::NonNull,
@@ -183,7 +184,7 @@ impl Drop for BufferStorage {
 /// Used for gathering up an entity's components or inserting it.
 #[derive(Default)]
 pub struct ComponentBuffer {
-    components: HashMap<ComponentId, (Offset, ComponentInfo)>,
+    components: BTreeMap<ComponentId, (Offset, ComponentInfo)>,
     storage: BufferStorage,
 }
 
@@ -271,7 +272,7 @@ impl ComponentBuffer {
         let components = &mut self.components;
         let storage = &mut self.storage;
         ComponentBufferIter {
-            components: components.drain(),
+            components: mem::take(components).into_iter(),
             storage,
         }
     }
@@ -279,7 +280,7 @@ impl ComponentBuffer {
 
 /// Iterate all items in the component buffer
 pub struct ComponentBufferIter<'a> {
-    components: hash_map::Drain<'a, ComponentId, (Offset, ComponentInfo)>,
+    components: btree_map::IntoIter<ComponentId, (Offset, ComponentInfo)>,
     storage: &'a mut BufferStorage,
 }
 

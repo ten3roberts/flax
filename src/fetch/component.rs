@@ -61,7 +61,6 @@ where
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
         if archetype.has(self.id()) {
-            eprintln!("Archetype has: {:?}", self.name());
             vec![Access {
                 kind: AccessKind::Archetype {
                     id,
@@ -112,8 +111,6 @@ where
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
         if archetype.has(self.0.id()) {
-            eprintln!("Archetype has mut: {:?}", self.0.name());
-
             vec![Access {
                 kind: AccessKind::Archetype {
                     id,
@@ -171,7 +168,6 @@ where
             arch.storage()
                 .iter()
                 .map(move |(k, v)| {
-                    eprintln!("Looking at: {k:?}");
                     let (rel, obj) = k.split_pair();
                     (rel, obj, k, v)
                 })
@@ -189,11 +185,6 @@ where
                 })
                 .collect()
         };
-
-        eprintln!(
-            "Found borrows: {:?}",
-            borrows.iter().map(|v| v.0).collect_vec()
-        );
 
         Some(PreparedRelations { borrows })
     }

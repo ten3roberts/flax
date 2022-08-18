@@ -76,7 +76,6 @@ impl CommandBuffer {
         // Remove from insert list
         if let Some(offset) = offset {
             unsafe { self.inserts.take::<T>(offset) };
-            eprintln!("Found old value");
         }
 
         self.removals.push((id, component.info()));

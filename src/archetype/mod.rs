@@ -314,6 +314,13 @@ impl Archetype {
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
     /// The component must be Send + Sync
     pub unsafe fn push(&mut self, component: ComponentId, src: *mut u8) -> Result<(), *mut u8> {
+        tracing::debug!(
+            "Components: {:?}",
+            self.storage()
+                .values()
+                .map(|v| v.info().name())
+                .collect_vec()
+        );
         let storage = self.storage.get_mut(&component).ok_or(src)?;
         storage.extend(src, 1);
 
@@ -336,6 +343,7 @@ impl Archetype {
         // assert!(
         //     slice.end <= self.len(),
         //     "Slice end is past the archetype length"
+
         // );
         let storage = self.storage.get_mut(&src.info().id())?;
 
@@ -419,10 +427,8 @@ impl Archetype {
         }
 
         let entities = mem::take(&mut self.entities);
-        eprintln!("Entities: {entities:?}");
 
         let dst_slots = dst.allocate_n(&entities);
-        eprintln!("Allocated {dst_slots:?} for move all");
 
         // Migrate all changes before doing anything
         for (src_slot, dst_slot) in self.slots().iter().zip(dst_slots) {

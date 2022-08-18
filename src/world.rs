@@ -368,6 +368,12 @@ impl World {
                 .expect("Failed to initialize component");
         }
 
+        assert_eq!(
+            buffer.components().sorted().collect_vec(),
+            buffer.components().collect_vec(),
+            "Components are not sorted"
+        );
+
         let (arch_id, _) = self.archetypes.init(buffer.components());
 
         let (id, loc, arch) = self.spawn_inner(arch_id, EntityKind::empty());
@@ -678,7 +684,6 @@ impl World {
             }
         };
 
-        eprintln!("Moving {}", component.name());
         unsafe {
             assert_ne!(src_id, dst_id);
             // Borrow disjoint
@@ -722,7 +727,6 @@ impl World {
     }
 
     pub(crate) fn remove_dyn(&mut self, id: Entity, component: ComponentInfo) -> Result<()> {
-        eprintln!("Removing component {component:?} from {id} ");
         unsafe {
             self.remove_inner(id, component, |ptr| (component.drop)(ptr))
                 .map(|_| {})
@@ -772,7 +776,6 @@ impl World {
         // This moves the differing value out of the archetype before it is
         // forgotten in the move
 
-        eprintln!("Moving {id} from {src_id} => {dst_id}");
         // Capture the ONE moved value
         let mut on_drop = Some(on_drop);
         let (dst_slot, swapped) = src.move_to(dst, slot, |_, p| {
@@ -934,6 +937,11 @@ impl World {
         }
     }
 
+    /// Formats a set of entities using the debug visitor.
+    pub fn format_entities<'a>(&'a self, ids: &'a [Entity]) -> EntityFormatter<'a> {
+        EntityFormatter { world: self, ids }
+    }
+
     pub(crate) fn reconstruct(&self, id: crate::StrippedEntity) -> Option<Entity> {
         let ns = self.entities.get(id.kind())?;
 
@@ -1019,6 +1027,43 @@ where
             for slot in batch.slots().iter() {
                 let row = RowFormatter::new(arch, slot, &meta);
                 list.entry(&arch.entity(slot).unwrap(), &row);
+            }
+        }
+
+        list.finish()
+    }
+}
+
+/// Debug formats the specified entities,
+/// Created using [World::format_entities]
+pub struct EntityFormatter<'a> {
+    world: &'a World,
+    ids: &'a [Entity],
+}
+
+impl<'a> std::fmt::Debug for EntityFormatter<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut meta = BTreeMap::new();
+        let mut list = f.debug_map();
+
+        for &id in self.ids {
+            let loc = self.world.location(id);
+            if let Ok(loc) = loc {
+                let arch = self.world.archetype(loc.arch);
+
+                meta.extend(arch.components().flat_map(|info| {
+                    Some((
+                        info.id(),
+                        (
+                            self.world.get(info.id(), debug_visitor()).ok(),
+                            self.world.get(info.id(), name()).ok()?,
+                        ),
+                    ))
+                }));
+
+                let row = RowFormatter::new(arch, loc.slot, &meta);
+                list.entry(&id, &row);
+                list.entry(&"location", &loc);
             }
         }
 
