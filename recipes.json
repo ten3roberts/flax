@@ -21,9 +21,15 @@
     },
     "example-query": {
         "cmd": "cargo run --example query",
-        "keep_open": true,
-        "term": {
-            "focus": false
+        "opts": {
+            "auto_close": false
+        },
+        "kind": "term"
+    },
+    "example-builder": {
+        "cmd": "cargo run --example builder",
+        "opts": {
+            "auto_close": false
         },
         "kind": "term"
     }

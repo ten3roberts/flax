@@ -8,3 +8,5 @@
     * [Query](fundamentals/query.md)
     * [Systems](fundamentals/systems.md)
     * [Schedule](fundamentals/schedule.md)
+- [ Diving deeper ](diving_deeper/index.md)
+    * [EntityBuilder](diving_deeper/builder.md)

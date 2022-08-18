@@ -4,12 +4,14 @@ use crate::{Component, ComponentId, ComponentInfo, ComponentValue, Entity, Error
 
 use super::Storage;
 
+/// Allows batch spawning many entities with the same components
 pub struct BatchSpawn {
     len: usize,
     storage: BTreeMap<ComponentId, Storage>,
 }
 
 impl BatchSpawn {
+    /// Creates a new batch spawn to spawn `len` entities
     pub fn new(len: usize) -> Self {
         Self {
             len,
@@ -17,15 +19,18 @@ impl BatchSpawn {
         }
     }
 
+    /// Returns the components in the batch
     pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
         self.storage.values().map(|v| v.info())
     }
 
+    /// Returns the number of entities in the batch
     pub fn len(&self) -> usize {
         self.len
     }
 
     #[must_use]
+    /// Returns true if the batch will not spawn any entities
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -62,6 +67,7 @@ impl BatchSpawn {
         mem::take(&mut self.storage).into_iter()
     }
 
+    /// Spawns the batch into the world
     pub fn spawn(&mut self, world: &mut crate::World) -> Vec<Entity> {
         world.spawn_batch(self)
     }
