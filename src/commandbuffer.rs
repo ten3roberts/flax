@@ -3,9 +3,14 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use itertools::Itertools;
 
 use crate::{
-    error::Result, BufferStorage, Component, ComponentInfo, ComponentValue, Entity, EntityBuilder,
-    World,
+    error::Result, BatchSpawn, BufferStorage, Component, ComponentInfo, ComponentValue, Entity,
+    EntityBuilder, World,
 };
+
+enum Spawn {
+    One(EntityBuilder),
+    Batch(BatchSpawn),
+}
 
 /// Records commands into the world.
 /// Allows insertion and removal of components when the world is not available
@@ -14,7 +19,7 @@ use crate::{
 pub struct CommandBuffer {
     inserts: BufferStorage,
     insert_locations: BTreeMap<(Entity, ComponentInfo), usize>,
-    spawned: Vec<EntityBuilder>,
+    spawned: Vec<Spawn>,
     despawned: Vec<Entity>,
     removals: Vec<(Entity, ComponentInfo)>,
 }
@@ -85,11 +90,17 @@ impl CommandBuffer {
 
     /// Spawn a new entity with the given components of the builder
     pub fn spawn(&mut self, entity: EntityBuilder) -> &mut Self {
-        self.spawned.push(entity);
+        self.spawned.push(Spawn::One(entity));
 
         self
     }
 
+    /// Spawn a new batch with the given components of the builder
+    pub fn spawn_batch(&mut self, batch: BatchSpawn) -> &mut Self {
+        self.spawned.push(Spawn::Batch(batch));
+
+        self
+    }
     /// Despawn an entity by id
     pub fn despawn(&mut self, id: Entity) -> &mut Self {
         // // Drop all inserts for this component
@@ -134,8 +145,13 @@ impl CommandBuffer {
             .drain(..)
             .try_for_each(|(id, component)| world.remove_dyn(id, component))?;
 
-        self.spawned.drain(..).for_each(|mut builder| {
-            builder.spawn(world);
+        self.spawned.drain(..).for_each(|spawn| match spawn {
+            Spawn::One(mut builder) => {
+                builder.spawn(world);
+            }
+            Spawn::Batch(mut batch) => {
+                batch.spawn(world);
+            }
         });
 
         self.despawned
