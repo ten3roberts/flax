@@ -1063,7 +1063,6 @@ impl<'a> std::fmt::Debug for EntityFormatter<'a> {
 
                 let row = RowFormatter::new(arch, loc.slot, &meta);
                 list.entry(&id, &row);
-                list.entry(&"location", &loc);
             }
         }
 

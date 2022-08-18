@@ -78,7 +78,7 @@ fn builder() {
         .set(a(), 38)
         .set(b(), shared.clone())
         .set(c(), "Baz".to_string())
-        .set(b(), shared.clone())
+        .set(b(), shared)
         .spawn(&mut world);
 
     EntityBuilder::new()

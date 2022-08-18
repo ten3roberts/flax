@@ -100,7 +100,7 @@ fn commandbuffer() {
 
     assert_eq!(names, ["Bertha", "Johnathan"]);
 
-    assert_eq!(world.is_alive(ids[8]), false);
+    assert!(!world.is_alive(ids[8]));
 
     // Spawn some entities
     component! {
@@ -128,13 +128,14 @@ fn commandbuffer() {
     assert_eq!(soldiers, [100.0; 100]);
 
     // Oh no, one got shot
-    Query::new(health().as_mut())
+    if let Some(health) = Query::new(health().as_mut())
         .filter(soldier().with())
         .prepare(&world)
         .iter()
-        .skip(42)
-        .next()
-        .map(|health| *health -= 20.0);
+        .nth(42)
+    {
+        *health -= 20.0
+    }
 
     // Well, there are only 99 unwounded soldiers left
     // Lets count them
