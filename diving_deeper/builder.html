@@ -151,9 +151,9 @@ the world, like a function which only creates the <code>EntityBuilder</code>.</p
         .init();
 
     component! {
-        health: f32,
-        position: (f32, f32),
-        is_player: (),
+        health: f32 =&gt; [flax::Debug],
+        position: (f32, f32) =&gt; [flax::Debug],
+        is_player: () =&gt; [flax::Debug],
     }
 
     let mut world = World::new();
@@ -165,6 +165,7 @@ the world, like a function which only creates the <code>EntityBuilder</code>.</p
     world.set(player, is_player(), ()).unwrap();
     world.set(player, name(), &quot;Player&quot;.into()).unwrap();
 
+    tracing::info!(&quot;Player: {:#?}&quot;, world.format_entities(&amp;[player]));
     world.despawn(player).unwrap();
 
     // Do this
@@ -175,7 +176,8 @@ the world, like a function which only creates the <code>EntityBuilder</code>.</p
         .set(name(), &quot;Player&quot;.into())
         .spawn(&amp;mut world);
 
-    tracing::info!(&quot;Player: {player}&quot;);
+    tracing::info!(&quot;Player: {:#?}&quot;, world.format_entities(&amp;[player]));
+
 <span class="boring">}
 </span></code></pre></pre>
 <p>When the entity builder is spawned, the held components are moved out into the
@@ -239,17 +241,20 @@ format of the archetype storage and is thus maximally efficient.</p>
     trees
         .set(
             position(),
-            (0..).map(|_| (rng.gen_range(-50.0..50.0), rng.gen_range(-50.0..50.0))),
+            (0..).map(|i| {
+                let f = i as f32 / 64.0;
+                (f.cos() * (1.0 + f / 2.0), f.sin() * (1.0 + f / 2.0))
+            }),
         )
         .expect(&quot;Invalid length&quot;);
 
     let trees = trees.spawn(&amp;mut world);
 
-    tracing::info!(&quot;Trees: {trees:?}&quot;);
+    // tracing::info!(&quot;Trees: {trees:?}&quot;);
 
     let mut query = Query::new((name(), position()));
     for (name, pos) in &amp;mut query.prepare(&amp;world) {
-        tracing::info!(&quot;name: {name}, pos: {pos:?}&quot;);
+        // tracing::info!(&quot;name: {name}, pos: {pos:?}&quot;);
     }
 
 <span class="boring">}
