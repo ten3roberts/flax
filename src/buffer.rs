@@ -1,4 +1,4 @@
-use std::alloc::alloc;
+use std::alloc::{alloc, handle_alloc_error};
 use std::collections::{btree_map, BTreeMap, HashMap};
 use std::mem;
 use std::{
@@ -39,7 +39,7 @@ impl BufferStorage {
         let new_len = new_offset + layout.size();
 
         if new_len >= self.layout.size() || layout.align() > self.layout.align() && new_len != 0 {
-            // eprintln!("Reallocating {} => {}", self.layout.size(), new_len);
+            eprintln!("Reallocating {} => {}", self.layout.size(), new_len);
             let align = self.layout.align().max(layout.align());
             let new_layout = Layout::from_size_align(new_len.next_power_of_two(), align).unwrap();
 
@@ -47,17 +47,26 @@ impl BufferStorage {
                 // Don't realloc since layout may change
                 let new_data = alloc(new_layout);
 
+                let new_data = match NonNull::new(new_data) {
+                    Some(v) => v,
+                    None => handle_alloc_error(layout),
+                };
+
                 if self.layout.size() > 0 {
-                    std::ptr::copy_nonoverlapping(self.data.as_ptr(), new_data, self.cursor);
+                    std::ptr::copy_nonoverlapping(
+                        self.data.as_ptr(),
+                        new_data.as_ptr(),
+                        self.cursor,
+                    );
                     dealloc(self.data.as_ptr(), self.layout)
                 }
 
-                self.data = NonNull::new(new_data).unwrap();
+                self.data = new_data;
             }
             self.layout = new_layout;
         }
 
-        self.cursor += new_len;
+        self.cursor = new_len;
         new_offset
     }
 
