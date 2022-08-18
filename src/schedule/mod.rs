@@ -231,14 +231,12 @@ impl Schedule {
             let dst_deps = dst
                 .iter()
                 .flat_map(move |dst| {
-                    eprintln!("Looking at: {dst:?}");
                     accesses
                         .iter()
                         .take(dst_idx)
                         .enumerate()
                         .flat_map(|(src_idx, src)| src.iter().map(move |v| (src_idx, v)))
                         .filter(|(_, src)| !src.is_compatible_with(dst))
-                        .inspect(|v| eprintln!("Found dep: {v:?}"))
                         .map(|(src_idx, _)| src_idx)
                 })
                 .collect_vec();

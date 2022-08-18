@@ -1,5 +1,3 @@
-use std::process::id;
-
 use flax::{component, components::name, BatchSpawn, Entity, FetchExt, Query, World};
 use itertools::Itertools;
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -13,9 +11,9 @@ fn main() {
         .init();
 
     component! {
-        health: f32,
-        position: (f32, f32),
-        is_player: (),
+        health: f32 => [flax::Debug],
+        position: (f32, f32) => [flax::Debug],
+        is_player: () => [flax::Debug],
     }
 
     let mut world = World::new();
@@ -27,6 +25,7 @@ fn main() {
     world.set(player, is_player(), ()).unwrap();
     world.set(player, name(), "Player".into()).unwrap();
 
+    tracing::info!("Player: {:#?}", world.format_entities(&[player]));
     world.despawn(player).unwrap();
 
     // Do this
@@ -37,7 +36,8 @@ fn main() {
         .set(name(), "Player".into())
         .spawn(&mut world);
 
-    tracing::info!("Player: {player}");
+    tracing::info!("Player: {:#?}", world.format_entities(&[player]));
+
     // ANCHOR_END: builder
     // ANCHOR: reuse
 
@@ -87,17 +87,20 @@ fn main() {
     trees
         .set(
             position(),
-            (0..).map(|_| (rng.gen_range(-50.0..50.0), rng.gen_range(-50.0..50.0))),
+            (0..).map(|i| {
+                let f = i as f32 / 64.0;
+                (f.cos() * (1.0 + f / 2.0), f.sin() * (1.0 + f / 2.0))
+            }),
         )
         .expect("Invalid length");
 
     let trees = trees.spawn(&mut world);
 
-    tracing::info!("Trees: {trees:?}");
+    // tracing::info!("Trees: {trees:?}");
 
     let mut query = Query::new((name(), position()));
     for (name, pos) in &mut query.prepare(&world) {
-        tracing::info!("name: {name}, pos: {pos:?}");
+        // tracing::info!("name: {name}, pos: {pos:?}");
     }
 
     // ANCHOR_END: batch
