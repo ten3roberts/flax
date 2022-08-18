@@ -35,7 +35,7 @@ fn main() -> color_eyre::Result<()> {
 
     let mut query = Query::new((position(), health()));
 
-    for (pos, health) in &mut query.prepare(&world) {
+    for (pos, health) in &mut query.iter(&world) {
         println!("pos: {pos:?}, health: {health}");
     }
 
@@ -61,7 +61,7 @@ fn main() -> color_eyre::Result<()> {
         .filter(position().modified() & health().gt(0.0));
 
     tracing::info!("Updating distances");
-    for (id, pos, dist) in &mut query.prepare(&world) {
+    for (id, pos, dist) in &mut query.iter(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -71,7 +71,7 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR: query_repeat
 
     tracing::info!("Running query again");
-    for (id, pos, dist) in &mut query.prepare(&world) {
+    for (id, pos, dist) in &mut query.iter(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -82,7 +82,7 @@ fn main() -> color_eyre::Result<()> {
     *world.get_mut(id2, position())? = (8.0, 3.0);
 
     tracing::info!("... and again");
-    for (id, pos, dist) in &mut query.prepare(&world) {
+    for (id, pos, dist) in &mut query.iter(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -96,7 +96,7 @@ fn main() -> color_eyre::Result<()> {
         .with(query)
         .build(
             |mut query: QueryData<(_, Component<(f32, f32)>, Mutable<f32>), _>| {
-                for (id, pos, dist) in &mut query.prepare() {
+                for (id, pos, dist) in &mut query.iter() {
                     tracing::info!("Updating distance for {id} with position: {pos:?}");
                     *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
                 }
@@ -132,7 +132,7 @@ fn main() -> color_eyre::Result<()> {
         .write::<CommandBuffer>()
         .build(
             |mut query: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
-                for (id, &dist) in &mut query.prepare() {
+                for (id, &dist) in &mut query.iter() {
                     tracing::info!("Despawning {id} at: {dist}");
                     cmd.despawn(id);
                 }
@@ -200,7 +200,7 @@ fn main() -> color_eyre::Result<()> {
         .with_name("count")
         .with(Query::new(()))
         .build(move |mut query: QueryData<()>| {
-            let count: usize = query.prepare().iter_batched().map(|v| v.len()).sum();
+            let count: usize = query.iter().iter_batched().map(|v| v.len()).sum();
             tracing::info!("[{frame_count}]: {count}");
             frame_count += 1;
         });

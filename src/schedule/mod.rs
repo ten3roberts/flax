@@ -346,7 +346,7 @@ mod test {
         let system_a = System::builder()
             .with(Query::new(a()))
             .build(move |mut a: QueryData<_>| {
-                let count = a.prepare().iter().count() as i32;
+                let count = a.iter().iter().count() as i32;
 
                 eprintln!("Change: {prev_count} -> {count}");
                 prev_count = count;
@@ -354,7 +354,7 @@ mod test {
 
         let system_b = System::builder().with(Query::new(b())).build(
             move |mut query: QueryData<_>| -> eyre::Result<()> {
-                let mut query = query.prepare();
+                let mut query = query.iter();
                 let item: &i32 = query.get(id)?;
                 eprintln!("Item: {item}");
 
@@ -437,7 +437,7 @@ mod test {
             .with(Query::new(health().as_mut()))
             .with_name("heal")
             .build(|mut q: QueryData<crate::Mutable<f32>>| {
-                q.prepare().iter().for_each(|h| {
+                q.iter().iter().for_each(|h| {
                     if *h > 0.0 {
                         *h += 1.0
                     }
@@ -449,7 +449,7 @@ mod test {
             .write::<CommandBuffer>()
             .with_name("cleanup")
             .build(|mut q: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
-                q.prepare().iter().for_each(|id| {
+                q.iter().iter().for_each(|id| {
                     eprintln!("Cleaning up: {id}");
                     cmd.despawn(id);
                 })
@@ -474,8 +474,8 @@ mod test {
                     )>| {
                         // Lock the queries for the whole duration.
                         // There is not much difference in calling `prepare().iter()` for each inner iteration of the loop.
-                        let mut sub = sub.prepare();
-                        let mut obj = obj.prepare();
+                        let mut sub = sub.iter();
+                        let mut obj = obj.iter();
                         eprintln!("Prepared queries, commencing battles");
                         for (id1, damage, range, pos) in sub.iter() {
                             for (id2, other_pos, health) in obj.iter() {
@@ -495,7 +495,7 @@ mod test {
             .with_name("remaining")
             .with(Query::new(entities()))
             .build(|mut q: QueryData<EntityFetch>| {
-                let mut q = q.prepare();
+                let mut q = q.iter();
                 eprintln!("Remaining: {:?}", q.iter().format(", "));
             });
 

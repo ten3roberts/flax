@@ -10,3 +10,5 @@
     * [Schedule](fundamentals/schedule.md)
 - [ Diving deeper ](diving_deeper/index.md)
     * [EntityBuilder](diving_deeper/builder.md)
+    * [Query Advanced](diving_deeper/query.md)
+    * [Relations](diving_deeper/relations.md)

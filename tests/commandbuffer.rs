@@ -43,20 +43,16 @@ fn commandbuffer() {
     let mut query = Query::new(entities()).filter(name().without());
 
     // Deferred world modification while iterating
-    query
-        .prepare(&world)
-        .iter()
-        .enumerate()
-        .for_each(|(i, id)| {
-            eprintln!("Adding name to id: {id}");
-            cmd.set(id, name(), format!("Unnamed: {i}"));
-        });
+    query.iter(&world).iter().enumerate().for_each(|(i, id)| {
+        eprintln!("Adding name to id: {id}");
+        cmd.set(id, name(), format!("Unnamed: {i}"));
+    });
 
     cmd.apply(&mut world).unwrap();
 
     let mut name_query = Query::new(name());
     let names = name_query
-        .prepare(&world)
+        .iter(&world)
         .iter()
         .cloned()
         .sorted()
@@ -80,7 +76,7 @@ fn commandbuffer() {
 
     Query::new((entities(), name()))
         .filter(name().cmp(|name| name.contains("Unnamed")))
-        .prepare(&world)
+        .iter(&world)
         .iter()
         .for_each(|(id, n)| {
             eprintln!("Removing name for entity: {id} {n}");
@@ -92,7 +88,7 @@ fn commandbuffer() {
     cmd.apply(&mut world).unwrap();
 
     let names = name_query
-        .prepare(&world)
+        .iter(&world)
         .iter()
         .cloned()
         .sorted()
@@ -119,7 +115,7 @@ fn commandbuffer() {
 
     let soldiers = Query::new(health())
         .filter(soldier().with())
-        .prepare(&world)
+        .iter(&world)
         .iter()
         .copied()
         .collect_vec();
@@ -130,7 +126,7 @@ fn commandbuffer() {
     // Oh no, one got shot
     if let Some(health) = Query::new(health().as_mut())
         .filter(soldier().with())
-        .prepare(&world)
+        .iter(&world)
         .iter()
         .nth(42)
     {
@@ -141,7 +137,7 @@ fn commandbuffer() {
     // Lets count them
     let soldiers = Query::new(name())
         .filter(soldier().with() & health().gte(100.0))
-        .prepare(&world)
+        .iter(&world)
         .iter()
         .cloned()
         .collect_vec();

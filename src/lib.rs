@@ -19,7 +19,7 @@
 //!
 //! ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
 //!
-//! # Example Usage
+//! ## Example Usage
 //!
 //! ```rust
 //!   // Declare static components
@@ -46,14 +46,14 @@
 //!   let mut query = Query::new((health().as_mut(), regen()));
 //!
 //!   // Apply health regen for all match entites
-//!   for (health, regen) in &mut query.prepare(&world) {
+//!   for (health, regen) in &mut query.iter(&world) {
 //!       *health = (*health + regen).min(100.0);
 //!   }
 //!
 //! ```
 //!
 //!
-//! # Comparison to other ECS
+//! ## Comparison to other ECS
 //!
 //! Compared to other ecs implementations, a component is simply another `Entity`
 //! identifier to which data is attached. This means the same "type" can be added to
@@ -94,7 +94,7 @@
 //! Having statically declared componenents makes the rust type system disallow
 //! these cases and catches these bugs earlier.
 //!
-//! # Motivation
+//! ## Motivation
 //!
 //! During development of a game in school I used the `hecs` ECS. It is an awesome
 //! library, and the author [Ralith](https://github.com/Ralith) has been awesome in bringing some pull
@@ -104,7 +104,7 @@
 //! cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
 //! coercions in order to coexist.
 //!
-//! # Unsafe
+//! ## Unsafe
 //! This library makes use of unsafe for type erasure and the allocation in storage
 //! of ComponentBuffers and Archetypes.
 //!
@@ -152,7 +152,9 @@ pub use archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ChangeKind, Comp
 pub use buffer::*;
 pub use commandbuffer::*;
 pub use component::*;
+pub use components::*;
 pub use entity::*;
+pub use error::Error;
 pub use fetch::*;
 pub use filter::*;
 pub use meta::*;
@@ -161,5 +163,3 @@ pub use schedule::*;
 pub use system::*;
 pub use visitors::*;
 pub use world::*;
-
-pub use error::Error;

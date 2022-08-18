@@ -32,8 +32,8 @@ test-log = { version = "0.2.11", default_features = false, features = [
   "trace",
 ] }
 serde_json = "1.0"
-
 color-eyre = "0.6.2"
+glam = { version = "0.21.3", features = ["rand", "serde"] }
 rand = "0.8.5"
 tracing-tree = "0.2"
 
@@ -49,3 +49,7 @@ path = "./examples/guide/query.rs"
 [[example]]
 name = "builder"
 path = "./examples/guide/builder.rs"
+
+[[example]]
+name = "query_advanced"
+path = "./examples/guide/query_advanced.rs"

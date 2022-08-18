@@ -314,13 +314,6 @@ impl Archetype {
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
     /// The component must be Send + Sync
     pub unsafe fn push(&mut self, component: ComponentId, src: *mut u8) -> Result<(), *mut u8> {
-        tracing::debug!(
-            "Components: {:?}",
-            self.storage()
-                .values()
-                .map(|v| v.info().name())
-                .collect_vec()
-        );
         let storage = self.storage.get_mut(&component).ok_or(src)?;
         storage.extend(src, 1);
 

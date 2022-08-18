@@ -1,6 +1,7 @@
 use crate::{Fetch, PreparedFetch};
 
 /// Transform a fetch into a optional fetch
+#[derive(Debug, Clone)]
 pub struct Opt<F>(pub(crate) F);
 
 impl<F> Opt<F> {}
@@ -57,6 +58,7 @@ where
 }
 
 /// Transform a fetch into a optional fetch
+#[derive(Debug, Clone)]
 pub struct OptOr<F, V> {
     inner: F,
     or: V,

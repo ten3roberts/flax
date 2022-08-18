@@ -24,7 +24,7 @@ pub use self::prepared::PreparedQuery;
 /// The archetype borrowing assures aliasing.
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Query<Q, F = Without> {
     // The archetypes to visit
     archetypes: Vec<ArchetypeId>,
@@ -32,6 +32,19 @@ pub struct Query<Q, F = Without> {
     change_tick: u32,
     archetype_gen: u32,
     fetch: Q,
+}
+
+impl<Q, F> Debug for Query<Q, F>
+where
+    Q: for<'x> Fetch<'x>,
+    F: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Query")
+            .field("fetch", &self.fetch.describe())
+            .field("filter", &self.filter)
+            .finish()
+    }
 }
 
 impl<Q> Query<Q, Without> {
@@ -147,7 +160,7 @@ where
     ///
     /// It is safe to use the same prepared query for both iteration and random
     /// access, Rust's borrow rules will ensure aliasing rules.
-    pub fn prepare<'w>(&'w mut self, world: &'w World) -> PreparedQuery<'w, Q, F> {
+    pub fn iter<'w>(&'w mut self, world: &'w World) -> PreparedQuery<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
         let (archetypes, fetch, filter) = self.get_archetypes(world);
 
@@ -160,7 +173,7 @@ where
         for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Item:
             TupleCloned<Cloned = C>,
     {
-        let mut prepared = self.prepare(world);
+        let mut prepared = self.iter(world);
         prepared.iter().map(|v| v.cloned()).collect_vec()
     }
 
@@ -216,7 +229,7 @@ pub struct QueryData<'a, Q, F = Without> {
 
 impl<'a, Q, F> SystemData<'a> for Query<Q, F>
 where
-    Q: for<'x> Fetch<'x> + Debug + 'a,
+    Q: for<'x> Fetch<'x> + 'a,
     F: for<'x> Filter<'x> + Debug + 'a,
 {
     type Data = QueryData<'a, Q, F>;
@@ -242,7 +255,7 @@ where
     ///
     /// The same query can be prepared multiple times, though not
     /// simultaneously.
-    pub fn prepare(&mut self) -> PreparedQuery<Q, F> {
-        self.query.prepare(&self.world)
+    pub fn iter(&mut self) -> PreparedQuery<Q, F> {
+        self.query.iter(&self.world)
     }
 }
