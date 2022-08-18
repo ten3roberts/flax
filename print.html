@@ -772,6 +772,7 @@ matching archetype in the world.</p>
             tracing::info!(&quot;name: {name}, pos: {pos:?}, health: {health}&quot;);
         }
     }
+
 <span class="boring">}
 </span></code></pre></pre>
 <h2 id="batch-spawn"><a class="header" href="#batch-spawn">Batch Spawn</a></h2>
@@ -792,7 +793,7 @@ format of the archetype storage and is thus maximally efficient.</p>
         .set(
             position(),
             (0..).map(|i| {
-                let f = i as f32 / 64.0;
+                let f = i as f32 / 32.0;
                 (f.cos() * (1.0 + f / 2.0), f.sin() * (1.0 + f / 2.0))
             }),
         )
@@ -800,12 +801,7 @@ format of the archetype storage and is thus maximally efficient.</p>
 
     let trees = trees.spawn(&amp;mut world);
 
-    // tracing::info!(&quot;Trees: {trees:?}&quot;);
-
-    let mut query = Query::new((name(), position()));
-    for (name, pos) in &amp;mut query.prepare(&amp;world) {
-        // tracing::info!(&quot;name: {name}, pos: {pos:?}&quot;);
-    }
+    tracing::info!(&quot;Trees: {:#?}&quot;, world.format_entities(&amp;trees[0..100]));
 
 <span class="boring">}
 </span></code></pre></pre>
