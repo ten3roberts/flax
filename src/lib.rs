@@ -148,7 +148,7 @@ pub mod serde;
 // Required due to macro
 pub use paste::paste;
 
-pub use archetype::{Archetype, ArchetypeId, Change, ChangeKind, ComponentInfo};
+pub use archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ChangeKind, ComponentInfo};
 pub use buffer::*;
 pub use commandbuffer::*;
 pub use component::*;
