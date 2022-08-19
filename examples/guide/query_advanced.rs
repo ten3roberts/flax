@@ -1,7 +1,5 @@
-use std::process::Command;
-
 use flax::{components::name, *};
-use glam::{Mat4, Quat, Vec2, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::prelude::*;
 

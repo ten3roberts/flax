@@ -19,32 +19,26 @@ impl<'a> SystemContext<'a> {
     }
 
     /// Access the world
-    pub fn world(
-        &self,
-    ) -> std::result::Result<AtomicRef<'_, &'a mut World>, atomic_refcell::BorrowError> {
-        self.world.try_borrow()
+    pub fn world(&self) -> Result<AtomicRef<World>, atomic_refcell::BorrowError> {
+        let borrow = self.world.try_borrow()?;
+        Ok(AtomicRef::map(borrow, |v| *v))
     }
 
     /// Access the world mutably
-    pub fn world_mut(
-        &self,
-    ) -> std::result::Result<AtomicRefMut<&'a mut World>, atomic_refcell::BorrowMutError> {
-        self.world.try_borrow_mut()
+    pub fn world_mut(&self) -> Result<AtomicRefMut<World>, atomic_refcell::BorrowMutError> {
+        let borrow = self.world.try_borrow_mut()?;
+        Ok(AtomicRefMut::map(borrow, |v| *v))
     }
 
     /// Access the commandbuffer
-    pub fn cmp(
-        &self,
-    ) -> std::result::Result<AtomicRef<'_, &'a mut CommandBuffer>, atomic_refcell::BorrowError>
-    {
-        self.cmd.try_borrow()
+    pub fn cmd(&self) -> Result<AtomicRef<CommandBuffer>, atomic_refcell::BorrowError> {
+        let borrow = self.cmd.try_borrow()?;
+        Ok(AtomicRef::map(borrow, |v| *v))
     }
 
     /// Access the commandbuffer mutably
-    pub fn cmd_mut(
-        &self,
-    ) -> std::result::Result<AtomicRefMut<&'a mut CommandBuffer>, atomic_refcell::BorrowMutError>
-    {
-        self.cmd.try_borrow_mut()
+    pub fn cmd_mut(&self) -> Result<AtomicRefMut<CommandBuffer>, atomic_refcell::BorrowMutError> {
+        let borrow = self.cmd.try_borrow_mut()?;
+        Ok(AtomicRefMut::map(borrow, |v| *v))
     }
 }

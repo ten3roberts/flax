@@ -204,10 +204,8 @@ impl Schedule {
     #[tracing::instrument(skip_all)]
     fn build_dependencies(systems: &mut [BoxedSystem], world: &mut World) -> Vec<Vec<BoxedSystem>> {
         debug!("Building batches");
-        let mut cmd = CommandBuffer::new();
-        let ctx = SystemContext::new(world, &mut cmd);
 
-        let accesses = systems.iter_mut().map(|v| v.access(&ctx)).collect_vec();
+        let accesses = systems.iter_mut().map(|v| v.access(world)).collect_vec();
 
         let mut deps = BTreeMap::new();
 
@@ -343,14 +341,15 @@ mod test {
             .spawn(&mut world);
 
         let mut prev_count: i32 = 0;
-        let system_a = System::builder()
-            .with(Query::new(a()))
-            .build(move |mut a: QueryData<_>| {
+        let system_a = System::builder().with(Query::new(a())).build(
+            move |mut a: QueryData<_>| -> eyre::Result<()> {
                 let count = a.iter().iter().count() as i32;
 
                 eprintln!("Change: {prev_count} -> {count}");
                 prev_count = count;
-            });
+                Ok(())
+            },
+        );
 
         let system_b = System::builder().with(Query::new(b())).build(
             move |mut query: QueryData<_>| -> eyre::Result<()> {

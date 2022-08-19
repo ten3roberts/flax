@@ -14,18 +14,17 @@ use super::{cell::SystemContext, Access};
 /// Describe an access to the world in ters of shared and unique accesses
 pub trait SystemAccess {
     /// Returns all the accesses for a system
-    fn access(&mut self, world: &World) -> Vec<Access>;
+    fn access(&self, world: &World) -> Vec<Access>;
 }
 
-/// Trait for any function `Fn(Args) -> Ret)` or similar which is callable with
-/// the provided context
-pub trait SystemFn<'a, Ctx, Args, Ret> {
-    /// Executes a system with the associated data
-    fn execute(&'a mut self, ctx: Ctx) -> Ret;
-    /// Human friendly description of this system
+/// A callable function
+pub trait Callable<'this, Args, Ret> {
+    /// exe
+    fn execute(&'this mut self, args: Args) -> Ret;
+    /// Debug for Fn
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
     /// Returns the data accesses of a system function
-    fn access(&'a mut self, ctx: Ctx) -> Vec<Access>;
+    fn access(&self, world: &World) -> Vec<Access>;
 }
 
 struct Verbatim(String);
@@ -37,23 +36,19 @@ impl fmt::Debug for Verbatim {
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        // Fallible
-        impl<'a, Func, Ret, $($ty,)* > SystemFn<'a, (&'a SystemContext<'a>, &'a mut ($($ty,)*)), ($($ty::Data,)*), Ret> for Func
-        where
-            Func: FnMut($($ty::Data,)*) -> Ret,
-            $($ty: SystemData<'a> + SystemAccess,)*
+        impl<'this, Func, Ret, $($ty,)*> Callable<'this, ($($ty,)*), Ret> for Func
+        where Func: FnMut($($ty,)*) -> Ret
         {
-            fn execute(&mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut ($($ty,)*))) -> Ret {
-                let _data = data.get(ctx).expect("Failed to get system data");
-                (self)($((_data.$idx),)*)
+            fn execute(&'this mut self, _args: ($($ty,)*)) -> Ret {
+                (self)($(_args.$idx,)*)
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
                 use std::fmt::Debug;
-                f.write_str("Fn")?;
+                f.write_str("fn")?;
 
                 ($(
-                        Verbatim(tynm::type_name::<$ty>()),
+                    Verbatim(tynm::type_name::<$ty>()),
                 )*).fmt(f)?;
 
                 if std::any::type_name::<Ret>() != std::any::type_name::<()>() {
@@ -63,9 +58,8 @@ macro_rules! tuple_impl {
                 Ok(())
             }
 
-            fn access(&'a mut self, (ctx, data): (&'a SystemContext<'a>, &'a mut ($($ty,)*))) -> Vec<Access> {
-                let world = ctx.world().unwrap();
-                data.access(&world)
+            fn access(&self, _: &World) -> Vec<Access> {
+                vec![]
             }
         }
 
@@ -73,7 +67,7 @@ macro_rules! tuple_impl {
         where
             $($ty: SystemAccess,)*
         {
-            fn access(&mut self, world: &World) -> Vec<Access> {
+            fn access(&self, world: &World) -> Vec<Access> {
                 [
                     $(self.$idx.access(&*world)),*
                 ].concat()
@@ -86,9 +80,9 @@ macro_rules! tuple_impl {
         {
             type Data = ($(<$ty as SystemData<'w>>::Data,)*);
 
-            fn get(&'w mut self, _ctx: &'w SystemContext<'w>) -> eyre::Result<Self::Data> {
+            fn bind(&'w mut self, _ctx: &'w SystemContext<'_>) -> eyre::Result<Self::Data> {
                 Ok(
-                    ($((self.$idx).get(_ctx)?,)*)
+                    ($((self.$idx).bind(_ctx)?,)*)
                 )
             }
         }
@@ -118,7 +112,7 @@ pub trait SystemData<'a>: SystemAccess {
     /// The borrow from the system context
     type Data;
     /// Get the data from the system context
-    fn get(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data>;
+    fn bind(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data>;
 }
 
 /// Access part of the context mutably.
@@ -128,11 +122,11 @@ pub struct Writable<T>(PhantomData<T>);
 pub struct Readable<T>(PhantomData<T>);
 #[derive(Debug)]
 /// Allows mutable access to data in the system context
-pub struct Write<'a, T>(AtomicRefMut<'a, &'a mut T>);
+pub struct Write<'a, T>(AtomicRefMut<'a, T>);
 
 #[derive(Debug)]
 /// Allows immutable access to data in the system context
-pub struct Read<'a, T>(AtomicRef<'a, &'a mut T>);
+pub struct Read<'a, T>(AtomicRef<'a, T>);
 
 impl<'a, T> Deref for Read<'a, T> {
     type Target = T;
@@ -143,7 +137,7 @@ impl<'a, T> Deref for Read<'a, T> {
 }
 
 impl<'a, T> Deref for Write<'a, T> {
-    type Target = &'a mut T;
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
         self.0.deref()
@@ -183,7 +177,7 @@ impl<T> Default for Writable<T> {
 impl<'a> SystemData<'a> for Writable<World> {
     type Data = Write<'a, World>;
 
-    fn get(&mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data> {
+    fn bind(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data> {
         Ok(Write(
             ctx.world_mut()
                 .map_err(|_| eyre!("Failed to borrow world mutably"))?,
@@ -194,7 +188,7 @@ impl<'a> SystemData<'a> for Writable<World> {
 impl<'a> SystemData<'a> for Readable<World> {
     type Data = Read<'a, World>;
 
-    fn get(&mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data> {
+    fn bind(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data> {
         Ok(Read(
             ctx.world()
                 .map_err(|_| eyre!("Failed to borrow world mutably"))?,
@@ -203,7 +197,7 @@ impl<'a> SystemData<'a> for Readable<World> {
 }
 
 impl SystemAccess for Writable<World> {
-    fn access(&mut self, _: &World) -> Vec<Access> {
+    fn access(&self, _: &World) -> Vec<Access> {
         vec![Access {
             kind: AccessKind::World,
             mutable: true,
@@ -212,7 +206,7 @@ impl SystemAccess for Writable<World> {
 }
 
 impl SystemAccess for Readable<World> {
-    fn access(&mut self, _: &World) -> Vec<Access> {
+    fn access(&self, _: &World) -> Vec<Access> {
         vec![Access {
             kind: AccessKind::World,
             mutable: false,
@@ -223,7 +217,7 @@ impl SystemAccess for Readable<World> {
 impl<'a> SystemData<'a> for Writable<CommandBuffer> {
     type Data = Write<'a, CommandBuffer>;
 
-    fn get(&mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data> {
+    fn bind(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data> {
         Ok(Write(ctx.cmd_mut().map_err(|_| {
             eyre!("Failed to borrow commandbuffer mutably")
         })?))
@@ -231,7 +225,7 @@ impl<'a> SystemData<'a> for Writable<CommandBuffer> {
 }
 
 impl SystemAccess for Writable<CommandBuffer> {
-    fn access(&mut self, _: &World) -> Vec<Access> {
+    fn access(&self, _: &World) -> Vec<Access> {
         vec![Access {
             kind: AccessKind::CommandBuffer,
             mutable: true,
@@ -245,8 +239,8 @@ mod test {
     use itertools::Itertools;
 
     use crate::{
-        component, components::name, system::SystemContext, CommandBuffer, Entity, Query,
-        QueryData, SystemFn, World,
+        component, components::name, system::SystemContext, Callable, CommandBuffer, Entity, Query,
+        QueryData, SystemData, World,
     };
 
     use super::{Writable, Write};
@@ -265,12 +259,12 @@ mod test {
             Entity::builder()
                 .set(name(), "Neo".to_string())
                 .set(health(), 90.0)
-                .spawn(*w);
+                .spawn(&mut w);
 
             Entity::builder()
                 .set(name(), "Trinity".to_string())
                 .set(health(), 85.0)
-                .spawn(*w);
+                .spawn(&mut w);
         };
 
         let mut reader = |mut q: QueryData<_, _>| {
@@ -281,10 +275,10 @@ mod test {
 
         let data = &mut (Writable::<World>::new(),);
 
-        (spawner).execute((&ctx, data));
+        (spawner).execute(data.bind(&ctx).unwrap());
 
         let data = &mut (Query::new(name()),);
-        (reader).execute((&ctx, data));
+        (reader).execute(data.bind(&ctx).unwrap());
         Ok(())
     }
 }

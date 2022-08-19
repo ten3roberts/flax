@@ -162,9 +162,19 @@ where
     /// access, Rust's borrow rules will ensure aliasing rules.
     pub fn iter<'w>(&'w mut self, world: &'w World) -> PreparedQuery<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
-        let (archetypes, fetch, filter) = self.get_archetypes(world);
 
-        PreparedQuery::new(world, archetypes, fetch, filter, old_tick, new_tick)
+        if world.archetype_gen() > self.archetype_gen {
+            self.archetypes = self.get_archetypes(world);
+        }
+
+        PreparedQuery::new(
+            world,
+            &self.archetypes,
+            &self.fetch,
+            &self.filter,
+            old_tick,
+            new_tick,
+        )
     }
 
     /// Gathers all elements in the query as a Vec of owned values.
@@ -177,22 +187,17 @@ where
         prepared.iter().map(|v| v.cloned()).collect_vec()
     }
 
-    fn get_archetypes<'w>(&mut self, world: &'w World) -> (&[ArchetypeId], &Q, &F) {
-        if world.archetype_gen() > self.archetype_gen {
-            self.archetypes.clear();
-            self.archetypes
-                .extend(world.archetypes().filter_map(|(id, arch)| {
-                    if self.fetch.matches(world, arch) && self.filter.matches(arch) {
-                        Some(id)
-                    } else {
-                        None
-                    }
-                }))
-        }
-
-        // Prepare the query
-
-        (&self.archetypes, &self.fetch, &self.filter)
+    fn get_archetypes(&self, world: &World) -> Vec<ArchetypeId> {
+        world
+            .archetypes()
+            .filter_map(|(id, arch)| {
+                if self.fetch.matches(world, arch) && self.filter.matches(arch) {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect_vec()
     }
 }
 
@@ -201,14 +206,14 @@ where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
 {
-    fn access(&mut self, world: &World) -> Vec<crate::system::Access> {
-        let (archetypes, fetch, filter) = self.get_archetypes(world);
+    fn access(&self, world: &World) -> Vec<crate::system::Access> {
+        let archetypes = self.get_archetypes(world);
         let accesses = archetypes
             .iter()
             .flat_map(|&id| {
                 let archetype = world.archetype(id);
-                let mut res = fetch.access(id, archetype);
-                res.append(&mut filter.access(id, archetype));
+                let mut res = self.fetch.access(id, archetype);
+                res.append(&mut self.filter.access(id, archetype));
                 res
             })
             .chain([Access {
@@ -223,7 +228,7 @@ where
 
 /// Provides a query and a borrow of the world during system execution
 pub struct QueryData<'a, Q, F = Without> {
-    world: AtomicRef<'a, &'a mut World>,
+    world: AtomicRef<'a, World>,
     query: &'a mut Query<Q, F>,
 }
 
@@ -234,7 +239,7 @@ where
 {
     type Data = QueryData<'a, Q, F>;
 
-    fn get(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<Self::Data> {
+    fn bind(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data> {
         let world = ctx
             .world()
             .map_err(|_| eyre::eyre!(format!("Failed to borrow world for query: {:?}", self)))?;
