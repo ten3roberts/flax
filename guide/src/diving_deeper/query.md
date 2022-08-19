@@ -56,6 +56,9 @@ Similarly, `set` when the component did not previously exist, and new entities w
     The following example combines optional queries with change detection to create
     a small physic calculation.
 
+The following example makes use of optional combinators and change detection to
+handle a 3d world.
+
 ```rust
 {{ #include ../../../examples/guide/query_advanced.rs:physics }}
 ```

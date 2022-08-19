@@ -48,5 +48,12 @@
                 "cmd": "cargo build --example query_advanced"
             }
         ]
+    },
+    "example-relations": {
+        "cmd": "cargo run --example relations",
+        "opts": {
+            "auto_close": false
+        },
+        "kind": "term"
     }
 }

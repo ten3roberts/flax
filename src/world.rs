@@ -257,6 +257,7 @@ impl World {
         meta: fn(ComponentInfo) -> ComponentBuffer,
     ) -> Component<T> {
         let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
+
         Component::new(id, name, meta)
     }
 
@@ -514,11 +515,18 @@ impl World {
 
     /// Set metadata for a given component if they do not already exist
     fn init_component(&mut self, info: ComponentInfo) -> Result<ComponentInfo> {
-        if self.is_alive(info.id()) {
+        assert!(
+            info.id().kind().contains(EntityKind::COMPONENT),
+            "Component is not a component kind id"
+        );
+
+        if self.has(info.id(), is_component()) {
             return Ok(info);
         }
 
         let mut meta = info.meta()(info);
+        meta.set(is_component(), info);
+        meta.set(name(), info.name().to_string());
 
         self.spawn_at(info.id());
         self.set_with(info.id(), meta.take_all()).unwrap();
@@ -538,13 +546,16 @@ impl World {
 
         let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
 
-        let store = self.entities.init(id.kind());
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
-            store.get_mut(swapped).expect("Invalid entity id").slot = slot;
+            self.entities
+                .init(swapped.kind())
+                .get_mut(swapped)
+                .expect("Invalid entity id")
+                .slot = slot;
         }
 
-        store.despawn(id)?;
+        self.entities.init(id.kind()).despawn(id)?;
         self.detach(id);
         Ok(())
     }
@@ -612,8 +623,6 @@ impl World {
             });
 
             let (dst_id, dst) = self.archetypes.init(components);
-
-            eprintln!("{:?} => {dst_id}", src.component_names().collect_vec());
 
             for (id, slot) in src.move_all(dst) {
                 *self.location_mut(id).expect("Entity id was not valid") =
