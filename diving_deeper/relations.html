@@ -135,6 +135,16 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="relations"><a class="header" href="#relations">Relations</a></h1>
+<p>A component is nothing more than a type safe entity id.</p>
+<p>The <a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> uses a
+lazily acquired entity. It does not require the world since the entity is
+spawned in the <code>STATIC</code> global namespace which is shared across all worlds.</p>
+<p>It is entirely possible to create a component yourself for e.g; a local system.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span><span class="boring">}
+</span></code></pre></pre>
 
                     </main>
 
