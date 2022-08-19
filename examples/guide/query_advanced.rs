@@ -1,9 +1,12 @@
+use std::{thread::sleep, time::Duration};
+
 use flax::{components::name, *};
 use glam::{Mat4, Quat, Vec3};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use itertools::Itertools;
+use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 use tracing_subscriber::prelude::*;
 
-fn main() {
+fn main() -> color_eyre::Result<()> {
     tracing_subscriber::registry()
         .with(tracing_tree::HierarchicalLayer::default())
         .init();
@@ -22,15 +25,6 @@ fn main() {
     // ANCHOR: full_match
 
     // Entities with mass
-    (0..10).for_each(|i| {
-        builder
-            .set(name(), format!("Entity.{i}"))
-            .set(position(), rng.gen::<Vec3>() * 10.0)
-            .set(velocity(), rng.gen())
-            .set(mass(), rng.gen_range(10..30) as f32)
-            .spawn(&mut world);
-    });
-
     (0..10).for_each(|i| {
         builder
             .set(name(), format!("Entity.{i}"))
@@ -104,23 +98,10 @@ fn main() {
             ))
             .filter(position().modified() | rotation().modified() | scale().modified()),
         )
-        .build(
-            |mut query: QueryData<
-                (
-                    EntityFetch,
-                    Mutable<Mat4>,
-                    Component<Vec3>,
-                    OptOr<Component<Quat>, Quat>,
-                    OptOr<Component<Vec3>, Vec3>,
-                ),
-                _,
-            >| {
-                for (id, world_matrix, pos, rot, scale) in &mut query.iter() {
-                    tracing::info!("Updating world matrix for: {id}");
-                    *world_matrix = Mat4::from_scale_rotation_translation(*scale, *rot, *pos);
-                }
-            },
-        );
+        .for_each(|(id, world_matrix, pos, rot, scale)| {
+            tracing::info!("Updating world matrix for: {id} {pos} {rot} {scale}");
+            *world_matrix = Mat4::from_scale_rotation_translation(*scale, *rot, *pos);
+        });
 
     let mut schedule = Schedule::builder()
         .with_system(create_world_matrix)
@@ -128,15 +109,30 @@ fn main() {
         .with_system(update_world_matrix)
         .build();
 
-    schedule
-        .execute_par(&mut world)
-        .expect("Failed to execute schedule");
+    let all_ids = Query::new(entities()).iter(&world).iter().collect_vec();
 
-    schedule
-        .execute_par(&mut world)
-        .expect("Failed to execute schedule");
+    for _ in 0..10 {
+        schedule
+            .execute_par(&mut world)
+            .expect("Failed to execute schedule");
+
+        for _ in 0..32 {
+            let id = *all_ids.choose(&mut rng).expect("no ids");
+            let mut pos = world.get_mut(id, position())?;
+            // Move a bit away from origin
+            let dir = pos.normalize();
+            *pos += dir * rng.gen::<f32>();
+            drop(pos);
+
+            let mut scale = world.entry(id, scale())?.or_insert(Vec3::ONE);
+            *scale *= 1.1;
+        }
+
+        sleep(Duration::from_secs(1))
+    }
 
     tracing::info!("World: {world:#?}");
 
     // ANCHOR_END: physics
+    Ok(())
 }

@@ -276,7 +276,7 @@ impl Archetype {
     /// All components of slot are uninitialized. Must be followed by `push`
     /// all components in archetype.
     pub(crate) fn allocate(&mut self, id: Entity) -> Slot {
-        // self.reserve(1);
+        self.reserve(1);
 
         #[cfg(debug_assertions)]
         {

@@ -454,41 +454,31 @@ mod test {
                 })
             });
 
-        let battle =
-            System::builder()
-                .with(Query::new((entities(), damage(), range(), pos())))
-                .with(Query::new((entities(), pos(), health().as_mut())))
-                .with_name("battle")
-                .build(
-                    |mut sub: QueryData<(
-                        EntityFetch,
-                        Component<f32>,
-                        Component<f32>,
-                        Component<(f32, f32)>,
-                    )>,
-                     mut obj: QueryData<(
-                        EntityFetch,
-                        Component<(f32, f32)>,
-                        Mutable<f32>,
-                    )>| {
-                        // Lock the queries for the whole duration.
-                        // There is not much difference in calling `prepare().iter()` for each inner iteration of the loop.
-                        let mut sub = sub.iter();
-                        let mut obj = obj.iter();
-                        eprintln!("Prepared queries, commencing battles");
-                        for (id1, damage, range, pos) in sub.iter() {
-                            for (id2, other_pos, health) in obj.iter() {
-                                let rel: (f32, f32) = (other_pos.0 - pos.0, other_pos.1 - pos.1);
-                                let dist = (rel.0 * rel.0 + rel.1 * rel.1).sqrt();
-                                // We are within range
-                                if dist < *range {
-                                    eprintln!("{id1} Applying {damage} damage to {id2}");
-                                    *health -= damage;
-                                }
+        let battle = System::builder()
+            .with(Query::new((entities(), damage(), range(), pos())))
+            .with(Query::new((entities(), pos(), health().as_mut())))
+            .with_name("battle")
+            .build(
+                |mut sub: QueryData<(_, _, Component<f32>, Component<(f32, f32)>)>,
+                 mut obj: QueryData<(_, Component<(f32, f32)>, Mutable<f32>)>| {
+                    // Lock the queries for the whole duration.
+                    // There is not much difference in calling `prepare().iter()` for each inner iteration of the loop.
+                    let mut sub = sub.iter();
+                    let mut obj = obj.iter();
+                    eprintln!("Prepared queries, commencing battles");
+                    for (id1, damage, range, pos) in sub.iter() {
+                        for (id2, other_pos, health) in obj.iter() {
+                            let rel: (f32, f32) = (other_pos.0 - pos.0, other_pos.1 - pos.1);
+                            let dist = (rel.0 * rel.0 + rel.1 * rel.1).sqrt();
+                            // We are within range
+                            if dist < *range {
+                                eprintln!("{id1} Applying {damage} damage to {id2}");
+                                *health -= damage;
                             }
                         }
-                    },
-                );
+                    }
+                },
+            );
 
         let remaining = System::builder()
             .with_name("remaining")
