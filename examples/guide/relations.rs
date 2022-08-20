@@ -1,30 +1,68 @@
-use flax::{Component, ComponentBuffer, Debug, Entity, MetaData, World};
-use glam::{vec2, Vec2};
+use flax::*;
+use itertools::Itertools;
 use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;
 
 fn main() -> color_eyre::Result<()> {
     registry().with(HierarchicalLayer::default()).init();
+    // ANCHOR: relation_basic
+    component! {
+        child_of(parent): () => [Debug],
+    }
 
     let mut world = World::new();
 
-    let position: Component<Vec2> = world.spawn_component("position", |info| {
-        let mut buf = ComponentBuffer::new();
-        <Debug as MetaData<Vec2>>::attach(info, &mut buf);
-        buf
-    });
-
-    let id = Entity::builder()
-        .set(position, vec2(1.0, 6.4))
+    let parent = Entity::builder()
+        .set(name(), "Parent".into())
         .spawn(&mut world);
 
-    tracing::info!("world: {world:#?}");
+    let child1 = Entity::builder()
+        .set(name(), "Child1".into())
+        .set_default(child_of(parent))
+        .spawn(&mut world);
 
-    // When `position` is despawned, it is removed from all entities.
-    // This ensured that dead components never exist
-    world.despawn(position.id())?;
+    let child2 = Entity::builder()
+        .set(name(), "Child2".into())
+        .set_default(child_of(parent))
+        .spawn(&mut world);
 
-    tracing::info!("world: {world:#?}");
+    // ANCHOR_END: relation_basic
+    // ANCHOR: many_to_many
+    let parent_2 = Entity::builder()
+        .set(name(), "Parent2".into())
+        .spawn(&mut world);
+
+    world.set(child1, child_of(parent_2), ())?;
+
+    tracing::info!("World: {world:#?}");
+
+    let children = Query::new(entities())
+        .with(child_of(parent))
+        .iter(&world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!("Children: {children:?}");
+    // ANCHOR_END: many_to_many
+    // ANCHOR: lifetime
+
+    tracing::info!(
+        "has relation to: {parent_2}: {}",
+        world.has(child1, child_of(parent_2))
+    );
+
+    world.despawn(parent_2)?;
+
+    tracing::info!(
+        "has relation to: {parent_2}: {}",
+        world.has(child1, child_of(parent_2))
+    );
+
+    tracing::info!("World: {world:#?}");
+    world.despawn_recursive(parent)?;
+
+    tracing::info!("World: {world:#?}");
+    // ANCHOR_END: lifetime
 
     Ok(())
 }

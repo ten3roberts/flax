@@ -62,8 +62,6 @@ impl<T: ComponentValue> Display for Component<T> {
 
 impl<T: ComponentValue> Component<T> {
     /// Create a new component given a unique id and name.
-    ///
-    /// *SAFETY*: The id must not be used by anything else
     pub fn new(
         id: ComponentId,
         name: &'static str,
