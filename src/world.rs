@@ -261,6 +261,22 @@ impl World {
         Component::new(id, name, meta)
     }
 
+    /// Spawn a new relation of type `T` which can be attached to an entity.
+    ///
+    /// The given name does not need to be unique.
+    pub fn spawn_relation<T: ComponentValue>(
+        &mut self,
+        name: &'static str,
+        meta: fn(ComponentInfo) -> ComponentBuffer,
+    ) -> impl Fn(Entity) -> Component<T> {
+        let (id, _, _) = self.spawn_inner(
+            self.archetypes.root,
+            EntityKind::COMPONENT | EntityKind::RELATION,
+        );
+
+        move |object| Component::new_pair(id, name, meta, object)
+    }
+
     fn spawn_inner(
         &mut self,
         arch_id: ArchetypeId,
@@ -573,23 +589,19 @@ impl World {
         }
     }
 
-    /// Despawns an entity and all connected entities given by the supplied
-    /// relations.
-    pub fn despawn_recursive(
-        &mut self,
-        id: Entity,
-        relations: &[fn(Entity) -> ComponentId],
-    ) -> Result<()> {
+    /// Despawns an entity and all connected entities
+    pub fn despawn_recursive(&mut self, id: Entity) -> Result<()> {
         let mut to_remove = vec![id];
 
         while let Some(id) = to_remove.pop() {
             self.despawn(id)?;
 
-            for (_, arch) in self
-                .archetypes
-                .iter_mut()
-                .filter(|(_, arch)| relations.iter().map(|v| v(id)).any(|v| arch.has(v)))
-            {
+            for (_, arch) in self.archetypes.iter_mut().filter(|(_, arch)| {
+                let relations = arch.relations().collect_vec();
+                dbg!(relations);
+                arch.relations().any(|v| v.high() == id.low())
+            }) {
+                dbg!("Removing: {:?}", arch.entities());
                 to_remove.extend_from_slice(arch.entities());
             }
         }
@@ -600,15 +612,19 @@ impl World {
     /// Removes all instances of relations and component of the given entities
     /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
     /// on all the children.
-    pub fn detach(&mut self, component: ComponentId) {
-        let subject = component.low();
+    pub fn detach(&mut self, id: ComponentId) {
+        let subject = id.low();
         // The archetypes to remove
         let archetypes = self
             .archetypes()
             .filter(|(_, v)| {
-                v.has(component)
-                    || v.relations()
-                        .any(|id| id.low() == subject || id.high() == subject)
+                let remove = v.components().any(|v| {
+                    v.id() == id
+                        || (id.is_relation() && v.id().low() == id.low())
+                        || (!id.is_relation() && v.id().high() == id.low())
+                });
+
+                remove
             })
             .map(|v| v.0)
             .collect_vec();
@@ -616,10 +632,10 @@ impl World {
         for src in archetypes {
             let mut src = self.archetypes.despawn(src).unwrap();
 
-            let components = src.components().filter(|info| {
-                let id = info.id();
-                !(id == component
-                    || (id.is_relation() && (id.low() == subject || id.high() == subject)))
+            let components = src.components().filter(|v| {
+                !(v.id() == id
+                    || (id.is_relation() && v.id().low() == id.low())
+                    || (!id.is_relation() && v.id().high() == id.low()))
             });
 
             let (dst_id, dst) = self.archetypes.init(components);
@@ -1024,13 +1040,7 @@ where
             let arch = batch.arch();
             meta.clear();
             meta.extend(arch.components().flat_map(|info| {
-                Some((
-                    info.id(),
-                    (
-                        self.world.get(info.id(), debug_visitor()).ok(),
-                        self.world.get(info.id(), name()).ok()?,
-                    ),
-                ))
+                Some((info.id(), self.world.get(info.id(), debug_visitor()).ok()?))
             }));
 
             for slot in batch.slots().iter() {
@@ -1061,13 +1071,7 @@ impl<'a> std::fmt::Debug for EntityFormatter<'a> {
                 let arch = self.world.archetype(loc.arch);
 
                 meta.extend(arch.components().flat_map(|info| {
-                    Some((
-                        info.id(),
-                        (
-                            self.world.get(info.id(), debug_visitor()).ok(),
-                            self.world.get(info.id(), name()).ok()?,
-                        ),
-                    ))
+                    Some((info.id(), self.world.get(info.id(), debug_visitor()).ok()?))
                 }));
 
                 let row = RowFormatter::new(arch, loc.slot, &meta);

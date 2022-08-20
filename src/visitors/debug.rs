@@ -61,8 +61,7 @@ where
 pub(crate) struct RowFormatter<'a> {
     pub arch: &'a Archetype,
     pub slot: Slot,
-    pub meta:
-        &'a BTreeMap<ComponentId, (Option<AtomicRef<'a, DebugVisitor>>, AtomicRef<'a, String>)>,
+    pub meta: &'a BTreeMap<ComponentId, AtomicRef<'a, DebugVisitor>>,
 }
 
 struct MissingDebug;
@@ -77,12 +76,24 @@ impl<'a> RowFormatter<'a> {
     pub fn new(
         arch: &'a Archetype,
         slot: Slot,
-        meta: &'a BTreeMap<
-            ComponentId,
-            (Option<AtomicRef<'a, DebugVisitor>>, AtomicRef<'a, String>),
-        >,
+        meta: &'a BTreeMap<ComponentId, AtomicRef<'a, DebugVisitor>>,
     ) -> Self {
         Self { arch, slot, meta }
+    }
+}
+
+struct ComponentName {
+    base_name: &'static str,
+    id: ComponentId,
+}
+
+impl fmt::Debug for ComponentName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.id.is_relation() {
+            write!(f, "{}({})", self.base_name, self.id.high())
+        } else {
+            write!(f, "{}", self.base_name)
+        }
     }
 }
 
@@ -90,18 +101,18 @@ impl<'a> fmt::Debug for RowFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
         for storage in self.arch.borrow_all() {
-            if let Some((visitor, name)) = self.meta.get(&storage.info().id()) {
-                if let Some(visitor) = visitor {
-                    unsafe {
-                        let data = VisitData::new(&storage, self.slot);
+            let name = ComponentName {
+                base_name: storage.info().name(),
+                id: storage.info().id(),
+            };
+            if let Some(visitor) = self.meta.get(&storage.info().id()) {
+                unsafe {
+                    let data = VisitData::new(&storage, self.slot);
 
-                        map.entry(name, visitor.visit(data));
-                    }
-                } else {
-                    map.entry(name, &MissingDebug);
-                };
+                    map.entry(&name, visitor.visit(data));
+                }
             } else {
-                map.entry(&storage.info().name(), &MissingDebug);
+                map.entry(&name, &MissingDebug);
             }
         }
 

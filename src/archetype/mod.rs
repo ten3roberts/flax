@@ -3,7 +3,9 @@ use std::{alloc::Layout, collections::BTreeMap, mem};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::{wildcard, Component, ComponentBuffer, ComponentId, ComponentValue, Entity};
+use crate::{
+    wildcard, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind,
+};
 
 /// Unique archetype id
 pub type ArchetypeId = Entity;
@@ -81,9 +83,14 @@ impl Archetype {
         let (storage, changes) = components
             .into_iter()
             .map(|info| {
+                let id = info.id();
+                if !id.kind().contains(EntityKind::COMPONENT) {
+                    panic!("Attempt to insert non component entity");
+                }
+
                 (
-                    (info.id, Storage::new(info)),
-                    (info.id, AtomicRefCell::new(Changes::new(info))),
+                    (id, Storage::new(info)),
+                    (id, AtomicRefCell::new(Changes::new(info))),
                 )
             })
             .unzip();
