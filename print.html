@@ -76,7 +76,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/builder.html"><strong aria-hidden="true">2.1.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">2.2.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="diving_deeper/relations.html"><strong aria-hidden="true">2.3.</strong> Relations</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="fundamentals/hierarchy.html"><strong aria-hidden="true">1.7.</strong> Hierarchy</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/builder.html"><strong aria-hidden="true">2.1.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">2.2.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.3.</strong> Dynamic Components</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -636,7 +636,7 @@ sequence.</p>
             pos.1 += dir.1;
         });
 
-    // Spawn a new entity with a random position each frame
+    // Spawn new entities with a random position each frame
     let spawn = System::builder()
         .with_name(&quot;spawner&quot;)
         .write::&lt;CommandBuffer&gt;()
@@ -681,6 +681,113 @@ sequence.</p>
         // sleep(Duration::from_secs_f32(0.1));
     }
 
+<span class="boring">}
+</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="hierarchy"><a class="header" href="#hierarchy">Hierarchy</a></h1>
+<p>Hierarchies are a common way to structure entities in an application or game,
+such as nested UI elements or entities in a game world which move along with
+their parents.</p>
+<p>Flax has first class support for hierarchies, called <code>Relations</code>.</p>
+<p>A relation in Flax is represented by a parameterized component containing the
+<code>object</code>, i.e; parent added to the <code>subject</code>, i.e; child entity.</p>
+<p>Think of it as the component accepting an argument entity prior to adding it to
+another entity.</p>
+<p>Relations are declared using the
+<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    component! {
+        child_of(parent): () =&gt; [Debug],
+    }
+
+    let mut world = World::new();
+
+    let parent = Entity::builder()
+        .set(name(), &quot;Parent&quot;.into())
+        .spawn(&amp;mut world);
+
+    let child1 = Entity::builder()
+        .set(name(), &quot;Child1&quot;.into())
+        .set_default(child_of(parent))
+        .spawn(&amp;mut world);
+
+    let _child2 = Entity::builder()
+        .set(name(), &quot;Child2&quot;.into())
+        .set_default(child_of(parent))
+        .spawn(&amp;mut world);
+
+<span class="boring">}
+</span></code></pre></pre>
+<p>Important to note is that the same <code>child_of</code> component with different <code>object</code>
+arguments are distinct, and can as such exist on an entity at the same time,
+allowing many-many relationsships between entities;</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    let parent_2 = Entity::builder()
+        .set(name(), &quot;Parent2&quot;.into())
+        .spawn(&amp;mut world);
+
+    world.set(child1, child_of(parent_2), ())?;
+
+    tracing::info!(&quot;World: {world:#?}&quot;);
+
+<span class="boring">}
+</span></code></pre></pre>
+<h2 id="queries"><a class="header" href="#queries">Queries</a></h2>
+<p>Since relations are normal components, the can be used in a query as normal, or
+used to exclude components.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let children_of_parent = Query::new(entities())
+        .with(child_of(parent))
+        .iter(&amp;world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!(&quot;Children: {children_of_parent:?}&quot;);
+
+    let all_children = Query::new(entities())
+        .filter(child_of.with())
+        .iter(&amp;world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!(&quot;Children: {all_children:?}&quot;);
+
+    let roots = Query::new(entities())
+        .filter(child_of.without())
+        .iter(&amp;world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!(&quot;Roots: {roots:?}&quot;);
+
+<span class="boring">}
+</span></code></pre></pre>
+<h2 id="lifetime"><a class="header" href="#lifetime">Lifetime</a></h2>
+<p>When an entity is despawned, all relations to it present on other components
+will be removed and dropped. As such, no entity will have a relation to an
+entity which does not exist.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    tracing::info!(
+        &quot;has relation to: {parent_2}: {}&quot;,
+        world.has(child1, child_of(parent_2))
+    );
+
+    world.despawn(parent_2)?;
+
+    tracing::info!(
+        &quot;has relation to: {parent_2}: {}&quot;,
+        world.has(child1, child_of(parent_2))
+    );
+
+    tracing::info!(&quot;World: {world:#?}&quot;);
+    world.despawn_recursive(parent, child_of)?;
+
+    tracing::info!(&quot;World: {world:#?}&quot;);
 <span class="boring">}
 </span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="diving-deeper"><a class="header" href="#diving-deeper">Diving deeper</a></h1>
@@ -960,17 +1067,40 @@ handle a 3d world.</p>
 
 <span class="boring">}
 </span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="relations"><a class="header" href="#relations">Relations</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="components-and-relations"><a class="header" href="#components-and-relations">Components and Relations</a></h1>
 <p>A component is nothing more than a type safe entity id.</p>
 <p>The <a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> uses a
 lazily acquired entity. It does not require the world since the entity is
 spawned in the <code>STATIC</code> global namespace which is shared across all worlds.</p>
 <p>It is entirely possible to create a component yourself for e.g; a local system.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span><span class="boring">}
+</span><span class="boring">fn main() {
+</span>{{ #include /../../examples/guide/dynamic_components.rs:custom }}
+<span class="boring">}
 </span></code></pre></pre>
+<p>The world will automatically manage the lifetime of the component to ensure that
+no entity has invalid components attached to it.</p>
+<h2 id="relations"><a class="header" href="#relations">Relations</a></h2>
+<p>As a component is just a normal entity you can add an entity to another entity.
+Such as adding a parent entity to the children entities.</p>
+<p>However, while this method allows quick and easy entity hierarchies, there is no
+notion of what the entity represents, and no way to distinguish it from another
+component.</p>
+<p>This is where component parameterization comes to play.</p>
+<p>An entity is <code>64</code> bits in size, sufficient for holding the <code>kind</code>, <code>index</code>, and
+<code>generation</code>.</p>
+<p>However, since the world manages the lifetime of the component, the generation
+of <code>32</code> bits is freed up, which allows other data to be stored, such as another
+entity id.</p>
+<p>This allows the upper bits of a component(<em>entity</em>) id to contain another
+entity as the generation is not needed.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>{{ #include /../../examples/guide/dynamic_components.rs:relation }}
+<span class="boring">}
+</span></code></pre></pre>
+<p>When despawning either the relation component or object entity, the &quot;parent&quot;,
+the component is removed from all entities.</p>
 
                     </main>
 
