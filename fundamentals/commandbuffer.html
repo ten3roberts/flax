@@ -75,7 +75,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/hierarchy.html"><strong aria-hidden="true">1.7.</strong> Hierarchy</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.8.</strong> EntityBuilder</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/commandbuffer.html" class="active"><strong aria-hidden="true">2.1.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">2.2.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.3.</strong> Dynamic Components</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/hierarchy.html"><strong aria-hidden="true">1.7.</strong> Hierarchy</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.8.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html" class="active"><strong aria-hidden="true">1.9.</strong> CommandBuffer</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">2.1.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.2.</strong> Dynamic Components</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -135,15 +135,136 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="commandbuffer"><a class="header" href="#commandbuffer">CommandBuffer</a></h1>
+<p>The commandbuffer allows deferred modification of the world.</p>
+<p>This is useful in queries where the world is currently being iterated over, or
+in other situations where a mutable reference to the world is not available.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    component! {
+        position: Vec2,
+    }
+
+    let mut world = World::new();
+
+    let mut cmd = CommandBuffer::new();
+
+    cmd.spawn(Entity::builder().set(name(), &quot;a&quot;.into()));
+
+    cmd.apply(&amp;mut world)?;
+
+    let id = Query::new(entities())
+        .filter(name().eq(&quot;a&quot;.into()))
+        .iter(&amp;world)
+        .iter()
+        .next()
+        .ok_or(eyre::eyre!(&quot;Missing entity&quot;))?;
+
+    cmd.set(id, position(), vec2(32.0, 2.6));
+    let id2 = world.spawn();
+
+    cmd.spawn(
+        EntityBuilder::new()
+            .set(name(), &quot;b&quot;.into())
+            .set(position(), vec2(4.6, 8.4))
+            .with_id(id2),
+    );
+
+    cmd.remove(id2, position());
+
+    cmd.apply(&amp;mut world)?;
+
+    cmd.set(id2, child_of(id), ());
+
+    // Execute this function when the commandbuffer is applied
+    cmd.defer(move |w| {
+        w.despawn_recursive(id, child_of)?;
+        Ok(())
+    });
+
+    cmd.apply(&amp;mut world)?;
+<span class="boring">}
+</span></code></pre></pre>
+<h2 id="usage-with-schedule"><a class="header" href="#usage-with-schedule">Usage with schedule</a></h2>
+<p>A schedule contains a commandbuffer which is available in systems through
+<code>.write::&lt;CommandBuffer&gt;()</code></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    component! {
+        world_matrix: Mat4 =&gt; [Debug],
+    }
+
+    // Make sure there are always 64 entities in the world
+    let mut rng = StdRng::seed_from_u64(42);
+    let spawner = System::builder()
+        .with_name(&quot;spawn_entities&quot;)
+        .with(Query::new(()))
+        .write::&lt;CommandBuffer&gt;()
+        .build(move |mut q: QueryData&lt;()&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
+            let count = q.iter().count();
+
+            for _ in count..64 {
+                tracing::info!(&quot;Spawning new entity&quot;);
+                cmd.spawn(
+                    Entity::builder()
+                        .set(name(), &quot;entity&quot;.to_string())
+                        .set(position(), rng.gen()),
+                );
+            }
+        });
+
+    // Ensure a world matrix to each entity with a position
+    let add_world_matrix = System::builder()
+        .with_name(&quot;add_world_matrix&quot;)
+        .with(Query::new((entities(), position())).without(world_matrix()))
+        .write::&lt;CommandBuffer&gt;()
+        .build(
+            |mut q: QueryData&lt;(Entities, Component&lt;Vec2&gt;), _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
+                for (id, pos) in &amp;mut q.iter() {
+                    tracing::info!(&quot;Adding world matrix to {id}&quot;);
+                    cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));
+                }
+            },
+        );
+
+    // Update the world matrix if position changes
+    let update_world_matrix = System::builder()
+        .with_name(&quot;update_world_matrix&quot;)
+        .with(
+            Query::new((entities(), position(), world_matrix().as_mut()))
+                .filter(position().modified()),
+        )
+        .for_each(|(id, pos, ltw)| {
+            tracing::info!(&quot;Updating world matrix for {id}&quot;);
+            *ltw = Mat4::from_translation(pos.extend(0.0));
+        });
+
+    let mut schedule = Schedule::builder()
+        .with_system(spawner)
+        .flush()
+        .with_system(add_world_matrix)
+        .flush()
+        .with_system(update_world_matrix)
+        .build();
+
+    schedule
+        .execute_par(&amp;mut world)
+        .wrap_err(&quot;Failed to run schedule&quot;)?;
+
+<span class="boring">}
+</span></code></pre></pre>
+<p>The commandbuffer will be applied at the end of the schedule automatically.</p>
+<p><code>flush</code> can be used to apply the commandbuffer to make the modifications visible
+to the following systems.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../diving_deeper/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../fundamentals/builder.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
-                            <a rel="next" href="../diving_deeper/query.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="../diving_deeper/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
                         <div style="clear: both"></div>
@@ -152,10 +273,10 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../diving_deeper/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../fundamentals/builder.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
-                    <a rel="next" href="../diving_deeper/query.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="../diving_deeper/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
