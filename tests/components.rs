@@ -1,4 +1,4 @@
-use flax::*;
+use flax::{buffer::ComponentBuffer, *};
 use glam::{vec2, Vec2};
 
 #[test]

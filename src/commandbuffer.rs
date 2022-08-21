@@ -3,7 +3,7 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use itertools::Itertools;
 
 use crate::{
-    error::Result, BatchSpawn, BufferStorage, Component, ComponentInfo, ComponentValue, Entity,
+    buffer::BufferStorage, BatchSpawn, Component, ComponentInfo, ComponentValue, Entity,
     EntityBuilder, World,
 };
 
@@ -49,7 +49,7 @@ impl CommandBuffer {
     }
 
     /// Deferred set a component for `id`.
-    /// Unlike, [`World::insert`] it does not return the old value as that is
+    /// Unlike, [`World::set`] it does not return the old value as that is
     /// not known at call time.
     pub fn set<T: ComponentValue>(
         &mut self,

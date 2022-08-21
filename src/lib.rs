@@ -114,11 +114,11 @@
 #![deny(missing_docs)]
 
 mod archetype;
+/// Provides a buffer for holding multiple types simultaneously
+pub mod buffer;
+mod commandbuffer;
 mod component;
 mod entity;
-#[macro_use]
-mod buffer;
-mod commandbuffer;
 mod filter;
 mod query;
 mod system;
@@ -131,6 +131,7 @@ mod entry;
 pub mod error;
 /// Traits for fetching multiple component values simultaneously
 pub mod fetch;
+#[macro_use]
 mod macros;
 mod meta;
 /// System execution
@@ -149,7 +150,6 @@ pub mod serde;
 pub use paste::paste;
 
 pub use archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ChangeKind, ComponentInfo};
-pub use buffer::*;
 pub use commandbuffer::*;
 pub use component::*;
 pub use components::*;
