@@ -1,19 +1,19 @@
-use flax::{component, components::name, BatchSpawn, Entity, FetchExt, Query, World};
+use flax::*;
 use itertools::Itertools;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing::info_span;
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
 
 fn main() {
-    // ANCHOR: builder
     tracing_subscriber::registry()
         .with(tracing_tree::HierarchicalLayer::default())
         .init();
 
+    // ANCHOR: builder
     component! {
-        health: f32 => [flax::Debug],
-        position: (f32, f32) => [flax::Debug],
-        is_player: () => [flax::Debug],
+        health: f32 => [Debug],
+        position: (f32, f32) => [Debug],
+        is_player: () => [Debug],
     }
 
     let mut world = World::new();
@@ -100,4 +100,23 @@ fn main() {
     tracing::info!("Trees: {:#?}", world.format_entities(&trees[0..100]));
 
     // ANCHOR_END: batch
+    world.despawn_many(All);
+    // ANCHOR: hierarchy
+
+    let id = Entity::builder()
+        .set(name(), "parent".into())
+        .attach(
+            child_of,
+            Entity::builder()
+                .set(name(), "child1".into())
+                .attach(child_of, Entity::builder().set(name(), "child1.1".into())),
+        )
+        .attach(child_of, Entity::builder().set(name(), "child2".into()))
+        .spawn(&mut world);
+
+    tracing::info!("Parent: {id}");
+
+    tracing::info!("World: {world:#?}");
+
+    // ANCHOR_END: hierarchy
 }

@@ -121,6 +121,16 @@ where
         )
     }
 
+    /// Consumes the iterator and returns the number of entities visited.
+    /// Faster than `self.iter().count()`
+    pub fn count<'q>(&'q mut self) -> usize
+    where
+        'w: 'q,
+        F: Filter<'w>,
+    {
+        self.iter_batched().map(|v| v.slots().len()).sum()
+    }
+
     fn prepare_archetype(&mut self, arch: ArchetypeId) -> Option<usize> {
         let world = self.world;
         let prepared = &mut self.prepared;

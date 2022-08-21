@@ -576,8 +576,8 @@ impl World {
         Ok(())
     }
 
-    /// Despawns all components which matches the filter
-    pub fn despawn_all<F>(&mut self, filter: F)
+    /// Despawns all entities which matches the filter
+    pub fn despawn_many<F>(&mut self, filter: F)
     where
         F: for<'x> Filter<'x>,
     {

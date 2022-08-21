@@ -166,10 +166,7 @@ where
     Err: Into<eyre::Error>,
 {
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
-        let data = self
-            .data
-            .bind(&*ctx)
-            .wrap_err("Failed to bind system data")?;
+        let data = self.data.bind(ctx).wrap_err("Failed to bind system data")?;
 
         let func = &mut self.func;
 
@@ -199,10 +196,7 @@ where
     F: Callable<'this, Args::Data, ()>,
 {
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
-        let data = self
-            .data
-            .bind(&*ctx)
-            .wrap_err("Failed to bind system data")?;
+        let data = self.data.bind(ctx).wrap_err("Failed to bind system data")?;
 
         let func = &mut self.func;
 
