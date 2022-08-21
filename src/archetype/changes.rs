@@ -40,7 +40,7 @@ pub enum ChangeKind {
 impl ChangeKind {
     /// Returns `true` if the change kind is [`Remove`].
     ///
-    /// [`Remove`]: ChangeKind::Remove
+    /// [`Remove`]: ChangeKind::Removed
     #[must_use]
     pub fn is_removed(&self) -> bool {
         matches!(self, Self::Removed)
@@ -48,15 +48,15 @@ impl ChangeKind {
 
     /// Returns `true` if the change kind is [`Insert`].
     ///
-    /// [`Insert`]: ChangeKind::Insert
+    /// [`Insert`]: ChangeKind::Inserted
     #[must_use]
     pub fn is_inserted(&self) -> bool {
         matches!(self, Self::Inserted)
     }
 
-    /// Returns `true` if the change kind is [`Change`].
+    /// Returns `true` if the change kind is [`ChangeKind::Modified`]
     ///
-    /// [`Change`]: ChangeKind::Change
+    /// [`Modified`]: ChangeKind::Modified
     #[must_use]
     pub fn is_modified(&self) -> bool {
         matches!(self, Self::Modified)

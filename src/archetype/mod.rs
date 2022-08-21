@@ -4,7 +4,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    wildcard, Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind,
+    buffer::ComponentBuffer, wildcard, Component, ComponentId, ComponentValue, Entity, EntityKind,
 };
 
 /// Unique archetype id
@@ -613,7 +613,7 @@ impl ComponentInfo {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{component, ComponentBuffer, EntityKind};
+    use crate::{component, EntityKind};
 
     use super::*;
     use std::num::NonZeroU32;

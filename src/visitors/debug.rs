@@ -5,7 +5,8 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Slot, VisitData, Visitor},
-    component, Archetype, ComponentBuffer, ComponentId, ComponentInfo, ComponentValue, MetaData,
+    buffer::ComponentBuffer,
+    component, Archetype, ComponentId, ComponentInfo, ComponentValue, MetaData,
 };
 
 /// Format a component with debug

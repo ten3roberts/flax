@@ -12,13 +12,14 @@ use itertools::Itertools;
 
 use crate::{
     archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ComponentInfo, Slice},
+    buffer::ComponentBuffer,
     components::{is_component, name},
     debug_visitor, entities,
     entity::{EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, EntityStoreIter,
+    Component, ComponentId, ComponentValue, Entity, EntityKind, EntityStoreIter,
     EntityStoreIterMut, Error, Filter, Query, RelationExt, RowFormatter, StaticFilter,
 };
 

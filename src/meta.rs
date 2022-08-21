@@ -1,5 +1,6 @@
+use crate::buffer::ComponentBuffer;
 use crate::components::name;
-use crate::{ComponentBuffer, ComponentInfo, ComponentValue};
+use crate::{ComponentInfo, ComponentValue};
 
 /// Additional data that can attach itself to a component
 ///
