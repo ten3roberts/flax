@@ -10,7 +10,7 @@
     * [Schedule](fundamentals/schedule.md)
     * [Hierarchy](fundamentals/hierarchy.md)
     * [EntityBuilder](fundamentals/builder.md)
+    * [CommandBuffer](fundamentals/commandbuffer.md)
 - [ Diving deeper ](diving_deeper/index.md)
-    * [CommandBuffer](diving_deeper/commandbuffer.md)
     * [Query Advanced](diving_deeper/query.md)
     * [Dynamic Components](diving_deeper/dynamic_components.md)

@@ -165,6 +165,7 @@ where
     F: for<'x> Callable<'x, <Args as SystemData<'x>>::Data, Result<(), Err>>,
     Err: Into<eyre::Error>,
 {
+    #[tracing::instrument(skip_all, fields(name = self.name))]
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
         let data = self.data.bind(ctx).wrap_err("Failed to bind system data")?;
 
@@ -195,6 +196,7 @@ where
     Args: SystemData<'this>,
     F: Callable<'this, Args::Data, ()>,
 {
+    #[tracing::instrument(skip_all, fields(name = self.name))]
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
         let data = self.data.bind(ctx).wrap_err("Failed to bind system data")?;
 

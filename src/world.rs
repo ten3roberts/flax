@@ -248,6 +248,19 @@ impl World {
         Ok(())
     }
 
+    ///// Returns the first entity which matches the supplied predicate.
+    /////
+    ///// For more advanced usages, consider using a query
+    //pub fn find<F>(&self, filter: F) -> Option<Entity>
+    //where
+    //    F: for<'x> Filter<'x>,
+    //{
+    //    let mut query = Query::new(entities()).filter(filter);
+    //    let mut iter = query.iter(self);
+    //    let id = iter.iter().next();
+    //    id
+    //}
+
     /// Spawn a new component of type `T` which can be attached to an entity.
     ///
     /// The given name does not need to be unique.

@@ -61,11 +61,11 @@ impl Storage {
             return;
         }
 
-        tracing::debug!(
-            "Reserving size: {old_cap}[{}] + {additional} => {new_cap} for: {:?}",
-            self.len(),
-            self.info().name()
-        );
+        // tracing::debug!(
+        //     "Reserving size: {old_cap}[{}] + {additional} => {new_cap} for: {:?}",
+        //     self.len(),
+        //     self.info().name()
+        // );
 
         let old_layout =
             Layout::from_size_align(self.info.size() * old_cap, self.info.layout.align()).unwrap();

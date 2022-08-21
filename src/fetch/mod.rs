@@ -93,13 +93,13 @@ where
 
 #[derive(Debug, Clone)]
 /// Returns the entity ids
-pub struct EntityFetch;
+pub struct Entities;
 #[doc(hidden)]
 pub struct PreparedEntities<'a> {
     entities: &'a [Entity],
 }
 
-impl<'w> Fetch<'w> for EntityFetch {
+impl<'w> Fetch<'w> for Entities {
     const MUTABLE: bool = false;
 
     type Prepared = PreparedEntities<'w>;
