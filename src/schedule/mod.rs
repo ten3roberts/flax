@@ -376,8 +376,7 @@ mod test {
     #[cfg(feature = "parallel")]
     fn schedule_par() {
         use crate::{
-            components::name, entities, CmpExt, CommandBuffer, Component, EntityFetch, Mutable,
-            Write,
+            components::name, entities, CmpExt, CommandBuffer, Component, Entities, Mutable, Write,
         };
 
         #[derive(Debug, Clone)]
@@ -483,7 +482,7 @@ mod test {
         let remaining = System::builder()
             .with_name("remaining")
             .with(Query::new(entities()))
-            .build(|mut q: QueryData<EntityFetch>| {
+            .build(|mut q: QueryData<Entities>| {
                 let mut q = q.iter();
                 eprintln!("Remaining: {:?}", q.iter().format(", "));
             });

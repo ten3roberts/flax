@@ -57,3 +57,7 @@ path = "./examples/guide/query_advanced.rs"
 [[example]]
 name = "relations"
 path = "./examples/guide/relations.rs"
+
+[[example]]
+name = "commandbuffer"
+path = "./examples/guide/commandbuffer.rs"

@@ -92,7 +92,7 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR: system_basic
 
     let mut update_dist = System::builder()
-        .with_name("update distance")
+        .with_name("update_distance")
         .with(query)
         .build(
             |mut query: QueryData<(_, Component<(f32, f32)>, Mutable<f32>), _>| {
@@ -108,7 +108,7 @@ fn main() -> color_eyre::Result<()> {
 
     // ANCHOR: system_for_each
     let mut update_dist = System::builder()
-        .with_name("update distance")
+        .with_name("update_distance")
         .with(
             Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
         )
@@ -127,7 +127,7 @@ fn main() -> color_eyre::Result<()> {
     // Despawn all entities with a distance > 50
     // ANCHOR: schedule_basic
     let despawn = System::builder()
-        .with_name("delete outside world")
+        .with_name("delete_outside_world")
         .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
         .write::<CommandBuffer>()
         .build(
@@ -140,7 +140,7 @@ fn main() -> color_eyre::Result<()> {
         );
 
     let debug_world = System::builder()
-        .with_name("debug world")
+        .with_name("debug_world")
         .write::<World>()
         .build(|world: Write<World>| {
             tracing::debug!("World: {world:#?}");

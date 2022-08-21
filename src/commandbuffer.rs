@@ -12,6 +12,8 @@ enum Spawn {
     Batch(BatchSpawn),
 }
 
+type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
+
 /// Records commands into the world.
 /// Allows insertion and removal of components when the world is not available
 /// mutably, such as in systems or during iteration.
@@ -22,6 +24,7 @@ pub struct CommandBuffer {
     spawned: Vec<Spawn>,
     despawned: Vec<Entity>,
     removals: Vec<(Entity, ComponentInfo)>,
+    defers: Vec<DeferFn>,
 }
 
 impl std::fmt::Debug for CommandBuffer {
@@ -89,8 +92,8 @@ impl CommandBuffer {
     }
 
     /// Spawn a new entity with the given components of the builder
-    pub fn spawn(&mut self, entity: EntityBuilder) -> &mut Self {
-        self.spawned.push(Spawn::One(entity));
+    pub fn spawn(&mut self, entity: impl Into<EntityBuilder>) -> &mut Self {
+        self.spawned.push(Spawn::One(entity.into()));
 
         self
     }
@@ -120,10 +123,21 @@ impl CommandBuffer {
         self
     }
 
+    /// Defer a function to execute upon the world.
+    ///
+    /// Errors will be propagated.
+    pub fn defer(
+        &mut self,
+        func: impl Fn(&mut World) -> eyre::Result<()> + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.defers.push(Box::new(func));
+        self
+    }
+
     /// Applies all contents of the command buffer to the world.
     /// The commandbuffer is cleared and can be reused.
     #[tracing::instrument(skip(world))]
-    pub fn apply(&mut self, world: &mut World) -> Result<()> {
+    pub fn apply(&mut self, world: &mut World) -> eyre::Result<()> {
         let groups = self
             .insert_locations
             .iter()
@@ -141,10 +155,6 @@ impl CommandBuffer {
             }
         })?;
 
-        self.removals
-            .drain(..)
-            .try_for_each(|(id, component)| world.remove_dyn(id, component))?;
-
         self.spawned.drain(..).for_each(|spawn| match spawn {
             Spawn::One(mut builder) => {
                 builder.spawn(world);
@@ -154,12 +164,17 @@ impl CommandBuffer {
             }
         });
 
+        self.removals
+            .drain(..)
+            .try_for_each(|(id, component)| world.remove_dyn(id, component))?;
+
         self.despawned
             .drain(..)
             .try_for_each(|id| world.despawn(id))?;
 
+        self.defers.drain(..).try_for_each(|func| (func)(world))?;
+
         self.clear();
-        tracing::info!("Applied commandbuffer");
         Ok(())
     }
 

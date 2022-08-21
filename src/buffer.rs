@@ -39,7 +39,6 @@ impl BufferStorage {
         let new_len = new_offset + layout.size();
 
         if new_len >= self.layout.size() || layout.align() > self.layout.align() && new_len != 0 {
-            eprintln!("Reallocating {} => {}", self.layout.size(), new_len);
             let align = self.layout.align().max(layout.align());
             let new_layout = Layout::from_size_align(new_len.next_power_of_two(), align).unwrap();
 
