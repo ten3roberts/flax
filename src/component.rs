@@ -1,20 +1,61 @@
 use std::{fmt::Display, marker::PhantomData, sync::atomic::AtomicU32};
 
 use crate::{
-    archetype::ComponentInfo, ComponentBuffer, Entity, EntityKind, InsertedFilter, MetaData,
-    ModifiedFilter, Mutable, RemovedFilter, With, Without,
+    archetype::ComponentInfo, wildcard, ComponentBuffer, Entity, EntityKind, InsertedFilter,
+    MetaData, ModifiedFilter, Mutable, RemovedFilter, With, Without,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
 /// component.
 pub trait ComponentValue: Send + Sync + 'static {}
+impl<T> ComponentValue for T where T: Send + Sync + 'static {}
 
 /// A unique component identifier
 /// Is not stable between executions, and should as such not be used for
 /// execution.
 pub type ComponentId = Entity;
 
-impl<T> ComponentValue for T where T: Send + Sync + 'static {}
+/// Type alias for a function which instantiates a component
+pub type ComponentFn<T> = fn() -> Component<T>;
+
+/// Type alias for a function which instantiates a relation with the specified
+/// object
+pub type RelationFn<T> = fn(object: Entity) -> Component<T>;
+
+/// Relation helper trait
+pub trait RelationExt<T>
+where
+    T: ComponentValue,
+{
+    /// Instantiate the relation
+    fn of(&self, object: Entity) -> Component<T>;
+    /// Construct a new filter yielding entities with this kind of relation
+    fn with(self) -> With;
+    /// Construct a new filter yielding entities without this kind of relation
+    fn without(self) -> Without;
+}
+
+impl<T, F> RelationExt<T> for F
+where
+    F: Fn(Entity) -> Component<T>,
+    T: ComponentValue,
+{
+    fn of(&self, object: Entity) -> Component<T> {
+        (self)(object)
+    }
+
+    fn with(self) -> With {
+        With {
+            component: self(wildcard()).id(),
+        }
+    }
+
+    fn without(self) -> Without {
+        Without {
+            component: self(wildcard()).id(),
+        }
+    }
+}
 
 /// Defines a strongly typed component
 pub struct Component<T> {
@@ -62,7 +103,7 @@ impl<T: ComponentValue> Display for Component<T> {
 
 impl<T: ComponentValue> Component<T> {
     /// Create a new component given a unique id and name.
-    pub fn new(
+    pub(crate) fn new(
         id: ComponentId,
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
@@ -76,7 +117,7 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Creates a new relation component with the specified object entity
-    pub fn new_pair(
+    pub(crate) fn new_pair(
         id: ComponentId,
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
@@ -91,10 +132,23 @@ impl<T: ComponentValue> Component<T> {
     }
 
     #[doc(hidden)]
+    pub fn static_init_pair(
+        id: &AtomicU32,
+        kind: EntityKind,
+        name: &'static str,
+        meta: fn(ComponentInfo) -> ComponentBuffer,
+        object: Entity,
+    ) -> Self {
+        let id = Entity::static_init(id, kind);
+
+        Self::new_pair(id, name, meta, object)
+    }
+
+    #[doc(hidden)]
     pub fn static_init(
         id: &AtomicU32,
-        name: &'static str,
         kind: EntityKind,
+        name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
     ) -> Self {
         let id = Entity::static_init(id, kind);

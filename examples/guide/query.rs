@@ -178,7 +178,7 @@ fn main() -> color_eyre::Result<()> {
             pos.1 += dir.1;
         });
 
-    // Spawn a new entity with a random position each frame
+    // Spawn new entities with a random position each frame
     let spawn = System::builder()
         .with_name("spawner")
         .write::<CommandBuffer>()

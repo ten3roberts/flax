@@ -19,7 +19,7 @@ use crate::{
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     Component, ComponentBuffer, ComponentId, ComponentValue, Entity, EntityKind, EntityStoreIter,
-    EntityStoreIterMut, Error, Filter, Query, RowFormatter, StaticFilter,
+    EntityStoreIterMut, Error, Filter, Query, RelationExt, RowFormatter, StaticFilter,
 };
 
 #[derive(Debug, Default)]
@@ -589,21 +589,25 @@ impl World {
         }
     }
 
-    /// Despawns an entity and all connected entities
-    pub fn despawn_recursive(&mut self, id: Entity) -> Result<()> {
+    /// Despawns an entity and all connected entities through the supplied
+    /// relation
+    pub fn despawn_recursive<T: ComponentValue>(
+        &mut self,
+        id: Entity,
+        relation: impl RelationExt<T>,
+    ) -> Result<()> {
         let mut to_remove = vec![id];
 
         while let Some(id) = to_remove.pop() {
-            self.despawn(id)?;
-
-            for (_, arch) in self.archetypes.iter_mut().filter(|(_, arch)| {
-                let relations = arch.relations().collect_vec();
-                dbg!(relations);
-                arch.relations().any(|v| v.high() == id.low())
-            }) {
-                dbg!("Removing: {:?}", arch.entities());
+            for (_, arch) in self
+                .archetypes
+                .iter_mut()
+                .filter(|(_, arch)| arch.relations().any(|v| v == relation.of(id).id()))
+            {
                 to_remove.extend_from_slice(arch.entities());
             }
+
+            self.despawn(id)?;
         }
 
         Ok(())
@@ -613,7 +617,6 @@ impl World {
     /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
     /// on all the children.
     pub fn detach(&mut self, id: ComponentId) {
-        let subject = id.low();
         // The archetypes to remove
         let archetypes = self
             .archetypes()
@@ -1044,6 +1047,13 @@ where
             }));
 
             for slot in batch.slots().iter() {
+                assert!(
+                    slot < arch.len(),
+                    "batch is larger than archetype, batch: {:?}, arch: {:?}",
+                    batch.slots(),
+                    arch.entities()
+                );
+
                 let row = RowFormatter::new(arch, slot, &meta);
                 list.entry(&arch.entity(slot).unwrap(), &row);
             }
