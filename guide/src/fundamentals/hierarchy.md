@@ -27,7 +27,17 @@ allowing many-many relationsships between entities;
 {{ #include ../../../examples/guide/relations.rs:many_to_many }}
 ```
 
+## Queries
+
+Since relations are normal components, the can be used in a query as normal, or
+used to exclude components.
+
+```rust
+{{ #include ../../../examples/guide/relations.rs:query }}
+```
+
 ## Lifetime
+
 When an entity is despawned, all relations to it present on other components
 will be removed and dropped. As such, no entity will have a relation to an
 entity which does not exist.

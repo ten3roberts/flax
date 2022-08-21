@@ -437,11 +437,8 @@ impl Archetype {
 
         for storage in self.storage.values_mut() {
             // Copy this storage to the end of dst
-            if storage.info().size() > 0 {
-                unsafe {
-                    // Put or drop
-                    let _ = dst.extend(storage);
-                }
+            unsafe {
+                let _ = dst.extend(storage);
             }
         }
 

@@ -5,6 +5,8 @@ use tracing_tree::HierarchicalLayer;
 
 fn main() -> color_eyre::Result<()> {
     registry().with(HierarchicalLayer::default()).init();
+    color_eyre::install()?;
+
     // ANCHOR: relation_basic
     component! {
         child_of(parent): () => [Debug],
@@ -21,7 +23,7 @@ fn main() -> color_eyre::Result<()> {
         .set_default(child_of(parent))
         .spawn(&mut world);
 
-    let child2 = Entity::builder()
+    let _child2 = Entity::builder()
         .set(name(), "Child2".into())
         .set_default(child_of(parent))
         .spawn(&mut world);
@@ -36,14 +38,36 @@ fn main() -> color_eyre::Result<()> {
 
     tracing::info!("World: {world:#?}");
 
-    let children = Query::new(entities())
+    // ANCHOR_END: many_to_many
+
+    // ANCHOR: query
+
+    let children_of_parent = Query::new(entities())
         .with(child_of(parent))
         .iter(&world)
         .iter()
         .collect_vec();
 
-    tracing::info!("Children: {children:?}");
-    // ANCHOR_END: many_to_many
+    tracing::info!("Children: {children_of_parent:?}");
+
+    let all_children = Query::new(entities())
+        .filter(child_of.with())
+        .iter(&world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!("Children: {all_children:?}");
+
+    let roots = Query::new(entities())
+        .filter(child_of.without())
+        .iter(&world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!("Roots: {roots:?}");
+
+    // ANCHOR_END: query
+
     // ANCHOR: lifetime
 
     tracing::info!(
@@ -59,7 +83,7 @@ fn main() -> color_eyre::Result<()> {
     );
 
     tracing::info!("World: {world:#?}");
-    world.despawn_recursive(parent)?;
+    world.despawn_recursive(parent, child_of)?;
 
     tracing::info!("World: {world:#?}");
     // ANCHOR_END: lifetime
