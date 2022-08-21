@@ -6,7 +6,7 @@ use crate::ComponentInfo;
 
 use super::{Slice, Slot};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 /// A self compacting change tracking which holds either singular changes or a
 /// range of changes, automatically merging adjacent ones.
 ///

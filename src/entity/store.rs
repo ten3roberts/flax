@@ -183,7 +183,7 @@ impl<V> EntityStore<V> {
 
             let val = &val.value.occupied;
 
-            Some(&*val)
+            Some(val)
         }
     }
 

@@ -62,5 +62,30 @@ fn relations() -> color_eyre::Result<()> {
 
     tracing::info!("World: {world:#?}");
 
+    world.despawn_many(All);
+
+    assert_eq!(
+        Query::new(()).iter(&world).count(),
+        0,
+        "World was not empty"
+    );
+
+    let root = EntityBuilder::new()
+        .set(name(), "parent".into())
+        .attach(
+            child_of,
+            Entity::builder()
+                .set(name(), "child1".into())
+                .attach(child_of, Entity::builder().set(name(), "child1.1".into())),
+        )
+        .attach(child_of, Entity::builder().set(name(), "child2".into()))
+        .spawn(&mut world);
+
+    assert_eq!(Query::new(child_of(root)).iter(&world).count(), 2);
+    assert_eq!(
+        Query::new(()).filter(child_of.with()).iter(&world).count(),
+        3
+    );
+
     Ok(())
 }

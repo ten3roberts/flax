@@ -146,7 +146,7 @@ fn tags() {
     let mut query = query.iter(&world);
     let items = query.into_iter().sorted().collect_vec();
 
-    let expected = (&[50; 16]).iter().chain(&[100]).collect_vec();
+    let expected = ([50; 16]).iter().chain(&[100]).collect_vec();
     assert_eq!(items, expected);
 }
 

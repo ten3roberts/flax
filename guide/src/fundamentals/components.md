@@ -35,3 +35,4 @@ Flax provides some opinionated default components to ease the communication
 between different libraries and users.
 
 - [name](https://docs.rs/flax/latest/flax/components/fn.name.html): Provides a name for entities and components.
+- [child_of](https://docs.rs/flax/latest/flax/components/fn.child_of.html): Default dataless hierarchy relation. See: [Hierarchy](https://ten3roberts.github.io/flax/fundamentals/hierarchy.html)
