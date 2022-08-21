@@ -76,7 +76,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="fundamentals/hierarchy.html"><strong aria-hidden="true">1.7.</strong> Hierarchy</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/builder.html"><strong aria-hidden="true">2.1.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">2.2.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.3.</strong> Dynamic Components</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="fundamentals/hierarchy.html"><strong aria-hidden="true">1.7.</strong> Hierarchy</a></li><li class="chapter-item expanded "><a href="fundamentals/builder.html"><strong aria-hidden="true">1.8.</strong> EntityBuilder</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/commandbuffer.html"><strong aria-hidden="true">2.1.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">2.2.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.3.</strong> Dynamic Components</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -254,6 +254,7 @@ entity.</p>
 between different libraries and users.</p>
 <ul>
 <li><a href="https://docs.rs/flax/latest/flax/components/fn.name.html">name</a>: Provides a name for entities and components.</li>
+<li><a href="https://docs.rs/flax/latest/flax/components/fn.child_of.html">child_of</a>: Default dataless hierarchy relation. See: <a href="https://ten3roberts.github.io/flax/fundamentals/hierarchy.html">Hierarchy</a></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="component-metadata"><a class="header" href="#component-metadata">Component metadata</a></h1>
 <p>The keen eyed of you may have noticed that <code>ComponentId</code> is the same as
@@ -790,27 +791,19 @@ entity which does not exist.</p>
     tracing::info!(&quot;World: {world:#?}&quot;);
 <span class="boring">}
 </span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="diving-deeper"><a class="header" href="#diving-deeper">Diving deeper</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="entity-builder"><a class="header" href="#entity-builder">Entity Builder</a></h1>
-<p>In the previous chapters, the
-<a href="https://docs.rs/flax/latest/flax/struct.EntityBuilder">EntityBuilder</a> has been
-used but largly glossed over.</p>
-<p>Put simply, the entity builder allows you to incrementally construct an entity
-by adding components and <em>then</em> inserting it into the world. This provides both
-better ergonomics and efficiency as the entity does not bounce around
-archetypes.</p>
+<p>The <a href="https://docs.rs/flax/latest/flax/struct.EntityBuilder">EntityBuilder</a>
+allows you to incrementally construct an entity by adding components and <em>then</em>
+inserting it into the world. This provides both better ergonomics and efficiency
+as the entity does not bounce around archetypes.</p>
 <p>Additionally, the entity builder allows constructing an entity in the absence of
 the world, like a function which only creates the <code>EntityBuilder</code>.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>    tracing_subscriber::registry()
-        .with(tracing_tree::HierarchicalLayer::default())
-        .init();
-
-    component! {
-        health: f32 =&gt; [flax::Debug],
-        position: (f32, f32) =&gt; [flax::Debug],
-        is_player: () =&gt; [flax::Debug],
+</span>    component! {
+        health: f32 =&gt; [Debug],
+        position: (f32, f32) =&gt; [Debug],
+        is_player: () =&gt; [Debug],
     }
 
     let mut world = World::new();
@@ -912,6 +905,33 @@ format of the archetype storage and is thus maximally efficient.</p>
 
 <span class="boring">}
 </span></code></pre></pre>
+<h2 id="hierarchy-1"><a class="header" href="#hierarchy-1">Hierarchy</a></h2>
+<p>In the previous chapter, hierarchies were constructed by adding a relation to an
+entity to the child entity.</p>
+<p>The entity builder allows construction of hierarchies before being spawned into
+the world.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let id = Entity::builder()
+        .set(name(), &quot;parent&quot;.into())
+        .attach(
+            child_of,
+            Entity::builder()
+                .set(name(), &quot;child1&quot;.into())
+                .attach(child_of, Entity::builder().set(name(), &quot;child1.1&quot;.into())),
+        )
+        .attach(child_of, Entity::builder().set(name(), &quot;child2&quot;.into()))
+        .spawn(&amp;mut world);
+
+    tracing::info!(&quot;Parent: {id}&quot;);
+
+    tracing::info!(&quot;World: {world:#?}&quot;);
+
+<span class="boring">}
+</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="diving-deeper"><a class="header" href="#diving-deeper">Diving deeper</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="commandbuffer"><a class="header" href="#commandbuffer">CommandBuffer</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-query"><a class="header" href="#advanced-query">Advanced query</a></h1>
 <p>A query is a combination of a
 <a href="https://docs.rs/flax/latest/flax/traits.Fetch"><code>Fetch</code></a> and a
@@ -1067,17 +1087,42 @@ handle a 3d world.</p>
 
 <span class="boring">}
 </span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="components-and-relations"><a class="header" href="#components-and-relations">Components and Relations</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="dynamic-components"><a class="header" href="#dynamic-components">Dynamic components</a></h1>
 <p>A component is nothing more than a type safe entity id.</p>
 <p>The <a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> uses a
 lazily acquired entity. It does not require the world since the entity is
 spawned in the <code>STATIC</code> global namespace which is shared across all worlds.</p>
-<p>It is entirely possible to create a component yourself for e.g; a local system.</p>
+<p>It is entirely possible to create a component at runtime for e.g; a local system.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>{{ #include /../../examples/guide/dynamic_components.rs:custom }}
+</span>
+<span class="boring">fn main() {
+</span>    registry().with(HierarchicalLayer::default()).init();
+
+    let mut world = World::new();
+
+    let position: Component&lt;Vec2&gt; = world.spawn_component(&quot;position&quot;, |info| {
+        let mut buf = ComponentBuffer::new();
+        &lt;Debug as MetaData&lt;Vec2&gt;&gt;::attach(info, &amp;mut buf);
+        buf
+    });
+
+    let id = Entity::builder()
+        .set(position, vec2(1.0, 6.4))
+        .spawn(&amp;mut world);
+
+    tracing::info!(&quot;world: {world:#?}&quot;);
+
+    // When `position` is despawned, it is removed from all entities.
+    // This ensured that dead components never exist
+    world.despawn(position.id())?;
+
+    tracing::info!(&quot;world: {world:#?}&quot;);
+
+    world.despawn(id)?;
 <span class="boring">}
 </span></code></pre></pre>
+<p>The <code>meta</code> allows the user to provide a function to attach extra components to
+the entity. This is used by the <code>=&gt; [ty, ty]</code> syntax for the <code>component</code> macro.</p>
 <p>The world will automatically manage the lifetime of the component to ensure that
 no entity has invalid components attached to it.</p>
 <h2 id="relations"><a class="header" href="#relations">Relations</a></h2>
@@ -1095,8 +1140,35 @@ entity id.</p>
 <p>This allows the upper bits of a component(<em>entity</em>) id to contain another
 entity as the generation is not needed.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>{{ #include /../../examples/guide/dynamic_components.rs:relation }}
+</span>
+<span class="boring">fn main() {
+</span>    #[derive(Debug, Clone)]
+    struct RelationData {
+        // This allows you to add extra data to the child in the relation
+        distance: f32,
+    }
+
+    let child_of = world.spawn_relation::&lt;RelationData&gt;(&quot;child_of&quot;, |info| {
+        let mut buf = ComponentBuffer::new();
+        &lt;Debug as MetaData&lt;RelationData&gt;&gt;::attach(info, &amp;mut buf);
+        buf
+    });
+
+    let parent = world.spawn();
+
+    let child = Entity::builder()
+        .set(child_of(parent), RelationData { distance: 1.0 })
+        .spawn(&amp;mut world);
+
+    let data = world.get(child, child_of(parent))?;
+
+    tracing::info!(&quot;Relation distance: {:?}&quot;, data.distance);
+
+    drop(data);
+
+    world.despawn(parent)?;
+    assert!(world.get(child, child_of(parent)).is_err());
+
 <span class="boring">}
 </span></code></pre></pre>
 <p>When despawning either the relation component or object entity, the &quot;parent&quot;,
