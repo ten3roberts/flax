@@ -13,12 +13,12 @@ fn derive_fetch() {
     use glam::*;
 
     #[derive(Debug, Clone, Fetch)]
-    struct MyFetch<'q> {
+    struct MyFetch<'a> {
         #[fetch(position())]
-        pos: &'q Vec3,
+        pos: &'a Vec3,
         #[fetch(rotation().opt())]
-        rot: Option<&'q Quat>,
+        rot: Option<&'a Quat>,
         #[fetch(scale().opt_or(Vec3::ONE))]
-        scale: Vec3,
+        scale: &'a Vec3,
     }
 }

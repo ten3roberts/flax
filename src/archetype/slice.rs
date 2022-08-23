@@ -5,8 +5,8 @@ use super::Slot;
 #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 /// Represents a contiguous range of slots within and archetype
 pub struct Slice {
-    pub start: Slot,
-    pub end: Slot,
+    pub(crate) start: Slot,
+    pub(crate) end: Slot,
 }
 
 impl Slice {
@@ -17,39 +17,44 @@ impl Slice {
     }
 
     #[inline]
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self { start: 0, end: 0 }
     }
 
-    pub fn single(slot: Slot) -> Slice {
+    pub(crate) fn single(slot: Slot) -> Slice {
         Self::new(slot, slot + 1)
     }
 
     #[inline]
+    /// Returns the number of slots in the slice
     pub fn len(&self) -> Slot {
         self.end.wrapping_sub(self.start)
     }
 
     #[inline]
+    /// Returns true if the slice is empty
     pub fn is_empty(&self) -> bool {
         self.end <= self.start
     }
 
-    // Convert the slice into a BTreeSet of entities.
-    // If using this in hot loops... don't
+    /// Convert the slice into a BTreeSet of entities.
+    /// If using this in hot loops... don't
     pub fn into_set(self) -> BTreeSet<Slot> {
         BTreeSet::from_iter(self.start..self.end)
     }
 
+    /// Iterate all slots in the slice
     pub fn iter(&self) -> Range<Slot> {
         self.start..self.end
     }
 
+    /// Returns true if the slice contains `slot`
     pub fn contains(&self, slot: Slot) -> bool {
         slot >= self.start && slot < self.end
     }
 
     #[inline]
+    /// Returns the intersection of self and other
     pub fn intersect(&self, other: &Self) -> Self {
         let start = self.start.max(other.start);
         let end = self.end.min(other.end);
@@ -109,6 +114,7 @@ impl Slice {
         }
     }
 
+    /// Returns true if the slice is a subset of `of`
     pub fn is_subset(&self, of: &Self) -> bool {
         self.is_empty() || (self.start >= of.start && self.end <= of.end)
     }

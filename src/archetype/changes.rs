@@ -114,21 +114,21 @@ impl Change {
 }
 
 impl Changes {
-    pub fn new(info: ComponentInfo) -> Self {
+    pub(crate) fn new(info: ComponentInfo) -> Self {
         Self {
             info,
             inner: Default::default(),
         }
     }
 
-    pub fn as_set(&self, f: impl Fn(&Change) -> bool) -> BTreeSet<Slot> {
+    pub(crate) fn as_set(&self, f: impl Fn(&Change) -> bool) -> BTreeSet<Slot> {
         self.iter()
             .filter_map(|v| if f(v) { Some(v.slice) } else { None })
             .flatten()
             .collect()
     }
 
-    pub fn as_map(&self) -> BTreeMap<Slot, (u32, ChangeKind)> {
+    pub(crate) fn as_map(&self) -> BTreeMap<Slot, (u32, ChangeKind)> {
         self.inner
             .iter()
             .flat_map(|v| v.slice.iter().map(move |p| (p, (v.tick, v.kind))))
@@ -136,7 +136,7 @@ impl Changes {
     }
 
     #[cfg(debug_assertions)]
-    pub fn assert_ordered(&self, msg: &str) {
+    pub(crate) fn assert_ordered(&self, msg: &str) {
         let groups = self.inner.iter().copied().group_by(|v| v.kind);
 
         let sorted = groups
@@ -152,7 +152,7 @@ impl Changes {
         }
     }
 
-    pub fn set(&mut self, change: Change) -> &mut Self {
+    pub(crate) fn set(&mut self, change: Change) -> &mut Self {
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
@@ -261,8 +261,15 @@ impl Changes {
         self.inner.get(index)
     }
 
+    /// Returns the number of changes
     pub fn len(&self) -> usize {
         self.inner.len()
+    }
+
+    #[must_use]
+    /// Returns true if the change list is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Iterate all changes in ascending order
@@ -270,11 +277,12 @@ impl Changes {
         self.inner.iter()
     }
 
-    pub fn as_changed_set(&self, tick: u32) -> BTreeSet<Slot> {
+    #[cfg(test)]
+    pub(crate) fn as_changed_set(&self, tick: u32) -> BTreeSet<Slot> {
         self.as_set(|v| v.kind.is_modified_or_inserted() && v.tick > tick)
     }
 
-    pub fn info(&self) -> ComponentInfo {
+    pub(crate) fn info(&self) -> ComponentInfo {
         self.info
     }
 }

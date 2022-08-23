@@ -13,17 +13,17 @@ use crate::{
 };
 
 /// Describes a type which can fetch itself from an archetype
-pub trait Fetch<'w> {
+pub trait Fetch<'q> {
     /// true if the fetch mutates any component and thus needs a change event
     const MUTABLE: bool;
 
     /// The prepared version of the fetch
-    type Prepared: for<'x> PreparedFetch<'x> + 'w;
+    type Prepared: for<'x> PreparedFetch<'x> + 'q;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
-    fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
+    fn prepare(&'q self, world: &'q World, archetype: &'q Archetype) -> Option<Self::Prepared>;
     /// Returns true if the fetch matches the archetype
-    fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool;
+    fn matches(&self, world: &'q World, archetype: &'q Archetype) -> bool;
     /// Describes the fetch in a human-readable fashion
     fn describe(&self) -> String;
     /// Returns which components and how will be accessed for an archetype.

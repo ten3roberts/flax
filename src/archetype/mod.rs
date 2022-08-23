@@ -9,19 +9,18 @@ use crate::{
 
 /// Unique archetype id
 pub type ArchetypeId = Entity;
+/// Represents a slot in the archetype
 pub type Slot = usize;
 
 mod batch;
 mod changes;
 mod slice;
 mod storage;
-mod visit;
 
 pub use batch::*;
 pub use changes::*;
 pub use slice::*;
 pub use storage::*;
-pub use visit::*;
 
 #[derive(Debug)]
 /// A collection of entities with the same components.

@@ -4,14 +4,14 @@ use std::{collections::BTreeMap, fmt::Formatter};
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{Slot, VisitData, Visitor},
+    archetype::{Slot, Storage, StorageBorrowDyn},
     buffer::ComponentBuffer,
     component, Archetype, ComponentId, ComponentInfo, ComponentValue, MetaData,
 };
 
 /// Format a component with debug
 pub struct DebugVisitor {
-    visit: unsafe fn(VisitData<'_>) -> &'_ dyn fmt::Debug,
+    visit: for<'x> unsafe fn(&'x StorageBorrowDyn, slot: Slot) -> &'x dyn fmt::Debug,
 }
 
 impl DebugVisitor {
@@ -21,24 +21,15 @@ impl DebugVisitor {
         T: ComponentValue + std::fmt::Debug,
     {
         Self {
-            visit: |visit| unsafe {
-                visit
-                    .data
-                    .at(visit.slot)
+            visit: |storage, slot| unsafe {
+                storage
+                    .at(slot)
                     .expect("Out of bounds")
                     .cast::<T>()
                     .as_ref()
                     .expect("Not null")
             },
         }
-    }
-}
-
-impl<'a> Visitor<'a> for DebugVisitor {
-    type Visited = &'a dyn fmt::Debug;
-
-    unsafe fn visit(&'a self, visit: VisitData<'a>) -> Self::Visited {
-        (self.visit)(visit)
     }
 }
 
@@ -108,9 +99,7 @@ impl<'a> fmt::Debug for RowFormatter<'a> {
             };
             if let Some(visitor) = self.meta.get(&storage.info().id()) {
                 unsafe {
-                    let data = VisitData::new(&storage, self.slot);
-
-                    map.entry(&name, visitor.visit(data));
+                    map.entry(&name, (visitor.visit)(&storage, self.slot));
                 }
             } else {
                 map.entry(&name, &MissingDebug);
