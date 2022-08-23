@@ -113,7 +113,8 @@
 
 #![deny(missing_docs)]
 
-mod archetype;
+/// Structured component storage
+pub mod archetype;
 /// Provides a buffer for holding multiple types simultaneously
 pub mod buffer;
 mod commandbuffer;

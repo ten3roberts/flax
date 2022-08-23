@@ -253,7 +253,7 @@ pub struct StorageBorrowDyn<'a> {
 }
 
 impl<'a> StorageBorrowDyn<'a> {
-    pub fn new(data: AtomicRef<'a, NonNull<u8>>, info: ComponentInfo, len: usize) -> Self {
+    pub(crate) fn new(data: AtomicRef<'a, NonNull<u8>>, info: ComponentInfo, len: usize) -> Self {
         Self { data, info, len }
     }
 
@@ -274,6 +274,7 @@ impl<'a> StorageBorrowDyn<'a> {
         }
     }
 
+    /// Returns the component info for the storage
     pub fn info(&self) -> ComponentInfo {
         self.info
     }
@@ -286,11 +287,13 @@ impl<'a> StorageBorrowDyn<'a> {
         slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
     }
 
+    /// Returns the number of items in the storage
     pub fn len(&self) -> usize {
         self.len
     }
 
     #[must_use]
+    /// Returns true if the storage is empty
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
