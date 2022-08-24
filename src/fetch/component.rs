@@ -47,8 +47,8 @@ where
         archetype.has(self.id())
     }
 
-    fn describe(&self) -> String {
-        self.name().to_string()
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        f.write_str(self.name())
     }
 
     fn difference(&self, archetype: &Archetype) -> Vec<String> {
@@ -101,8 +101,10 @@ where
     fn matches(&self, _: &World, archetype: &Archetype) -> bool {
         archetype.has(self.0.id())
     }
-    fn describe(&self) -> String {
-        format!("mut {}", self.0.name())
+
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        f.write_str("mut ")?;
+        f.write_str(self.0.name())
     }
 
     fn difference(&self, archetype: &Archetype) -> Vec<String> {
@@ -201,8 +203,8 @@ where
         true
     }
 
-    fn describe(&self) -> String {
-        format!("relations({})", self.component.name())
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        write!(f, "relations({})", self.component.name())
     }
 
     fn difference(&self, _: &Archetype) -> Vec<String> {

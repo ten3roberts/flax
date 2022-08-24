@@ -11,8 +11,8 @@ use crate::{
     fetch::Fetch,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, All, And, Component, ComponentValue, FetchItem, Filter, PreparedFetch,
-    With, Without, World,
+    Access, AccessKind, All, And, Component, ComponentValue, FetchItem, Filter, With, Without,
+    World,
 };
 
 pub use self::prepared::PreparedQuery;
@@ -40,8 +40,11 @@ where
     F: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut buf = String::new();
+        self.fetch.describe(&mut buf).unwrap();
+
         f.debug_struct("Query")
-            .field("fetch", &self.fetch.describe())
+            .field("fetch", &buf)
             .field("filter", &self.filter)
             .finish()
     }
