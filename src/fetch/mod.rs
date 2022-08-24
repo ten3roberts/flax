@@ -3,6 +3,9 @@ mod ext;
 mod opt;
 mod to_fetch;
 
+use core::fmt;
+use std::fmt::Write;
+
 pub use component::*;
 pub use ext::*;
 pub use opt::*;
@@ -32,7 +35,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// Returns true if the fetch matches the archetype
     fn matches(&self, world: &World, archetype: &Archetype) -> bool;
     /// Describes the fetch in a human-readable fashion
-    fn describe(&self) -> String;
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result;
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access>;
     /// Returns the required elements in self which are not in archetype
@@ -52,8 +55,8 @@ impl<'w> Fetch<'w> for () {
         true
     }
 
-    fn describe(&self) -> String {
-        "()".to_string()
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        write!(f, "()")
     }
 
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
@@ -129,8 +132,8 @@ impl<'w> Fetch<'w> for Entities {
         true
     }
 
-    fn describe(&self) -> String {
-        "entities".to_string()
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        f.write_str("entities")
     }
 
     fn difference(&self, _: &Archetype) -> Vec<String> {
@@ -175,14 +178,10 @@ macro_rules! tuple_impl {
                 $((self.$idx).matches(world, archetype)) && *
             }
 
-            fn describe(&self) -> String {
-            [
-                    "(".to_string(),
-                $(
-                    (self.$idx).describe()
-                ),*,
-                    "(".to_string()
-                ].join(", ")
+            fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+                f.write_str("(")?;
+                $( (self.$idx).describe(f)?;)*
+                f.write_str(")")
             }
 
             fn difference(&self, archetype: &Archetype) -> Vec<String> {

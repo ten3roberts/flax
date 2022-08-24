@@ -8,8 +8,8 @@ use syn::{
     parse_macro_input,
     spanned::Spanned,
     token::Paren,
-    Attribute, DataStruct, DeriveInput, Error, Expr, Ident, Lifetime, Path, Result, Token, Type,
-    TypePath, TypeReference,
+    Attribute, DataStruct, DeriveInput, Error, Expr, Field, Ident, Lifetime, MetaList, Path,
+    Result, Token, Type, TypePath, TypeReference, Visibility,
 };
 
 /// ```rust
@@ -37,28 +37,112 @@ pub fn derive_fetch(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     }
 }
 
+fn derive_item_struct<'a>(
+    crate_name: &Ident,
+    attrs: &Attrs,
+    vis: &Visibility,
+    name: &Ident,
+    item_name: &Ident,
+    fields: impl Iterator<Item = &'a Field>,
+) -> TokenStream {
+    let fields = fields.map(|field| {
+        let name = field
+            .ident
+            .as_ref()
+            .expect("Only named fields are supported");
+
+        let ty = &field.ty;
+
+        quote! {
+            #name: <#ty as #crate_name::FetchItem<'q>>::Item
+        }
+    });
+
+    let msg = format!("The item yielded by {name}");
+
+    let extras = match attrs.extras {
+        Some(ref extras) => {
+            let nested = &extras.nested;
+            quote! { #[derive(#nested)]}
+        }
+        None => quote! {},
+    };
+
+    quote! {
+        #[doc = #msg]
+        #extras
+        #vis struct #item_name<'q> {
+            #(#fields),*
+        }
+
+        #[automatically_derived]
+        impl<'q> #crate_name::FetchItem<'q> for #name {
+            type Item = #item_name<'q>;
+        }
+    }
+}
+
+fn derive_prepared_struct<'a>(
+    crate_name: &Ident,
+    vis: &Visibility,
+    name: &Ident,
+    item_name: &Ident,
+    prepared_name: &Ident,
+    fields: impl Iterator<Item = &'a Field>,
+) -> TokenStream {
+    let (types, expr): (Vec<_>, Vec<_>) = fields
+        .map(|field| {
+            let name = field
+                .ident
+                .as_ref()
+                .expect("Only named fields are supported");
+            let ty = &field.ty;
+
+            (
+                quote! {
+                    #name: <#ty as #crate_name::Fetch<'w>>::Prepared
+                },
+                quote! {
+                    #name: self.#name.fetch(slot)
+                },
+            )
+        })
+        .unzip();
+
+    let msg = format!("The prepared fetch for {name}");
+
+    quote! {
+        #[doc = #msg]
+        #vis struct #prepared_name<'w> {
+            #(#types),*
+        }
+
+        #[automatically_derived]
+        impl<'w, 'q> #crate_name::PreparedFetch<'q> for #prepared_name<'w> {
+            type Item = #item_name<'q>;
+
+            unsafe fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
+                Self::Item {
+                    #(#expr),*
+                }
+            }
+        }
+    }
+}
+
 fn derive_data_struct(
     crate_name: Ident,
     input: &DeriveInput,
     data: &DataStruct,
 ) -> Result<TokenStream> {
-    let lf = input.generics.lifetimes().next().cloned().ok_or_else(|| {
-        Error::new_spanned(
-            input.generics.clone(),
-            "Fetch struct must have one lifetime",
-        )
-    })?;
-
     let name = &input.ident;
+    let item_name = Ident::new(&format!("{}Item", name), Span::call_site());
+    let prepared_name = Ident::new(&format!("Prepared{}", name), Span::call_site());
+    let attrs = Attrs::get(&input.attrs)?;
 
+    eprintln!("Found attrs: {attrs:?}");
     match data.fields {
         syn::Fields::Named(ref fields) => {
-            let generics = ('A'..='Z')
-                .take(fields.named.len())
-                .map(|v| Ident::new(&v.to_string(), Span::call_site()))
-                .collect_vec();
-            let fetch_name = Ident::new(&format!("{}Fetch", name), Span::call_site());
-
             let fields = &fields.named;
 
             let field_names = fields
@@ -68,161 +152,101 @@ fn derive_data_struct(
 
             let types = fields.iter().map(|v| &v.ty).collect_vec();
 
-            let iter = fields
-                .iter()
-                .zip_eq(&generics)
-                .map(|(field, ty)| -> Result<_> {
-                    let name = field.ident.as_ref().unwrap();
-                    let attrs = Attrs::get(&field.attrs)?;
-                    let fetch_expr = attrs
-                        .fetch
-                        .ok_or_else(|| Error::new(fields.span(), "Missing `fetch` attribute"))?
-                        .expr;
+            let item_derive = derive_item_struct(
+                &crate_name,
+                &attrs,
+                &input.vis,
+                name,
+                &item_name,
+                fields.iter(),
+            );
 
-                    let field_decl = quote! {
-                        #name: #ty
-                    };
+            let prepared_derive = derive_prepared_struct(
+                &crate_name,
+                &input.vis,
+                name,
+                &item_name,
+                &prepared_name,
+                fields.iter(),
+            );
 
-                    let field_expr = quote! {
-                        #fetch_expr
-                    };
+            Ok(quote! {
 
-                    let field_prepare = quote! {
-                        #name: self.#name.prepare(world, archetype)
-                    };
+                #item_derive
 
-                    Ok((field_decl, field_expr, field_prepare))
-                });
+                #prepared_derive
 
-            let (fields_decl, fields_expr, fields_prepare): (Vec<_>, Vec<_>, Vec<_>) =
-                process_results(iter, |iter| multiunzip(iter))?;
+                impl<'w> #crate_name::Fetch<'w> for #name
+                where #(#types: Fetch<'w>),*
+                {
+                    const MUTABLE: bool = #(<#types as Fetch<'w>>::MUTABLE)|*;
 
-            let fetch_struct = quote! {
-                    impl<#lf> #name<#lf> {
-                        /// Returns the associated fetch.
-                        pub fn as_fetch<'lifetime>() -> impl Fetch<'lifetime> {
-                            use #crate_name::*;
+                    type Prepared = #prepared_name<'w>;
+                    fn prepare(
+                        &'w self,
+                        world: &'w World,
+                        arch: &'w Archetype,
+                    ) -> Option<Self::Prepared> {
+                        Some(Self::Prepared {
+                            #(#field_names: self.#field_names.prepare(world, arch)?),*
+                        })
+                    }
 
-                        struct #fetch_name<#(#generics),*> {
-                            #(#fields_decl,)*
-                        }
 
-                        #[automatically_derived]
-                        impl<'world, #(#generics,)*> #crate_name::Fetch<'world> for #fetch_name<#(#generics),*>
-                        where
-                            #(#generics: Fetch<'world>,
-                            <#generics as Fetch<'world>>::Prepared: for<#lf> #crate_name::PreparedFetch<#lf, Item = #types> + 'world
-                        ),*
-                        {
-                            const MUTABLE: bool = #(#generics::MUTABLE)|*;
+                    fn matches(&self, _world: &World, _arch: &Archetype) -> bool {
+                        ( #(self.#field_names.matches(_world, _arch))&&* )
+                    }
 
-                            type Prepared = #fetch_name<A::Prepared, B::Prepared, C::Prepared>;
+                    fn describe(&self, f: &mut dyn ::std::fmt::Write) -> ::std::fmt::Result {
+                        use ::std::fmt::Write;
+                        f.write_str(stringify!(#name))?;
+                        f.write_str("{")?;
+                        #(
+                            f.write_str(stringify!(#field_names));
+                            f.write_str(": ");
+                            f.write_str(stringify!(self.#field_names.describe()));
+                        )*
+                        f.write_str("}")
+                    }
 
-                            fn prepare(
-                                &'world self,
-                                world: &'world World,
-                                archetype: &'world Archetype,
-                            ) -> Option<Self::Prepared> {
-                                Some(#fetch_name {
-                                    #(#fields_prepare?,)*
-                                })
-                            }
+                    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+                        todo!()
+                    }
 
-                            fn matches(&self, world: &World, archetype: &Archetype) -> bool {
-                                #(self.#field_names.matches(world, archetype))&&*
-                            }
-
-                            fn describe(&self) -> String {
-                                use std::fmt::Write;
-                                let mut buf = String::new();
-                                write!(buf, stringify!(#name));
-                                write!(buf, "{{");
-                                #(
-                                    write!(buf, stringify!(#field_names));
-                                    write!(buf, stringify!(self.#field_names.describe()));
-                                )*
-                                write!(buf, "}}");
-                                buf
-                            }
-
-                            fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-                                [
-                                    #(self.#field_names.access(id, archetype)),*
-                                ].concat()
-                            }
-
-                            fn difference(&self, archetype: &Archetype) -> Vec<String> {
-                                todo!()
-                            }
-                        }
-
-                        #[automatically_derived]
-                        impl<#lf, #(#generics,)*> #crate_name::PreparedFetch<#lf> for #fetch_name<#(#generics),*>
-                        where
-                            #(#generics: PreparedFetch<#lf, Item = #types>),*
-                        {
-
-                            type Item = #name<#lf>;
-
-                            unsafe fn fetch(&#lf mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
-                                Self::Item {
-                                    #(
-                                        #field_names: self.#field_names.fetch(slot),
-                                    )*
-                                }
-                            }
-                        }
-
-                        #fetch_name {
-                            #(#field_names: #fields_expr,)*
-                        }
+                    fn difference(&self, archetype: &Archetype) -> Vec<String> {
+                        todo!()
                     }
                 }
-            };
-
-            Ok(fetch_struct)
+            })
         }
         syn::Fields::Unnamed(_) => todo!(),
         syn::Fields::Unit => todo!(),
     }
 }
 
-fn map_lifetime(ty: Type, lifetime: Lifetime) -> Type {
-    match ty {
-        Type::Reference(ty) => Type::Reference(TypeReference {
-            lifetime: Some(lifetime),
-            ..ty
-        }),
-        v => v,
-    }
-}
-
-struct FetchExpr {
-    expr: Expr,
-}
-
-fn parse_fetch_expr(input: &Attribute) -> Result<FetchExpr> {
-    input.parse_args_with(|input: ParseStream| {
-        // let path: Path = input.parse()?;
-        // parenthesized!(content in input);
-        Ok(FetchExpr {
-            expr: input.parse()?,
-        })
-    })
-}
-
+#[derive(Debug)]
 struct Attrs {
-    fetch: Option<FetchExpr>,
+    extras: Option<MetaList>,
 }
 
 impl Attrs {
     fn get(input: &[Attribute]) -> Result<Self> {
-        let mut res = Self { fetch: None };
+        let mut res = Self { extras: None };
 
         for attr in input {
             if attr.path.is_ident("fetch") {
-                let fetch = parse_fetch_expr(attr)?;
-                res.fetch = Some(fetch);
+                attr.parse_meta()?;
+                let list = match attr.parse_meta().unwrap() {
+                    syn::Meta::List(list) => list,
+                    _ => {
+                        return Err(Error::new(
+                            Span::call_site(),
+                            "Expected a MetaList for `fetch`",
+                        ))
+                    }
+                };
+
+                res.extras = Some(list);
             }
         }
 

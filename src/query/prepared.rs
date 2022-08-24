@@ -173,7 +173,10 @@ where
             idxs[i] = (
                 self.prepare_archetype(arch).ok_or_else(|| {
                     let arch = self.world.archetype(arch);
-                    Error::UnmatchedFetch(id, self.fetch.describe(), self.fetch.difference(arch))
+                    let mut buf = String::new();
+                    self.fetch.describe(&mut buf).unwrap();
+
+                    Error::UnmatchedFetch(id, buf, self.fetch.difference(arch))
                 })?,
                 slot,
             );
@@ -203,7 +206,10 @@ where
 
         let idx = self.prepare_archetype(arch).ok_or_else(|| {
             let arch = self.world.archetype(arch);
-            Error::UnmatchedFetch(id, self.fetch.describe(), self.fetch.difference(arch))
+            let mut buf = String::new();
+            self.fetch.describe(&mut buf).unwrap();
+
+            Error::UnmatchedFetch(id, buf, self.fetch.difference(arch))
         })?;
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique

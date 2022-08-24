@@ -1,3 +1,5 @@
+use std::fmt::{self, Write};
+
 use crate::{ComponentValue, Fetch, PreparedFetch};
 
 use super::FetchItem;
@@ -30,8 +32,9 @@ where
         true
     }
 
-    fn describe(&self) -> String {
-        format!("opt {}", self.0.describe())
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        f.write_str("opt");
+        self.0.describe(f)
     }
 
     fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
@@ -101,8 +104,10 @@ where
         true
     }
 
-    fn describe(&self) -> String {
-        format!("opt {}", self.inner.describe())
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        f.write_str("opt_or(");
+        self.inner.describe(f)?;
+        f.write_str(")")
     }
 
     fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
