@@ -97,34 +97,31 @@ fn derive_data_struct(
             let (fields_decl, fields_expr, fields_prepare): (Vec<_>, Vec<_>, Vec<_>) =
                 process_results(iter, |iter| multiunzip(iter))?;
 
-            let impl_generics = quote!(#(#generics: Fetch<#lf>),*);
-            let impl_generics_prepared = quote!(#(#generics: PreparedFetch<#lf>),*);
-
             let fetch_struct = quote! {
-                impl<#lf> #name<#lf> {
-                    /// Returns the associated fetch.
-                    pub fn as_fetch(&self) -> impl Fetch {
-                        use #crate_name::*;
+                    impl<#lf> #name<#lf> {
+                        /// Returns the associated fetch.
+                        pub fn as_fetch<'lifetime>() -> impl Fetch<'lifetime> {
+                            use #crate_name::*;
 
-                        pub struct #fetch_name<#(#generics),*> {
+                        struct #fetch_name<#(#generics),*> {
                             #(#fields_decl,)*
                         }
 
                         #[automatically_derived]
-                        impl<#lf, #(#generics,)*> #crate_name::Fetch<#lf> for #fetch_name<#(#generics),*>
-                            where
-                                #(#generics: Fetch,
-                                <#generics as #crate_name::Fetch>::Prepared: #crate_name::PreparedFetch<#lf, Item = #types>
-                            ),*
+                        impl<'world, #(#generics,)*> #crate_name::Fetch<'world> for #fetch_name<#(#generics),*>
+                        where
+                            #(#generics: Fetch<'world>,
+                            <#generics as Fetch<'world>>::Prepared: for<#lf> #crate_name::PreparedFetch<#lf, Item = #types> + 'world
+                        ),*
                         {
                             const MUTABLE: bool = #(#generics::MUTABLE)|*;
 
                             type Prepared = #fetch_name<A::Prepared, B::Prepared, C::Prepared>;
 
                             fn prepare(
-                                &#lf self,
-                                world: &#lf World,
-                                archetype: &#lf Archetype,
+                                &'world self,
+                                world: &'world World,
+                                archetype: &'world Archetype,
                             ) -> Option<Self::Prepared> {
                                 Some(#fetch_name {
                                     #(#fields_prepare?,)*
@@ -161,8 +158,8 @@ fn derive_data_struct(
 
                         #[automatically_derived]
                         impl<#lf, #(#generics,)*> #crate_name::PreparedFetch<#lf> for #fetch_name<#(#generics),*>
-                            where
-                                #(#generics: PreparedFetch<Item = #types>),*
+                        where
+                            #(#generics: PreparedFetch<#lf, Item = #types>),*
                         {
 
                             type Item = #name<#lf>;
@@ -170,7 +167,7 @@ fn derive_data_struct(
                             unsafe fn fetch(&#lf mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
                                 Self::Item {
                                     #(
-                                    #field_names: self.#field_names.fetch(slot),
+                                        #field_names: self.#field_names.fetch(slot),
                                     )*
                                 }
                             }

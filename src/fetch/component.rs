@@ -43,7 +43,7 @@ where
         Some(PreparedComponent { borrow })
     }
 
-    fn matches(&self, _: &'w World, archetype: &'w Archetype) -> bool {
+    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
         archetype.has(self.id())
     }
 
@@ -74,6 +74,10 @@ where
     }
 }
 
+impl<'q, T: ComponentValue> FetchItem<'q> for Component<T> {
+    type Item = &'q T;
+}
+
 #[derive(Debug, Clone)]
 /// Mutable component fetch
 /// See [crate::Component::as_mut]
@@ -94,7 +98,7 @@ where
         Some(PreparedComponentMut { borrow, changes })
     }
 
-    fn matches(&self, _: &'w World, archetype: &'w Archetype) -> bool {
+    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
         archetype.has(self.0.id())
     }
     fn describe(&self) -> String {
@@ -122,6 +126,10 @@ where
             vec![]
         }
     }
+}
+
+impl<'q, T: ComponentValue> FetchItem<'q> for Mutable<T> {
+    type Item = &'q mut T;
 }
 
 impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
@@ -154,15 +162,15 @@ pub struct Relations<T: ComponentValue> {
     component: Component<T>,
 }
 
-impl<'a, T> Fetch<'a> for Relations<T>
+impl<'w, T> Fetch<'w> for Relations<T>
 where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedRelations<'a, T>;
+    type Prepared = PreparedRelations<'w, T>;
 
-    fn prepare(&self, world: &'a World, arch: &'a Archetype) -> Option<Self::Prepared> {
+    fn prepare(&self, world: &'w World, arch: &'w Archetype) -> Option<Self::Prepared> {
         let relation = self.component.id().low();
         let borrows: SmallVec<[(Entity, AtomicRef<[T]>); 4]> = {
             arch.storage()
@@ -189,7 +197,7 @@ where
         Some(PreparedRelations { borrows })
     }
 
-    fn matches(&self, _: &'a World, _: &'a Archetype) -> bool {
+    fn matches(&self, _: &World, _: &Archetype) -> bool {
         true
     }
 
@@ -212,6 +220,10 @@ where
             })
             .collect_vec()
     }
+}
+
+impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {
+    type Item = RelationsIter<'q, T>;
 }
 
 #[doc(hidden)]

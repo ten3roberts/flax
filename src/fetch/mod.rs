@@ -1,6 +1,7 @@
 mod component;
 mod ext;
 mod opt;
+mod to_fetch;
 
 pub use component::*;
 pub use ext::*;
@@ -12,18 +13,24 @@ use crate::{
     ArchetypeId, Entity, World,
 };
 
+/// Trait which gives an associated `Item` fetch type
+pub trait FetchItem<'q> {
+    /// The item yielded by the prepared fetch
+    type Item;
+}
+
 /// Describes a type which can fetch itself from an archetype
-pub trait Fetch<'q> {
+pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// true if the fetch mutates any component and thus needs a change event
     const MUTABLE: bool;
 
     /// The prepared version of the fetch
-    type Prepared: for<'x> PreparedFetch<'x> + 'q;
+    type Prepared: for<'x> PreparedFetch<'x, Item = <Self as FetchItem<'x>>::Item> + 'w;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
-    fn prepare(&'q self, world: &'q World, archetype: &'q Archetype) -> Option<Self::Prepared>;
+    fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
     /// Returns true if the fetch matches the archetype
-    fn matches(&self, world: &'q World, archetype: &'q Archetype) -> bool;
+    fn matches(&self, world: &World, archetype: &Archetype) -> bool;
     /// Describes the fetch in a human-readable fashion
     fn describe(&self) -> String;
     /// Returns which components and how will be accessed for an archetype.
@@ -41,7 +48,7 @@ impl<'w> Fetch<'w> for () {
         Some(())
     }
 
-    fn matches(&self, _: &'w World, _: &'w Archetype) -> bool {
+    fn matches(&self, _: &World, _: &Archetype) -> bool {
         true
     }
 
@@ -56,6 +63,10 @@ impl<'w> Fetch<'w> for () {
     fn difference(&self, _: &Archetype) -> Vec<String> {
         vec![]
     }
+}
+
+impl<'q> FetchItem<'q> for () {
+    type Item = ();
 }
 
 impl<'q> PreparedFetch<'q> for () {
@@ -99,6 +110,10 @@ pub struct PreparedEntities<'a> {
     entities: &'a [Entity],
 }
 
+impl<'q> FetchItem<'q> for Entities {
+    type Item = Entity;
+}
+
 impl<'w> Fetch<'w> for Entities {
     const MUTABLE: bool = false;
 
@@ -110,7 +125,7 @@ impl<'w> Fetch<'w> for Entities {
         })
     }
 
-    fn matches(&self, _: &'w World, _: &'w Archetype) -> bool {
+    fn matches(&self, _: &World, _: &Archetype) -> bool {
         true
     }
 
@@ -138,6 +153,12 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
+        impl<'q, $($ty, )*> FetchItem<'q> for ($($ty,)*)
+            where $($ty: FetchItem<'q>,)*
+        {
+            type Item = ($($ty::Item,)*);
+
+        }
         impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
             where $($ty: Fetch<'w>,)*
         {
@@ -150,7 +171,7 @@ macro_rules! tuple_impl {
                 )*))
             }
 
-            fn matches(&self, world: &'w World, archetype: &'w Archetype) -> bool {
+            fn matches(&self, world: &World, archetype: &Archetype) -> bool {
                 $((self.$idx).matches(world, archetype)) && *
             }
 

@@ -1,4 +1,6 @@
-use crate::{Fetch, PreparedFetch};
+use crate::{ComponentValue, Fetch, PreparedFetch};
+
+use super::FetchItem;
 
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
@@ -24,7 +26,7 @@ where
         })
     }
 
-    fn matches(&self, _: &'w crate::World, _: &'w crate::Archetype) -> bool {
+    fn matches(&self, _: &crate::World, _: &crate::Archetype) -> bool {
         true
     }
 
@@ -39,6 +41,10 @@ where
     fn difference(&self, _: &crate::Archetype) -> Vec<String> {
         vec![]
     }
+}
+
+impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
+    type Item = Option<F::Item>;
 }
 
 #[doc(hidden)]
@@ -72,9 +78,9 @@ impl<F, V> OptOr<F, V> {
 
 impl<'w, F, V> Fetch<'w> for OptOr<F, V>
 where
-    F: for<'x> Fetch<'x>,
-    for<'x, 'y> <F as Fetch<'x>>::Prepared: PreparedFetch<'y, Item = &'y V>,
-    V: 'static,
+    F: Fetch<'w> + for<'q> FetchItem<'q, Item = &'q V>,
+    for<'q> <F as Fetch<'w>>::Prepared: PreparedFetch<'q, Item = &'q V>,
+    V: ComponentValue,
 {
     const MUTABLE: bool = F::MUTABLE;
 
@@ -91,7 +97,7 @@ where
         })
     }
 
-    fn matches(&self, _: &'w crate::World, _: &'w crate::Archetype) -> bool {
+    fn matches(&self, _: &crate::World, _: &crate::Archetype) -> bool {
         true
     }
 
@@ -106,6 +112,10 @@ where
     fn difference(&self, _: &crate::Archetype) -> Vec<String> {
         vec![]
     }
+}
+
+impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {
+    type Item = &'q V;
 }
 
 #[doc(hidden)]
