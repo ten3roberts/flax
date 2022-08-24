@@ -11,8 +11,8 @@ use crate::{
     fetch::Fetch,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, All, And, Component, ComponentValue, Filter, PreparedFetch, With, Without,
-    World,
+    Access, AccessKind, All, And, Component, ComponentValue, FetchItem, Filter, PreparedFetch,
+    With, Without, World,
 };
 
 pub use self::prepared::PreparedQuery;
@@ -47,7 +47,10 @@ where
     }
 }
 
-impl<Q> Query<Q, Without> {
+impl<Q> Query<Q, Without>
+where
+    Q: for<'x> Fetch<'x>,
+{
     /// Construct a new query which will fetch all items in the given query.
 
     /// The query can be either a singular component, a tuple of components, or
@@ -67,7 +70,10 @@ impl<Q> Query<Q, Without> {
     }
 }
 
-impl<Q> Query<Q, All> {
+impl<Q> Query<Q, All>
+where
+    Q: for<'x> Fetch<'x>,
+{
     /// Create a query which will yield components
     pub fn with_components(query: Q) -> Self {
         Self {
@@ -180,8 +186,7 @@ where
     /// Gathers all elements in the query as a Vec of owned values.
     pub fn as_vec<'w, C>(&'w mut self, world: &'w World) -> Vec<C>
     where
-        for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Item:
-            TupleCloned<Cloned = C>,
+        for<'q> <Q as FetchItem<'q>>::Item: TupleCloned<Cloned = C>,
     {
         let mut prepared = self.iter(world);
         prepared.iter().map(|v| v.cloned()).collect_vec()
