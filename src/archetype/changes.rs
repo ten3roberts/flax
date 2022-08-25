@@ -1,5 +1,3 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use itertools::Itertools;
 
 use crate::ComponentInfo;
@@ -62,6 +60,7 @@ impl ChangeKind {
         matches!(self, Self::Modified)
     }
 
+    #[cfg(test)]
     pub(crate) fn is_modified_or_inserted(&self) -> bool {
         self.is_modified() || self.is_inserted()
     }
@@ -121,20 +120,21 @@ impl Changes {
         }
     }
 
-    pub(crate) fn as_set(&self, f: impl Fn(&Change) -> bool) -> BTreeSet<Slot> {
+    #[cfg(test)]
+    pub(crate) fn as_set(&self, f: impl Fn(&Change) -> bool) -> std::collections::BTreeSet<Slot> {
         self.iter()
             .filter_map(|v| if f(v) { Some(v.slice) } else { None })
             .flatten()
             .collect()
     }
 
-    pub(crate) fn as_map(&self) -> BTreeMap<Slot, (u32, ChangeKind)> {
-        self.inner
-            .iter()
-            .flat_map(|v| v.slice.iter().map(move |p| (p, (v.tick, v.kind))))
-            .collect()
-    }
-
+    // #[cfg(test)]
+    // pub(crate) fn as_map(&self) -> std::collections::BTreeMap<Slot, (u32, ChangeKind)> {
+    //     self.inner
+    //         .iter()
+    //         .flat_map(|v| v.slice.iter().map(move |p| (p, (v.tick, v.kind))))
+    //         .collect()
+    // }
     #[cfg(debug_assertions)]
     pub(crate) fn assert_ordered(&self, msg: &str) {
         let groups = self.inner.iter().copied().group_by(|v| v.kind);
@@ -278,7 +278,7 @@ impl Changes {
     }
 
     #[cfg(test)]
-    pub(crate) fn as_changed_set(&self, tick: u32) -> BTreeSet<Slot> {
+    pub(crate) fn as_changed_set(&self, tick: u32) -> std::collections::BTreeSet<Slot> {
         self.as_set(|v| v.kind.is_modified_or_inserted() && v.tick > tick)
     }
 

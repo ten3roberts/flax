@@ -253,16 +253,6 @@ pub struct StorageBorrowDyn<'a> {
 }
 
 impl<'a> StorageBorrowDyn<'a> {
-    pub(crate) fn new(data: AtomicRef<'a, NonNull<u8>>, info: ComponentInfo, len: usize) -> Self {
-        Self { data, info, len }
-    }
-
-    // pub(crate) unsafe fn downcast<T: ComponentValue>(self) -> AtomicRef<'a, [T]> {
-    //     AtomicRef::map(self.data, |v| {
-    //         slice::from_raw_parts(v.as_ptr().cast::<T>(), self.len)
-    //     })
-    // }
-
     /// Returns a pointer to the value at the given slot.
     ///
     /// Returns None if the slot is out of bounds.

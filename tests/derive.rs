@@ -1,5 +1,4 @@
 use flax_derive::Fetch;
-use glam::*;
 
 #[test]
 fn derive_fetch() {

@@ -156,7 +156,10 @@ pub use component::*;
 pub use components::*;
 pub use entity::*;
 pub use error::Error;
-pub use fetch::*;
+pub use fetch::{
+    relations_like, Entities, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, PreparedFetch,
+    Relations,
+};
 pub use filter::*;
 pub use meta::*;
 pub use query::*;

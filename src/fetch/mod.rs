@@ -1,7 +1,6 @@
 mod component;
 mod ext;
 mod opt;
-mod to_fetch;
 
 use core::fmt;
 use std::fmt::Write;
@@ -15,6 +14,17 @@ use crate::{
     system::Access,
     ArchetypeId, Entity, World,
 };
+
+/// Represents the world data necessary for preparing a fetch
+#[derive(Copy, Clone)]
+pub struct FetchPrepareData<'w> {
+    /// The current world
+    pub world: &'w World,
+    /// The iterated archetype to prepare for
+    pub arch: &'w Archetype,
+    /// The archetype id
+    pub arch_id: ArchetypeId,
+}
 
 /// Trait which gives an associated `Item` fetch type
 pub trait FetchItem<'q> {
@@ -31,15 +41,17 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     type Prepared: for<'x> PreparedFetch<'x, Item = <Self as FetchItem<'x>>::Item> + 'w;
     /// Prepare the query against an archetype. Returns None if doesn't match.
     /// If Self::matches true, this needs to return Some
-    fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared>;
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared>;
+
     /// Returns true if the fetch matches the archetype
-    fn matches(&self, world: &World, archetype: &Archetype) -> bool;
+    fn matches(&self, data: FetchPrepareData) -> bool;
+    /// Returns which components and how will be accessed for an archetype.
+    fn access(&self, data: FetchPrepareData) -> Vec<Access>;
+    /// Returns the required elements in self which are not in archetype
+    fn difference(&self, data: FetchPrepareData) -> Vec<String>;
+
     /// Describes the fetch in a human-readable fashion
     fn describe(&self, f: &mut dyn Write) -> fmt::Result;
-    /// Returns which components and how will be accessed for an archetype.
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access>;
-    /// Returns the required elements in self which are not in archetype
-    fn difference(&self, archetype: &Archetype) -> Vec<String>;
 }
 
 impl<'w> Fetch<'w> for () {
@@ -47,11 +59,11 @@ impl<'w> Fetch<'w> for () {
 
     type Prepared = ();
 
-    fn prepare(&'w self, _: &'w World, _: &'w Archetype) -> Option<Self::Prepared> {
+    fn prepare(&'w self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(())
     }
 
-    fn matches(&self, _: &World, _: &Archetype) -> bool {
+    fn matches(&self, _: FetchPrepareData) -> bool {
         true
     }
 
@@ -59,11 +71,11 @@ impl<'w> Fetch<'w> for () {
         write!(f, "()")
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         vec![]
     }
 
-    fn difference(&self, _: &Archetype) -> Vec<String> {
+    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
         vec![]
     }
 }
@@ -122,13 +134,13 @@ impl<'w> Fetch<'w> for Entities {
 
     type Prepared = PreparedEntities<'w>;
 
-    fn prepare(&'w self, _: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(PreparedEntities {
-            entities: archetype.entities(),
+            entities: data.arch.entities(),
         })
     }
 
-    fn matches(&self, _: &World, _: &Archetype) -> bool {
+    fn matches(&self, _: FetchPrepareData) -> bool {
         true
     }
 
@@ -136,11 +148,11 @@ impl<'w> Fetch<'w> for Entities {
         f.write_str("entities")
     }
 
-    fn difference(&self, _: &Archetype) -> Vec<String> {
+    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
         vec![]
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         vec![]
     }
 }
@@ -168,14 +180,14 @@ macro_rules! tuple_impl {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
             type Prepared       = ($($ty::Prepared,)*);
 
-            fn prepare(&'w self, world: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
+            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
                 Some(($(
-                    (self.$idx).prepare(world, archetype)?,
+                    (self.$idx).prepare(data)?,
                 )*))
             }
 
-            fn matches(&self, world: &World, archetype: &Archetype) -> bool {
-                $((self.$idx).matches(world, archetype)) && *
+            fn matches(&self, data: FetchPrepareData) -> bool {
+                $((self.$idx).matches(data)) && *
             }
 
             fn describe(&self, f: &mut dyn Write) -> fmt::Result {
@@ -184,16 +196,15 @@ macro_rules! tuple_impl {
                 f.write_str(")")
             }
 
-            fn difference(&self, archetype: &Archetype) -> Vec<String> {
-                [$((self.$idx).difference(archetype)),*].concat()
-            }
-
-            fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
+            fn access(&self, data: FetchPrepareData) -> Vec<Access> {
                 [ $(
-                    (self.$idx).access(id, archetype),
+                    (self.$idx).access(data),
                 )* ].into_iter().flatten().collect()
             }
 
+            fn difference(&self, data: FetchPrepareData) -> Vec<String> {
+                [$((self.$idx).difference(data)),*].concat()
+            }
         }
 
         impl<'q, $($ty, )*> PreparedFetch<'q> for ($($ty,)*)

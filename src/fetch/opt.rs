@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use crate::{ComponentValue, Fetch, PreparedFetch};
+use crate::{fetch::FetchPrepareData, ComponentValue, Fetch, PreparedFetch};
 
 use super::FetchItem;
 
@@ -18,30 +18,26 @@ where
 
     type Prepared = PreparedOpt<<F as Fetch<'w>>::Prepared>;
 
-    fn prepare(
-        &'w self,
-        world: &'w crate::World,
-        archetype: &'w crate::Archetype,
-    ) -> Option<Self::Prepared> {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(PreparedOpt {
-            inner: self.0.prepare(world, archetype),
+            inner: self.0.prepare(data),
         })
     }
 
-    fn matches(&self, _: &crate::World, _: &crate::Archetype) -> bool {
+    fn matches(&self, _: FetchPrepareData) -> bool {
         true
     }
 
     fn describe(&self, f: &mut dyn Write) -> fmt::Result {
-        f.write_str("opt");
+        f.write_str("opt")?;
         self.0.describe(f)
     }
 
-    fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
-        self.0.access(id, archetype)
+    fn access(&self, data: FetchPrepareData) -> Vec<crate::Access> {
+        self.0.access(data)
     }
 
-    fn difference(&self, _: &crate::Archetype) -> Vec<String> {
+    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
         vec![]
     }
 }
@@ -89,32 +85,28 @@ where
 
     type Prepared = PreparedOptOr<'w, <F as Fetch<'w>>::Prepared, V>;
 
-    fn prepare(
-        &'w self,
-        world: &'w crate::World,
-        archetype: &'w crate::Archetype,
-    ) -> Option<Self::Prepared> {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(PreparedOptOr {
-            inner: self.inner.prepare(world, archetype),
+            inner: self.inner.prepare(data),
             or: &self.or,
         })
     }
 
-    fn matches(&self, _: &crate::World, _: &crate::Archetype) -> bool {
+    fn matches(&self, _: FetchPrepareData) -> bool {
         true
     }
 
     fn describe(&self, f: &mut dyn Write) -> fmt::Result {
-        f.write_str("opt_or(");
+        f.write_str("opt_or(")?;
         self.inner.describe(f)?;
         f.write_str(")")
     }
 
-    fn access(&self, id: crate::ArchetypeId, archetype: &crate::Archetype) -> Vec<crate::Access> {
-        self.inner.access(id, archetype)
+    fn access(&self, data: FetchPrepareData) -> Vec<crate::Access> {
+        self.inner.access(data)
     }
 
-    fn difference(&self, _: &crate::Archetype) -> Vec<String> {
+    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
         vec![]
     }
 }

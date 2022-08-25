@@ -3,14 +3,14 @@ use std::mem::{self, MaybeUninit};
 use smallvec::SmallVec;
 
 use crate::{
-    error::Result, All, Archetype, ArchetypeId, Entity, EntityLocation, Error, Fetch, Filter,
-    PreparedFetch, World,
+    error::Result, fetch::FetchPrepareData, All, Archetype, ArchetypeId, Entity, EntityLocation,
+    Error, Fetch, Filter, PreparedFetch, World,
 };
 
 use super::iter::{BatchedIter, QueryIter};
 
 pub struct PreparedArchetype<'w, Q> {
-    pub(crate) id: ArchetypeId,
+    pub(crate) arch_id: ArchetypeId,
     pub(crate) arch: &'w Archetype,
     pub(crate) fetch: Q,
 }
@@ -99,15 +99,18 @@ where
             self.prepared = self
                 .archetypes
                 .iter()
-                .map(|&v| {
-                    let arch = self.world.archetype(v);
-                    PreparedArchetype {
-                        id: v,
+                .map(|&arch_id| {
+                    let arch = self.world.archetype(arch_id);
+                    let data = FetchPrepareData {
+                        world: self.world,
                         arch,
-                        fetch: self
-                            .fetch
-                            .prepare(self.world, arch)
-                            .expect("Mismathed archetype"),
+                        arch_id,
+                    };
+
+                    PreparedArchetype {
+                        arch_id,
+                        arch,
+                        fetch: self.fetch.prepare(data).expect("Mismathed archetype"),
                     }
                 })
                 .collect();
@@ -131,19 +134,24 @@ where
         self.iter_batched().map(|v| v.slots().len()).sum()
     }
 
-    fn prepare_archetype(&mut self, arch: ArchetypeId) -> Option<usize> {
+    fn prepare_archetype(&mut self, arch_id: ArchetypeId) -> Option<usize> {
         let world = self.world;
         let prepared = &mut self.prepared;
 
-        if let Some(idx) = prepared.iter().position(|v| v.id == arch) {
+        if let Some(idx) = prepared.iter().position(|v| v.arch_id == arch_id) {
             Some(idx)
         } else {
-            let archetype = world.archetype(arch);
-            let fetch = self.fetch.prepare(world, archetype)?;
+            let arch = world.archetype(arch_id);
+            let data = FetchPrepareData {
+                world: self.world,
+                arch,
+                arch_id,
+            };
+            let fetch = self.fetch.prepare(data)?;
 
             prepared.push(PreparedArchetype {
-                id: arch,
-                arch: archetype,
+                arch_id,
+                arch,
                 fetch,
             });
 
@@ -169,14 +177,25 @@ where
 
         for i in 0..C {
             let id = ids[i];
-            let EntityLocation { arch, slot } = self.world.location(id)?;
+            let EntityLocation {
+                arch: arch_id,
+                slot,
+            } = self.world.location(id)?;
             idxs[i] = (
-                self.prepare_archetype(arch).ok_or_else(|| {
-                    let arch = self.world.archetype(arch);
+                self.prepare_archetype(arch_id).ok_or_else(|| {
+                    let arch = self.world.archetype(arch_id);
                     let mut buf = String::new();
                     self.fetch.describe(&mut buf).unwrap();
 
-                    Error::UnmatchedFetch(id, buf, self.fetch.difference(arch))
+                    Error::UnmatchedFetch(
+                        id,
+                        buf,
+                        self.fetch.difference(FetchPrepareData {
+                            world: self.world,
+                            arch,
+                            arch_id,
+                        }),
+                    )
                 })?,
                 slot,
             );
@@ -202,14 +221,25 @@ where
     /// Get the fetch items for an entity.
     /// **Note**: Filters are ignored.
     pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
-        let EntityLocation { arch, slot } = self.world.location(id)?;
+        let EntityLocation {
+            arch: arch_id,
+            slot,
+        } = self.world.location(id)?;
 
-        let idx = self.prepare_archetype(arch).ok_or_else(|| {
-            let arch = self.world.archetype(arch);
+        let idx = self.prepare_archetype(arch_id).ok_or_else(|| {
+            let arch = self.world.archetype(arch_id);
             let mut buf = String::new();
             self.fetch.describe(&mut buf).unwrap();
 
-            Error::UnmatchedFetch(id, buf, self.fetch.difference(arch))
+            Error::UnmatchedFetch(
+                id,
+                buf,
+                self.fetch.difference(FetchPrepareData {
+                    world: self.world,
+                    arch,
+                    arch_id,
+                }),
+            )
         })?;
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
