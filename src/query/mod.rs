@@ -9,6 +9,7 @@ use itertools::Itertools;
 use crate::{
     archetype::ArchetypeId,
     fetch::Fetch,
+    fetch::FetchPrepareData,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
     Access, AccessKind, All, And, Component, ComponentValue, FetchItem, Filter, With, Without,
@@ -198,9 +199,14 @@ where
     fn get_archetypes(&self, world: &World) -> Vec<ArchetypeId> {
         world
             .archetypes()
-            .filter_map(|(id, arch)| {
-                if self.fetch.matches(world, arch) && self.filter.matches(arch) {
-                    Some(id)
+            .filter_map(|(arch_id, arch)| {
+                let data = FetchPrepareData {
+                    world,
+                    arch,
+                    arch_id,
+                };
+                if self.filter.matches(arch) && self.fetch.matches(data) {
+                    Some(arch_id)
                 } else {
                     None
                 }
@@ -218,10 +224,15 @@ where
         let archetypes = self.get_archetypes(world);
         let accesses = archetypes
             .iter()
-            .flat_map(|&id| {
-                let archetype = world.archetype(id);
-                let mut res = self.fetch.access(id, archetype);
-                res.append(&mut self.filter.access(id, archetype));
+            .flat_map(|&arch_id| {
+                let arch = world.archetype(arch_id);
+                let data = FetchPrepareData {
+                    world,
+                    arch,
+                    arch_id,
+                };
+                let mut res = self.fetch.access(data);
+                res.append(&mut self.filter.access(arch_id, arch));
                 res
             })
             .chain([Access {

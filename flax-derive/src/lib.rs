@@ -1,16 +1,8 @@
-use itertools::{multiunzip, process_results, Itertools};
+use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use proc_macro_crate::FoundCrate;
-use quote::{quote, ToTokens, TokenStreamExt};
-use syn::{
-    braced, bracketed, parenthesized,
-    parse::{Parse, ParseStream},
-    parse_macro_input,
-    spanned::Spanned,
-    token::Paren,
-    Attribute, DataStruct, DeriveInput, Error, Expr, Field, Ident, Lifetime, MetaList, Path,
-    Result, Token, Type, TypePath, TypeReference, Visibility,
-};
+use quote::quote;
+use syn::*;
 
 /// ```rust
 /// use glam::*;
@@ -140,7 +132,6 @@ fn derive_data_struct(
     let prepared_name = Ident::new(&format!("Prepared{}", name), Span::call_site());
     let attrs = Attrs::get(&input.attrs)?;
 
-    eprintln!("Found attrs: {attrs:?}");
     match data.fields {
         syn::Fields::Named(ref fields) => {
             let fields = &fields.named;
@@ -184,43 +175,50 @@ fn derive_data_struct(
                     type Prepared = #prepared_name<'w>;
                     fn prepare(
                         &'w self,
-                        world: &'w World,
-                        arch: &'w Archetype,
+                        data: #crate_name::fetch::FetchPrepareData<'w>,
                     ) -> Option<Self::Prepared> {
                         Some(Self::Prepared {
-                            #(#field_names: self.#field_names.prepare(world, arch)?),*
+                            #(#field_names: self.#field_names.prepare(data)?),*
                         })
                     }
 
 
-                    fn matches(&self, _world: &World, _arch: &Archetype) -> bool {
-                        ( #(self.#field_names.matches(_world, _arch))&&* )
+                    fn matches(&self, data: #crate_name::fetch::FetchPrepareData) -> bool {
+                        ( #(self.#field_names.matches(data))&&* )
                     }
 
                     fn describe(&self, f: &mut dyn ::std::fmt::Write) -> ::std::fmt::Result {
                         use ::std::fmt::Write;
                         f.write_str(stringify!(#name))?;
                         f.write_str("{")?;
+
                         #(
-                            f.write_str(stringify!(#field_names));
-                            f.write_str(": ");
-                            f.write_str(stringify!(self.#field_names.describe()));
+                            f.write_str(stringify!(#field_names))?;
+                            f.write_str(": ")?;
+                            f.write_str(stringify!(self.#field_names.describe()))?;
                         )*
+
                         f.write_str("}")
                     }
 
-                    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-                        todo!()
+                    fn access(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<Access> {
+                        [ #(self.#field_names.access(data)),* ].into_iter().flatten().collect()
                     }
 
-                    fn difference(&self, archetype: &Archetype) -> Vec<String> {
-                        todo!()
+                    fn difference(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<String> {
+                        [ #(self.#field_names.difference(data)),* ].concat()
                     }
                 }
             })
         }
-        syn::Fields::Unnamed(_) => todo!(),
-        syn::Fields::Unit => todo!(),
+        syn::Fields::Unnamed(_) => Err(Error::new(
+            Span::call_site(),
+            "Deriving fetch for a tuple struct is not supported",
+        )),
+        syn::Fields::Unit => Err(Error::new(
+            Span::call_site(),
+            "Deriving fetch for a unit struct is not supported",
+        )),
     }
 }
 

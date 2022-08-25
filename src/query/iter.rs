@@ -2,7 +2,8 @@ use std::{iter::Flatten, slice::IterMut};
 
 use crate::{
     archetype::{Slice, Slot},
-    Archetype, Fetch, Filter, FilterIter, PreparedFetch, PreparedFilter,
+    fetch::PreparedFetch,
+    Archetype, Fetch, Filter, FilterIter, PreparedFilter,
 };
 
 use super::prepared::PreparedArchetype;

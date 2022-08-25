@@ -5,8 +5,8 @@ use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{
-    archetype::{Archetype, Changes, Slice, Slot},
-    wildcard, AccessKind, ArchetypeId, Change, Component, ComponentValue,
+    archetype::{Changes, Slice, Slot},
+    wildcard, AccessKind, Change, Component, ComponentValue,
 };
 
 use super::*;
@@ -38,32 +38,28 @@ where
 
     type Prepared = PreparedComponent<'w, T>;
 
-    fn prepare(&self, _: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
-        let borrow = archetype.borrow(*self)?;
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        let borrow = data.arch.borrow(*self)?;
         Some(PreparedComponent { borrow })
     }
 
-    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
-        archetype.has(self.id())
+    fn matches(&self, data: FetchPrepareData) -> bool {
+        data.arch.has(self.id())
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
-        f.write_str(self.name())
-    }
-
-    fn difference(&self, archetype: &Archetype) -> Vec<String> {
-        if archetype.has(self.id()) {
+    fn difference(&self, data: FetchPrepareData) -> Vec<String> {
+        if data.arch.has(self.id()) {
             vec![]
         } else {
             vec![self.name().to_string()]
         }
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if archetype.has(self.id()) {
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        if data.arch.has(self.id()) {
             vec![Access {
                 kind: AccessKind::Archetype {
-                    id,
+                    id: data.arch_id,
                     component: self.id(),
                 },
                 mutable: false,
@@ -71,6 +67,10 @@ where
         } else {
             vec![]
         }
+    }
+
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
@@ -91,15 +91,15 @@ where
 
     type Prepared = PreparedComponentMut<'w, T>;
 
-    fn prepare(&self, _: &'w World, archetype: &'w Archetype) -> Option<Self::Prepared> {
-        let borrow = archetype.borrow_mut(self.0)?;
-        let changes = archetype.changes_mut(self.0.id())?;
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        let borrow = data.arch.borrow_mut(self.0)?;
+        let changes = data.arch.changes_mut(self.0.id())?;
 
         Some(PreparedComponentMut { borrow, changes })
     }
 
-    fn matches(&self, _: &World, archetype: &Archetype) -> bool {
-        archetype.has(self.0.id())
+    fn matches(&self, data: FetchPrepareData) -> bool {
+        data.arch.has(self.0.id())
     }
 
     fn describe(&self, f: &mut dyn Write) -> fmt::Result {
@@ -107,19 +107,19 @@ where
         f.write_str(self.0.name())
     }
 
-    fn difference(&self, archetype: &Archetype) -> Vec<String> {
-        if archetype.has(self.0.id()) {
+    fn difference(&self, data: FetchPrepareData) -> Vec<String> {
+        if data.arch.has(self.0.id()) {
             vec![]
         } else {
             vec![self.0.name().to_string()]
         }
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if archetype.has(self.0.id()) {
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        if data.arch.has(self.0.id()) {
             vec![Access {
                 kind: AccessKind::Archetype {
-                    id,
+                    id: data.arch_id,
                     component: self.0.id(),
                 },
                 mutable: true,
@@ -172,10 +172,11 @@ where
 
     type Prepared = PreparedRelations<'w, T>;
 
-    fn prepare(&self, world: &'w World, arch: &'w Archetype) -> Option<Self::Prepared> {
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let relation = self.component.id().low();
         let borrows: SmallVec<[(Entity, AtomicRef<[T]>); 4]> = {
-            arch.storage()
+            data.arch
+                .storage()
                 .iter()
                 .map(move |(k, v)| {
                     let (rel, obj) = k.split_pair();
@@ -187,7 +188,7 @@ where
                 // the component type is guaranteed to be the same
                 .map(|(_, obj, _, v)| {
                     (
-                        world
+                        data.world
                             .reconstruct(obj)
                             .expect("Relation object is not alive"),
                         unsafe { v.borrow::<T>() },
@@ -199,7 +200,7 @@ where
         Some(PreparedRelations { borrows })
     }
 
-    fn matches(&self, _: &World, _: &Archetype) -> bool {
+    fn matches(&self, _: FetchPrepareData) -> bool {
         true
     }
 
@@ -207,20 +208,24 @@ where
         write!(f, "relations({})", self.component.name())
     }
 
-    fn difference(&self, _: &Archetype) -> Vec<String> {
-        vec![]
-    }
-
-    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
         let relation = self.component.id().low();
-        arch.storage()
+        data.arch
+            .storage()
             .keys()
             .filter(move |k| k.is_relation() && k.low() == relation)
             .map(|&k| Access {
-                kind: AccessKind::Archetype { id, component: k },
+                kind: AccessKind::Archetype {
+                    id: data.arch_id,
+                    component: k,
+                },
                 mutable: false,
             })
             .collect_vec()
+    }
+
+    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
+        vec![]
     }
 }
 

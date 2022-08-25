@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, fmt::Formatter};
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{Slot, Storage, StorageBorrowDyn},
+    archetype::{Slot, StorageBorrowDyn},
     buffer::ComponentBuffer,
     component, Archetype, ComponentId, ComponentInfo, ComponentValue, MetaData,
 };
