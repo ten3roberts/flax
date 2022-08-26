@@ -176,7 +176,6 @@ where
     pub fn borrow<'w>(&'w mut self, world: &'w World) -> QueryBorrow<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
 
-        eprintln!("Has filter: {}", Q::HAS_FILTER);
         if world.archetype_gen() > self.archetype_gen {
             self.archetypes = self.get_archetypes(world);
         }

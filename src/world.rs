@@ -19,7 +19,7 @@ use crate::{
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentId, ComponentValue, Entity, EntityKind, EntityStoreIter,
+    Component, ComponentId, ComponentValue, Entity, EntityGen, EntityKind, EntityStoreIter,
     EntityStoreIterMut, Error, Filter, Query, RelationExt, RowFormatter, StaticFilter,
 };
 
@@ -42,7 +42,7 @@ impl EntityStores {
 
 pub(crate) struct Archetypes {
     root: ArchetypeId,
-    archetypes: EntityStore<Archetype>,
+    inner: EntityStore<Archetype>,
     gen: AtomicU32,
 }
 
@@ -52,29 +52,31 @@ impl Archetypes {
         let root = archetypes.spawn(Archetype::empty());
         Self {
             root,
-            archetypes,
+            inner: archetypes,
             gen: AtomicU32::new(0),
         }
     }
 
     pub fn get(&self, arch_id: ArchetypeId) -> &Archetype {
-        self.archetypes.get(arch_id).expect("Invalid archetype")
+        self.inner.get(arch_id).expect("Invalid archetype")
     }
 
     pub fn get_mut(&mut self, arch_id: ArchetypeId) -> &mut Archetype {
-        self.archetypes.get_mut(arch_id).expect("Invalid archetype")
+        self.inner.get_mut(arch_id).expect("Invalid archetype")
     }
 
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    pub(crate) fn init<'a>(
+    pub(crate) fn init<I: std::borrow::Borrow<ComponentInfo>>(
         &mut self,
-        components: impl IntoIterator<Item = &'a ComponentInfo>,
+        components: impl IntoIterator<Item = I>,
     ) -> (ArchetypeId, &mut Archetype) {
         let mut cursor = self.root;
 
         for head in components {
-            let cur = &mut self.archetypes.get(cursor).unwrap();
+            let head = head.borrow();
+            let cur = &mut self.inner.get(cursor).expect("Invalid archetype id");
+
             cursor = match cur.edge_to(head.id) {
                 Some(id) => id,
                 None => {
@@ -87,9 +89,9 @@ impl Archetypes {
 
                     // Increase gen
                     self.gen.fetch_add(1, Ordering::Relaxed);
-                    let id = self.archetypes.spawn(new);
+                    let id = self.inner.spawn(new);
 
-                    let (cur, new) = self.archetypes.get_disjoint(cursor, id).unwrap();
+                    let (cur, new) = self.inner.get_disjoint(cursor, id).unwrap();
                     cur.add_edge_to(new, id, cursor, head.id);
 
                     id
@@ -97,7 +99,7 @@ impl Archetypes {
             };
         }
 
-        (cursor, self.archetypes.get_mut(cursor).unwrap())
+        (cursor, self.inner.get_mut(cursor).unwrap())
     }
 
     pub fn root(&mut self) -> &mut Archetype {
@@ -109,19 +111,31 @@ impl Archetypes {
         a: Entity,
         b: Entity,
     ) -> Option<(&mut Archetype, &mut Archetype)> {
-        self.archetypes.get_disjoint(a, b)
+        self.inner.get_disjoint(a, b)
     }
 
     pub fn iter(&self) -> EntityStoreIter<Archetype> {
-        self.archetypes.iter()
+        self.inner.iter()
     }
 
     pub fn iter_mut(&mut self) -> EntityStoreIterMut<Archetype> {
-        self.archetypes.iter_mut()
+        self.inner.iter_mut()
     }
 
     pub fn despawn(&mut self, id: Entity) -> Result<Archetype> {
-        self.archetypes.despawn(id)
+        let arch = self.inner.despawn(id)?;
+        // Remove outgoing edges
+        for (component, dst_id) in &arch.edges {
+            assert!(self.get_mut(*dst_id).edges.remove(component).is_some());
+        }
+
+        Ok(arch)
+    }
+}
+
+impl Default for Archetypes {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -166,6 +180,7 @@ impl World {
 
         let base = arch.len();
         let store = self.entities.init(EntityKind::empty());
+
         let ids = (0..batch.len())
             .map(|idx| {
                 store.spawn(EntityLocation {
@@ -201,16 +216,16 @@ impl World {
             "The length of ids must match the number of slots in `batch`"
         );
 
+        for &component in batch.components() {
+            self.init_component(component)
+                .expect("failed to initialize component");
+        }
+
         for &id in ids {
             assert!(matches!(
                 self.despawn(id),
                 Err(Error::NoSuchEntity(..)) | Ok(())
             ));
-        }
-
-        for &component in batch.components() {
-            self.init_component(component)
-                .expect("failed to initialize component");
         }
 
         let change_tick = self.advance_change_tick();
@@ -221,6 +236,7 @@ impl World {
         for (idx, &id) in ids.iter().enumerate() {
             let kind = id.kind();
             let store = self.entities.init(kind);
+            assert_eq!(store.kind, kind);
             store
                 .spawn_at(
                     id.index(),
@@ -230,7 +246,7 @@ impl World {
                         arch: arch_id,
                     },
                 )
-                .expect("Entity already exists");
+                .unwrap_or_else(|| panic!("Entity {id} already exists"));
         }
 
         let slots = arch.allocate_n(ids);
@@ -433,10 +449,13 @@ impl World {
         let src = self.archetype_mut(arch);
 
         let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
-        let ns = self.entities.init(id.kind());
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
-            ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+            self.entities
+                .init(swapped.kind())
+                .get_mut(swapped)
+                .expect("Invalid entity id")
+                .slot = slot;
         }
 
         *self.location_mut(id).unwrap() = EntityLocation {
@@ -990,7 +1009,8 @@ impl World {
         EntityFormatter { world: self, ids }
     }
 
-    pub(crate) fn reconstruct(&self, id: crate::StrippedEntity) -> Option<Entity> {
+    /// Attempt to find an alive entity given the id
+    pub(crate) fn find_alive(&self, id: crate::StrippedEntity) -> Option<Entity> {
         let ns = self.entities.get(id.kind())?;
 
         ns.reconstruct(id).map(|v| v.0)
@@ -1038,6 +1058,87 @@ impl World {
                 component,
             }));
         };
+    }
+
+    /// Merges `other` into `self`.
+    ///
+    /// Colliding entities will be migrated to a new entity id.
+    ///
+    /// Returns a map from the entity id in `other` to the entity id in `self`.
+    pub fn merge_with(&mut self, other: &mut World) -> BTreeMap<Entity, Entity> {
+        let mut archetypes = mem::take(&mut other.archetypes);
+        let entities = mem::take(&mut other.entities);
+
+        let new_ids: BTreeMap<_, _> = archetypes
+            .inner
+            .iter_mut()
+            .filter(|v| !v.1.has(is_component().id()))
+            .flat_map(|(_, arch)| {
+                arch.entities_mut()
+                    .iter_mut()
+                    .map(|id| {
+                        let old_id = *id;
+                        if !id.is_static() && self.find_alive(id.low()).is_some() {
+                            let new_id = self.spawn_inner(self.archetypes.root, id.kind()).0;
+
+                            *id = new_id;
+                            (old_id, new_id)
+                        } else {
+                            (old_id, old_id)
+                        }
+                    })
+                    .collect_vec()
+            })
+            .collect();
+
+        for (_, arch) in &mut archetypes
+            .inner
+            .iter_mut()
+            .filter(|v| !v.1.has(is_component().id()))
+        {
+            let mut batch = BatchSpawn::new(arch.len());
+
+            for mut storage in mem::take(arch.storage_mut()).into_values() {
+                let id = storage.info().id;
+
+                // Modify the relations to match new components
+                if id.is_relation() {
+                    let (low, high) = id.split_pair();
+
+                    let low = entities
+                        .get(low.kind())
+                        .unwrap()
+                        .reconstruct(low)
+                        .unwrap()
+                        .0;
+
+                    let high = entities
+                        .get(high.kind())
+                        .unwrap()
+                        .reconstruct(high)
+                        .unwrap()
+                        .0;
+
+                    let new_low = *new_ids.get(&low).unwrap();
+                    let new_high = *new_ids.get(&high).unwrap();
+
+                    eprintln!("Mapping relation {low}, {high} => {new_low}, {new_high}");
+                    // Safety
+                    // The component is still of the same type
+                    unsafe {
+                        storage.set_id(Entity::pair(new_low, new_high));
+                    }
+                }
+
+                batch.insert(storage).expect("Batch is incomplete");
+            }
+
+            eprintln!("Merging: {arch:#?}");
+            self.spawn_batch_at(arch.entities(), &mut batch)
+                .expect("Failed to spawn batch")
+        }
+
+        new_ids
     }
 }
 
