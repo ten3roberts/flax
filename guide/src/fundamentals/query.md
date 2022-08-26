@@ -37,14 +37,14 @@ Change detection is also supported and allows querying only over the entities
 where a certain component changed.
 
 The following example shows a query which will update the distance to origin
-when an entity moves for every entity which are not dead.
+when an entity moves for every entity which are not despawned.
 
 ```rust
 {{ #include ../../../examples/guide/query.rs:query_modified }}
 ```
 
 The same query can be run again, but since all changes have been visited, it
-yield nothing.
+yields nothing.
 
 ```rust
 {{ #include ../../../examples/guide/query.rs:query_repeat }}
@@ -53,12 +53,20 @@ yield nothing.
 However, if the position were to be modified, the query would pick up that, and
 only that change.
 
-
 ```rust
 {{ #include ../../../examples/guide/query.rs:query_repeat_reboot }}
 ```
 
+For situations where an `or` combined filter is used in conjunction with a fetch
+of the same components, the filter may be attached directly to the query fetch
+instead.
+
+```rust
+{{ #include ../../../examples/guide/query.rs:shorthand }}
+```
+
 ### Change detection
+
 - [modified](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) yields components which have been updated **or** inserted.
 - [inserted](https://docs.rs/flax/latest/flax/struct.Component.html#method.inserted) yields new components.
 - [removed](https://docs.rs/flax/latest/flax/struct.Component.html#method.removed) yields each entity for which the component was recently removed.

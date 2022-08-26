@@ -46,7 +46,7 @@
 //!   let mut query = Query::new((health().as_mut(), regen()));
 //!
 //!   // Apply health regen for all match entites
-//!   for (health, regen) in &mut query.iter(&world) {
+//!   for (health, regen) in &mut query.borrow(&world) {
 //!       *health = (*health + regen).min(100.0);
 //!   }
 //!

@@ -171,6 +171,8 @@ fn derive_data_struct(
                 where #(#types: Fetch<'w>),*
                 {
                     const MUTABLE: bool = #(<#types as Fetch<'w>>::MUTABLE)|*;
+                    type Filter = (#(<#types as Fetch<'w>>::Filter),*);
+                    const HAS_FILTER: bool = #(<#types as Fetch<'w>>::HAS_FILTER)|*;
 
                     type Prepared = #prepared_name<'w>;
                     fn prepare(
@@ -202,11 +204,15 @@ fn derive_data_struct(
                     }
 
                     fn access(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<Access> {
-                        [ #(self.#field_names.access(data)),* ].into_iter().flatten().collect()
+                        [ #(self.#field_names.access(data)),* ].concat()
                     }
 
                     fn difference(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<String> {
                         [ #(self.#field_names.difference(data)),* ].concat()
+                    }
+
+                    fn filter(&self) -> Self::Filter {
+                        (#(self.#field_names.filter()),*)
                     }
                 }
             })

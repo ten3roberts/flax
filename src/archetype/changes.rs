@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use itertools::Itertools;
 
 use crate::ComponentInfo;
@@ -33,6 +35,16 @@ pub enum ChangeKind {
     Inserted,
     /// Component was removed
     Removed,
+}
+
+impl Display for ChangeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ChangeKind::Modified => f.write_str("modified"),
+            ChangeKind::Inserted => f.write_str("inserted"),
+            ChangeKind::Removed => f.write_str("removed"),
+        }
+    }
 }
 
 impl ChangeKind {
@@ -80,12 +92,12 @@ pub struct Change {
 
 impl Change {
     /// Creates a new change
-    pub fn new(slice: Slice, tick: u32, kind: ChangeKind) -> Self {
+    pub(crate) fn new(slice: Slice, tick: u32, kind: ChangeKind) -> Self {
         Self { slice, tick, kind }
     }
 
     /// Create a new modification event
-    pub fn modified(slice: Slice, tick: u32) -> Change {
+    pub(crate) fn modified(slice: Slice, tick: u32) -> Change {
         Self {
             slice,
             tick,
@@ -94,7 +106,7 @@ impl Change {
     }
 
     /// Create a new insert event
-    pub fn inserted(slice: Slice, tick: u32) -> Change {
+    pub(crate) fn inserted(slice: Slice, tick: u32) -> Change {
         Self {
             slice,
             tick,
@@ -103,7 +115,7 @@ impl Change {
     }
 
     /// Create a new remove event
-    pub fn removed(slice: Slice, tick: u32) -> Change {
+    pub(crate) fn removed(slice: Slice, tick: u32) -> Change {
         Self {
             slice,
             tick,

@@ -12,7 +12,7 @@ pub use opt::*;
 use crate::{
     archetype::{Archetype, Slice, Slot},
     system::Access,
-    ArchetypeId, Entity, World,
+    ArchetypeId, Entity, Filter, Nothing, World,
 };
 
 /// Represents the world data necessary for preparing a fetch
@@ -36,6 +36,11 @@ pub trait FetchItem<'q> {
 pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// true if the fetch mutates any component and thus needs a change event
     const MUTABLE: bool;
+    /// true if the fetch has a filter
+    const HAS_FILTER: bool = false;
+    /// The filter associated to the fetch, if applicable. If the fetch does not
+    /// use a filter, use the [ `crate::All` ] filter
+    type Filter: for<'x> Filter<'x>;
 
     /// The prepared version of the fetch
     type Prepared: for<'x> PreparedFetch<'x, Item = <Self as FetchItem<'x>>::Item> + 'w;
@@ -52,10 +57,15 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 
     /// Describes the fetch in a human-readable fashion
     fn describe(&self, f: &mut dyn Write) -> fmt::Result;
+
+    /// Returns the filter if any
+    fn filter(&self) -> Self::Filter;
 }
 
 impl<'w> Fetch<'w> for () {
     const MUTABLE: bool = false;
+    const HAS_FILTER: bool = false;
+    type Filter = Nothing;
 
     type Prepared = ();
 
@@ -67,16 +77,20 @@ impl<'w> Fetch<'w> for () {
         true
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
-        write!(f, "()")
-    }
-
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         vec![]
     }
 
     fn difference(&self, _: FetchPrepareData) -> Vec<String> {
         vec![]
+    }
+
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        write!(f, "()")
+    }
+
+    fn filter(&self) -> Self::Filter {
+        Nothing
     }
 }
 
@@ -131,6 +145,7 @@ impl<'q> FetchItem<'q> for Entities {
 
 impl<'w> Fetch<'w> for Entities {
     const MUTABLE: bool = false;
+    type Filter = Nothing;
 
     type Prepared = PreparedEntities<'w>;
 
@@ -154,6 +169,10 @@ impl<'w> Fetch<'w> for Entities {
 
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         vec![]
+    }
+
+    fn filter(&self) -> Self::Filter {
+        Nothing
     }
 }
 
@@ -179,6 +198,8 @@ macro_rules! tuple_impl {
         {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
             type Prepared       = ($($ty::Prepared,)*);
+            type Filter         = ($($ty::Filter,)*);
+            const HAS_FILTER: bool =  $($ty::HAS_FILTER )|*;
 
             fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
                 Some(($(
@@ -199,11 +220,15 @@ macro_rules! tuple_impl {
             fn access(&self, data: FetchPrepareData) -> Vec<Access> {
                 [ $(
                     (self.$idx).access(data),
-                )* ].into_iter().flatten().collect()
+                )* ].concat()
             }
 
             fn difference(&self, data: FetchPrepareData) -> Vec<String> {
                 [$((self.$idx).difference(data)),*].concat()
+            }
+
+            fn filter(&self) -> Self::Filter {
+                ( $(self.$idx.filter(),)* )
             }
         }
 

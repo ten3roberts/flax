@@ -25,7 +25,7 @@ fn main() -> color_eyre::Result<()> {
 
     let id = Query::new(entities())
         .filter(name().eq("a".into()))
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .next()
         .ok_or(eyre::eyre!("Missing entity"))?;

@@ -285,6 +285,13 @@ pub enum AccessKind {
         /// The accessed component
         component: ComponentId,
     },
+    /// Borrow a single change event of an archetype
+    ChangeEvent {
+        /// The archetype id
+        id: ArchetypeId,
+        /// The accessed component
+        component: ComponentId,
+    },
     /// Borrow the whole world
     World,
     /// Borrow the commandbuffer

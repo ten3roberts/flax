@@ -112,7 +112,7 @@ fn relations() {
     assert!(world.get(child_of(parent2).id(), debug_visitor()).is_ok());
 
     let items = query
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .map(TupleCloned::cloned)
         .sorted()
@@ -130,7 +130,7 @@ fn relations() {
 
     // Visit the first parent of the children
     let mut query = Query::new((name(), relations_like(child_of)));
-    let mut query = query.iter(&world);
+    let mut query = query.borrow(&world);
 
     let items = query
         .iter()
@@ -211,7 +211,7 @@ fn build_hierarchy() {
     );
 
     let mut query = Query::new((name(), child_of(parent)));
-    let mut query = query.iter(&world);
+    let mut query = query.borrow(&world);
     let children = query.iter().sorted().collect_vec();
 
     assert_eq!(
@@ -241,19 +241,19 @@ fn hierarchy_manipulation() {
     // Query all entities with no `child_of` relation
     let mut q = Query::new(entities()).without(child_of(wildcard()));
 
-    let roots = q.iter(&world).iter().sorted().collect_vec();
+    let roots = q.borrow(&world).iter().sorted().collect_vec();
     assert_eq!(roots, [a, b]);
 
     // Attach a under b
     world.set(a, child_of(b), ()).unwrap();
-    let roots = q.iter(&world).iter().sorted().collect_vec();
+    let roots = q.borrow(&world).iter().sorted().collect_vec();
     assert_eq!(roots, [b]);
 
     world.detach(b);
     assert_eq!(world.get(b, name()).as_deref(), Ok(&"b".to_string()));
 
     let mut q = Query::new(name()).without(child_of(wildcard()));
-    let mut roots = q.iter(&world);
+    let mut roots = q.borrow(&world);
     let roots = roots.iter().sorted().collect_vec();
 
     assert_eq!(roots, ["a", "b", "b.a", "b.b"]);

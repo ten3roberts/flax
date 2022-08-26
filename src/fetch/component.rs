@@ -35,6 +35,7 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
+    type Filter = Nothing;
 
     type Prepared = PreparedComponent<'w, T>;
 
@@ -72,6 +73,10 @@ where
     fn describe(&self, f: &mut dyn Write) -> fmt::Result {
         f.write_str(self.name())
     }
+
+    fn filter(&self) -> Self::Filter {
+        Nothing
+    }
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Component<T> {
@@ -88,6 +93,7 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = true;
+    type Filter = Nothing;
 
     type Prepared = PreparedComponentMut<'w, T>;
 
@@ -117,16 +123,28 @@ where
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
         if data.arch.has(self.0.id()) {
-            vec![Access {
-                kind: AccessKind::Archetype {
-                    id: data.arch_id,
-                    component: self.0.id(),
+            vec![
+                Access {
+                    kind: AccessKind::Archetype {
+                        id: data.arch_id,
+                        component: self.0.id(),
+                    },
+                    mutable: true,
                 },
-                mutable: true,
-            }]
+                Access {
+                    kind: AccessKind::ChangeEvent {
+                        id: data.arch_id,
+                        component: self.0.id(),
+                    },
+                    mutable: true,
+                },
+            ]
         } else {
             vec![]
         }
+    }
+    fn filter(&self) -> Self::Filter {
+        Nothing
     }
 }
 
@@ -169,6 +187,7 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
+    type Filter = Nothing;
 
     type Prepared = PreparedRelations<'w, T>;
 
@@ -226,6 +245,10 @@ where
 
     fn difference(&self, _: FetchPrepareData) -> Vec<String> {
         vec![]
+    }
+
+    fn filter(&self) -> Self::Filter {
+        Nothing
     }
 }
 

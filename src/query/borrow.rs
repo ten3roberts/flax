@@ -3,13 +3,16 @@ use std::mem::{self, MaybeUninit};
 use smallvec::SmallVec;
 
 use crate::{
-    error::Result, fetch::FetchPrepareData, All, Archetype, ArchetypeId, Entity, EntityLocation,
-    Error, Fetch, Filter, PreparedFetch, World,
+    error::Result, fetch::FetchPrepareData, All, And, Archetype, ArchetypeId, Entity,
+    EntityLocation, Error, Fetch, Filter, GatedFilter, PreparedFetch, World,
 };
 
-use super::iter::{BatchedIter, QueryIter};
+use super::{
+    iter::{BatchedIter, QueryIter},
+    FilterWithFetch,
+};
 
-pub struct PreparedArchetype<'w, Q> {
+pub(crate) struct PreparedArchetype<'w, Q> {
     pub(crate) arch_id: ArchetypeId,
     pub(crate) arch: &'w Archetype,
     pub(crate) fetch: Q,
@@ -17,7 +20,7 @@ pub struct PreparedArchetype<'w, Q> {
 
 /// A lazily prepared query which borrows and hands out chunk iterators for
 /// each archetype matched.
-pub struct PreparedQuery<'w, Q, F = All>
+pub struct QueryBorrow<'w, Q, F = All>
 where
     Q: Fetch<'w>,
 {
@@ -25,15 +28,15 @@ where
     pub(crate) world: &'w World,
     pub(crate) archetypes: &'w [ArchetypeId],
     pub(crate) fetch: &'w Q,
-    pub(crate) filter: &'w F,
+    pub(crate) filter: FilterWithFetch<&'w F, Q::Filter>,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
 }
 
-impl<'w, 'q, Q, F> IntoIterator for &'q mut PreparedQuery<'w, Q, F>
+impl<'w, 'q, Q, F> IntoIterator for &'q mut QueryBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'w>,
+    &'w F: Filter<'q>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -51,12 +54,12 @@ where
 /// The borrowing is lazy, as such, calling [`PreparedQuery::get`] will only borrow the one required archetype.
 /// [`PreparedQuery::iter`] will borrow the components from all archetypes and release them once the prepared query drops.
 /// Subsequent calls to iter will use the same borrow.
-impl<'w, Q, F> PreparedQuery<'w, Q, F>
+impl<'w, Q, F> QueryBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
 {
     /// Creates a new prepared query from a query, but does not allocate or lock anything.
-    pub fn new(
+    pub(super) fn new(
         world: &'w World,
         archetypes: &'w [ArchetypeId],
         fetch: &'w Q,
@@ -66,12 +69,12 @@ where
     ) -> Self {
         Self {
             prepared: SmallVec::new(),
-            filter,
+            fetch,
+            filter: And::new(filter, GatedFilter::new(Q::HAS_FILTER, fetch.filter())),
             old_tick,
             new_tick,
             world,
             archetypes,
-            fetch,
         }
     }
 
@@ -79,7 +82,7 @@ where
     pub fn iter<'q>(&'q mut self) -> QueryIter<'q, 'w, Q, F>
     where
         'w: 'q,
-        F: Filter<'w>,
+        &'w F: Filter<'q>,
     {
         QueryIter {
             inner: self.iter_batched().flatten(),
@@ -90,7 +93,7 @@ where
     pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'q, 'w, Q, F>
     where
         'w: 'q,
-        F: Filter<'w>,
+        &'w F: Filter<'q>,
     {
         // Prepare all archetypes only if it is not already done
         // Clear previous borrows
@@ -119,7 +122,7 @@ where
         BatchedIter::new(
             self.old_tick,
             self.new_tick,
-            self.filter,
+            &self.filter,
             self.prepared.iter_mut(),
         )
     }
@@ -129,7 +132,7 @@ where
     pub fn count<'q>(&'q mut self) -> usize
     where
         'w: 'q,
-        F: Filter<'w>,
+        &'w F: Filter<'q>,
     {
         self.iter_batched().map(|v| v.slots().len()).sum()
     }

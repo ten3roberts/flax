@@ -49,7 +49,7 @@ fn query_change() {
     consumer.ignore_changes(&world);
 
     let moved = move_alive
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .map(|(name, pos)| {
             pos.0 += 1.0;
@@ -64,7 +64,7 @@ fn query_change() {
     dbg!(world.change_tick(), &consumer);
 
     let consumed = consumer
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .map(|(name, pos, distance)| {
             *distance = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
@@ -107,7 +107,7 @@ fn query_opt() {
     let mut query = Query::new((name(), mass(), vel().opt_or_default()));
 
     let items = query
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .sorted_by_key(|v| v.0)
         .map(|v| v.cloned())
@@ -123,7 +123,7 @@ fn query_opt() {
     );
 
     let mut query = Query::new((name(), status_effect().opt()));
-    let mut query = query.iter(&world);
+    let mut query = query.borrow(&world);
     let items = query.iter().sorted().collect_vec();
 
     assert_eq!(

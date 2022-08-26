@@ -186,7 +186,8 @@ impl World {
             }
 
             arch.init_changes(*storage.info())
-                .set(Change::inserted(slots, change_tick));
+                .set(Change::inserted(slots, change_tick))
+                .set(Change::modified(slots, change_tick));
         }
 
         ids
@@ -243,7 +244,8 @@ impl World {
             }
 
             arch.init_changes(*storage.info())
-                .set(Change::inserted(slots, change_tick));
+                .set(Change::inserted(slots, change_tick))
+                .set(Change::modified(slots, change_tick));
         }
 
         Ok(())
@@ -382,7 +384,8 @@ impl World {
             }
 
             arch.init_changes(component)
-                .set(Change::inserted(Slice::single(loc.slot), change_tick));
+                .set(Change::inserted(Slice::single(loc.slot), change_tick))
+                .set(Change::modified(Slice::single(loc.slot), change_tick));
         }
 
         id
@@ -416,7 +419,8 @@ impl World {
             }
 
             arch.init_changes(component)
-                .set(Change::inserted(Slice::single(loc.slot), change_tick));
+                .set(Change::inserted(Slice::single(loc.slot), change_tick))
+                .set(Change::modified(Slice::single(loc.slot), change_tick));
         }
 
         id
@@ -515,7 +519,8 @@ impl World {
                         .expect("Insert should not fail");
 
                     dst.init_changes(component)
-                        .set(Change::inserted(Slice::single(dst_slot), change_tick));
+                        .set(Change::inserted(Slice::single(dst_slot), change_tick))
+                        .set(Change::modified(Slice::single(dst_slot), change_tick));
                 }
 
                 assert_eq!(dst.entity(dst_slot), Some(id));
@@ -596,7 +601,7 @@ impl World {
         F: for<'x> Filter<'x>,
     {
         let mut query = Query::new(entities()).filter(filter);
-        let ids = query.iter(self).iter().collect_vec();
+        let ids = query.borrow(self).iter().collect_vec();
 
         for id in ids {
             self.despawn(id).expect("Invalid entity id");
@@ -747,7 +752,8 @@ impl World {
             debug_assert_eq!(dst.entity(dst_slot), Some(id));
 
             dst.init_changes(component.info())
-                .set(Change::inserted(Slice::single(dst_slot), change_tick));
+                .set(Change::inserted(Slice::single(dst_slot), change_tick))
+                .set(Change::modified(Slice::single(dst_slot), change_tick));
 
             if let Some((swapped, slot)) = swapped {
                 // The last entity in src was moved into the slot occupied by id
@@ -1051,7 +1057,7 @@ where
         let mut list = f.debug_map();
 
         let mut query = Query::with_components(()).filter(&self.filter);
-        let mut query = query.iter(self.world);
+        let mut query = query.borrow(self.world);
 
         for batch in query.iter_batched() {
             let arch = batch.arch();

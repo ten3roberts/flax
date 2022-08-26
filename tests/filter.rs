@@ -71,7 +71,7 @@ fn filters() {
     let mut query = Query::new(a()).filter(a().inserted());
 
     let items = query
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .copied()
         .sorted_by_key(|v| (v * 256.0) as i64)
@@ -94,12 +94,12 @@ fn filters() {
 
     let mut query = Query::new(entities()).filter(a().removed());
 
-    let items = query.iter(&world).iter().collect_vec();
+    let items = query.borrow(&world).iter().collect_vec();
 
     assert_eq!(items, []);
     world.remove(id2, a()).unwrap();
 
-    let items = query.iter(&world).iter().collect_vec();
+    let items = query.borrow(&world).iter().collect_vec();
 
     assert_eq!(items, [id2]);
 }
@@ -138,17 +138,17 @@ fn combinations() {
     let mut query = Query::new(entities()).filter(a().modified() | b().modified());
 
     // eprintln!("Items: {:?}", query.iter(&world).sorted().collect_vec());
-    assert_eq!(query.iter(&world).iter().sorted().collect_vec(), ids);
+    assert_eq!(query.borrow(&world).iter().sorted().collect_vec(), ids);
 
     for &id in &ids[50..67] {
         *world.get_mut(id, a()).unwrap() *= -2;
     }
 
-    let items = query.iter(&world).iter().sorted().collect_vec();
+    let items = query.borrow(&world).iter().sorted().collect_vec();
     eprintln!("Items: {items:?}");
 
     assert_eq!(items, ids[50..67]);
-    let items = query.iter(&world).iter().sorted().collect_vec();
+    let items = query.borrow(&world).iter().sorted().collect_vec();
     assert_eq!(items, []);
 
     for &id in &ids[20..43] {
@@ -159,7 +159,7 @@ fn combinations() {
         world.get_mut(id, b()).unwrap().push_str("...");
     }
 
-    let items = query.iter(&world).iter().sorted().collect_vec();
+    let items = query.borrow(&world).iter().sorted().collect_vec();
 
     assert_eq!(items, ids[20..89]);
 }

@@ -63,7 +63,7 @@ fn main() {
     // ANCHOR: query
 
     let mut query = Query::new((name(), position(), is_player().opt(), health()));
-    for (name, pos, is_player, health) in &mut query.iter(&world) {
+    for (name, pos, is_player, health) in &mut query.borrow(&world) {
         tracing::info!("name: {name}, pos: {pos:?}, player: {is_player:?}, health: {health}");
     }
 
@@ -72,7 +72,7 @@ fn main() {
     {
         let mut query = Query::new((name(), position(), health())).without(is_player());
         info_span!("enemies");
-        for (name, pos, health) in &mut query.iter(&world) {
+        for (name, pos, health) in &mut query.borrow(&world) {
             tracing::info!("name: {name}, pos: {pos:?}, health: {health}");
         }
     }

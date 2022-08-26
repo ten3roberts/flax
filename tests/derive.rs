@@ -63,7 +63,7 @@ fn derive_fetch() {
         scale: scale().opt(),
     });
 
-    let mut query = query.iter(&world);
+    let mut query = query.borrow(&world);
 
     assert_eq!(
         query.get(id1),

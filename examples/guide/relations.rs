@@ -44,7 +44,7 @@ fn main() -> color_eyre::Result<()> {
 
     let children_of_parent = Query::new(entities())
         .with(child_of(parent))
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .collect_vec();
 
@@ -52,7 +52,7 @@ fn main() -> color_eyre::Result<()> {
 
     let all_children = Query::new(entities())
         .filter(child_of.with())
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .collect_vec();
 
@@ -60,7 +60,7 @@ fn main() -> color_eyre::Result<()> {
 
     let roots = Query::new(entities())
         .filter(child_of.without())
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .collect_vec();
 

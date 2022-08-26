@@ -45,7 +45,7 @@ fn main() -> color_eyre::Result<()> {
 
     // Since this query accessed `position`, `velocity` **and** `mass` only the
     // first group of entities will be matched
-    for (pos, vel, mass) in &mut Query::new((position(), velocity(), mass())).iter(&world) {
+    for (pos, vel, mass) in &mut Query::new((position(), velocity(), mass())).borrow(&world) {
         tracing::info!("pos: {pos}, vel: {vel}, mass: {mass}");
     }
 
@@ -53,7 +53,7 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR: opt
 
     // Use an optional fetch to yield an `Option<T>`, works for any query
-    for (pos, vel, mass) in &mut Query::new((position(), velocity(), mass().opt())).iter(&world) {
+    for (pos, vel, mass) in &mut Query::new((position(), velocity(), mass().opt())).borrow(&world) {
         if mass.is_some() {
             tracing::info!("Has mass");
         }
@@ -109,7 +109,7 @@ fn main() -> color_eyre::Result<()> {
         .with_system(update_world_matrix)
         .build();
 
-    let all_ids = Query::new(entities()).iter(&world).iter().collect_vec();
+    let all_ids = Query::new(entities()).borrow(&world).iter().collect_vec();
 
     for _ in 0..10 {
         schedule
