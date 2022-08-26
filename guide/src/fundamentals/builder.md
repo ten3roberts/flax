@@ -1,6 +1,6 @@
 # Entity Builder
 
-The [EntityBuilder](https://docs.rs/flax/latest/flax/struct.EntityBuilder)
+The [EntityBuilder](https://docs.rs/flax/latest/flax/struct.EntityBuilder.struct)
 allows you to incrementally construct an entity by adding components and *then*
 inserting it into the world. This provides both better ergonomics and efficiency
 as the entity does not bounce around archetypes.

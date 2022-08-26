@@ -72,7 +72,7 @@ instead.
 - [inserted](https://docs.rs/flax/latest/flax/struct.Component.html#method.inserted) yields new components.
 - [removed](https://docs.rs/flax/latest/flax/struct.Component.html#method.removed) yields each entity for which the component was recently removed.
 
-All change detection is per query and based on when the query last executed.
+All change detection is per query and based on when the query last ran.
 
 ### Comparative filter
 
