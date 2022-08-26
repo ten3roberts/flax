@@ -7,7 +7,7 @@ use std::{
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{ComponentInfo, ComponentValue};
+use crate::{ComponentId, ComponentInfo, ComponentValue};
 
 use super::Slot;
 
@@ -222,6 +222,13 @@ impl Storage {
             self.extend(&mut item as *mut T as *mut u8, 1);
         }
         mem::forget(item);
+    }
+
+    /// Changes the id of the stored component.
+    /// This is safe as the underlying vtable is not changed, as long as the id
+    /// points to a component of the same kind.
+    pub(crate) unsafe fn set_id(&mut self, id: ComponentId) {
+        self.info.id = id
     }
 }
 

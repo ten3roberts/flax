@@ -35,7 +35,7 @@ pub struct Archetype {
 
     // ComponentId => ArchetypeId
     // If the key is an existing component, it means it is a backwards edge
-    edges: BTreeMap<Entity, ArchetypeId>,
+    pub(crate) edges: BTreeMap<ComponentId, ArchetypeId>,
 }
 
 /// Since all components are Send + Sync, the archetype is as well
@@ -526,6 +526,14 @@ impl Archetype {
 
     pub(crate) fn storage(&self) -> &BTreeMap<Entity, Storage> {
         &self.storage
+    }
+
+    pub(crate) fn storage_mut(&mut self) -> &mut BTreeMap<Entity, Storage> {
+        &mut self.storage
+    }
+
+    pub(crate) fn entities_mut(&mut self) -> &mut [Entity] {
+        &mut self.entities
     }
 }
 

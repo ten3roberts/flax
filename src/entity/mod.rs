@@ -271,6 +271,10 @@ impl Entity {
     pub(crate) fn is_relation(&self) -> bool {
         self.kind().contains(EntityKind::RELATION)
     }
+
+    pub(crate) fn is_static(&self) -> bool {
+        self.kind().contains(EntityKind::STATIC)
+    }
 }
 
 impl StrippedEntity {

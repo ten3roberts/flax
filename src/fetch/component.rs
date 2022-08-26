@@ -208,7 +208,7 @@ where
                 .map(|(_, obj, _, v)| {
                     (
                         data.world
-                            .reconstruct(obj)
+                            .find_alive(obj)
                             .expect("Relation object is not alive"),
                         unsafe { v.borrow::<T>() },
                     )

@@ -50,7 +50,7 @@ pub(crate) struct EntityLocation {
 pub(crate) struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
     free_head: Option<NonZeroU32>,
-    kind: EntityKind,
+    pub(crate) kind: EntityKind,
     len: usize,
 }
 
@@ -73,6 +73,26 @@ where
             .field("kind", &self.kind)
             .field("len", &self.len)
             .finish()
+    }
+}
+
+impl<'a, V> IntoIterator for &'a EntityStore<V> {
+    type Item = (Entity, &'a V);
+
+    type IntoIter = EntityStoreIter<'a, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a, V> IntoIterator for &'a mut EntityStore<V> {
+    type Item = (Entity, &'a mut V);
+
+    type IntoIter = EntityStoreIterMut<'a, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
     }
 }
 
@@ -224,9 +244,15 @@ impl<V> EntityStore<V> {
         let index = id.index();
 
         let next = self.free_head.take();
+        let kind = self.kind;
         let slot = self.slot_mut(index).unwrap();
 
-        slot.gen = slot.gen.wrapping_add(1);
+        // Make sure static ids never get a generation
+        if kind.contains(EntityKind::STATIC) {
+            slot.gen = 0b10
+        } else {
+            slot.gen = slot.gen.wrapping_add(1);
+        }
 
         let inner = mem::replace(
             &mut slot.value,
@@ -299,7 +325,6 @@ impl<V> EntityStore<V> {
         let mut prev = None;
         let mut cur = self.free_head;
         while let Some(current) = cur {
-            dbg!(current);
             let slot = self.slot(current).expect("Invalid free list node");
 
             let next_free = unsafe { slot.value.vacant.next };
