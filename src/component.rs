@@ -1,8 +1,8 @@
 use std::{fmt::Display, marker::PhantomData, sync::atomic::AtomicU32};
 
 use crate::{
-    archetype::ComponentInfo, buffer::ComponentBuffer, wildcard, Entity, EntityKind,
-    InsertedFilter, MetaData, ModifiedFilter, Mutable, RemovedFilter, With, Without,
+    archetype::ComponentInfo, buffer::ComponentBuffer, wildcard, ChangeFilter, ChangeKind, Entity,
+    EntityKind, MetaData, Mutable, RemovedFilter, With, Without,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
@@ -183,18 +183,18 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Construct a fine grained change detection filter.
-    pub fn modified(self) -> ModifiedFilter {
-        ModifiedFilter::new(self.id())
+    pub fn modified(self) -> ChangeFilter<T> {
+        ChangeFilter::new(self, ChangeKind::Inserted)
     }
 
     /// Construct a fine grained insert detection filter.
-    pub fn inserted(self) -> InsertedFilter {
-        InsertedFilter::new(self.id())
+    pub fn inserted(self) -> ChangeFilter<T> {
+        ChangeFilter::new(self, ChangeKind::Inserted)
     }
 
     /// Construct a fine grained component remove detection filter.
-    pub fn removed(self) -> RemovedFilter {
-        RemovedFilter::new(self.id())
+    pub fn removed(self) -> RemovedFilter<T> {
+        RemovedFilter::new(self)
     }
 
     /// Construct a new filter yielding entities without this component.

@@ -35,7 +35,7 @@ fn main() -> color_eyre::Result<()> {
 
     let mut query = Query::new((position(), health()));
 
-    for (pos, health) in &mut query.iter(&world) {
+    for (pos, health) in &mut query.borrow(&world) {
         println!("pos: {pos:?}, health: {health}");
     }
 
@@ -61,7 +61,7 @@ fn main() -> color_eyre::Result<()> {
         .filter(position().modified() & health().gt(0.0));
 
     tracing::info!("Updating distances");
-    for (id, pos, dist) in &mut query.iter(&world) {
+    for (id, pos, dist) in &mut query.borrow(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -71,7 +71,7 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR: query_repeat
 
     tracing::info!("Running query again");
-    for (id, pos, dist) in &mut query.iter(&world) {
+    for (id, pos, dist) in &mut query.borrow(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -82,12 +82,24 @@ fn main() -> color_eyre::Result<()> {
     *world.get_mut(id2, position())? = (8.0, 3.0);
 
     tracing::info!("... and again");
-    for (id, pos, dist) in &mut query.iter(&world) {
+    for (id, pos, dist) in &mut query.borrow(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
 
     // ANCHOR_END: query_repeat_reboot
+
+    #[allow(unused_variables)]
+    {
+        // ANCHOR: shorthand
+        // Instead of this:
+        let query = Query::new((position(), health(), distance()))
+            .filter(position().modified() | health().modified());
+
+        // Do this:
+        let query = Query::new((position().modified(), health().modified(), distance()));
+        // ANCHOR_END: shorthand
+    }
 
     // ANCHOR: system_basic
 

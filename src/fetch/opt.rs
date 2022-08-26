@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use crate::{fetch::FetchPrepareData, ComponentValue, Fetch, PreparedFetch};
+use crate::{fetch::FetchPrepareData, All, ComponentValue, Fetch, PreparedFetch};
 
 use super::FetchItem;
 
@@ -12,9 +12,11 @@ impl<F> Opt<F> {}
 
 impl<'w, F> Fetch<'w> for Opt<F>
 where
-    F: for<'x> Fetch<'x>,
+    F: Fetch<'w>,
 {
     const MUTABLE: bool = F::MUTABLE;
+    const HAS_FILTER: bool = F::HAS_FILTER;
+    type Filter = F::Filter;
 
     type Prepared = PreparedOpt<<F as Fetch<'w>>::Prepared>;
 
@@ -39,6 +41,10 @@ where
 
     fn difference(&self, _: FetchPrepareData) -> Vec<String> {
         vec![]
+    }
+
+    fn filter(&self) -> Self::Filter {
+        self.0.filter()
     }
 }
 
@@ -82,6 +88,8 @@ where
     V: ComponentValue,
 {
     const MUTABLE: bool = F::MUTABLE;
+    const HAS_FILTER: bool = F::HAS_FILTER;
+    type Filter = F::Filter;
 
     type Prepared = PreparedOptOr<'w, <F as Fetch<'w>>::Prepared, V>;
 
@@ -108,6 +116,10 @@ where
 
     fn difference(&self, _: FetchPrepareData) -> Vec<String> {
         vec![]
+    }
+
+    fn filter(&self) -> Self::Filter {
+        self.inner.filter()
     }
 }
 

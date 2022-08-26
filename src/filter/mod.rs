@@ -1,19 +1,19 @@
+mod change;
 mod cmp;
 
 use std::{iter::FusedIterator, ops::Neg};
 
-use atomic_refcell::AtomicRef;
-
 use crate::{
-    archetype::{Archetype, ChangeKind, Changes, Slice},
-    Access, ArchetypeId, ComponentId,
+    archetype::{Archetype, Slice},
+    Access, ArchetypeId, ComponentId, ComponentValue,
 };
 
+pub use change::*;
 pub use cmp::CmpExt;
 
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
-        impl<R, $($p),*> std::ops::BitOr<R> for $ty<$($p),*>
+        impl<R, $($p: ComponentValue),*> std::ops::BitOr<R> for $ty<$($p),*>
         {
             type Output = Or<Self, R>;
 
@@ -22,7 +22,7 @@ macro_rules! gen_bitops {
             }
         }
 
-        impl<R, $($p),*> std::ops::BitAnd<R> for $ty<$($p),*>
+        impl<R, $($p: ComponentValue),*> std::ops::BitAnd<R> for $ty<$($p),*>
         {
             type Output = And<Self, R>;
 
@@ -31,7 +31,7 @@ macro_rules! gen_bitops {
             }
         }
 
-        impl<$($p),*> std::ops::Neg for $ty<$($p),*>
+        impl<$($p: ComponentValue),*> std::ops::Neg for $ty<$($p),*>
         {
             type Output = Not<Self>;
 
@@ -50,9 +50,8 @@ macro_rules! gen_bitops {
 }
 
 gen_bitops! {
-    ModifiedFilter[];
-    InsertedFilter[];
-    RemovedFilter[];
+    ChangeFilter[T];
+    RemovedFilter[T];
     And[A,B];
     Or[A,B];
     All[];
@@ -97,136 +96,6 @@ where
 pub trait PreparedFilter {
     /// Filters a slice of entity slots and returns a subset of the slice
     fn filter(&mut self, slots: Slice) -> Slice;
-}
-
-#[derive(Debug, Clone)]
-/// Filter which only yields modified or inserted components
-pub struct ModifiedFilter {
-    component: ComponentId,
-}
-
-impl ModifiedFilter {
-    /// Create a new modified filter
-    pub fn new(component: ComponentId) -> Self {
-        Self { component }
-    }
-}
-
-impl<'a> Filter<'a> for ModifiedFilter {
-    type Prepared = PreparedOr<PreparedKindFilter<'a>, PreparedKindFilter<'a>>;
-
-    fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedOr {
-            left: PreparedKindFilter::new(
-                archetype,
-                self.component,
-                change_tick,
-                ChangeKind::Modified,
-            ),
-            right: PreparedKindFilter::new(
-                archetype,
-                self.component,
-                change_tick,
-                ChangeKind::Inserted,
-            ),
-        }
-    }
-
-    fn matches(&self, archetype: &Archetype) -> bool {
-        archetype.has(self.component)
-    }
-
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(archetype) {
-            vec![Access {
-                kind: crate::AccessKind::Archetype {
-                    id,
-                    component: self.component,
-                },
-                mutable: false,
-            }]
-        } else {
-            vec![]
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-/// Filter which only yields inserted components
-pub struct InsertedFilter {
-    component: ComponentId,
-}
-
-impl InsertedFilter {
-    /// Create a new inserted filter
-    pub fn new(component: ComponentId) -> Self {
-        Self { component }
-    }
-}
-
-impl<'a> Filter<'a> for InsertedFilter {
-    type Prepared = PreparedKindFilter<'a>;
-
-    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedKindFilter::new(archetype, self.component, change_tick, ChangeKind::Inserted)
-    }
-
-    fn matches(&self, archetype: &Archetype) -> bool {
-        archetype.has(self.component)
-    }
-
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(archetype) {
-            vec![Access {
-                kind: crate::AccessKind::Archetype {
-                    id,
-                    component: self.component,
-                },
-                mutable: false,
-            }]
-        } else {
-            vec![]
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-/// Filter which only yields removed `components
-pub struct RemovedFilter {
-    component: ComponentId,
-}
-
-impl RemovedFilter {
-    /// Create a new removed filter
-    pub fn new(component: ComponentId) -> Self {
-        Self { component }
-    }
-}
-
-impl<'a> Filter<'a> for RemovedFilter {
-    type Prepared = PreparedKindFilter<'a>;
-
-    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedKindFilter::new(archetype, self.component, change_tick, ChangeKind::Removed)
-    }
-
-    fn matches(&self, _: &Archetype) -> bool {
-        true
-    }
-
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(archetype) {
-            vec![Access {
-                kind: crate::AccessKind::Archetype {
-                    id,
-                    component: self.component,
-                },
-                mutable: false,
-            }]
-        } else {
-            vec![]
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -324,86 +193,6 @@ where
 {
     fn static_matches(&self, archetype: &Archetype) -> bool {
         self.left.static_matches(archetype) || self.right.static_matches(archetype)
-    }
-}
-
-#[derive(Debug)]
-#[doc(hidden)]
-pub struct PreparedKindFilter<'a> {
-    changes: Option<AtomicRef<'a, Changes>>,
-    cur: Option<Slice>,
-    // The current change group.
-    // Starts at the end and decrements
-    index: usize,
-    tick: u32,
-    kind: ChangeKind,
-}
-
-impl<'a> PreparedKindFilter<'a> {
-    pub fn new(
-        archetype: &'a Archetype,
-        component: ComponentId,
-        tick: u32,
-        kind: ChangeKind,
-    ) -> Self {
-        let changes = archetype.changes(component);
-        Self {
-            changes,
-            cur: None,
-            index: 0,
-            tick,
-            kind,
-        }
-    }
-
-    #[cfg(test)]
-    fn from_borrow(changes: AtomicRef<'a, Changes>, tick: u32, kind: ChangeKind) -> Self {
-        Self {
-            changes: Some(changes),
-            cur: None,
-            index: 0,
-            tick,
-            kind,
-        }
-    }
-
-    pub fn current_slice(&mut self) -> Option<Slice> {
-        match (self.cur, self.changes.as_mut()) {
-            (Some(v), _) => Some(v),
-            (None, Some(changes)) => loop {
-                let v = changes.get(self.index);
-                if let Some(change) = v {
-                    self.index += 1;
-                    if change.tick > self.tick && self.kind == change.kind {
-                        break Some(*self.cur.get_or_insert(change.slice));
-                    }
-                } else {
-                    // No more
-                    return None;
-                };
-            },
-            _ => None,
-        }
-    }
-}
-
-impl<'a> PreparedFilter for PreparedKindFilter<'a> {
-    fn filter(&mut self, slots: Slice) -> Slice {
-        loop {
-            let cur = match self.current_slice() {
-                Some(v) => v,
-                None => return Slice::empty(),
-            };
-
-            let intersect = cur.intersect(&slots);
-            // Try again with the next change group
-            if intersect.is_empty() {
-                self.cur = None;
-                continue;
-            } else {
-                return intersect;
-            }
-        }
     }
 }
 
@@ -713,7 +502,23 @@ impl StaticFilter for Without {
 }
 
 /// Like a bool literal
+#[derive(Copy, Debug, Clone)]
 pub struct BooleanFilter(pub bool);
+impl<'w> Filter<'w> for BooleanFilter {
+    type Prepared = Self;
+
+    fn prepare(&'w self, _: &'w Archetype, _: u32) -> Self::Prepared {
+        *self
+    }
+
+    fn matches(&self, _: &Archetype) -> bool {
+        self.0
+    }
+
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+        vec![]
+    }
+}
 
 impl PreparedFilter for BooleanFilter {
     fn filter(&mut self, slots: Slice) -> Slice {
@@ -744,13 +549,117 @@ where
     }
 }
 
+/// A filter which can be turned on or off
+/// When disabled, returns All
+#[derive(Debug, Clone)]
+pub struct GatedFilter<F> {
+    pub(crate) active: bool,
+    pub(crate) filter: F,
+}
+
+impl<F> GatedFilter<F> {
+    pub(crate) fn new(active: bool, filter: F) -> Self {
+        Self { active, filter }
+    }
+}
+
+impl<F: PreparedFilter> PreparedFilter for GatedFilter<F> {
+    fn filter(&mut self, slots: Slice) -> Slice {
+        if self.active {
+            self.filter.filter(slots)
+        } else {
+            slots
+        }
+    }
+}
+
+impl<'w, F: Filter<'w>> Filter<'w> for GatedFilter<F> {
+    type Prepared = GatedFilter<F::Prepared>;
+
+    fn prepare(&'w self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared {
+        GatedFilter {
+            active: self.active,
+            filter: self.filter.prepare(archetype, change_tick),
+        }
+    }
+
+    fn matches(&self, arch: &Archetype) -> bool {
+        !self.active || self.filter.matches(arch)
+    }
+
+    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
+        self.filter.access(id, arch)
+    }
+}
+
+macro_rules! tuple_impl {
+    ($($idx: tt => $ty: ident),*) => {
+        impl<$($ty, )*> StaticFilter for ($($ty,)*)
+            where $($ty: StaticFilter,)*
+        {
+            fn static_matches(&self, arch: &Archetype) -> bool {
+                $(self.$idx.static_matches(arch))||*
+            }
+        }
+
+        impl<$($ty, )*> PreparedFilter for ($($ty,)*)
+            where $($ty: PreparedFilter,)*
+        {
+            fn filter(&mut self, slots: Slice) -> Slice {
+                let mut u = Slice::new(0, 0);
+
+                $(
+                    match u.union(&self.$idx.filter(slots)) {
+                        Some(v) => { u = v }
+                        None => { return u }
+                    }
+                )*
+
+                u
+            }
+        }
+
+        impl<'w, $($ty, )*> Filter<'w> for ($($ty,)*)
+            where $($ty: Filter<'w>,)*
+        {
+            type Prepared       = ($($ty::Prepared,)*);
+
+            fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared {
+                ($(self.$idx.prepare(arch, change_tick),)*)
+            }
+
+            fn matches(&self, arch: &Archetype) -> bool {
+                $(self.$idx.matches(arch))||*
+            }
+
+            fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
+                [ $(self.$idx.access(id, arch),)* ].concat()
+            }
+
+        }
+    };
+}
+
+tuple_impl! { 0 => A }
+tuple_impl! { 0 => A, 1 => B }
+tuple_impl! { 0 => A, 1 => B, 2 => C }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
+
 #[cfg(test)]
 mod tests {
 
     use atomic_refcell::AtomicRefCell;
     use itertools::Itertools;
 
-    use crate::{archetype::Change, component};
+    use crate::{
+        archetype::{Change, Changes},
+        component, ChangeKind,
+    };
 
     use super::*;
     component! {
@@ -851,8 +760,9 @@ mod tests {
 
         let archetype = Archetype::new([a().info(), b().info(), c().info()]);
 
-        let filter = ModifiedFilter::new(a().id()) & (ModifiedFilter::new(b().id()))
-            | (ModifiedFilter::new(c().id()));
+        let filter = ChangeFilter::new(a(), ChangeKind::Modified)
+            & (ChangeFilter::new(b(), ChangeKind::Modified))
+            | (ChangeFilter::new(c(), ChangeKind::Modified));
 
         // Mock changes
         let a_map = archetype

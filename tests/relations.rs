@@ -33,7 +33,7 @@ fn relations() -> color_eyre::Result<()> {
 
     let children = Query::new(entities())
         .with(child_of(parent))
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .sorted()
         .collect_vec();
@@ -43,7 +43,7 @@ fn relations() -> color_eyre::Result<()> {
 
     let parents = Query::new(entities())
         .filter(child_of.without())
-        .iter(&world)
+        .borrow(&world)
         .iter()
         .collect_vec();
 
@@ -65,7 +65,7 @@ fn relations() -> color_eyre::Result<()> {
     world.despawn_many(All);
 
     assert_eq!(
-        Query::new(()).iter(&world).count(),
+        Query::new(()).borrow(&world).count(),
         0,
         "World was not empty"
     );
@@ -81,9 +81,12 @@ fn relations() -> color_eyre::Result<()> {
         .attach(child_of, Entity::builder().set(name(), "child2".into()))
         .spawn(&mut world);
 
-    assert_eq!(Query::new(child_of(root)).iter(&world).count(), 2);
+    assert_eq!(Query::new(child_of(root)).borrow(&world).count(), 2);
     assert_eq!(
-        Query::new(()).filter(child_of.with()).iter(&world).count(),
+        Query::new(())
+            .filter(child_of.with())
+            .borrow(&world)
+            .count(),
         3
     );
 

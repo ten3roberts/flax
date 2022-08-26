@@ -1,5 +1,5 @@
+mod borrow;
 mod iter;
-mod prepared;
 
 use std::fmt::Debug;
 
@@ -12,12 +12,13 @@ use crate::{
     fetch::FetchPrepareData,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, All, And, Component, ComponentValue, FetchItem, Filter, With, Without,
-    World,
+    Access, AccessKind, All, And, Component, ComponentValue, FetchItem, Filter, GatedFilter, With,
+    Without, World,
 };
 
-pub use self::prepared::PreparedQuery;
+pub use borrow::*;
 
+type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Represents a query and state for a given world.
 /// The archetypes to visit is cached in the query which means it is more
 /// performant to reuse the query than creating a new one.
@@ -63,6 +64,8 @@ where
     /// **Note**: The query will not yield components, as it may not be intended
     /// behaviour since the most common intent is the entities. See
     /// [`Query::with_components`]
+    ///
+    /// A fetch may also contain filters
     pub fn new(query: Q) -> Self {
         Self {
             archetypes: Vec::new(),
@@ -156,10 +159,10 @@ where
         Q::MUTABLE
     }
 
-    /// Prepare the query upon the world.
+    /// Borrow the world for the query.
     ///
     /// Allows for both random access and efficient iteration.
-    /// See: [`PreparedQuery::get`] and [`PreparedQuery::iter`]
+    /// See: [`QueryBorrow::get`] and [`QueryBorrow::iter`]
     ///
     /// The returned value holds the borrows of the query fetch. As such, all
     /// references from iteration or using [`PreparedQuery::get`] will have a
@@ -170,14 +173,15 @@ where
     ///
     /// It is safe to use the same prepared query for both iteration and random
     /// access, Rust's borrow rules will ensure aliasing rules.
-    pub fn iter<'w>(&'w mut self, world: &'w World) -> PreparedQuery<'w, Q, F> {
+    pub fn borrow<'w>(&'w mut self, world: &'w World) -> QueryBorrow<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
 
+        eprintln!("Has filter: {}", Q::HAS_FILTER);
         if world.archetype_gen() > self.archetype_gen {
             self.archetypes = self.get_archetypes(world);
         }
 
-        PreparedQuery::new(
+        QueryBorrow::new(
             world,
             &self.archetypes,
             &self.fetch,
@@ -192,7 +196,7 @@ where
     where
         for<'q> <Q as FetchItem<'q>>::Item: TupleCloned<Cloned = C>,
     {
-        let mut prepared = self.iter(world);
+        let mut prepared = self.borrow(world);
         prepared.iter().map(|v| v.cloned()).collect_vec()
     }
 
@@ -205,7 +209,10 @@ where
                     arch,
                     arch_id,
                 };
-                if self.filter.matches(arch) && self.fetch.matches(data) {
+                if self.filter.matches(arch)
+                    && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
+                    && self.fetch.matches(data)
+                {
                     Some(arch_id)
                 } else {
                     None
@@ -279,7 +286,7 @@ where
     ///
     /// The same query can be prepared multiple times, though not
     /// simultaneously.
-    pub fn iter(&mut self) -> PreparedQuery<Q, F> {
-        self.query.iter(&self.world)
+    pub fn iter(&mut self) -> QueryBorrow<Q, F> {
+        self.query.borrow(&self.world)
     }
 }
