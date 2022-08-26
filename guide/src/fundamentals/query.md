@@ -14,10 +14,11 @@ A query accepts any type which implements
 
 - A component
 - A tuple of components
-- `component.as_mut()` for mutable access
-- `component.opt()` for an optional access, returns Option<&T>,
-- `component.as_mut().opt()` for an optional mutable access, returns Option<&mut T>,
-- `component.opt_or_default()` for an access which returns a default value if
+- [`component.as_mut()`](https://docs.rs/flax/latest/flax/struct.Component.html#method.as_mut) for mutable access
+- [`component.opt()`](https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt) for an optional access, returns Option<&T>,
+- [`component.as_mut().opt()`](https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt) for an optional mutable access, returns Option<&mut T>,
+- [`component.opt_or_default()`](https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or_default) for an access which returns a default value if
+- [`component.opt_or()`](https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or) for an access which returns a provided value if
   the current entity does not have the component.
 - [entities](https://docs.rs/flax/latest/flax/fn.entities.html) to return the
   iterated `Entity` ids.
