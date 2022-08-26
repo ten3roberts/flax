@@ -171,10 +171,11 @@ a certain filter.</p>
 <ul>
 <li>A component</li>
 <li>A tuple of components</li>
-<li><code>component.as_mut()</code> for mutable access</li>
-<li><code>component.opt()</code> for an optional access, returns Option&lt;&amp;T&gt;,</li>
-<li><code>component.as_mut().opt()</code> for an optional mutable access, returns Option&lt;&amp;mut T&gt;,</li>
-<li><code>component.opt_or_default()</code> for an access which returns a default value if
+<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.as_mut"><code>component.as_mut()</code></a> for mutable access</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt"><code>component.opt()</code></a> for an optional access, returns Option&lt;&amp;T&gt;,</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt"><code>component.as_mut().opt()</code></a> for an optional mutable access, returns Option&lt;&amp;mut T&gt;,</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or_default"><code>component.opt_or_default()</code></a> for an access which returns a default value if</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or"><code>component.opt_or()</code></a> for an access which returns a provided value if
 the current entity does not have the component.</li>
 <li><a href="https://docs.rs/flax/latest/flax/fn.entities.html">entities</a> to return the
 iterated <code>Entity</code> ids.</li>
