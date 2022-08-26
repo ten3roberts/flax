@@ -155,7 +155,7 @@ in other situations where a mutable reference to the world is not available.</p>
 
     let id = Query::new(entities())
         .filter(name().eq(&quot;a&quot;.into()))
-        .iter(&amp;world)
+        .borrow(&amp;world)
         .iter()
         .next()
         .ok_or(eyre::eyre!(&quot;Missing entity&quot;))?;

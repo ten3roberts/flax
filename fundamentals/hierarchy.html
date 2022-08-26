@@ -192,7 +192,7 @@ used to exclude components.</p>
 <span class="boring">fn main() {
 </span>    let children_of_parent = Query::new(entities())
         .with(child_of(parent))
-        .iter(&amp;world)
+        .borrow(&amp;world)
         .iter()
         .collect_vec();
 
@@ -200,7 +200,7 @@ used to exclude components.</p>
 
     let all_children = Query::new(entities())
         .filter(child_of.with())
-        .iter(&amp;world)
+        .borrow(&amp;world)
         .iter()
         .collect_vec();
 
@@ -208,7 +208,7 @@ used to exclude components.</p>
 
     let roots = Query::new(entities())
         .filter(child_of.without())
-        .iter(&amp;world)
+        .borrow(&amp;world)
         .iter()
         .collect_vec();
 

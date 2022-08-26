@@ -167,7 +167,7 @@ the full tuple, I.e;</p>
 
     // Since this query accessed `position`, `velocity` **and** `mass` only the
     // first group of entities will be matched
-    for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass())).iter(&amp;world) {
+    for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass())).borrow(&amp;world) {
         tracing::info!(&quot;pos: {pos}, vel: {vel}, mass: {mass}&quot;);
     }
 
@@ -180,7 +180,7 @@ the value yielded by the underlying fetch</p>
 </span>
 <span class="boring">fn main() {
 </span>    // Use an optional fetch to yield an `Option&lt;T&gt;`, works for any query
-    for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass().opt())).iter(&amp;world) {
+    for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass().opt())).borrow(&amp;world) {
         if mass.is_some() {
             tracing::info!(&quot;Has mass&quot;);
         }
@@ -201,17 +201,6 @@ default is also returned by reference. For when there is an owned value, conside
 <p>Similarly, <code>set</code> when the component did not previously exist, and new entities will create an <code>Inserted</code> event.</p>
 <p><code>Removal</code> events are created by
 <a href="https://docs.rs/flax/latest/flax/struct.World#method.remove"><code>World::remove</code></a>.</p>
-<h3 id="implementation-details"><a class="header" href="#implementation-details">Implementation details</a></h3>
-<pre><code>Each `ChangeEvent` consists of a subslice of adjacent entities in the same
-archetype, the change type, and when the change occurred.
-
-Two change events where the entities are adjacent will be joined into a single
-one will be joined. This means the change list is always rather small compared
-to the number of changing entities (especially compared to using a `HashSet`).
-
-The following example combines optional queries with change detection to create
-a small physic calculation.
-</code></pre>
 <p>The following example makes use of optional combinators and change detection to
 handle a 3d world.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -263,7 +252,7 @@ handle a 3d world.</p>
         .with_system(update_world_matrix)
         .build();
 
-    let all_ids = Query::new(entities()).iter(&amp;world).iter().collect_vec();
+    let all_ids = Query::new(entities()).borrow(&amp;world).iter().collect_vec();
 
     for _ in 0..10 {
         schedule
@@ -289,6 +278,17 @@ handle a 3d world.</p>
 
 <span class="boring">}
 </span></code></pre></pre>
+<h3 id="implementation-details"><a class="header" href="#implementation-details">Implementation details</a></h3>
+<pre><code>Each `ChangeEvent` consists of a subslice of adjacent entities in the same
+archetype, the change type, and when the change occurred.
+
+Two change events where the entities are adjacent will be joined into a single
+one will be joined. This means the change list is always rather small compared
+to the number of changing entities (especially compared to using a `HashSet`).
+
+The following example combines optional queries with change detection to create
+a small physic calculation.
+</code></pre>
 
                     </main>
 

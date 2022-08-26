@@ -160,7 +160,7 @@ a certain filter.</p>
 
     let mut query = Query::new((position(), health()));
 
-    for (pos, health) in &amp;mut query.iter(&amp;world) {
+    for (pos, health) in &amp;mut query.borrow(&amp;world) {
         println!(&quot;pos: {pos:?}, health: {health}&quot;);
     }
 
@@ -189,7 +189,7 @@ the same time.</p>
 <p>Change detection is also supported and allows querying only over the entities
 where a certain component changed.</p>
 <p>The following example shows a query which will update the distance to origin
-when an entity moves for every entity which are not dead.</p>
+when an entity moves for every entity which are not despawned.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
@@ -212,7 +212,7 @@ when an entity moves for every entity which are not dead.</p>
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);
-    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -220,12 +220,12 @@ when an entity moves for every entity which are not dead.</p>
 <span class="boring">}
 </span></code></pre></pre>
 <p>The same query can be run again, but since all changes have been visited, it
-yield nothing.</p>
+yields nothing.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
 </span>    tracing::info!(&quot;Running query again&quot;);
-    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
@@ -239,11 +239,24 @@ only that change.</p>
 </span>    *world.get_mut(id2, position())? = (8.0, 3.0);
 
     tracing::info!(&quot;... and again&quot;);
-    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
 
+<span class="boring">}
+</span></code></pre></pre>
+<p>For situations where an <code>or</code> combined filter is used in conjunction with a fetch
+of the same components, the filter may be attached directly to the query fetch
+instead.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>        // Instead of this:
+        let query = Query::new((position(), health(), distance()))
+            .filter(position().modified() | health().modified());
+
+        // Do this:
+        let query = Query::new((position().modified(), health().modified(), distance()));
 <span class="boring">}
 </span></code></pre></pre>
 <h3 id="change-detection"><a class="header" href="#change-detection">Change detection</a></h3>

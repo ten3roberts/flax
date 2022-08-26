@@ -202,7 +202,7 @@ matching archetype in the world.</p>
 </span>
 <span class="boring">fn main() {
 </span>    let mut query = Query::new((name(), position(), is_player().opt(), health()));
-    for (name, pos, is_player, health) in &amp;mut query.iter(&amp;world) {
+    for (name, pos, is_player, health) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;name: {name}, pos: {pos:?}, player: {is_player:?}, health: {health}&quot;);
     }
 
@@ -211,7 +211,7 @@ matching archetype in the world.</p>
     {
         let mut query = Query::new((name(), position(), health())).without(is_player());
         info_span!(&quot;enemies&quot;);
-        for (name, pos, health) in &amp;mut query.iter(&amp;world) {
+        for (name, pos, health) in &amp;mut query.borrow(&amp;world) {
             tracing::info!(&quot;name: {name}, pos: {pos:?}, health: {health}&quot;);
         }
     }

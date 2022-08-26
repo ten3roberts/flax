@@ -164,7 +164,7 @@ thrice could be turned into a query.</p>
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);
-    for (id, pos, dist) in &amp;mut query.iter(&amp;world) {
+    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
         *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
     }
