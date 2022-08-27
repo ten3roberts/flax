@@ -215,7 +215,7 @@ fn merge_custom() {
 
     let mut world = World::new();
 
-    let custom_component = world.spawn_component::<Arc<String>>("custom", |_| Default::default());
+    let _ = world.spawn_component::<Arc<String>>("custom2", |_| Default::default());
 
     random_entities(&mut rng)
         .take(1000)

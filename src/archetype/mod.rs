@@ -337,11 +337,6 @@ impl Archetype {
     /// The length of the passed data must be equal to the slice and the slice
     /// must point to a currently uninitialized region in the archetype.
     pub(crate) unsafe fn extend(&mut self, src: &mut Storage) -> Option<usize> {
-        // assert!(
-        //     slice.end <= self.len(),
-        //     "Slice end is past the archetype length"
-
-        // );
         let storage = self.storage.get_mut(&src.info().id())?;
 
         let additional = src.len();
@@ -456,9 +451,9 @@ impl Archetype {
             return;
         }
 
-        for storage in self.storage.values_mut() {
-            storage.reserve(additional);
-        }
+        // for storage in self.storage.values_mut() {
+        //     storage.reserve(additional);
+        // }
 
         // Copy over entity ids
         // let mut new_entities = vec![None; new_cap].into_boxed_slice();
