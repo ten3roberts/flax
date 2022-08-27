@@ -146,6 +146,15 @@ impl Storage {
     /// # Safety
     /// Other must be of the same type as self
     pub(crate) unsafe fn append(&mut self, other: &mut Self) {
+        assert_eq!(self.info.type_id, other.info.type_id);
+
+        // This is faster than copying everything over if there is no elements
+        // in self
+        if self.len == 0 {
+            mem::swap(self, other);
+            return;
+        }
+
         self.reserve(other.len);
 
         std::ptr::copy_nonoverlapping(
@@ -165,6 +174,7 @@ impl Storage {
 
     #[inline(always)]
     pub unsafe fn borrow_mut<T: ComponentValue>(&self) -> AtomicRefMut<[T]> {
+        assert!(self.info.is::<T>(), "Mismatched types");
         let data = match self.data.try_borrow_mut() {
             Ok(v) => v,
             Err(_) => panic!("Component {} is already borrowed", self.info.name()),
@@ -177,6 +187,7 @@ impl Storage {
 
     #[inline(always)]
     pub unsafe fn borrow<T: ComponentValue>(&self) -> AtomicRef<[T]> {
+        assert!(self.info.is::<T>(), "Mismatched types");
         let data = match self.data.try_borrow() {
             Ok(v) => v,
             Err(_) => panic!("Component {} is already borrowed mutably", self.info.name()),
@@ -218,6 +229,7 @@ impl Storage {
     }
 
     pub(crate) fn push<T: ComponentValue>(&mut self, mut item: T) {
+        assert!(self.info.is::<T>(), "Mismatched types");
         unsafe {
             self.extend(&mut item as *mut T as *mut u8, 1);
         }

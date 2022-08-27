@@ -1148,7 +1148,6 @@ impl World {
         for (_, arch) in &mut archetypes.inner.iter_mut() {
             if arch.has(is_component().id()) {
                 for (slot, &id) in arch.slots().iter().zip(arch.entities()) {
-                    eprintln!("Mapped component: {id}");
                     components.insert(
                         id.low(),
                         *arch.get(slot, is_component()).expect("Invalid slot"),
