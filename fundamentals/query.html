@@ -209,7 +209,7 @@ when an entity moves for every entity which are not despawned.</p>
         world.set(id, distance(), 0.0)?;
     }
 
-    let mut query = Query::new((entities(), position(), distance().as_mut()))
+    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);

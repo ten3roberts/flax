@@ -160,7 +160,7 @@ thrice could be turned into a query.</p>
         world.set(id, distance(), 0.0)?;
     }
 
-    let mut query = Query::new((entities(), position(), distance().as_mut()))
+    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);
@@ -199,7 +199,8 @@ single query.</p>
 </span>    let mut update_dist = System::builder()
         .with_name(&quot;update_distance&quot;)
         .with(
-            Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
+            Query::new((entity_ids(), position(), distance().as_mut()))
+                .filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
             tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
@@ -227,7 +228,7 @@ as it may access anything.</p>
 </span>    // Despawn all entities with a distance &gt; 50
     let despawn = System::builder()
         .with_name(&quot;delete_outside_world&quot;)
-        .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
+        .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {

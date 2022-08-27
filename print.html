@@ -413,7 +413,7 @@ when an entity moves for every entity which are not despawned.</p>
         world.set(id, distance(), 0.0)?;
     }
 
-    let mut query = Query::new((entities(), position(), distance().as_mut()))
+    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);
@@ -499,7 +499,7 @@ thrice could be turned into a query.</p>
         world.set(id, distance(), 0.0)?;
     }
 
-    let mut query = Query::new((entities(), position(), distance().as_mut()))
+    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
         .filter(position().modified() &amp; health().gt(0.0));
 
     tracing::info!(&quot;Updating distances&quot;);
@@ -538,7 +538,8 @@ single query.</p>
 </span>    let mut update_dist = System::builder()
         .with_name(&quot;update_distance&quot;)
         .with(
-            Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
+            Query::new((entity_ids(), position(), distance().as_mut()))
+                .filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
             tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
@@ -566,7 +567,7 @@ as it may access anything.</p>
 </span>    // Despawn all entities with a distance &gt; 50
     let despawn = System::builder()
         .with_name(&quot;delete_outside_world&quot;)
-        .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
+        .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
@@ -602,7 +603,7 @@ sequence.</p>
 </span><span class="boring">fn main() {
 </span>    let despawn = System::builder()
         .with_name(&quot;delete_outside_world&quot;)
-        .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
+        .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
@@ -754,7 +755,7 @@ used to exclude components.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
-</span>    let children_of_parent = Query::new(entities())
+</span>    let children_of_parent = Query::new(entity_ids())
         .with(child_of(parent))
         .borrow(&amp;world)
         .iter()
@@ -762,7 +763,7 @@ used to exclude components.</p>
 
     tracing::info!(&quot;Children: {children_of_parent:?}&quot;);
 
-    let all_children = Query::new(entities())
+    let all_children = Query::new(entity_ids())
         .filter(child_of.with())
         .borrow(&amp;world)
         .iter()
@@ -770,7 +771,7 @@ used to exclude components.</p>
 
     tracing::info!(&quot;Children: {all_children:?}&quot;);
 
-    let roots = Query::new(entities())
+    let roots = Query::new(entity_ids())
         .filter(child_of.without())
         .borrow(&amp;world)
         .iter()
@@ -963,7 +964,7 @@ in other situations where a mutable reference to the world is not available.</p>
 
     cmd.apply(&amp;mut world)?;
 
-    let id = Query::new(entities())
+    let id = Query::new(entity_ids())
         .filter(name().eq(&quot;a&quot;.into()))
         .borrow(&amp;world)
         .iter()
@@ -1026,7 +1027,7 @@ in other situations where a mutable reference to the world is not available.</p>
     // Ensure a world matrix to each entity with a position
     let add_world_matrix = System::builder()
         .with_name(&quot;add_world_matrix&quot;)
-        .with(Query::new((entities(), position())).without(world_matrix()))
+        .with(Query::new((entity_ids(), position())).without(world_matrix()))
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut q: QueryData&lt;(Entities, Component&lt;Vec2&gt;), _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
@@ -1041,7 +1042,7 @@ in other situations where a mutable reference to the world is not available.</p>
     let update_world_matrix = System::builder()
         .with_name(&quot;update_world_matrix&quot;)
         .with(
-            Query::new((entities(), position(), world_matrix().as_mut()))
+            Query::new((entity_ids(), position(), world_matrix().as_mut()))
                 .filter(position().modified()),
         )
         .for_each(|(id, pos, ltw)| {
@@ -1148,7 +1149,7 @@ handle a 3d world.</p>
     let create_world_matrix = System::builder()
         .with_name(&quot;add_world_matrix&quot;)
         .with(
-            Query::new(entities())
+            Query::new(entity_ids())
                 .with(position())
                 .without(world_matrix()),
         )
@@ -1166,7 +1167,7 @@ handle a 3d world.</p>
         .with_name(&quot;update_world_matrix&quot;)
         .with(
             Query::new((
-                entities(),
+                entity_ids(),
                 world_matrix().as_mut(),
                 position(),
                 rotation().opt_or_default(),
@@ -1185,7 +1186,7 @@ handle a 3d world.</p>
         .with_system(update_world_matrix)
         .build();
 
-    let all_ids = Query::new(entities()).borrow(&amp;world).iter().collect_vec();
+    let all_ids = Query::new(entity_ids()).borrow(&amp;world).iter().collect_vec();
 
     for _ in 0..10 {
         schedule

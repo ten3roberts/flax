@@ -153,7 +153,7 @@ in other situations where a mutable reference to the world is not available.</p>
 
     cmd.apply(&amp;mut world)?;
 
-    let id = Query::new(entities())
+    let id = Query::new(entity_ids())
         .filter(name().eq(&quot;a&quot;.into()))
         .borrow(&amp;world)
         .iter()
@@ -216,7 +216,7 @@ in other situations where a mutable reference to the world is not available.</p>
     // Ensure a world matrix to each entity with a position
     let add_world_matrix = System::builder()
         .with_name(&quot;add_world_matrix&quot;)
-        .with(Query::new((entities(), position())).without(world_matrix()))
+        .with(Query::new((entity_ids(), position())).without(world_matrix()))
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut q: QueryData&lt;(Entities, Component&lt;Vec2&gt;), _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
@@ -231,7 +231,7 @@ in other situations where a mutable reference to the world is not available.</p>
     let update_world_matrix = System::builder()
         .with_name(&quot;update_world_matrix&quot;)
         .with(
-            Query::new((entities(), position(), world_matrix().as_mut()))
+            Query::new((entity_ids(), position(), world_matrix().as_mut()))
                 .filter(position().modified()),
         )
         .for_each(|(id, pos, ltw)| {

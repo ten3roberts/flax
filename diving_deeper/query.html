@@ -215,7 +215,7 @@ handle a 3d world.</p>
     let create_world_matrix = System::builder()
         .with_name(&quot;add_world_matrix&quot;)
         .with(
-            Query::new(entities())
+            Query::new(entity_ids())
                 .with(position())
                 .without(world_matrix()),
         )
@@ -233,7 +233,7 @@ handle a 3d world.</p>
         .with_name(&quot;update_world_matrix&quot;)
         .with(
             Query::new((
-                entities(),
+                entity_ids(),
                 world_matrix().as_mut(),
                 position(),
                 rotation().opt_or_default(),
@@ -252,7 +252,7 @@ handle a 3d world.</p>
         .with_system(update_world_matrix)
         .build();
 
-    let all_ids = Query::new(entities()).borrow(&amp;world).iter().collect_vec();
+    let all_ids = Query::new(entity_ids()).borrow(&amp;world).iter().collect_vec();
 
     for _ in 0..10 {
         schedule
