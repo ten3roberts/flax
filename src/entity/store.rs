@@ -1,6 +1,9 @@
 use itertools::Itertools;
 
-use crate::{archetype::ArchetypeId, error::Result, EntityGen, EntityKind, Error, StrippedEntity};
+use crate::{
+    archetype::ArchetypeId, entity::EntityGen, entity::EntityKind, entity::StrippedEntity,
+    error::Result, Error,
+};
 use std::{
     iter::Enumerate,
     mem::{self, ManuallyDrop},

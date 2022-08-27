@@ -1,8 +1,8 @@
 use std::{fmt::Display, marker::PhantomData, sync::atomic::AtomicU32};
 
 use crate::{
-    archetype::ComponentInfo, buffer::ComponentBuffer, wildcard, ChangeFilter, ChangeKind, Entity,
-    EntityKind, MetaData, Mutable, RemovedFilter, With, Without,
+    archetype::ComponentInfo, buffer::ComponentBuffer, entity::wildcard, entity::EntityKind,
+    ChangeFilter, ChangeKind, Entity, MetaData, Mutable, RemovedFilter, With, Without,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
@@ -103,7 +103,11 @@ impl<T: ComponentValue> Display for Component<T> {
 
 impl<T: ComponentValue> Component<T> {
     /// Create a new component given a unique id and name.
-    pub(crate) fn new(
+    ///
+    /// # Safety
+    /// The constructed component can not be of a different type, name or meta
+    /// than any existing component of the same id
+    pub(crate) unsafe fn from_raw_id(
         id: ComponentId,
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
@@ -117,7 +121,9 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Creates a new relation component with the specified object entity
-    pub(crate) fn new_pair(
+    /// # Safety
+    /// See: [Component::from_raw_id]
+    pub(crate) unsafe fn from_pair(
         id: ComponentId,
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
@@ -141,7 +147,7 @@ impl<T: ComponentValue> Component<T> {
     ) -> Self {
         let id = Entity::static_init(id, kind);
 
-        Self::new_pair(id, name, meta, object)
+        unsafe { Self::from_pair(id, name, meta, object) }
     }
 
     #[doc(hidden)]
@@ -153,7 +159,9 @@ impl<T: ComponentValue> Component<T> {
     ) -> Self {
         let id = Entity::static_init(id, kind);
 
-        Self::new(id, name, meta)
+        // Safety
+        // The id is new
+        unsafe { Self::from_raw_id(id, name, meta) }
     }
 
     /// Attaches a function to generate component metadata

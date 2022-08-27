@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flax::{component, components::name, entities, EntityBuilder, Error, Query, World};
+use flax::{component, components::name, entity_ids, EntityBuilder, Error, Query, World};
 use itertools::Itertools;
 
 #[test]
@@ -30,7 +30,7 @@ fn query() {
         b: String,
     }
 
-    let mut query = Query::new((entities(), a()));
+    let mut query = Query::new((entity_ids(), a()));
     let mut world = World::new();
     query.borrow(&world).iter().for_each(|_| {});
 

@@ -1,6 +1,8 @@
 use flax::components::{child_of, name};
-use flax::{component, debug_visitor, util::TupleCloned, wildcard, EntityBuilder, Query, World};
-use flax::{entities, relations_like, Debug, Entity};
+use flax::{
+    component, debug_visitor, entity::wildcard, util::TupleCloned, EntityBuilder, Query, World,
+};
+use flax::{entity_ids, relations_like, Debug, Entity};
 use itertools::Itertools;
 
 #[derive(Debug, Clone)]
@@ -239,7 +241,7 @@ fn hierarchy_manipulation() {
         .spawn(&mut world);
 
     // Query all entities with no `child_of` relation
-    let mut q = Query::new(entities()).without(child_of(wildcard()));
+    let mut q = Query::new(entity_ids()).without(child_of(wildcard()));
 
     let roots = q.borrow(&world).iter().sorted().collect_vec();
     assert_eq!(roots, [a, b]);

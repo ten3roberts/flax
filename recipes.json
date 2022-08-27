@@ -1,68 +1,72 @@
 {
-    "check": {
-        "cmd": "cargo check --tests --examples --all-features"
+  "check": {
+    "cmd": "cargo check --tests --examples --all-features"
+  },
+  "test": {
+    "cmd": "cargo nextest run --all-features",
+    "kind": "term"
+  },
+  "build": {
+    "cmd": "cargo build --examples"
+  },
+  "mdbook-build": {
+    "cmd": "mdbook build",
+    "kind": "term",
+    "cwd": "guide"
+  },
+  "mdbook-serve": {
+    "cmd": "mdbook serve --open",
+    "cwd": "guide"
+  },
+  "example-guide": {
+    "cmd": "cargo run --example guide",
+    "kind": "term",
+    "keep_open": true
+  },
+  "example-query": {
+    "cmd": "cargo run --example query",
+    "opts": {
+      "auto_close": false
     },
-    "build": {
-        "cmd": "cargo build --examples"
+    "kind": "term"
+  },
+  "example-builder": {
+    "cmd": "cargo run --example builder",
+    "opts": {
+      "auto_close": false
     },
-    "mdbook-build": {
-        "cmd": "mdbook build",
-        "kind": "term",
-        "cwd": "guide"
+    "kind": "term"
+  },
+  "example-query-advanced": {
+    "cmd": "cargo run --example query_advanced",
+    "opts": {
+      "auto_close": false
     },
-    "mdbook-serve": {
-        "cmd": "mdbook serve --open",
-        "cwd": "guide"
+    "kind": "term"
+  },
+  "debug-query-advanced": {
+    "cmd": "./target/debug/examples/query_advanced",
+    "kind": "dap",
+    "depends_on": [
+      {
+        "cmd": "cargo build --example query_advanced"
+      }
+    ]
+  },
+  "example-relations": {
+    "cmd": "cargo run --example relations",
+    "opts": {
+      "auto_close": false
     },
-    "example-guide": {
-        "cmd": "cargo run --example guide",
-        "kind": "term",
-        "keep_open": true
-    },
-    "example-query": {
-        "cmd": "cargo run --example query",
-        "opts": {
-            "auto_close": false
-        },
-        "kind": "term"
-    },
-    "example-builder": {
-        "cmd": "cargo run --example builder",
-        "opts": {
-            "auto_close": false
-        },
-        "kind": "term"
-    },
-    "example-query-advanced": {
-        "cmd": "cargo run --example query_advanced",
-        "opts": {
-            "auto_close": false
-        },
-        "kind": "term"
-    },
-    "debug-query-advanced": {
-        "cmd": "./target/debug/examples/query_advanced",
-        "kind": "dap",
-        "depends_on": [
-            {
-                "cmd": "cargo build --example query_advanced"
-            }
-        ]
-    },
-    "example-relations": {
-        "cmd": "cargo run --example relations",
-        "opts": {
-            "auto_close": false
-        },
-        "kind": "term"
-    },
-    "debug-relations": {
-        "cmd": "./target/debug/examples/relations",
-        "kind": "dap",
-        "depends_on": [
-            {
-                "cmd": "cargo build --example relations"
-            }
-        ]
-    }
+    "kind": "term"
+  },
+  "debug-relations": {
+    "cmd": "./target/debug/examples/relations",
+    "kind": "dap",
+    "depends_on": [
+      {
+        "cmd": "cargo build --example relations"
+      }
+    ]
+  }
 }

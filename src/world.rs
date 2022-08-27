@@ -14,13 +14,17 @@ use crate::{
     archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ComponentInfo, Slice},
     buffer::ComponentBuffer,
     components::{is_component, name},
-    debug_visitor, entities,
-    entity::{EntityLocation, EntityStore},
+    debug_visitor,
+    entity::entity_ids,
+    entity::EntityKind,
+    entity::EntityStoreIterMut,
+    entity::{wildcard, EntityLocation, EntityStore},
+    entity::{EntityStoreIter, StrippedEntity},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentId, ComponentValue, Entity, EntityGen, EntityKind, EntityStoreIter,
-    EntityStoreIterMut, Error, Filter, Query, RelationExt, RowFormatter, StaticFilter,
+    is_static_component, Component, ComponentId, ComponentValue, Entity, Error, Filter, Query,
+    RelationExt, RowFormatter, StaticFilter,
 };
 
 #[derive(Debug, Default)]
@@ -171,7 +175,7 @@ impl World {
     pub fn spawn_batch(&mut self, batch: &mut BatchSpawn) -> Vec<Entity> {
         for &component in batch.components() {
             self.init_component(component)
-                .expect("failed to initialize component");
+                .expect("Failed to initialize component");
         }
 
         let change_tick = self.advance_change_tick();
@@ -290,7 +294,12 @@ impl World {
     ) -> Component<T> {
         let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
 
-        Component::new(id, name, meta)
+        // Safety
+        // The id is not used by anything else
+        let component = unsafe { Component::from_raw_id(id, name, meta) };
+
+        self.init_component(component.info()).unwrap();
+        component
     }
 
     /// Spawn a new relation of type `T` which can be attached to an entity.
@@ -306,7 +315,10 @@ impl World {
             EntityKind::COMPONENT | EntityKind::RELATION,
         );
 
-        move |object| Component::new_pair(id, name, meta, object)
+        let relation = move |object| unsafe { Component::from_pair(id, name, meta, object) };
+        self.init_component(relation(wildcard()).info()).unwrap();
+
+        relation
     }
 
     fn spawn_inner(
@@ -383,12 +395,8 @@ impl World {
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
     pub fn spawn_at_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Entity {
+        eprintln!("Spawn at with: {id}");
         let change_tick = self.advance_change_tick();
-
-        for component in buffer.components() {
-            self.init_component(*component)
-                .expect("Failed to initialize component");
-        }
 
         let (arch_id, _) = self.archetypes.init(buffer.components());
         let (loc, arch) = self.spawn_at_inner(id, arch_id);
@@ -402,6 +410,13 @@ impl World {
             arch.init_changes(component)
                 .set(Change::inserted(Slice::single(loc.slot), change_tick))
                 .set(Change::modified(Slice::single(loc.slot), change_tick));
+        }
+
+        for &component in buffer.components() {
+            if component.id != id {
+                self.init_component(component)
+                    .expect("Failed to initialize component");
+            }
         }
 
         id
@@ -561,7 +576,10 @@ impl World {
         }
 
         for (component, _) in new_data {
-            self.init_component(component)?;
+            if component.id != id {
+                self.init_component(component)
+                    .expect("Failed to initialize component");
+            }
         }
 
         Ok(())
@@ -582,8 +600,11 @@ impl World {
         meta.set(is_component(), info);
         meta.set(name(), info.name().to_string());
 
-        self.spawn_at(info.id());
-        self.set_with(info.id(), meta.take_all()).unwrap();
+        if info.id().is_static() {
+            meta.set(is_static_component(), ());
+        }
+
+        self.spawn_at_with(info.id(), &mut meta);
 
         Ok(info)
     }
@@ -595,6 +616,10 @@ impl World {
             arch: archetype,
             slot,
         } = self.location(id)?;
+
+        if id.is_static() {
+            panic!("Attempt to despawn static component");
+        }
 
         let src = self.archetype_mut(archetype);
 
@@ -619,7 +644,7 @@ impl World {
     where
         F: for<'x> Filter<'x>,
     {
-        let mut query = Query::new(entities()).filter(filter);
+        let mut query = Query::new(entity_ids()).filter(filter);
         let ids = query.borrow(self).iter().collect_vec();
 
         for id in ids {
@@ -787,7 +812,10 @@ impl World {
             };
             *ns.get_mut(id).expect("Entity is not valid") = loc;
 
-            self.init_component(component.info())?;
+            if component.id() != id {
+                self.init_component(component.info())
+                    .expect("Failed to initialize component");
+            }
 
             Ok((None, loc))
         }
@@ -1010,10 +1038,24 @@ impl World {
     }
 
     /// Attempt to find an alive entity given the id
-    pub(crate) fn find_alive(&self, id: crate::StrippedEntity) -> Option<Entity> {
+    pub fn find_alive(&self, id: StrippedEntity) -> Option<Entity> {
         let ns = self.entities.get(id.kind())?;
 
         ns.reconstruct(id).map(|v| v.0)
+    }
+
+    /// Attempt to find a component from the given id
+    pub fn find_component<T: ComponentValue>(&self, id: ComponentId) -> Option<Component<T>> {
+        let e = self.entity(id).ok()?;
+
+        let info = e.get(is_component()).ok()?;
+
+        if !info.is::<T>() {
+            panic!("Attempt to construct a component from the wrong type");
+        }
+        // Safety: the type
+
+        Some(unsafe { Component::from_raw_id(id, info.name(), info.meta()) })
     }
 
     /// Access, insert, and remove all components of an entity
@@ -1064,81 +1106,162 @@ impl World {
     ///
     /// Colliding entities will be migrated to a new entity id.
     ///
-    /// Returns a map from the entity id in `other` to the entity id in `self`.
-    pub fn merge_with(&mut self, other: &mut World) -> BTreeMap<Entity, Entity> {
+    /// Returns a map of all the entities which were remapped.
+    ///
+    /// `other` will be left empty
+    pub fn merge_with(&mut self, other: &mut World) -> Migrated {
         let mut archetypes = mem::take(&mut other.archetypes);
-        let entities = mem::take(&mut other.entities);
+        let mut entities = mem::take(&mut other.entities);
+
+        let mut components = BTreeMap::new();
 
         let new_ids: BTreeMap<_, _> = archetypes
             .inner
             .iter_mut()
-            .filter(|v| !v.1.has(is_component().id()))
-            .flat_map(|(_, arch)| {
+            .filter(|v| !v.1.has(is_static_component().id()))
+            .flat_map(|(arch_id, arch)| {
                 arch.entities_mut()
                     .iter_mut()
-                    .map(|id| {
+                    .filter_map(|id| {
                         let old_id = *id;
-                        if !id.is_static() && self.find_alive(id.low()).is_some() {
+
+                        let loc = entities
+                            .init(id.kind())
+                            .get(*id)
+                            .expect("Invalid component");
+
+                        assert_eq!(loc.arch, arch_id);
+
+                        if self.find_alive(id.low()).is_some() {
                             let new_id = self.spawn_inner(self.archetypes.root, id.kind()).0;
 
                             *id = new_id;
-                            (old_id, new_id)
+                            Some((old_id.low(), new_id))
                         } else {
-                            (old_id, old_id)
+                            None
                         }
                     })
                     .collect_vec()
             })
             .collect();
 
-        for (_, arch) in &mut archetypes
-            .inner
-            .iter_mut()
-            .filter(|v| !v.1.has(is_component().id()))
-        {
-            let mut batch = BatchSpawn::new(arch.len());
-
-            for mut storage in mem::take(arch.storage_mut()).into_values() {
-                let id = storage.info().id;
-
-                // Modify the relations to match new components
-                if id.is_relation() {
-                    let (low, high) = id.split_pair();
-
-                    let low = entities
-                        .get(low.kind())
-                        .unwrap()
-                        .reconstruct(low)
-                        .unwrap()
-                        .0;
-
-                    let high = entities
-                        .get(high.kind())
-                        .unwrap()
-                        .reconstruct(high)
-                        .unwrap()
-                        .0;
-
-                    let new_low = *new_ids.get(&low).unwrap();
-                    let new_high = *new_ids.get(&high).unwrap();
-
-                    eprintln!("Mapping relation {low}, {high} => {new_low}, {new_high}");
-                    // Safety
-                    // The component is still of the same type
-                    unsafe {
-                        storage.set_id(Entity::pair(new_low, new_high));
-                    }
+        for (_, arch) in &mut archetypes.inner.iter_mut() {
+            if arch.has(is_component().id()) {
+                for (slot, &id) in arch.slots().iter().zip(arch.entities()) {
+                    eprintln!("Mapped component: {id}");
+                    components.insert(
+                        id.low(),
+                        *arch.get(slot, is_component()).expect("Invalid slot"),
+                    );
                 }
-
-                batch.insert(storage).expect("Batch is incomplete");
             }
 
-            eprintln!("Merging: {arch:#?}");
-            self.spawn_batch_at(arch.entities(), &mut batch)
-                .expect("Failed to spawn batch")
+            // Don't migrate static components
+            if !arch.has(is_static_component().id()) {
+                let mut batch = BatchSpawn::new(arch.len());
+                for mut storage in mem::take(arch.storage_mut()).into_values() {
+                    let id = storage.info().id;
+
+                    // Modify the relations to match new components
+                    if id.is_relation() {
+                        let (low, high) = id.split_pair();
+
+                        let low = entities.init(low.kind()).reconstruct(low).unwrap().0;
+
+                        let high = entities.init(high.kind()).reconstruct(high).unwrap().0;
+
+                        let new_low = *new_ids.get(&low.low()).unwrap_or(&low);
+                        let new_high = *new_ids.get(&high.low()).unwrap_or(&high);
+
+                        // Safety
+                        // The component is still of the same type
+                        unsafe {
+                            storage.set_id(Entity::pair(new_low, new_high));
+                        }
+                    } else {
+                        let new_id = *new_ids.get(&id.low()).unwrap_or(&id);
+                        // Safety
+                        // The component is still of the same type
+                        unsafe {
+                            storage.set_id(new_id);
+                        }
+                    }
+
+                    batch.insert(storage).expect("Batch is incomplete");
+                }
+
+                self.spawn_batch_at(arch.entities(), &mut batch)
+                    .expect("Failed to spawn batch")
+            }
         }
 
-        new_ids
+        Migrated {
+            ids: new_ids,
+            components,
+        }
+    }
+}
+
+/// Holds the migrated components
+#[derive(Debug, Clone)]
+pub struct Migrated {
+    ids: BTreeMap<StrippedEntity, Entity>,
+    components: BTreeMap<StrippedEntity, ComponentInfo>,
+}
+
+impl Migrated {
+    /// Retuns the new id if it was migrated, otherwise, returns the given id
+    pub fn get(&self, id: Entity) -> Entity {
+        *self.ids.get(&id.low()).unwrap_or(&id)
+    }
+
+    /// Returns the migrated component. All components are migrated
+    /// # Panics
+    /// If the types do not match
+    pub fn get_component<T: ComponentValue>(&self, component: Component<T>) -> Component<T> {
+        let id = self.get(component.id());
+
+        let mut info = *self
+            .components
+            .get(&id.low())
+            .expect("{component} is not a component or not present in the world");
+
+        info.id = id;
+
+        if !info.is::<T>() {
+            panic!("Mismatched component types {component:?} for {info:#?}");
+        }
+
+        unsafe { Component::from_raw_id(info.id(), info.name(), info.meta()) }
+    }
+
+    /// Returns the migrated relation
+    /// # Panics
+    /// If the types do not match
+    pub fn get_relation<T: ComponentValue>(
+        &self,
+        relation: impl RelationExt<T>,
+    ) -> impl Fn(Entity) -> Component<T> {
+        let id = relation.of(wildcard()).id();
+        let id = *self.ids.get(&id.low()).unwrap_or(&id);
+
+        let mut info = *self
+            .components
+            .get(&id.low())
+            .expect("relation is not a component or not present in the world");
+
+        info.id = id;
+
+        if !info.is::<T>() {
+            panic!("Mismatched relation types");
+        }
+
+        move |object| unsafe { Component::from_pair(info.id(), info.name(), info.meta(), object) }
+    }
+
+    /// Returns the migrated ids
+    pub fn ids(&self) -> &BTreeMap<StrippedEntity, Entity> {
+        &self.ids
     }
 }
 

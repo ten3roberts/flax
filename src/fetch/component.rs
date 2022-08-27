@@ -6,7 +6,8 @@ use smallvec::SmallVec;
 
 use crate::{
     archetype::{Changes, Slice, Slot},
-    wildcard, AccessKind, Change, Component, ComponentValue,
+    entity::wildcard,
+    AccessKind, Change, Component, ComponentValue,
 };
 
 use super::*;

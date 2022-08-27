@@ -268,12 +268,19 @@ impl Entity {
         EntityBuilder::new()
     }
 
-    pub(crate) fn is_relation(&self) -> bool {
+    /// Returns true if the id is a relation id
+    pub fn is_relation(&self) -> bool {
         self.kind().contains(EntityKind::RELATION)
     }
 
-    pub(crate) fn is_static(&self) -> bool {
+    /// Returns true if the id is a static id
+    pub fn is_static(&self) -> bool {
         self.kind().contains(EntityKind::STATIC)
+    }
+
+    /// Returns true if the id is a component id
+    pub fn is_component(&self) -> bool {
+        self.kind().contains(EntityKind::COMPONENT)
     }
 }
 
@@ -334,7 +341,7 @@ impl fmt::Display for StrippedEntity {
 }
 
 /// Access the entity ids in a query
-pub fn entities() -> Entities {
+pub fn entity_ids() -> Entities {
     Entities
 }
 
@@ -342,7 +349,7 @@ pub fn entities() -> Entities {
 mod tests {
     use std::num::NonZeroU32;
 
-    use crate::{Entity, EntityKind};
+    use crate::{entity::EntityKind, Entity};
 
     use super::EntityStore;
     #[test]

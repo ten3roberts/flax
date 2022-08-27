@@ -1,11 +1,9 @@
-use std::{alloc::Layout, collections::BTreeMap, mem};
+use std::{alloc::Layout, any::TypeId, collections::BTreeMap, mem};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::{
-    buffer::ComponentBuffer, wildcard, Component, ComponentId, ComponentValue, Entity, EntityKind,
-};
+use crate::{buffer::ComponentBuffer, entity, Component, ComponentId, ComponentValue, Entity};
 
 /// Unique archetype id
 pub type ArchetypeId = Entity;
@@ -29,7 +27,7 @@ pub struct Archetype {
     storage: BTreeMap<Entity, Storage>,
     changes: BTreeMap<ComponentId, AtomicRefCell<Changes>>,
     /// Slot to entity id
-    entities: Vec<Entity>,
+    pub(crate) entities: Vec<Entity>,
     // Number of slots
     cap: usize,
 
@@ -69,7 +67,7 @@ impl Archetype {
     /// wildcard, otherwise, returns an exact match
     pub fn matches_relation(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
         let (rel, obj) = relation.split_pair();
-        let is_wild = obj == wildcard().low();
+        let is_wild = obj == crate::entity::wildcard().low();
         self.relations().filter(move |&v| {
             let (low, _) = v.split_pair();
             is_wild && low == rel || !is_wild && v == relation
@@ -83,7 +81,7 @@ impl Archetype {
             .into_iter()
             .map(|info| {
                 let id = info.id();
-                if !id.kind().contains(EntityKind::COMPONENT) {
+                if !id.kind().contains(entity::EntityKind::COMPONENT) {
                     panic!("Attempt to insert non component entity");
                 }
 
@@ -454,11 +452,10 @@ impl Archetype {
         let old_cap = self.cap;
         let new_cap = (len + additional).next_power_of_two();
 
-        if new_cap <= old_cap {
+        if additional == 0 || new_cap <= old_cap {
             return;
         }
 
-        assert_ne!(additional, 0, "Length is: {len}");
         for storage in self.storage.values_mut() {
             storage.reserve(additional);
         }
@@ -551,6 +548,7 @@ pub struct ComponentInfo {
     pub(crate) id: ComponentId,
     pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
+    pub(crate) type_id: TypeId,
     meta: fn(Self) -> ComponentBuffer,
 }
 
@@ -565,7 +563,7 @@ pub struct ComponentInfo {
 
 impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
     fn from(v: Component<T>) -> Self {
-        v.info()
+        ComponentInfo::of(v)
     }
 }
 
@@ -593,7 +591,12 @@ impl ComponentInfo {
             id: component.id(),
             name: component.name(),
             meta: component.meta(),
+            type_id: TypeId::of::<T>(),
         }
+    }
+
+    pub(crate) fn is<T: ComponentValue>(&self) -> bool {
+        self.type_id == TypeId::of::<T>()
     }
 
     pub(crate) fn size(&self) -> usize {
@@ -620,7 +623,7 @@ impl ComponentInfo {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{component, EntityKind};
+    use crate::{component, entity::EntityKind};
 
     use super::*;
     use std::num::NonZeroU32;

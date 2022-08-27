@@ -376,7 +376,8 @@ mod test {
     #[cfg(feature = "parallel")]
     fn schedule_par() {
         use crate::{
-            components::name, entities, CmpExt, CommandBuffer, Component, Entities, Mutable, Write,
+            components::name, entity_ids, CmpExt, CommandBuffer, Component, Entities, Mutable,
+            Write,
         };
 
         #[derive(Debug, Clone)]
@@ -443,7 +444,7 @@ mod test {
             });
 
         let cleanup = System::builder()
-            .with(Query::new(entities()).filter(health().lte(0.0)))
+            .with(Query::new(entity_ids()).filter(health().lte(0.0)))
             .write::<CommandBuffer>()
             .with_name("cleanup")
             .build(|mut q: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
@@ -454,8 +455,8 @@ mod test {
             });
 
         let battle = System::builder()
-            .with(Query::new((entities(), damage(), range(), pos())))
-            .with(Query::new((entities(), pos(), health().as_mut())))
+            .with(Query::new((entity_ids(), damage(), range(), pos())))
+            .with(Query::new((entity_ids(), pos(), health().as_mut())))
             .with_name("battle")
             .build(
                 |mut sub: QueryData<(_, _, Component<f32>, Component<(f32, f32)>)>,
@@ -481,7 +482,7 @@ mod test {
 
         let remaining = System::builder()
             .with_name("remaining")
-            .with(Query::new(entities()))
+            .with(Query::new(entity_ids()))
             .build(|mut q: QueryData<Entities>| {
                 let mut q = q.iter();
                 eprintln!("Remaining: {:?}", q.iter().format(", "));
