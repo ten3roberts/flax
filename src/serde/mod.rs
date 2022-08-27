@@ -22,16 +22,16 @@ enum WorldFields {
 /// Describes the serialialization format
 #[derive(Debug, Clone, serde::Deserialize)]
 pub enum SerializeFormat {
-    /// Serialize the world in a column major format.
-    /// This is more efficient but less human readable.
-    #[serde(rename = "col")]
-    ColumnMajor,
     /// Serialize the world in a row major format.
     /// This is less efficient and uses slightly more space since each entity is
     /// serialized as a map, though it is more human readable and easier for git
     /// merges.
     #[serde(rename = "row")]
     RowMajor,
+    /// Serialize the world in a column major format.
+    /// This is more efficient but less human readable.
+    #[serde(rename = "col")]
+    ColumnMajor,
 }
 
 /// Allows constructing a serialize and deserialize context with the same

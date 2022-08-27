@@ -325,6 +325,21 @@ impl<'de, 'a> Visitor<'de> for WorldRowVisitor<'a> {
         write!(formatter, "a struct containing a sequence of entities")
     }
 
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        let mut world = World::new();
+
+        seq.next_element_seed(DeserializeEntities {
+            context: self.context,
+            world: &mut world,
+        })?
+        .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+
+        Ok(world)
+    }
+
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: de::MapAccess<'de>,
