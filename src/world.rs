@@ -15,11 +15,7 @@ use crate::{
     buffer::ComponentBuffer,
     components::{is_component, name},
     debug_visitor,
-    entity::entity_ids,
-    entity::EntityKind,
-    entity::EntityStoreIterMut,
-    entity::{wildcard, EntityLocation, EntityStore},
-    entity::{EntityStoreIter, StrippedEntity},
+    entity::*,
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
@@ -143,11 +139,32 @@ impl Default for Archetypes {
     }
 }
 
+type EventSender = Box<dyn Fn(Entity, *const u8) -> bool + Send + Sync>;
+
+#[derive(Default)]
+struct EventRegistry {
+    inner: BTreeMap<ComponentId, Vec<EventSender>>,
+}
+
+impl EventRegistry {
+    fn register(&mut self, component: ComponentId, sender: EventSender) {
+        self.inner.entry(component).or_default().push(sender)
+    }
+
+    fn send(&mut self, component: ComponentId, id: Entity, value: *const u8) {
+        if let Some(senders) = self.inner.get_mut(&component) {
+            senders.retain_mut(|v| v(id, value));
+        }
+    }
+}
+
 /// Holds the entities and components of the ECS.
 pub struct World {
     entities: EntityStores,
     pub(crate) archetypes: Archetypes,
     change_tick: AtomicU32,
+
+    on_removed: EventRegistry,
 }
 
 impl World {
@@ -157,6 +174,7 @@ impl World {
             entities: EntityStores::default(),
             archetypes: Archetypes::new(),
             change_tick: AtomicU32::new(0),
+            on_removed: EventRegistry::default(),
         }
     }
 
@@ -621,9 +639,14 @@ impl World {
             panic!("Attempt to despawn static component");
         }
 
-        let src = self.archetype_mut(archetype);
+        let src = self.archetypes.get_mut(archetype);
 
-        let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
+        let swapped = unsafe {
+            src.take(slot, |c, p| {
+                self.on_removed.send(c.id(), id, p);
+                (c.drop)(p);
+            })
+        };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -875,6 +898,7 @@ impl World {
         let mut on_drop = Some(on_drop);
         let (dst_slot, swapped) = src.move_to(dst, slot, |_, p| {
             let drop = on_drop.take().expect("On drop called more than once");
+            self.on_removed.send(component.id(), id, p);
             (drop)(p);
         });
 
@@ -1102,6 +1126,25 @@ impl World {
         };
     }
 
+    /// Subscribe for removals of a component.
+    ///
+    /// The affected entity and component will be transmitted when the component is removed,
+    /// or when the entity is despawned.
+    ///
+    /// At consumption, the entity may not be alive
+    pub fn on_removed<T: ComponentValue + Clone>(
+        &mut self,
+        component: Component<T>,
+        tx: flume::Sender<(Entity, T)>,
+    ) {
+        let func = move |id: Entity, ptr: *const u8| unsafe {
+            let val = ptr.cast::<T>().as_ref().expect("not null").clone();
+            tx.send((id, val)).is_ok()
+        };
+
+        self.on_removed.register(component.id(), Box::new(func));
+    }
+
     /// Merges `other` into `self`.
     ///
     /// Colliding entities will be migrated to a new entity id.
@@ -1109,6 +1152,9 @@ impl World {
     /// Returns a map of all the entities which were remapped.
     ///
     /// `other` will be left empty
+    ///
+    /// **Note**: The components from `other` will all be marked as `inserted`
+    /// as change events do not carry over.
     pub fn merge_with(&mut self, other: &mut World) -> Migrated {
         let mut archetypes = mem::take(&mut other.archetypes);
         let mut entities = mem::take(&mut other.entities);
