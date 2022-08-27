@@ -184,7 +184,13 @@ impl<'a> Serialize for SerializeEntities<'a> {
     where
         S: Serializer,
     {
-        let mut seq = serializer.serialize_seq(None)?;
+        let len = self
+            .context
+            .archetypes(self.world)
+            .map(|(_, v)| v.len())
+            .sum();
+
+        let mut seq = serializer.serialize_seq(Some(len))?;
 
         for (_, arch) in self.context.archetypes(self.world) {
             for slot in arch.slots() {
@@ -236,7 +242,14 @@ impl<'a> Serialize for SerializeEntityData<'a> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_map(None)?;
+        let len = self
+            .arch
+            .storage()
+            .keys()
+            .filter(|key| self.context.slots.contains_key(key))
+            .count();
+
+        let mut state = serializer.serialize_map(Some(len))?;
         for storage in self.arch.borrow_all() {
             if let Some(slot) = self.context.slots.get(&storage.info().id()) {
                 state.serialize_entry(&slot.key, (slot.ser)(&storage, self.slot))?;
@@ -257,7 +270,8 @@ impl<'a> serde::Serialize for SerializeArchetypes<'a> {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_seq(None)?;
+        let mut state =
+            serializer.serialize_seq(Some(self.context.archetypes(self.world).count()))?;
 
         for (_, arch) in self.context.archetypes(self.world) {
             state.serialize_element(&SerializeArchetype {
@@ -276,7 +290,7 @@ struct SerializeArchetype<'a> {
 }
 
 struct SerializeStorages<'a> {
-    storage: &'a Archetype,
+    arch: &'a Archetype,
     context: &'a SerializeContext,
 }
 
@@ -304,9 +318,16 @@ impl<'a> serde::Serialize for SerializeStorages<'a> {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_map(None)?;
+        let len = self
+            .arch
+            .storage()
+            .keys()
+            .filter(|key| self.context.slots.contains_key(key))
+            .count();
 
-        for storage in self.storage.borrow_all() {
+        let mut state = serializer.serialize_map(Some(len))?;
+
+        for storage in self.arch.borrow_all() {
             let id = storage.info().id;
             if let Some(slot) = self.context.slots.get(&id) {
                 state.serialize_entry(
@@ -331,7 +352,7 @@ impl<'a> serde::Serialize for SerializeArchetype<'a> {
         let mut state = serializer.serialize_tuple_struct("Arch", 3)?;
         state.serialize_field(self.arch.entities())?;
         state.serialize_field(&SerializeStorages {
-            storage: self.arch,
+            arch: self.arch,
             context: self.context,
         })?;
 
