@@ -31,7 +31,7 @@ fn relations() -> color_eyre::Result<()> {
 
     assert_eq!(world.get(child1, child_of(parent2)).as_deref(), Ok(&()));
 
-    let children = Query::new(entities())
+    let children = Query::new(entity_ids())
         .with(child_of(parent))
         .borrow(&world)
         .iter()
@@ -41,7 +41,7 @@ fn relations() -> color_eyre::Result<()> {
     assert_eq!(children, [child1, child2]);
     tracing::info!("Children: {children:?}");
 
-    let parents = Query::new(entities())
+    let parents = Query::new(entity_ids())
         .filter(child_of.without())
         .borrow(&world)
         .iter()

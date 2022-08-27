@@ -42,7 +42,7 @@ fn main() -> color_eyre::Result<()> {
 
     // ANCHOR: query
 
-    let children_of_parent = Query::new(entities())
+    let children_of_parent = Query::new(entity_ids())
         .with(child_of(parent))
         .borrow(&world)
         .iter()
@@ -50,7 +50,7 @@ fn main() -> color_eyre::Result<()> {
 
     tracing::info!("Children: {children_of_parent:?}");
 
-    let all_children = Query::new(entities())
+    let all_children = Query::new(entity_ids())
         .filter(child_of.with())
         .borrow(&world)
         .iter()
@@ -58,7 +58,7 @@ fn main() -> color_eyre::Result<()> {
 
     tracing::info!("Children: {all_children:?}");
 
-    let roots = Query::new(entities())
+    let roots = Query::new(entity_ids())
         .filter(child_of.without())
         .borrow(&world)
         .iter()

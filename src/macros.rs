@@ -94,7 +94,7 @@ macro_rules! component {
                     _buffer
                 }
 
-                use $crate::EntityKind;
+                use $crate::entity::EntityKind;
                 $crate::Component::static_init_pair(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT | EntityKind::RELATION, stringify!($name), meta, $obj)
             }
         }
@@ -124,7 +124,7 @@ macro_rules! component {
 
                     _buffer
                 }
-                use $crate::EntityKind;
+                use $crate::entity::EntityKind;
                 $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT, stringify!($name), meta)
             }
         }
@@ -139,7 +139,7 @@ macro_rules! component {
             static [<ENTITY_ $name:snake:upper _ID>]: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             $(#[$outer])*
             $vis fn $name() -> $crate::Entity {
-                $crate::Entity::static_init(&[<ENTITY_ $name:snake:upper _ID>], $crate::EntityKind::empty())
+                $crate::Entity::static_init(&[<ENTITY_ $name:snake:upper _ID>], $crate::entity::EntityKind::empty())
             }
         }
 

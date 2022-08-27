@@ -72,7 +72,7 @@ fn main() -> color_eyre::Result<()> {
     let create_world_matrix = System::builder()
         .with_name("add_world_matrix")
         .with(
-            Query::new(entities())
+            Query::new(entity_ids())
                 .with(position())
                 .without(world_matrix()),
         )
@@ -90,7 +90,7 @@ fn main() -> color_eyre::Result<()> {
         .with_name("update_world_matrix")
         .with(
             Query::new((
-                entities(),
+                entity_ids(),
                 world_matrix().as_mut(),
                 position(),
                 rotation().opt_or_default(),
@@ -109,7 +109,7 @@ fn main() -> color_eyre::Result<()> {
         .with_system(update_world_matrix)
         .build();
 
-    let all_ids = Query::new(entities()).borrow(&world).iter().collect_vec();
+    let all_ids = Query::new(entity_ids()).borrow(&world).iter().collect_vec();
 
     for _ in 0..10 {
         schedule

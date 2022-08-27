@@ -40,7 +40,7 @@ fn commandbuffer() {
     assert_eq!(world.get(ids[8], health()).as_deref(), Ok(&28.5));
 
     // Add a name to each component which doesn't have a name
-    let mut query = Query::new(entities()).filter(name().without());
+    let mut query = Query::new(entity_ids()).filter(name().without());
 
     // Deferred world modification while iterating
     query.borrow(&world).iter().enumerate().for_each(|(i, id)| {
@@ -74,7 +74,7 @@ fn commandbuffer() {
         ]
     );
 
-    Query::new((entities(), name()))
+    Query::new((entity_ids(), name()))
         .filter(name().cmp(|name| name.contains("Unnamed")))
         .borrow(&world)
         .iter()

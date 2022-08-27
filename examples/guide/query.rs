@@ -1,5 +1,5 @@
 use flax::{
-    component, entities, CmpExt, CommandBuffer, Component, Debug, Entity, Mutable, Query,
+    component, entity_ids, CmpExt, CommandBuffer, Component, Debug, Entity, Mutable, Query,
     QueryData, Schedule, System, World, Write,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -57,7 +57,7 @@ fn main() -> color_eyre::Result<()> {
         world.set(id, distance(), 0.0)?;
     }
 
-    let mut query = Query::new((entities(), position(), distance().as_mut()))
+    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
         .filter(position().modified() & health().gt(0.0));
 
     tracing::info!("Updating distances");
@@ -122,7 +122,8 @@ fn main() -> color_eyre::Result<()> {
     let mut update_dist = System::builder()
         .with_name("update_distance")
         .with(
-            Query::new((entities(), position(), distance().as_mut())).filter(position().modified()),
+            Query::new((entity_ids(), position(), distance().as_mut()))
+                .filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
             tracing::info!("Updating distance for {id} with position: {pos:?}");
@@ -140,7 +141,7 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR: schedule_basic
     let despawn = System::builder()
         .with_name("delete_outside_world")
-        .with(Query::new((entities(), distance())).filter(distance().gt(50.0)))
+        .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .write::<CommandBuffer>()
         .build(
             |mut query: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {

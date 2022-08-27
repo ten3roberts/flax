@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flax::{component, entities, EntityBuilder, Query, World};
+use flax::{component, entity_ids, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 component! {
@@ -92,7 +92,7 @@ fn filters() {
 
     assert_eq!(items, &[29.5]);
 
-    let mut query = Query::new(entities()).filter(a().removed());
+    let mut query = Query::new(entity_ids()).filter(a().removed());
 
     let items = query.borrow(&world).iter().collect_vec();
 
@@ -135,7 +135,7 @@ fn combinations() {
         })
         .collect_vec();
 
-    let mut query = Query::new(entities()).filter(a().modified() | b().modified());
+    let mut query = Query::new(entity_ids()).filter(a().modified() | b().modified());
 
     // eprintln!("Items: {:?}", query.iter(&world).sorted().collect_vec());
     assert_eq!(query.borrow(&world).iter().sorted().collect_vec(), ids);

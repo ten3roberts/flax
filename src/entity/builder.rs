@@ -1,8 +1,8 @@
 use std::mem;
 
 use crate::{
-    buffer::ComponentBuffer, wildcard, CommandBuffer, Component, ComponentInfo, ComponentValue,
-    Entity, RelationExt, World,
+    buffer::ComponentBuffer, entity::wildcard, CommandBuffer, Component, ComponentInfo,
+    ComponentValue, Entity, RelationExt, World,
 };
 
 #[derive(Debug)]

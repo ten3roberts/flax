@@ -119,7 +119,8 @@ pub mod archetype;
 pub mod buffer;
 mod commandbuffer;
 mod component;
-mod entity;
+/// Provides entity identifiers
+pub mod entity;
 mod filter;
 mod query;
 mod system;
@@ -154,7 +155,7 @@ pub use archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ChangeKind, Comp
 pub use commandbuffer::*;
 pub use component::*;
 pub use components::*;
-pub use entity::*;
+pub use entity::{entity_ids, Entity, EntityBuilder};
 pub use error::Error;
 pub use fetch::{
     relations_like, Entities, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, PreparedFetch,

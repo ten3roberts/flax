@@ -30,7 +30,7 @@ fn change_detection() {
             .spawn(&mut world)
     }));
 
-    let mut query = Query::new((entities(), position().modified()));
+    let mut query = Query::new((entity_ids(), position().modified()));
 
     assert_eq!(
         query
@@ -56,7 +56,7 @@ fn change_detection() {
         ids[20..40]
     );
 
-    let mut query = Query::new((entities(), position(), rotation().removed()));
+    let mut query = Query::new((entity_ids(), position(), rotation().removed()));
 
     assert_eq!(
         query

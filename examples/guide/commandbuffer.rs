@@ -23,7 +23,7 @@ fn main() -> color_eyre::Result<()> {
 
     cmd.apply(&mut world)?;
 
-    let id = Query::new(entities())
+    let id = Query::new(entity_ids())
         .filter(name().eq("a".into()))
         .borrow(&world)
         .iter()
@@ -82,7 +82,7 @@ fn main() -> color_eyre::Result<()> {
     // Ensure a world matrix to each entity with a position
     let add_world_matrix = System::builder()
         .with_name("add_world_matrix")
-        .with(Query::new((entities(), position())).without(world_matrix()))
+        .with(Query::new((entity_ids(), position())).without(world_matrix()))
         .write::<CommandBuffer>()
         .build(
             |mut q: QueryData<(Entities, Component<Vec2>), _>, mut cmd: Write<CommandBuffer>| {
@@ -97,7 +97,7 @@ fn main() -> color_eyre::Result<()> {
     let update_world_matrix = System::builder()
         .with_name("update_world_matrix")
         .with(
-            Query::new((entities(), position(), world_matrix().as_mut()))
+            Query::new((entity_ids(), position(), world_matrix().as_mut()))
                 .filter(position().modified()),
         )
         .for_each(|(id, pos, ltw)| {
