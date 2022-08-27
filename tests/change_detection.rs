@@ -5,12 +5,16 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 
 #[test]
 fn change_detection() {
+    let (removed_tx, removed_rx) = flume::unbounded();
+
     component! {
         position: Vec3,
         rotation: Quat,
     }
 
     let mut world = World::new();
+
+    world.on_removed(rotation(), removed_tx);
 
     let mut rng = StdRng::seed_from_u64(83);
     let mut ids = (0..10)
@@ -81,4 +85,19 @@ fn change_detection() {
             .collect_vec(),
         vec![ids[11], ids[12], ids[30]]
     );
+
+    let removed = removed_rx
+        .drain()
+        .inspect(|v| eprintln!("removed: {v:?}"))
+        .map(|v| v.0)
+        .collect_vec();
+    assert_eq!(removed, [ids[11], ids[12], ids[30]]);
+    drop(removed_rx);
+
+    world.despawn(ids[35]).unwrap();
+
+    // let removed = removed_rx.drain().map(|v| v.0).collect_vec();
+    // assert_eq!(removed, [ids[35]]);
+
+    dbg!(removed);
 }

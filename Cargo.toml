@@ -29,6 +29,7 @@ tynm = "0.1.6"
 serde = { version = "1.0", features = ["derive"], optional = true }
 erased-serde = { version = "0.3", optional = true }
 bytes = "1.2.1"
+flume = "0.10.14"
 
 [dev-dependencies]
 itertools = "0.10.3"

@@ -239,8 +239,8 @@ mod test {
     use itertools::Itertools;
 
     use crate::{
-        component, components::name, system::SystemContext, Callable, CommandBuffer, Component,
-        Entity, Query, QueryData, SystemData, World,
+        component, components::name, system::SystemContext, Callable, CommandBuffer, Entity, Query,
+        QueryData, SystemData, World,
     };
 
     use super::{Writable, Write};
@@ -268,7 +268,6 @@ mod test {
         };
 
         let mut reader = |mut q: QueryData<_, _>| {
-            assert!(!<(Component<String>,) as crate::Fetch>::HAS_FILTER);
             let names = q.iter().iter().cloned().sorted().collect_vec();
 
             assert_eq!(names, ["Neo", "Trinity"]);
