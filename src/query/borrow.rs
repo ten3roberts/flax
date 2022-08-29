@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 use crate::{
     entity::EntityLocation, error::Result, fetch::FetchPrepareData, fetch::PreparedFetch,
     filter::All, filter::And, filter::GatedFilter, Archetype, ArchetypeId, Entity, Error, Fetch,
-    Filter, World,
+    FetchItem, Filter, World,
 };
 
 use super::{
@@ -88,6 +88,15 @@ where
         QueryIter {
             inner: self.iter_batched().flatten(),
         }
+    }
+
+    /// Returns the first item
+    pub fn first<'q>(&'q mut self) -> Option<<Q as FetchItem<'q>>::Item>
+    where
+        'w: 'q,
+        &'w F: Filter<'q>,
+    {
+        self.iter().next()
     }
 
     /// Iterate all items matched by query and filter.
@@ -253,4 +262,3 @@ where
         Ok(item)
     }
 }
-
