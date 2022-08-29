@@ -1189,6 +1189,7 @@ impl World {
                             *id = new_id;
                             Some((old_id.low(), new_id))
                         } else {
+                            self.spawn_at(old_id);
                             None
                         }
                     })
