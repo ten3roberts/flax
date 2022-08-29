@@ -3,8 +3,9 @@ use std::mem::{self, MaybeUninit};
 use smallvec::SmallVec;
 
 use crate::{
-    entity::EntityLocation, error::Result, fetch::FetchPrepareData, All, And, Archetype,
-    ArchetypeId, Entity, Error, Fetch, Filter, GatedFilter, PreparedFetch, World,
+    entity::EntityLocation, error::Result, fetch::FetchPrepareData, fetch::PreparedFetch,
+    filter::All, filter::And, filter::GatedFilter, Archetype, ArchetypeId, Entity, Error, Fetch,
+    Filter, World,
 };
 
 use super::{
@@ -252,3 +253,4 @@ where
         Ok(item)
     }
 }
+

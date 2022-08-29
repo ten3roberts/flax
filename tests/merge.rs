@@ -71,7 +71,7 @@ fn merge() {
 #[cfg(feature = "serde")]
 /// Merge into an empty world
 fn merge_empty() -> color_eyre::Result<()> {
-    use flax::serde::*;
+    use flax::{filter::All, serde::*};
 
     let mut world = World::new();
 

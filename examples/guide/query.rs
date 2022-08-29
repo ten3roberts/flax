@@ -108,7 +108,7 @@ fn main() -> color_eyre::Result<()> {
         .with(query)
         .build(
             |mut query: QueryData<(_, Component<(f32, f32)>, Mutable<f32>), _>| {
-                for (id, pos, dist) in &mut query.iter() {
+                for (id, pos, dist) in &mut query.borrow() {
                     tracing::info!("Updating distance for {id} with position: {pos:?}");
                     *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
                 }
@@ -145,7 +145,7 @@ fn main() -> color_eyre::Result<()> {
         .write::<CommandBuffer>()
         .build(
             |mut query: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
-                for (id, &dist) in &mut query.iter() {
+                for (id, &dist) in &mut query.borrow() {
                     tracing::info!("Despawning {id} at: {dist}");
                     cmd.despawn(id);
                 }
@@ -213,7 +213,7 @@ fn main() -> color_eyre::Result<()> {
         .with_name("count")
         .with(Query::new(()))
         .build(move |mut query: QueryData<()>| {
-            let count: usize = query.iter().iter_batched().map(|v| v.len()).sum();
+            let count: usize = query.borrow().iter_batched().map(|v| v.len()).sum();
             tracing::info!("[{frame_count}]: {count}");
             frame_count += 1;
         });

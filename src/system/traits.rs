@@ -268,7 +268,7 @@ mod test {
         };
 
         let mut reader = |mut q: QueryData<_, _>| {
-            let names = q.iter().iter().cloned().sorted().collect_vec();
+            let names = q.borrow().iter().cloned().sorted().collect_vec();
 
             assert_eq!(names, ["Neo", "Trinity"]);
         };

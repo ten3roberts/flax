@@ -9,7 +9,7 @@ repository = "https://github.com/ten3roberts/flax"
 license = "MIT"
 
 [workspace]
-members = ["flax-derive"]
+members = ["flax-derive", "asteroids"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -19,31 +19,6 @@ fn derive_fetch() {
         scale: Opt<Component<Vec3>>,
     }
 
-    struct Prepared<'w> {
-        pos: <Component<Vec3> as Fetch<'w>>::Prepared,
-        rot: <Opt<Component<Quat>> as Fetch<'w>>::Prepared,
-        scale: <Opt<Component<Vec3>> as Fetch<'w>>::Prepared,
-    }
-
-    #[derive(PartialEq, Debug, Clone)]
-    struct Res<'q> {
-        pos: <Component<Vec3> as FetchItem<'q>>::Item,
-        rot: <Opt<Component<Quat>> as FetchItem<'q>>::Item,
-        scale: <Opt<Component<Vec3>> as FetchItem<'q>>::Item,
-    }
-
-    impl<'w, 'q> PreparedFetch<'q> for Prepared<'w> {
-        type Item = Res<'q>;
-
-        unsafe fn fetch(&'q mut self, slot: archetype::Slot) -> Self::Item {
-            Self::Item {
-                pos: self.pos.fetch(slot),
-                rot: self.rot.fetch(slot),
-                scale: self.scale.fetch(slot),
-            }
-        }
-    }
-
     use flax::*;
 
     let mut world = World::new();

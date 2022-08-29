@@ -12,7 +12,11 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{ArchetypeId, Slice, Slot},
-    Access, And, Archetype, Component, ComponentValue, Filter, Not, Or, PreparedFilter,
+    filter::And,
+    filter::Not,
+    filter::Or,
+    filter::PreparedFilter,
+    Access, Archetype, Component, ComponentValue, Filter,
 };
 
 /// A filter which compare a component before yielding an item from the query

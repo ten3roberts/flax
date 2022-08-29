@@ -3,7 +3,8 @@ use std::{iter::Flatten, slice::IterMut};
 use crate::{
     archetype::{Slice, Slot},
     fetch::PreparedFetch,
-    Archetype, Fetch, Filter, FilterIter,
+    filter::FilterIter,
+    Archetype, Fetch, Filter,
 };
 
 use super::{FilterWithFetch, PreparedArchetype};
