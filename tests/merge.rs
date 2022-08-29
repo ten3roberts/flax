@@ -35,6 +35,8 @@ fn merge() {
 
     let mut rng = StdRng::seed_from_u64(48);
 
+    let placeholders = world1.spawn_many().take(10).collect_vec();
+
     random_entities(&mut rng)
         .take(40)
         .enumerate()
@@ -50,6 +52,10 @@ fn merge() {
         .for_each(|(i, mut v)| {
             v.set(name(), format!("b.{i}")).spawn(&mut world2);
         });
+
+    for id in placeholders {
+        world1.despawn(id).unwrap();
+    }
 
     eprintln!("world1: {world1:#?}\n\nworld2: {world2:#?}");
 
