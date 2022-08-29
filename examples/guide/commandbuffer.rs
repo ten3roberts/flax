@@ -67,7 +67,7 @@ fn main() -> color_eyre::Result<()> {
         .with(Query::new(()))
         .write::<CommandBuffer>()
         .build(move |mut q: QueryData<()>, mut cmd: Write<CommandBuffer>| {
-            let count = q.iter().count();
+            let count = q.borrow().count();
 
             for _ in count..64 {
                 tracing::info!("Spawning new entity");
@@ -86,7 +86,7 @@ fn main() -> color_eyre::Result<()> {
         .write::<CommandBuffer>()
         .build(
             |mut q: QueryData<(Entities, Component<Vec2>), _>, mut cmd: Write<CommandBuffer>| {
-                for (id, pos) in &mut q.iter() {
+                for (id, pos) in &mut q.borrow() {
                     tracing::info!("Adding world matrix to {id}");
                     cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));
                 }

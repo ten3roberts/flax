@@ -371,7 +371,7 @@ impl StaticFilter for Nothing {
     }
 }
 
-/// Filter all entities
+/// Yields all entities
 #[derive(Debug, Clone)]
 pub struct All;
 

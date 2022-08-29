@@ -1,4 +1,4 @@
-use crate::{Fetch, PreparedFetch};
+use crate::{fetch::PreparedFetch, Fetch};
 
 use super::opt::{Opt, OptOr};
 

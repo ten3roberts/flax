@@ -2,8 +2,9 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Changes, Slice},
+    filter::PreparedFilter,
     Access, Archetype, ArchetypeId, ChangeKind, Component, ComponentId, ComponentValue, Fetch,
-    FetchItem, Filter, PreparedFilter,
+    FetchItem, Filter,
 };
 
 #[derive(Clone)]

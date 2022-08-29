@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use crate::{fetch::FetchPrepareData, ComponentValue, Fetch, PreparedFetch};
+use crate::{fetch::FetchPrepareData, fetch::PreparedFetch, ComponentValue, Fetch};
 
 use super::FetchItem;
 

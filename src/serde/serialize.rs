@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    archetype::StorageBorrowDyn, components::is_component, And, Archetype, ArchetypeId, Component,
-    ComponentId, ComponentValue, Entity, StaticFilter, Without, World,
+    archetype::StorageBorrowDyn, components::is_component, filter::And, filter::StaticFilter,
+    filter::Without, Archetype, ArchetypeId, Component, ComponentId, ComponentValue, Entity, World,
 };
 
 use serde::{

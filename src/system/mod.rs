@@ -5,8 +5,8 @@ use core::fmt;
 use std::{any::type_name, fmt::Formatter, marker::PhantomData};
 
 use crate::{
-    util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, Fetch, Filter, PreparedFetch,
-    Query, QueryData, World,
+    fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, Fetch,
+    Filter, Query, QueryData, World,
 };
 
 pub use cell::*;
@@ -48,7 +48,7 @@ where
     for<'x> Func: FnMut(<<Q as Fetch<'x>>::Prepared as PreparedFetch>::Item),
 {
     fn execute(&mut self, mut data: QueryData<Q, F>) {
-        for item in &mut data.iter() {
+        for item in &mut data.borrow() {
             (self.func)(item)
         }
     }
@@ -441,7 +441,7 @@ mod test {
         let mut system = System::builder()
             .with(Query::new(a()))
             // .with(Query::new(b()))
-            .build(|mut a: QueryData<Component<String>>| assert_eq!(a.iter().iter().count(), 1));
+            .build(|mut a: QueryData<Component<String>>| assert_eq!(a.borrow().iter().count(), 1));
 
         let mut fallible = System::builder()
             // .with_name("Fallible")
@@ -449,7 +449,7 @@ mod test {
             .build(
                 move |mut query: QueryData<Component<i32>>| -> eyre::Result<()> {
                     // Lock archetypes
-                    let mut query = query.iter();
+                    let mut query = query.borrow();
                     let item: &i32 = query.get(id)?;
                     eprintln!("Item: {item}");
 

@@ -11,8 +11,9 @@ pub use opt::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
+    filter::Nothing,
     system::Access,
-    ArchetypeId, Entity, Filter, Nothing, World,
+    ArchetypeId, Entity, Filter, World,
 };
 
 /// Represents the world data necessary for preparing a fetch

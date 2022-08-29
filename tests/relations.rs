@@ -1,4 +1,4 @@
-use flax::*;
+use flax::{filter::All, *};
 use itertools::Itertools;
 
 #[test]

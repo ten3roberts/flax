@@ -121,7 +121,8 @@ mod commandbuffer;
 mod component;
 /// Provides entity identifiers
 pub mod entity;
-mod filter;
+/// Filter items yielded queries
+pub mod filter;
 mod query;
 mod system;
 mod world;
@@ -158,10 +159,9 @@ pub use components::*;
 pub use entity::{entity_ids, Entity, EntityBuilder};
 pub use error::Error;
 pub use fetch::{
-    relations_like, Entities, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, PreparedFetch,
-    Relations,
+    relations_like, Entities, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
-pub use filter::*;
+pub use filter::{All, CmpExt, Filter, StaticFilter};
 pub use meta::*;
 pub use query::*;
 pub use schedule::*;

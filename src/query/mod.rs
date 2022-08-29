@@ -8,12 +8,11 @@ use itertools::Itertools;
 
 use crate::{
     archetype::ArchetypeId,
-    fetch::Fetch,
-    fetch::FetchPrepareData,
+    fetch::*,
+    filter::*,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, All, And, Component, ComponentValue, FetchItem, Filter, GatedFilter, With,
-    Without, World,
+    Access, AccessKind, Component, ComponentValue, FetchItem, Filter, World,
 };
 
 pub use borrow::*;
@@ -285,7 +284,7 @@ where
     ///
     /// The same query can be prepared multiple times, though not
     /// simultaneously.
-    pub fn iter(&mut self) -> QueryBorrow<Q, F> {
+    pub fn borrow(&mut self) -> QueryBorrow<Q, F> {
         self.query.borrow(&self.world)
     }
 }

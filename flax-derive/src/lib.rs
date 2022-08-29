@@ -110,7 +110,7 @@ fn derive_prepared_struct<'a>(
         }
 
         #[automatically_derived]
-        impl<'w, 'q> #crate_name::PreparedFetch<'q> for #prepared_name<'w> {
+        impl<'w, 'q> #crate_name::fetch::PreparedFetch<'q> for #prepared_name<'w> {
             type Item = #item_name<'q>;
 
             unsafe fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
