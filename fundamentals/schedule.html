@@ -154,7 +154,7 @@ sequence.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, &amp;dist) in &amp;mut query.iter() {
+                for (id, &amp;dist) in &amp;mut query.borrow() {
                     tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
                     cmd.despawn(id);
                 }
@@ -221,7 +221,7 @@ sequence.</p>
         .with_name(&quot;count&quot;)
         .with(Query::new(()))
         .build(move |mut query: QueryData&lt;()&gt;| {
-            let count: usize = query.iter().iter_batched().map(|v| v.len()).sum();
+            let count: usize = query.borrow().iter_batched().map(|v| v.len()).sum();
             tracing::info!(&quot;[{frame_count}]: {count}&quot;);
             frame_count += 1;
         });

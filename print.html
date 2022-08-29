@@ -519,7 +519,7 @@ thrice could be turned into a query.</p>
         .with(query)
         .build(
             |mut query: QueryData&lt;(_, Component&lt;(f32, f32)&gt;, Mutable&lt;f32&gt;), _&gt;| {
-                for (id, pos, dist) in &amp;mut query.iter() {
+                for (id, pos, dist) in &amp;mut query.borrow() {
                     tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
                     *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
                 }
@@ -571,7 +571,7 @@ as it may access anything.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, &amp;dist) in &amp;mut query.iter() {
+                for (id, &amp;dist) in &amp;mut query.borrow() {
                     tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
                     cmd.despawn(id);
                 }
@@ -607,7 +607,7 @@ sequence.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, &amp;dist) in &amp;mut query.iter() {
+                for (id, &amp;dist) in &amp;mut query.borrow() {
                     tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
                     cmd.despawn(id);
                 }
@@ -674,7 +674,7 @@ sequence.</p>
         .with_name(&quot;count&quot;)
         .with(Query::new(()))
         .build(move |mut query: QueryData&lt;()&gt;| {
-            let count: usize = query.iter().iter_batched().map(|v| v.len()).sum();
+            let count: usize = query.borrow().iter_batched().map(|v| v.len()).sum();
             tracing::info!(&quot;[{frame_count}]: {count}&quot;);
             frame_count += 1;
         });
@@ -1012,7 +1012,7 @@ in other situations where a mutable reference to the world is not available.</p>
         .with(Query::new(()))
         .write::&lt;CommandBuffer&gt;()
         .build(move |mut q: QueryData&lt;()&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-            let count = q.iter().count();
+            let count = q.borrow().count();
 
             for _ in count..64 {
                 tracing::info!(&quot;Spawning new entity&quot;);
@@ -1031,7 +1031,7 @@ in other situations where a mutable reference to the world is not available.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut q: QueryData&lt;(Entities, Component&lt;Vec2&gt;), _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, pos) in &amp;mut q.iter() {
+                for (id, pos) in &amp;mut q.borrow() {
                     tracing::info!(&quot;Adding world matrix to {id}&quot;);
                     cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));
                 }
@@ -1156,7 +1156,7 @@ handle a 3d world.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(
             |mut query: QueryData&lt;Entities, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for id in &amp;mut query.iter() {
+                for id in &amp;mut query.borrow() {
                     tracing::info!(&quot;Adding world matrix to {id}&quot;);
                     cmd.set(id, world_matrix(), Mat4::IDENTITY);
                 }
