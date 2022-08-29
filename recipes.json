@@ -1,4 +1,8 @@
 {
+  "asteroids": {
+    "cmd": "cargo run -p asteroids",
+    "kind": "term"
+  },
   "check": {
     "cmd": "cargo check --tests --examples --all-features"
   },

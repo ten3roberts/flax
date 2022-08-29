@@ -211,14 +211,14 @@ impl Schedule {
 
         for (dst_idx, dst) in accesses.iter().enumerate() {
             {
+                // Check for self compatability
                 for (i, x) in dst.iter().enumerate() {
                     for y in dst.iter().skip(i + 1) {
                         if !x.is_compatible_with(y) {
                             tracing::error!(
-                                "System: {:#?} is not compatible with itself",
+                                "System: {:#?} is not compatible with itself\n\nThis means that a system uses a resource both mutably and immutably at the same time, which is not allowed. A common example is a query which used a query **and** a mutable reference to the world.",
                                 systems[dst_idx]
                             );
-                            panic!("Non self-compatible system");
                         }
                     }
                 }

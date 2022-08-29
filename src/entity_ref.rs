@@ -40,6 +40,7 @@ impl<'a> EntityRefMut<'a> {
         self.world.archetype(self.loc.arch).has(component.id())
     }
 
+    /// Set a component for the entity
     pub fn set<T: ComponentValue>(
         &mut self,
         component: Component<T>,
@@ -89,6 +90,7 @@ impl<'a> EntityRefMut<'a> {
 ///
 /// This is handy to borrow an entity and perform multiple operations on it
 /// without mentioning the id and performing re-lookups.
+#[derive(Copy, Clone)]
 pub struct EntityRef<'a> {
     pub(crate) world: &'a World,
     pub(crate) loc: EntityLocation,

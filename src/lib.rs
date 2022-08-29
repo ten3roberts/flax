@@ -157,14 +157,17 @@ pub use commandbuffer::*;
 pub use component::*;
 pub use components::*;
 pub use entity::{entity_ids, Entity, EntityBuilder};
+pub use entity_ref::*;
 pub use error::Error;
 pub use fetch::{
     relations_like, Entities, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
-pub use filter::{All, CmpExt, Filter, StaticFilter};
+pub use filter::{All, And, CmpExt, Filter, Or, StaticFilter, With, Without};
 pub use meta::*;
 pub use query::*;
 pub use schedule::*;
 pub use system::*;
 pub use visitors::*;
 pub use world::*;
+
+pub use flax_derive::*;
