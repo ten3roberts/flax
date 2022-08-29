@@ -479,9 +479,14 @@ impl World {
     pub fn clear(&mut self, id: Entity) -> Result<()> {
         let EntityLocation { arch, slot } = self.location(id)?;
 
-        let src = self.archetype_mut(arch);
+        let src = self.archetypes.get_mut(arch);
 
-        let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
+        let swapped = unsafe {
+            src.take(slot, |c, p| {
+                self.on_removed.send(c.id(), id, p);
+                (c.drop)(p)
+            })
+        };
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
             self.entities
