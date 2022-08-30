@@ -184,7 +184,13 @@ iterated <code>Entity</code> ids.</li>
 <h2 id="filters"><a class="header" href="#filters">Filters</a></h2>
 <p>A query allows for filters, such as skipping entities which have a certain
 components, or where the value of a component satisfies some condition.</p>
-<p>The difference between using a query filter and a filter on the iterator is that mutable components are not marked as modified if skipped by a query iterator. This is because the <code>QueryIter</code> is not able to determine if a later <code>filter</code> skipped the item. In addition, the query filters operate on ranges and can look up modifications and alike for a group of entities, E.g; if all entities next to each other are modified, only one range will be yielded, instead of each entity separately.</p>
+<p>The difference between using a query filter and a filter on the iterator is that
+mutable components are not marked as modified if skipped by a query iterator.
+This is because the <code>QueryIter</code> is not able to determine if a later <code>filter</code>
+skipped the item. In addition, the query filters operate on ranges and can look
+up modifications and alike for a group of entities, E.g; if all entities next to
+each other are modified, only one range will be yielded, instead of each entity
+separately.</p>
 <p><strong>Note</strong>: It is not possible to access a component mutably and filter on it at
 the same time.</p>
 <p>Change detection is also supported and allows querying only over the entities
@@ -266,7 +272,7 @@ instead.</p>
 <li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.inserted">inserted</a> yields new components.</li>
 <li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.removed">removed</a> yields each entity for which the component was recently removed.</li>
 </ul>
-<p>All change detection is per query and based on when the query last ran.</p>
+<p>All change detection is per query and based on when the query last executed.</p>
 <h3 id="comparative-filter"><a class="header" href="#comparative-filter">Comparative filter</a></h3>
 <p>In addition to change detection, filtering on value is also possible. See: <a href="https://docs.rs/flax/latest/flax/trait.CmpExt.html">CmpExt</a>.</p>
 

@@ -388,7 +388,13 @@ iterated <code>Entity</code> ids.</li>
 <h2 id="filters"><a class="header" href="#filters">Filters</a></h2>
 <p>A query allows for filters, such as skipping entities which have a certain
 components, or where the value of a component satisfies some condition.</p>
-<p>The difference between using a query filter and a filter on the iterator is that mutable components are not marked as modified if skipped by a query iterator. This is because the <code>QueryIter</code> is not able to determine if a later <code>filter</code> skipped the item. In addition, the query filters operate on ranges and can look up modifications and alike for a group of entities, E.g; if all entities next to each other are modified, only one range will be yielded, instead of each entity separately.</p>
+<p>The difference between using a query filter and a filter on the iterator is that
+mutable components are not marked as modified if skipped by a query iterator.
+This is because the <code>QueryIter</code> is not able to determine if a later <code>filter</code>
+skipped the item. In addition, the query filters operate on ranges and can look
+up modifications and alike for a group of entities, E.g; if all entities next to
+each other are modified, only one range will be yielded, instead of each entity
+separately.</p>
 <p><strong>Note</strong>: It is not possible to access a component mutably and filter on it at
 the same time.</p>
 <p>Change detection is also supported and allows querying only over the entities
@@ -470,7 +476,7 @@ instead.</p>
 <li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.inserted">inserted</a> yields new components.</li>
 <li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.removed">removed</a> yields each entity for which the component was recently removed.</li>
 </ul>
-<p>All change detection is per query and based on when the query last ran.</p>
+<p>All change detection is per query and based on when the query last executed.</p>
 <h3 id="comparative-filter"><a class="header" href="#comparative-filter">Comparative filter</a></h3>
 <p>In addition to change detection, filtering on value is also possible. See: <a href="https://docs.rs/flax/latest/flax/trait.CmpExt.html">CmpExt</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="systems"><a class="header" href="#systems">Systems</a></h1>
@@ -1030,7 +1036,7 @@ in other situations where a mutable reference to the world is not available.</p>
         .with(Query::new((entity_ids(), position())).without(world_matrix()))
         .write::&lt;CommandBuffer&gt;()
         .build(
-            |mut q: QueryData&lt;(Entities, Component&lt;Vec2&gt;), _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
+            |mut q: QueryData&lt;(EntityIds, Component&lt;Vec2&gt;), _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
                 for (id, pos) in &amp;mut q.borrow() {
                     tracing::info!(&quot;Adding world matrix to {id}&quot;);
                     cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));
@@ -1155,7 +1161,7 @@ handle a 3d world.</p>
         )
         .write::&lt;CommandBuffer&gt;()
         .build(
-            |mut query: QueryData&lt;Entities, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
+            |mut query: QueryData&lt;EntityIds, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
                 for id in &amp;mut query.borrow() {
                     tracing::info!(&quot;Adding world matrix to {id}&quot;);
                     cmd.set(id, world_matrix(), Mat4::IDENTITY);
