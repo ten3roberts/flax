@@ -210,20 +210,6 @@ impl Schedule {
         let mut deps = BTreeMap::new();
 
         for (dst_idx, dst) in accesses.iter().enumerate() {
-            {
-                // Check for self compatability
-                for (i, x) in dst.iter().enumerate() {
-                    for y in dst.iter().skip(i + 1) {
-                        if !x.is_compatible_with(y) {
-                            tracing::error!(
-                                "System: {:#?} is not compatible with itself\n\nThis means that a system uses a resource both mutably and immutably at the same time, which is not allowed. A common example is a query which used a query **and** a mutable reference to the world.",
-                                systems[dst_idx]
-                            );
-                        }
-                    }
-                }
-            }
-
             debug!("Generating deps for {dst_idx}");
             let accesses = &accesses;
             let dst_deps = dst
@@ -376,7 +362,7 @@ mod test {
     #[cfg(feature = "parallel")]
     fn schedule_par() {
         use crate::{
-            components::name, entity_ids, CmpExt, CommandBuffer, Component, Entities, Mutable,
+            components::name, entity_ids, CmpExt, CommandBuffer, Component, EntityIds, Mutable,
             Write,
         };
 
@@ -483,7 +469,7 @@ mod test {
         let remaining = System::builder()
             .with_name("remaining")
             .with(Query::new(entity_ids()))
-            .build(|mut q: QueryData<Entities>| {
+            .build(|mut q: QueryData<EntityIds>| {
                 let mut q = q.borrow();
                 eprintln!("Remaining: {:?}", q.iter().format(", "));
             });

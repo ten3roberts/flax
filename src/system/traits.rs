@@ -7,9 +7,7 @@ use std::{
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use eyre::eyre;
 
-use crate::{AccessKind, CommandBuffer, World};
-
-use super::{cell::SystemContext, Access};
+use crate::*;
 
 /// Describe an access to the world in ters of shared and unique accesses
 pub trait SystemAccess {
@@ -78,11 +76,11 @@ macro_rules! tuple_impl {
         where
             $($ty: SystemData<'w>,)*
         {
-            type Data = ($(<$ty as SystemData<'w>>::Data,)*);
+            type Value = ($(<$ty as SystemData<'w>>::Value,)*);
 
-            fn bind(&'w mut self, _ctx: &'w SystemContext<'_>) -> eyre::Result<Self::Data> {
+            fn acquire(&'w mut self, _ctx: &'w SystemContext<'_>) -> eyre::Result<Self::Value> {
                 Ok(
-                    ($((self.$idx).bind(_ctx)?,)*)
+                    ($((self.$idx).acquire(_ctx)?,)*)
                 )
             }
         }
@@ -110,9 +108,9 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 /// provide it to the system.
 pub trait SystemData<'a>: SystemAccess {
     /// The borrow from the system context
-    type Data;
+    type Value;
     /// Get the data from the system context
-    fn bind(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data>;
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value>;
 }
 
 /// Access part of the context mutably.
@@ -122,7 +120,7 @@ pub struct Writable<T>(PhantomData<T>);
 pub struct Readable<T>(PhantomData<T>);
 #[derive(Debug)]
 /// Allows mutable access to data in the system context
-pub struct Write<'a, T>(AtomicRefMut<'a, T>);
+pub struct Write<'a, T>(pub(crate) AtomicRefMut<'a, T>);
 
 #[derive(Debug)]
 /// Allows immutable access to data in the system context
@@ -175,9 +173,9 @@ impl<T> Default for Writable<T> {
 }
 
 impl<'a> SystemData<'a> for Writable<World> {
-    type Data = Write<'a, World>;
+    type Value = Write<'a, World>;
 
-    fn bind(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
         Ok(Write(
             ctx.world_mut()
                 .map_err(|_| eyre!("Failed to borrow world mutably"))?,
@@ -186,9 +184,9 @@ impl<'a> SystemData<'a> for Writable<World> {
 }
 
 impl<'a> SystemData<'a> for Readable<World> {
-    type Data = Read<'a, World>;
+    type Value = Read<'a, World>;
 
-    fn bind(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
         Ok(Read(
             ctx.world()
                 .map_err(|_| eyre!("Failed to borrow world mutably"))?,
@@ -209,15 +207,16 @@ impl SystemAccess for Readable<World> {
     fn access(&self, _: &World) -> Vec<Access> {
         vec![Access {
             kind: AccessKind::World,
-            mutable: false,
+            mutable: true, // Due to interior mutablity as anything can be
+                           // borrowed mut
         }]
     }
 }
 
 impl<'a> SystemData<'a> for Writable<CommandBuffer> {
-    type Data = Write<'a, CommandBuffer>;
+    type Value = Write<'a, CommandBuffer>;
 
-    fn bind(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
         Ok(Write(ctx.cmd_mut().map_err(|_| {
             eyre!("Failed to borrow commandbuffer mutably")
         })?))
@@ -275,10 +274,10 @@ mod test {
 
         let data = &mut (Writable::<World>::new(),);
 
-        (spawner).execute(data.bind(&ctx).unwrap());
+        (spawner).execute(data.acquire(&ctx).unwrap());
 
         let data = &mut (Query::new(name()),);
-        (reader).execute(data.bind(&ctx).unwrap());
+        (reader).execute(data.acquire(&ctx).unwrap());
         Ok(())
     }
 }

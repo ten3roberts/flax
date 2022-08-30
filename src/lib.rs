@@ -160,7 +160,7 @@ pub use entity::{entity_ids, Entity, EntityBuilder};
 pub use entity_ref::*;
 pub use error::Error;
 pub use fetch::{
-    relations_like, Entities, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
+    relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
 pub use filter::{All, And, CmpExt, Filter, Or, StaticFilter, With, Without};
 pub use meta::*;
