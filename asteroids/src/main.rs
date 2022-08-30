@@ -15,7 +15,7 @@ use macroquad::{
     time::get_frame_time,
     window::{clear_background, next_frame, screen_height, screen_width},
 };
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
 use tracing_tree::HierarchicalLayer;
 
 component! {
@@ -24,7 +24,6 @@ component! {
 
     asteroid: () => [ Debug ],
     player: () => [ Debug ],
-    plume: () => [ Debug ],
 
     /// The amount of material collected from asteroids
     material: f32 => [ Debug ],
@@ -33,12 +32,16 @@ component! {
     health: f32 => [ Debug ],
     color: Color => [ Debug ],
     mass: f32 => [ Debug ],
+    difficulty: f32 => [Debug],
 
     velocity: Vec2=> [ Debug ],
     angular_velocity: f32 => [ Debug ],
 
     shape: Shape => [ Debug ],
     radius: f32 => [ Debug ],
+
+    particle_size: f32,
+    particle_lifetime: f32,
 
     on_collision: Box<dyn Fn(&World, Collision) + Send + Sync>,
 
@@ -98,15 +101,15 @@ async fn main() -> Result<()> {
     world.on_removed(player(), player_dead_tx);
 
     let mut physics_schedule = Schedule::builder()
-        .with_system(spawn_asteroids(1.0))
+        .with_system(spawn_asteroids(16))
         .with_system(player_system(dt))
+        .with_system(camera_systems(dt))
+        .with_system(lifetime_system(dt))
+        .with_system(despawn_out_of_bounds())
+        .with_system(particle_system())
         .with_system(collision_system())
         .with_system(integrate_velocity(dt))
         .with_system(integrate_ang_velocity(dt))
-        .with_system(despawn_out_of_bounds())
-        .with_system(lifetime_system(dt))
-        .with_system(camera_systems(dt))
-        .with_system(plume_system())
         .with_system(despawn_dead())
         .build();
 
@@ -168,6 +171,7 @@ fn create_player() -> EntityBuilder {
                 }
             }),
         )
+        .set(difficulty(), 1.0)
         .into()
 }
 
@@ -220,26 +224,49 @@ fn create_bullet(player: Entity) -> EntityBuilder {
         .into()
 }
 
-const PLUME_LIFETIME: f32 = 0.5;
-
-fn create_plume() -> EntityBuilder {
+fn create_particle(size: f32, lifetime: f32, color: Color) -> EntityBuilder {
     Entity::builder()
         .set_default(rotation())
         .set_default(position())
-        .set_default(plume())
-        .set(shape(), Shape::Circle { radius: 8.0 })
-        .set(color(), ORANGE)
-        .set(lifetime(), PLUME_LIFETIME)
+        .set(shape(), Shape::Circle { radius: size })
+        .set(particle_size(), size)
+        .set(self::lifetime(), lifetime)
+        .set(particle_lifetime(), lifetime)
+        .set(self::color(), color)
         .into()
 }
 
-fn plume_system() -> BoxedSystem {
+fn create_explosion(
+    count: usize,
+    pos: Vec2,
+    speed: f32,
+    size: f32,
+    lifetime: f32,
+    color: Color,
+) -> impl Iterator<Item = EntityBuilder> {
+    let mut rng = thread_rng();
+    (0..count).map(move |_| {
+        let dir = rng.gen_range(0.0..TAU);
+        let speed = rng.gen_range(speed * 0.5..speed);
+        create_particle(size, lifetime, color)
+            .set(velocity(), speed * vec2(dir.cos(), dir.sin()))
+            .set(position(), pos)
+            .into()
+    })
+}
+
+fn particle_system() -> BoxedSystem {
     System::builder()
-        .with_name("plume_system")
-        .with(Query::new((lifetime(), shape().as_mut())).with(plume()))
-        .for_each(|(lifetime, shape)| {
+        .with_name("particle_system")
+        .with(Query::new((
+            lifetime(),
+            particle_size(),
+            particle_lifetime(),
+            shape().as_mut(),
+        )))
+        .for_each(|(lifetime, size, max_lifetime, shape)| {
             *shape = Shape::Circle {
-                radius: lifetime / PLUME_LIFETIME * 8.0,
+                radius: lifetime / max_lifetime * size,
             };
         })
         .boxed()
@@ -255,7 +282,7 @@ fn camera_systems(dt: f32) -> BoxedSystem {
                   -> Result<()> {
                 let mut cameras = cameras.borrow();
 
-                let player_pos = *players.borrow().first().ok_or_else(|| eyre!("No player"))?;
+                let player_pos = players.borrow().first().copied().unwrap_or_default();
 
                 let (camera_pos, camera): (&mut Vec2, &mut Mat3) =
                     cameras.first().ok_or_else(|| eyre!("No camera"))?;
@@ -285,6 +312,7 @@ struct Collision {
     depth: f32,
     impact: f32,
     system_mass: f32,
+    point: Vec2,
 }
 
 #[derive(Fetch, Debug, Clone)]
@@ -315,7 +343,7 @@ fn lifetime_system(dt: f32) -> BoxedSystem {
             move |mut q: QueryData<(EntityIds, Mutable<f32>)>, mut cmd: Write<CommandBuffer>| {
                 for (id, lf) in &mut q.borrow() {
                     if *lf <= 0.0 {
-                        cmd.despawn(id);
+                        cmd.set(id, health(), 0.0);
                     }
                     *lf -= dt;
                 }
@@ -330,10 +358,12 @@ fn collision_system() -> BoxedSystem {
         .with(Query::new((entity_ids(), CollisionQuery::new())))
         .with(Query::new((entity_ids(), CollisionQuery::new())))
         .read::<World>()
+        .write::<CommandBuffer>()
         .build(
             |mut a: QueryData<(EntityIds, CollisionQuery)>,
              mut b: QueryData<(EntityIds, CollisionQuery)>,
-             world: Read<World>| {
+             world: Read<World>,
+             mut cmd: Write<CommandBuffer>| {
                 let mut a = a.borrow();
                 let mut b = b.borrow();
 
@@ -359,6 +389,7 @@ fn collision_system() -> BoxedSystem {
                             collisions.push(Collision {
                                 a: id_a,
                                 b: id_b,
+                                point: *a.pos + (*a.radius) * -dir,
                                 dir,
                                 depth,
                                 impact,
@@ -384,6 +415,11 @@ fn collision_system() -> BoxedSystem {
                             collision.dir * collision.depth * (1.0 - mass / collision.system_mass);
                     }
 
+                    create_explosion(8, collision.point, collision.impact, 4.0, 1.0, GRAY)
+                        .for_each(|v| {
+                            cmd.spawn(v);
+                        });
+
                     if let Ok(on_collision) = entity.get(on_collision()) {
                         (on_collision)(&world, collision)
                     };
@@ -403,27 +439,38 @@ fn player_system(dt: f32) -> BoxedSystem {
     let mut current_plume_cooldown = 0.0;
 
     System::builder()
-        .with_name("player_input")
+        .with_name("player_system")
         .with(
             Query::new((
                 entity_ids(),
                 position(),
+                material(),
                 velocity().as_mut(),
                 rotation().as_mut(),
+                difficulty().as_mut(),
             ))
             .with(player()),
         )
         .write::<CommandBuffer>()
         .build(
             move |mut q: QueryData<
-                (EntityIds, Component<Vec2>, Mutable<Vec2>, Mutable<f32>),
+                (
+                    EntityIds,
+                    Component<Vec2>,
+                    Component<f32>,
+                    Mutable<Vec2>,
+                    Mutable<f32>,
+                    Mutable<f32>,
+                ),
                 _,
             >,
                   mut cmd: Write<CommandBuffer>| {
                 current_weapon_cooldown -= dt;
                 current_plume_cooldown -= dt;
 
-                for (player, pos, vel, rot) in &mut q.borrow() {
+                for (player, pos, material, vel, rot, current_difficulty) in &mut q.borrow() {
+                    *current_difficulty = (*material * 0.001).max(1.0);
+
                     let forward = vec2(rot.sin(), -rot.cos());
 
                     let acc = if is_key_down(KeyCode::W) {
@@ -436,7 +483,7 @@ fn player_system(dt: f32) -> BoxedSystem {
 
                     if acc.length() > 0.0 && current_plume_cooldown <= 0.0 {
                         current_plume_cooldown = PLUME_COOLDOWN;
-                        create_plume()
+                        create_particle(8.0, 0.5, ORANGE)
                             .set(position(), *pos - 30.0 * forward)
                             .set(velocity(), *vel + -acc)
                             .spawn_into(&mut cmd)
@@ -467,17 +514,15 @@ fn despawn_out_of_bounds() -> BoxedSystem {
     System::builder()
         .with_name("despawn_out_of_bounds")
         .with(Query::new(position()).with(player()))
-        .with(Query::new((entity_ids(), position())).without(player()))
-        .write::<CommandBuffer>()
+        .with(Query::new((position(), health().as_mut())).without(player()))
         .build(
             |mut player: QueryData<Component<Vec2>, _>,
-             mut asteroids: QueryData<(EntityIds, Component<Vec2>), _>,
-             mut cmd: Write<CommandBuffer>| {
+             mut asteroids: QueryData<(Component<Vec2>, Mutable<f32>), _>| {
                 let player_pos = *player.borrow().first().unwrap();
 
-                for (id, asteroid) in &mut asteroids.borrow() {
+                for (asteroid, health) in &mut asteroids.borrow() {
                     if player_pos.distance(*asteroid) > 2000.0 {
-                        cmd.despawn(id);
+                        *health = 0.0;
                     }
                 }
             },
@@ -500,12 +545,12 @@ fn despawn_dead() -> BoxedSystem {
         .boxed()
 }
 
-fn spawn_asteroids(difficulty_multiplier: f32) -> BoxedSystem {
+fn spawn_asteroids(max_count: usize) -> BoxedSystem {
     let mut rng = StdRng::from_entropy();
 
     System::builder()
         .with_name("spawn_asteroids")
-        .with(Query::new((position(), material())).with(player()))
+        .with(Query::new((position(), difficulty())).with(player()))
         .with(Query::new(asteroid()))
         .write::<CommandBuffer>()
         .build(
@@ -514,7 +559,7 @@ fn spawn_asteroids(difficulty_multiplier: f32) -> BoxedSystem {
                   mut cmd: Write<CommandBuffer>| {
                 let mut players = players.borrow();
 
-                let (player_pos, material) = match players.first() {
+                let (player_pos, difficulty) = match players.first() {
                     Some(v) => v,
                     None => return,
                 };
@@ -522,9 +567,6 @@ fn spawn_asteroids(difficulty_multiplier: f32) -> BoxedSystem {
                 let existing = existing.borrow().count();
 
                 let mut builder = Entity::builder();
-
-                let max_count =
-                    ((*material * difficulty_multiplier * 0.001).floor() as usize).max(10);
 
                 (existing..max_count).for_each(|_| {
                     // Spawn around player
@@ -537,7 +579,8 @@ fn spawn_asteroids(difficulty_multiplier: f32) -> BoxedSystem {
                     let health = size * 100.0;
 
                     let dir = rng.gen_range(0f32..TAU);
-                    let vel = vec2(dir.cos(), dir.sin()) * rng.gen_range(30.0..80.0);
+                    let vel =
+                        vec2(dir.cos(), dir.sin()) * rng.gen_range(30.0..80.0) * difficulty.sqrt();
 
                     builder
                         .set(position(), pos)
@@ -556,7 +599,7 @@ fn spawn_asteroids(difficulty_multiplier: f32) -> BoxedSystem {
                         .set(self::health(), health)
                         .set(color(), hsl_to_rgb(0.75, 0.5, 0.5))
                         .set(velocity(), vel)
-                        .set(angular_velocity(), rng.gen())
+                        .set(angular_velocity(), rng.gen_range(-2.0..2.0))
                         .spawn_into(&mut cmd);
                 })
             },
@@ -628,18 +671,18 @@ fn draw_ui() -> BoxedSystem {
     System::builder()
         .with_name("draw_ui")
         .with_resource(GraphicsContext)
-        .with(Query::new((material(), health())).with(player()))
+        .with(Query::new((material(), health(), difficulty())).with(player()))
         .with(Query::new(()))
         .build(
             |_ctx: Write<GraphicsContext>,
-             mut players: QueryData<(Component<f32>, Component<f32>), _>,
+             mut players: QueryData<(Component<f32>, Component<f32>, Component<f32>), _>,
              mut all: QueryData<(), _>| {
                 let count = all.borrow().count();
 
                 let mut players = players.borrow();
                 let result = players.first();
 
-                if let Some((material, health)) = result {
+                if let Some((material, health, _difficulty)) = result {
                     draw_text(
                         &format!("Hull: {}%", health.round()),
                         10.0,

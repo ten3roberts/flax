@@ -136,7 +136,7 @@ impl<Args> SystemBuilder<Args> {
     pub fn with_resource<T>(self, resource: T) -> SystemBuilder<Args::PushRight>
     where
         Args: TupleCombine<Arc<AtomicRefCell<T>>>,
-        Arc<AtomicRefCell<T>>: for<'x> SharedResource<'x>,
+        T: SharedResource + Send + 'static,
     {
         self.with(Arc::new(AtomicRefCell::new(resource)))
     }

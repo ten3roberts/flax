@@ -1,5 +1,6 @@
 use std::collections::{btree_map::Entry, BTreeMap};
 
+use eyre::Context;
 use itertools::Itertools;
 
 use crate::{
@@ -7,12 +8,49 @@ use crate::{
     EntityBuilder, World,
 };
 
-enum Spawn {
-    One(EntityBuilder),
-    Batch(BatchSpawn),
+type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
+
+enum Command {
+    Spawn(EntityBuilder),
+    SpawnBatch(BatchSpawn),
+    Set {
+        id: Entity,
+        info: ComponentInfo,
+        offset: usize,
+    },
+    Despawn(Entity),
+    Remove {
+        id: Entity,
+        info: ComponentInfo,
+    },
+
+    Defer(DeferFn),
 }
 
-type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
+impl std::fmt::Debug for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Spawn(arg0) => f.debug_tuple("Spawn").field(arg0).finish(),
+            Self::SpawnBatch(arg0) => f.debug_tuple("SpawnBatch").field(arg0).finish(),
+            Self::Set { id, info, offset } => f
+                .debug_struct("Set")
+                .field("id", id)
+                .field("info", info)
+                .field("offset", offset)
+                .finish(),
+            Self::Despawn(arg0) => f.debug_tuple("Despawn").field(arg0).finish(),
+            Self::Remove {
+                id,
+                info: component,
+            } => f
+                .debug_struct("Remove")
+                .field("id", id)
+                .field("component", component)
+                .finish(),
+            Self::Defer(_) => f.debug_tuple("Defer").field(&"...").finish(),
+        }
+    }
+}
 
 /// Records commands into the world.
 /// Allows insertion and removal of components when the world is not available
@@ -20,20 +58,13 @@ type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
 #[derive(Default)]
 pub struct CommandBuffer {
     inserts: BufferStorage,
-    insert_locations: BTreeMap<(Entity, ComponentInfo), usize>,
-    spawned: Vec<Spawn>,
-    despawned: Vec<Entity>,
-    removals: Vec<(Entity, ComponentInfo)>,
-    defers: Vec<DeferFn>,
+    commands: Vec<Command>,
 }
 
 impl std::fmt::Debug for CommandBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CommandBuffer")
-            .field("inserts", &self.insert_locations.len())
-            .field("spawned", &self.spawned.len())
-            .field("despawned", &self.despawned)
-            .field("removals", &self.removals)
+            .field("commands", &self.commands)
             .finish()
     }
 }
@@ -53,19 +84,16 @@ impl CommandBuffer {
     /// not known at call time.
     pub fn set<T: ComponentValue>(
         &mut self,
-        id: impl Into<Entity>,
+        id: Entity,
         component: Component<T>,
         value: T,
     ) -> &mut Self {
-        match self.insert_locations.entry((id.into(), component.info())) {
-            Entry::Vacant(slot) => {
-                let offset = self.inserts.insert(value);
-                slot.insert(offset);
-            }
-            Entry::Occupied(slot) => unsafe {
-                self.inserts.swap(*slot.get(), value);
-            },
-        }
+        let offset = self.inserts.insert(value);
+        self.commands.push(Command::Set {
+            id,
+            info: component.info(),
+            offset,
+        });
 
         self
     }
@@ -73,53 +101,31 @@ impl CommandBuffer {
     /// Deferred removal of a component for `id`.
     /// Unlike, [`World::remove`] it does not return the old value as that is
     /// not known at call time.
-    pub fn remove<T: ComponentValue>(
-        &mut self,
-        id: impl Into<Entity>,
-        component: Component<T>,
-    ) -> &mut Self {
-        let id = id.into();
-        let offset = self.insert_locations.remove(&(id, component.info()));
-
-        // Remove from insert list
-        if let Some(offset) = offset {
-            unsafe { self.inserts.take::<T>(offset) };
-        }
-
-        self.removals.push((id, component.info()));
+    pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> &mut Self {
+        self.commands.push(Command::Remove {
+            id,
+            info: component.info(),
+        });
 
         self
     }
 
     /// Spawn a new entity with the given components of the builder
     pub fn spawn(&mut self, entity: impl Into<EntityBuilder>) -> &mut Self {
-        self.spawned.push(Spawn::One(entity.into()));
+        self.commands.push(Command::Spawn(entity.into()));
 
         self
     }
 
     /// Spawn a new batch with the given components of the builder
     pub fn spawn_batch(&mut self, batch: BatchSpawn) -> &mut Self {
-        self.spawned.push(Spawn::Batch(batch));
+        self.commands.push(Command::SpawnBatch(batch));
 
         self
     }
     /// Despawn an entity by id
     pub fn despawn(&mut self, id: Entity) -> &mut Self {
-        // // Drop all inserts for this component
-        // self.insert_locations
-        //     .iter()
-        //     .skip_while(|((entity, _), _)| *entity != id)
-        //     .take_while(|((entity, _), _)| *entity == id)
-        //     .for_each(|((_, component), offset)| unsafe {
-        //         eprintln!("Removing insert for despawned entity");
-        //         let ptr = self.inserts.take_dyn(*offset);
-        //         (component.drop)(ptr);
-        //     });
-
-        // self.removals.retain(|(entity, _)| *entity != id);
-
-        self.despawned.push(id);
+        self.commands.push(Command::Despawn(id));
         self
     }
 
@@ -130,51 +136,37 @@ impl CommandBuffer {
         &mut self,
         func: impl Fn(&mut World) -> eyre::Result<()> + Send + Sync + 'static,
     ) -> &mut Self {
-        self.defers.push(Box::new(func));
+        self.commands.push(Command::Defer(Box::new(func)));
         self
     }
 
     /// Applies all contents of the command buffer to the world.
     /// The commandbuffer is cleared and can be reused.
-    #[tracing::instrument(skip(world))]
     pub fn apply(&mut self, world: &mut World) -> eyre::Result<()> {
-        let groups = self
-            .insert_locations
-            .iter()
-            .group_by(|((entity, _), _)| *entity);
-
-        let storage = &mut self.inserts;
-
-        (&groups).into_iter().try_for_each(|(id, group)| {
-            // Safety
-            // The offset is acquired from the map which was previously acquired
-            unsafe {
-                let components =
-                    group.map(|((_, info), offset)| (*info, storage.take_dyn(*offset)));
-                world.set_with(id, components)
+        for cmd in self.commands.drain(..) {
+            match cmd {
+                Command::Spawn(mut entity) => {
+                    entity.spawn(world);
+                }
+                Command::SpawnBatch(mut batch) => {
+                    batch.spawn(world);
+                }
+                Command::Set { id, info, offset } => unsafe {
+                    let value = self.inserts.take_dyn(offset);
+                    world
+                        .set_dyn(id, info, value, |v| (info.drop)(v.cast()))
+                        .wrap_err_with(|| format!("Failed to set component {}", info.name()))?;
+                },
+                Command::Despawn(id) => world.despawn(id).wrap_err("Failed to despawn entity")?,
+                Command::Remove { id, info } => world
+                    .remove_dyn(id, info)
+                    .wrap_err_with(|| format!("Failed to remove component {}", info.name))?,
+                Command::Defer(func) => {
+                    func(world).wrap_err("Failed to execute deferred function")?
+                }
             }
-        })?;
+        }
 
-        self.spawned.drain(..).for_each(|spawn| match spawn {
-            Spawn::One(mut builder) => {
-                builder.spawn(world);
-            }
-            Spawn::Batch(mut batch) => {
-                batch.spawn(world);
-            }
-        });
-
-        self.removals
-            .drain(..)
-            .try_for_each(|(id, component)| world.remove_dyn(id, component))?;
-
-        self.despawned
-            .drain(..)
-            .try_for_each(|id| world.despawn(id))?;
-
-        self.defers.drain(..).try_for_each(|func| (func)(world))?;
-
-        self.clear();
         Ok(())
     }
 
@@ -182,9 +174,6 @@ impl CommandBuffer {
     /// Is automatically called for [`Self::apply`].
     pub fn clear(&mut self) {
         self.inserts.clear();
-        self.insert_locations.clear();
-        self.removals.clear();
-        self.despawned.clear();
-        self.spawned.clear();
+        self.commands.clear()
     }
 }
