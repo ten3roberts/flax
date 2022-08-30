@@ -5,6 +5,7 @@ use crate::{Component, ComponentId, ComponentInfo, ComponentValue, Entity, Error
 use super::Storage;
 
 /// Allows batch spawning many entities with the same components
+#[derive(Debug)]
 pub struct BatchSpawn {
     len: usize,
     storage: BTreeMap<ComponentId, Storage>,

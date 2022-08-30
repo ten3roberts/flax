@@ -11,13 +11,21 @@ use crate::{ComponentId, ComponentInfo, ComponentValue};
 
 use super::Slot;
 
-#[derive(Debug)]
 /// Type erased but managed component store.
 pub(crate) struct Storage {
     data: AtomicRefCell<NonNull<u8>>,
     len: usize,
     cap: usize,
     info: ComponentInfo,
+}
+
+impl std::fmt::Debug for Storage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Storage")
+            .field("len", &self.len)
+            .field("info", &self.info)
+            .finish()
+    }
 }
 
 impl Storage {

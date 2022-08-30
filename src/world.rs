@@ -752,49 +752,48 @@ impl World {
         self.set_inner(id, component, value).map(|v| v.0)
     }
 
-    pub(crate) fn set_inner<T: ComponentValue>(
+    pub(crate) fn set_dyn(
         &mut self,
-        id: impl Into<Entity>,
-        component: Component<T>,
-        mut value: T,
-    ) -> Result<(Option<T>, EntityLocation)> {
-        let id = id.into();
+        id: Entity,
+        info: ComponentInfo,
+        value: *mut u8,
+        on_drop: impl FnOnce(*mut u8),
+    ) -> Result<EntityLocation> {
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
         let EntityLocation { arch: src_id, slot } = self.location(id)?;
 
-        let component_info = component.info();
-
         // if let Some(&EntityLocation { arch: src_id, slot }) = loc {
-        let src = self.archetype(src_id);
+        let src = self.archetype_mut(src_id);
 
-        if let Some(mut val) = src.get_mut(slot, component) {
-            src.changes_mut(component.id())
+        if let Some(old) = src.get_dyn(slot, info.id()) {
+            src.changes_mut(info.id())
                 .expect("Missing change list")
                 .set(Change::modified(Slice::single(slot), change_tick));
 
-            return Ok((
-                Some(mem::replace(&mut *val, value)),
-                EntityLocation { arch: src_id, slot },
-            ));
+            // Make the caller responsible for drop or store
+            (on_drop(old));
+
+            unsafe {
+                ptr::copy_nonoverlapping(value, old, info.size());
+            }
+
+            return Ok(EntityLocation { arch: src_id, slot });
         }
 
         // Pick up the entity and move it to the destination archetype
-        let dst_id = match src.edge_to(component.id()) {
+        let dst_id = match src.edge_to(info.id()) {
             Some(dst) => dst,
             None => {
-                let pivot = src
-                    .components()
-                    .take_while(|v| v.id < component.id())
-                    .count();
+                let pivot = src.components().take_while(|v| v.id < info.id()).count();
 
                 // Split the components
                 // A B C [new] D E F
                 let left = src.components().take(pivot).copied();
                 let right = src.components().skip(pivot).copied();
 
-                let components: Vec<_> = left.chain([component_info]).chain(right).collect();
+                let components: Vec<_> = left.chain([info]).chain(right).collect();
 
                 // assert in order
                 let (dst_id, _) = self.archetypes.init(&components);
@@ -812,18 +811,14 @@ impl World {
                 src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
 
             // Add a quick edge to refer to later
-            src.add_edge_to(dst, dst_id, src_id, component.id());
+            src.add_edge_to(dst, dst_id, src_id, info.id());
 
             // Insert the missing component
-            dst.push(component_info.id, &mut value as *mut T as *mut u8)
-                .expect("Insert should not fail");
-
-            // And don't forget to forget to drop it
-            std::mem::forget(value);
+            dst.push(info.id, value).expect("Insert should not fail");
 
             debug_assert_eq!(dst.entity(dst_slot), Some(id));
 
-            dst.init_changes(component.info())
+            dst.init_changes(info)
                 .set(Change::inserted(Slice::single(dst_slot), change_tick))
                 .set(Change::modified(Slice::single(dst_slot), change_tick));
 
@@ -840,13 +835,33 @@ impl World {
             };
             *ns.get_mut(id).expect("Entity is not valid") = loc;
 
-            if component.id() != id {
-                self.init_component(component.info())
+            if info.id() != id {
+                self.init_component(info)
                     .expect("Failed to initialize component");
             }
 
-            Ok((None, loc))
+            Ok(loc)
         }
+    }
+
+    pub(crate) fn set_inner<T: ComponentValue>(
+        &mut self,
+        id: Entity,
+        component: Component<T>,
+        mut value: T,
+    ) -> Result<(Option<T>, EntityLocation)> {
+        let mut old: Option<T> = None;
+
+        let loc = self.set_dyn(
+            id,
+            component.info(),
+            &mut value as *mut T as *mut u8,
+            |ptr| unsafe { old = Some(ptr.cast::<T>().read()) },
+        )?;
+
+        mem::forget(value);
+
+        Ok((old, loc))
     }
 
     pub(crate) fn remove_dyn(&mut self, id: Entity, component: ComponentInfo) -> Result<()> {

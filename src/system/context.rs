@@ -8,18 +8,18 @@ use crate::{Access, AccessKind, CommandBuffer, SystemAccess, SystemData, World, 
 /// The difference between this and an `Arc<Mutex<_>>` is that this will be
 /// taken into consideration when multithreading in the schedule, and will as
 /// such not require locks.
-pub trait SharedResource<'a>: SystemData<'a> {
+pub trait SharedResource {
     /// Uniquely identify the access
     fn key(&self) -> u64;
 }
 
 impl<'a, T> SystemAccess for Arc<AtomicRefCell<T>>
 where
-    T: Send + 'a + Hash,
+    T: SharedResource,
 {
     fn access(&self, _: &World) -> Vec<crate::Access> {
         vec![Access {
-            kind: AccessKind::External(self.key()),
+            kind: AccessKind::External(self.borrow().key()),
             mutable: true,
         }]
     }
@@ -27,7 +27,7 @@ where
 
 impl<'a, T> SystemData<'a> for Arc<AtomicRefCell<T>>
 where
-    T: Send + 'a + Hash,
+    T: Send + 'a + SharedResource,
 {
     type Value = Write<'a, T>;
 
@@ -43,12 +43,12 @@ where
     }
 }
 
-impl<'a, T> SharedResource<'a> for Arc<AtomicRefCell<T>>
+impl<T> SharedResource for T
 where
-    T: Send + 'a + Hash,
+    T: Send + Hash,
 {
     fn key(&self) -> u64 {
-        fxhash::hash64(&*self.borrow())
+        fxhash::hash64(self)
     }
 }
 
