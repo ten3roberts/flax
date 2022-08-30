@@ -1,6 +1,56 @@
+use std::{hash::Hash, sync::Arc};
+
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{CommandBuffer, World};
+use crate::{Access, AccessKind, CommandBuffer, SystemAccess, SystemData, World, Write};
+
+/// A resource that can be shared between systems
+/// The difference between this and an `Arc<Mutex<_>>` is that this will be
+/// taken into consideration when multithreading in the schedule, and will as
+/// such not require locks.
+pub trait SharedResource<'a>: SystemData<'a> {
+    /// Uniquely identify the access
+    fn key(&self) -> u64;
+}
+
+impl<'a, T> SystemAccess for Arc<AtomicRefCell<T>>
+where
+    T: Send + 'a + Hash,
+{
+    fn access(&self, _: &World) -> Vec<crate::Access> {
+        vec![Access {
+            kind: AccessKind::External(self.key()),
+            mutable: true,
+        }]
+    }
+}
+
+impl<'a, T> SystemData<'a> for Arc<AtomicRefCell<T>>
+where
+    T: Send + 'a + Hash,
+{
+    type Value = Write<'a, T>;
+
+    fn acquire(&'a mut self, _: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
+        let borrow = self.try_borrow_mut().map_err(|_| {
+            eyre::eyre!(
+                "Failed to borrow shared resource of {}",
+                std::any::type_name::<T>()
+            )
+        })?;
+
+        Ok(Write(borrow))
+    }
+}
+
+impl<'a, T> SharedResource<'a> for Arc<AtomicRefCell<T>>
+where
+    T: Send + 'a + Hash,
+{
+    fn key(&self) -> u64 {
+        fxhash::hash64(&*self.borrow())
+    }
+}
 
 /// Holds external context for system execution.
 /// Contains the world and a commandbuffer

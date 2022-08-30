@@ -2,34 +2,33 @@ name: main
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   test:
-
     runs-on: ubuntu-latest
     container:
       image: xd009642/tarpaulin:develop-nightly
       options: --security-opt seccomp=unconfined
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Install nightly
-      uses: actions-rs/toolchain@v1
-      with:
+      - uses: actions/checkout@v2
+      - name: Install nightly
+        uses: actions-rs/toolchain@v1
+        with:
           toolchain: nightly
           override: true
           profile: minimal
-          
-    - name: Test code coverage
-      run: "cargo +nightly tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml"
 
-    - name: Upload to codecov.io
-      uses: codecov/codecov-action@v2
-      with:
-        fail_ci_if_error:     true
+      - name: Test code coverage
+        run: "cargo +nightly tarpaulin --verbose --all-features --timeout 120 --out Xml"
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true

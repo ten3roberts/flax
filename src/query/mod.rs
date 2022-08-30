@@ -26,7 +26,11 @@ type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
 #[derive(Clone)]
-pub struct Query<Q, F = Without> {
+pub struct Query<Q, F = Without>
+where
+    Q: for<'x> Fetch<'x>,
+    F: for<'x> Filter<'x>,
+{
     // The archetypes to visit
     archetypes: Vec<ArchetypeId>,
     filter: F,
@@ -38,6 +42,7 @@ pub struct Query<Q, F = Without> {
 impl<Q, F> Debug for Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
+    F: for<'x> Filter<'x>,
     F: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -251,7 +256,11 @@ where
 }
 
 /// Provides a query and a borrow of the world during system execution
-pub struct QueryData<'a, Q, F = Without> {
+pub struct QueryData<'a, Q, F = Without>
+where
+    Q: for<'x> Fetch<'x>,
+    F: for<'x> Filter<'x>,
+{
     world: AtomicRef<'a, World>,
     query: &'a mut Query<Q, F>,
 }
@@ -261,9 +270,9 @@ where
     Q: for<'x> Fetch<'x> + 'a,
     F: for<'x> Filter<'x> + Debug + 'a,
 {
-    type Data = QueryData<'a, Q, F>;
+    type Value = QueryData<'a, Q, F>;
 
-    fn bind(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Data> {
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
         let world = ctx
             .world()
             .map_err(|_| eyre::eyre!(format!("Failed to borrow world for query: {:?}", self)))?;

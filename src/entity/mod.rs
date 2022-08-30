@@ -9,7 +9,7 @@ use std::{num::NonZeroU32, sync::atomic::Ordering};
 pub use builder::*;
 pub(super) use store::*;
 
-use crate::{component, Entities};
+use crate::{component, EntityIds};
 
 /// Represents an entity.
 /// An entity can either declare an identifier spawned into the world,
@@ -341,8 +341,8 @@ impl fmt::Display for StrippedEntity {
 }
 
 /// Access the entity ids in a query
-pub fn entity_ids() -> Entities {
-    Entities
+pub fn entity_ids() -> EntityIds {
+    EntityIds
 }
 
 #[cfg(test)]
@@ -388,3 +388,4 @@ mod tests {
         assert_eq!(parts, a.into_parts());
     }
 }
+

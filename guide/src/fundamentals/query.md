@@ -29,7 +29,13 @@ A query accepts any type which implements
 A query allows for filters, such as skipping entities which have a certain
 components, or where the value of a component satisfies some condition.
 
-The difference between using a query filter and a filter on the iterator is that mutable components are not marked as modified if skipped by a query iterator. This is because the `QueryIter` is not able to determine if a later `filter` skipped the item. In addition, the query filters operate on ranges and can look up modifications and alike for a group of entities, E.g; if all entities next to each other are modified, only one range will be yielded, instead of each entity separately.
+The difference between using a query filter and a filter on the iterator is that
+mutable components are not marked as modified if skipped by a query iterator.
+This is because the `QueryIter` is not able to determine if a later `filter`
+skipped the item. In addition, the query filters operate on ranges and can look
+up modifications and alike for a group of entities, E.g; if all entities next to
+each other are modified, only one range will be yielded, instead of each entity
+separately.
 
 **Note**: It is not possible to access a component mutably and filter on it at
 the same time.
@@ -72,7 +78,7 @@ instead.
 - [inserted](https://docs.rs/flax/latest/flax/struct.Component.html#method.inserted) yields new components.
 - [removed](https://docs.rs/flax/latest/flax/struct.Component.html#method.removed) yields each entity for which the component was recently removed.
 
-All change detection is per query and based on when the query last ran.
+All change detection is per query and based on when the query last executed.
 
 ### Comparative filter
 

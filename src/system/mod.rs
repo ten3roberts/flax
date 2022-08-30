@@ -1,15 +1,21 @@
-mod cell;
+mod context;
 mod traits;
 
 use core::fmt;
-use std::{any::type_name, fmt::Formatter, marker::PhantomData};
+use std::{
+    any::{type_name, TypeId},
+    fmt::Formatter,
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use crate::{
     fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, Fetch,
     Filter, Query, QueryData, World,
 };
 
-pub use cell::*;
+use atomic_refcell::AtomicRefCell;
+pub use context::*;
 use eyre::Context;
 pub use traits::*;
 
@@ -122,12 +128,25 @@ impl<Args> SystemBuilder<Args> {
         self
     }
 
+    /// Access a shared resource mutable in the system.
+    ///
+    /// This is useful to avoid sharing `Arc<Mutex<_>>` and locking for each
+    /// system. In addition, the resource will be taken into account for the
+    /// schedule paralellization and will as such not block.
+    pub fn with_resource<T>(self, resource: T) -> SystemBuilder<Args::PushRight>
+    where
+        Args: TupleCombine<Arc<AtomicRefCell<T>>>,
+        Arc<AtomicRefCell<T>>: for<'x> SharedResource<'x>,
+    {
+        self.with(Arc::new(AtomicRefCell::new(resource)))
+    }
+
     /// Creates the system by suppling a function to act upon the systems data,
     /// like queries and world accesses.
     pub fn build<Func, Ret>(self, func: Func) -> System<Func, Args, Ret>
     where
         Args: for<'a> SystemData<'a> + 'static,
-        Func: for<'this, 'a> Callable<'this, <Args as SystemData<'a>>::Data, Ret>,
+        Func: for<'this, 'a> Callable<'this, <Args as SystemData<'a>>::Value, Ret>,
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
@@ -162,12 +181,15 @@ impl<'this, F, Args, Err> Callable<'this, &'this SystemContext<'this>, eyre::Res
     for System<F, Args, Result<(), Err>>
 where
     Args: for<'x> SystemData<'x>,
-    F: for<'x> Callable<'x, <Args as SystemData<'x>>::Data, Result<(), Err>>,
+    F: for<'x> Callable<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
     Err: Into<eyre::Error>,
 {
     #[tracing::instrument(skip_all, fields(name = self.name))]
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
-        let data = self.data.bind(ctx).wrap_err("Failed to bind system data")?;
+        let data = self
+            .data
+            .acquire(ctx)
+            .wrap_err("Failed to bind system data")?;
 
         let func = &mut self.func;
 
@@ -194,11 +216,14 @@ impl<'this, F, Args> Callable<'this, &'this SystemContext<'this>, eyre::Result<(
     for System<F, Args, ()>
 where
     Args: SystemData<'this>,
-    F: Callable<'this, Args::Data, ()>,
+    F: Callable<'this, Args::Value, ()>,
 {
     #[tracing::instrument(skip_all, fields(name = self.name))]
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
-        let data = self.data.bind(ctx).wrap_err("Failed to bind system data")?;
+        let data = self
+            .data
+            .acquire(ctx)
+            .wrap_err("Failed to bind system data")?;
 
         let func = &mut self.func;
 
@@ -262,12 +287,12 @@ impl<F, Args, Ret> System<F, Args, Ret> {
     pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> Ret
     where
         for<'x> Args: SystemData<'x>,
-        for<'x> F: Callable<'x, <Args as SystemData<'x>>::Data, Ret>,
+        for<'x> F: Callable<'x, <Args as SystemData<'x>>::Value, Ret>,
     {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
 
-        let data = self.data.bind(&ctx).expect("Failed to bind data");
+        let data = self.data.acquire(&ctx).expect("Failed to bind data");
 
         let ret = self.func.execute(data);
         cmd.apply(world).expect("Failed to apply commandbuffer");
@@ -292,6 +317,8 @@ pub enum AccessKind {
         /// The accessed component
         component: ComponentId,
     },
+    /// A unit struct works as a synchronization barrier
+    External(u64),
     /// Borrow the whole world
     World,
     /// Borrow the commandbuffer

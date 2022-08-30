@@ -134,17 +134,17 @@ where
 
 #[derive(Debug, Clone)]
 /// Returns the entity ids
-pub struct Entities;
+pub struct EntityIds;
 #[doc(hidden)]
 pub struct PreparedEntities<'a> {
     entities: &'a [Entity],
 }
 
-impl<'q> FetchItem<'q> for Entities {
+impl<'q> FetchItem<'q> for EntityIds {
     type Item = Entity;
 }
 
-impl<'w> Fetch<'w> for Entities {
+impl<'w> Fetch<'w> for EntityIds {
     const MUTABLE: bool = false;
     type Filter = Nothing;
 
