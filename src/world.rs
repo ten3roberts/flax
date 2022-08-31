@@ -1346,7 +1346,7 @@ where
         let mut meta = BTreeMap::new();
         let mut list = f.debug_map();
 
-        let mut query = Query::with_components(()).filter(&self.filter);
+        let mut query = Query::new(()).with_components().filter(&self.filter);
         let mut query = query.borrow(self.world);
 
         for batch in query.iter_batched() {
