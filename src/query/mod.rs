@@ -10,6 +10,7 @@ use crate::{
     archetype::ArchetypeId,
     fetch::*,
     filter::*,
+    is_component,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
     Access, AccessKind, Component, ComponentValue, FetchItem, Filter, World,
@@ -26,7 +27,7 @@ type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
 #[derive(Clone)]
-pub struct Query<Q, F = Without>
+pub struct Query<Q, F = All>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
@@ -34,6 +35,7 @@ where
     // The archetypes to visit
     archetypes: Vec<ArchetypeId>,
     filter: F,
+    include_components: bool,
     change_tick: u32,
     archetype_gen: u32,
     fetch: Q,
@@ -56,7 +58,7 @@ where
     }
 }
 
-impl<Q> Query<Q, Without>
+impl<Q> Query<Q>
 where
     Q: for<'x> Fetch<'x>,
 {
@@ -73,10 +75,11 @@ where
     pub fn new(query: Q) -> Self {
         Self {
             archetypes: Vec::new(),
-            filter: crate::components::is_component().without(),
+            filter: All,
             fetch: query,
             change_tick: 0,
             archetype_gen: 0,
+            include_components: false,
         }
     }
 }
@@ -85,14 +88,13 @@ impl<Q> Query<Q, All>
 where
     Q: for<'x> Fetch<'x>,
 {
-    /// Create a query which will yield components
-    pub fn with_components(query: Q) -> Self {
+    /// Include component entities for the query.
+    /// The default is to hide components as they are usually not desired during
+    /// iteration.
+    pub fn with_components(self) -> Self {
         Self {
-            archetypes: Vec::new(),
-            filter: All,
-            fetch: query,
-            change_tick: 0,
-            archetype_gen: 0,
+            include_components: true,
+            ..self
         }
     }
 }
@@ -111,6 +113,7 @@ where
             change_tick: self.change_tick,
             archetype_gen: self.archetype_gen,
             fetch: self.fetch,
+            include_components: self.include_components,
         }
     }
 
@@ -212,9 +215,11 @@ where
                     arch,
                     arch_id,
                 };
-                if self.filter.matches(arch)
-                    && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
+
+                if (self.include_components || !arch.has(is_component().id()))
                     && self.fetch.matches(data)
+                    && self.filter.matches(arch)
+                    && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
                 {
                     Some(arch_id)
                 } else {
@@ -256,7 +261,7 @@ where
 }
 
 /// Provides a query and a borrow of the world during system execution
-pub struct QueryData<'a, Q, F = Without>
+pub struct QueryData<'a, Q, F = All>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
