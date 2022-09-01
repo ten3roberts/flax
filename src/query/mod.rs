@@ -263,8 +263,8 @@ where
 /// Provides a query and a borrow of the world during system execution
 pub struct QueryData<'a, Q, F = All>
 where
-    Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    Q: for<'x> Fetch<'x> + 'static,
+    F: for<'x> Filter<'x> + 'static,
 {
     world: AtomicRef<'a, World>,
     query: &'a mut Query<Q, F>,
@@ -272,8 +272,8 @@ where
 
 impl<'a, Q, F> SystemData<'a> for Query<Q, F>
 where
-    Q: for<'x> Fetch<'x> + 'a,
-    F: for<'x> Filter<'x> + Debug + 'a,
+    Q: for<'x> Fetch<'x> + 'static,
+    F: for<'x> Filter<'x> + Debug + 'static,
 {
     type Value = QueryData<'a, Q, F>;
 

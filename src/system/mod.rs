@@ -2,16 +2,11 @@ mod context;
 mod traits;
 
 use core::fmt;
-use std::{
-    any::{type_name, TypeId},
-    fmt::Formatter,
-    marker::PhantomData,
-    sync::Arc,
-};
+use std::{any::type_name, fmt::Formatter, marker::PhantomData, sync::Arc};
 
 use crate::{
     fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, Fetch,
-    Filter, Query, QueryData, World,
+    FetchItem, Filter, Query, QueryData, World,
 };
 
 use atomic_refcell::AtomicRefCell;
@@ -47,11 +42,11 @@ pub struct ForEach<F> {
     func: F,
 }
 
-impl<'a, Func, Q, F> Callable<'a, QueryData<'a, Q, F>, ()> for ForEach<Func>
+impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ForEach<Func>
 where
     for<'x> Q: Fetch<'x> + std::fmt::Debug,
     for<'x> F: Filter<'x> + std::fmt::Debug,
-    for<'x> Func: FnMut(<<Q as Fetch<'x>>::Prepared as PreparedFetch>::Item),
+    for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
 {
     fn execute(&mut self, mut data: QueryData<Q, F>) {
         for item in &mut data.borrow() {
@@ -81,7 +76,7 @@ where
     /// Execute a function for each item in the query
     pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, Query<Q, F>, ()>
     where
-        for<'x> Func: FnMut(<<Q as Fetch<'x>>::Prepared as PreparedFetch>::Item),
+        for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
@@ -146,7 +141,7 @@ impl<Args> SystemBuilder<Args> {
     pub fn build<Func, Ret>(self, func: Func) -> System<Func, Args, Ret>
     where
         Args: for<'a> SystemData<'a> + 'static,
-        Func: for<'this, 'a> Callable<'this, <Args as SystemData<'a>>::Value, Ret>,
+        Func: for<'this, 'a> SystemFn<'this, <Args as SystemData<'a>>::Value, Ret>,
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
@@ -177,11 +172,11 @@ where
     }
 }
 
-impl<'this, F, Args, Err> Callable<'this, &'this SystemContext<'this>, eyre::Result<()>>
+impl<'this, F, Args, Err> SystemFn<'this, &'this SystemContext<'this>, eyre::Result<()>>
     for System<F, Args, Result<(), Err>>
 where
     Args: for<'x> SystemData<'x>,
-    F: for<'x> Callable<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
+    F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
     Err: Into<eyre::Error>,
 {
     #[tracing::instrument(skip_all, fields(name = self.name))]
@@ -191,9 +186,7 @@ where
             .acquire(ctx)
             .wrap_err("Failed to bind system data")?;
 
-        let func = &mut self.func;
-
-        let res: eyre::Result<()> = func.execute(data).map_err(Into::into);
+        let res: eyre::Result<()> = self.func.execute(data).map_err(Into::into);
         if let Err(err) = res {
             return Err(err.wrap_err(format!("Failed to execute system: {:?}", self)));
         }
@@ -212,11 +205,11 @@ where
     }
 }
 
-impl<'this, F, Args> Callable<'this, &'this SystemContext<'this>, eyre::Result<()>>
+impl<'this, F, Args> SystemFn<'this, &'this SystemContext<'this>, eyre::Result<()>>
     for System<F, Args, ()>
 where
     Args: SystemData<'this>,
-    F: Callable<'this, Args::Value, ()>,
+    F: SystemFn<'this, Args::Value, ()>,
 {
     #[tracing::instrument(skip_all, fields(name = self.name))]
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
@@ -225,9 +218,7 @@ where
             .acquire(ctx)
             .wrap_err("Failed to bind system data")?;
 
-        let func = &mut self.func;
-
-        func.execute(data);
+        self.func.execute(data);
 
         Ok(())
     }
@@ -235,7 +226,8 @@ where
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: ", self.name)?;
 
-        self.func.describe(f)
+        Ok(())
+        // self.func.describe(f)
     }
 
     fn access(&self, world: &World) -> Vec<Access> {
@@ -245,7 +237,7 @@ where
 
 impl<F, Args, Ret> fmt::Debug for System<F, Args, Ret>
 where
-    Self: for<'x> Callable<'x, &'x SystemContext<'x>, eyre::Result<()>>,
+    Self: for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.describe(f)
@@ -268,7 +260,7 @@ impl<F, Args, Ret> System<F, Args, Ret> {
         Ret: Send + Sync + 'static,
         Args: Send + Sync + 'static,
         F: Send + Sync + 'static,
-        Self: for<'x> Callable<'x, &'x SystemContext<'x>, eyre::Result<()>>,
+        Self: for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>>,
     {
         BoxedSystem::new(self)
     }
@@ -286,8 +278,9 @@ impl<F, Args, Ret> System<F, Args, Ret> {
     #[tracing::instrument(skip_all, fields(name = ?self.name))]
     pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> Ret
     where
+        Ret: 'static,
         for<'x> Args: SystemData<'x>,
-        for<'x> F: Callable<'x, <Args as SystemData<'x>>::Value, Ret>,
+        for<'x> F: SystemFn<'x, <Args as SystemData<'x>>::Value, Ret>,
     {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
@@ -372,7 +365,7 @@ impl Access {
 /// Is essentially a `None` variant system.
 pub(crate) struct NeverSystem;
 
-impl<'a> Callable<'a, &'a SystemContext<'a>, eyre::Result<()>> for NeverSystem {
+impl<'a> SystemFn<'a, &'a SystemContext<'a>, eyre::Result<()>> for NeverSystem {
     fn execute(&'a mut self, _: &'a SystemContext<'a>) -> eyre::Result<()> {
         panic!("This system should never be executed as it is a placeholder");
     }
@@ -388,7 +381,7 @@ impl<'a> Callable<'a, &'a SystemContext<'a>, eyre::Result<()>> for NeverSystem {
 
 /// A type erased system
 pub struct BoxedSystem {
-    inner: Box<dyn for<'x> Callable<'x, &'x SystemContext<'x>, eyre::Result<()>> + Send + Sync>,
+    inner: Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>> + Send + Sync>,
 }
 
 impl std::fmt::Debug for BoxedSystem {
@@ -400,7 +393,7 @@ impl std::fmt::Debug for BoxedSystem {
 impl BoxedSystem {
     /// Creates a new boxed system from any other kind of system
     pub fn new(
-        system: impl for<'x> Callable<'x, &'x SystemContext<'x>, eyre::Result<()>>
+        system: impl for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>>
             + Send
             + Sync
             + 'static,
@@ -436,7 +429,7 @@ impl BoxedSystem {
 
 impl<T> From<T> for BoxedSystem
 where
-    T: for<'x> Callable<'x, &'x SystemContext<'x>, eyre::Result<()>> + Send + Sync + 'static,
+    T: for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>> + Send + Sync + 'static,
 {
     fn from(system: T) -> Self {
         Self::new(system)
@@ -446,9 +439,8 @@ where
 #[cfg(test)]
 mod test {
 
-    use crate::{component, CommandBuffer, Component, EntityBuilder, Query, QueryData, World};
+    use crate::{component, CommandBuffer, Component, EntityBuilder, Query, QueryBorrow, World};
 
-    use super::traits::Callable;
     use super::*;
 
     #[test]
@@ -468,15 +460,14 @@ mod test {
         let mut system = System::builder()
             .with(Query::new(a()))
             // .with(Query::new(b()))
-            .build(|mut a: QueryData<Component<String>>| assert_eq!(a.borrow().iter().count(), 1));
+            .build(|mut a: QueryBorrow<Component<String>>| assert_eq!(a.iter().count(), 1));
 
         let mut fallible = System::builder()
             // .with_name("Fallible")
             .with(Query::new(b()))
             .build(
-                move |mut query: QueryData<Component<i32>>| -> eyre::Result<()> {
+                move |mut query: QueryBorrow<Component<i32>>| -> eyre::Result<()> {
                     // Lock archetypes
-                    let mut query = query.borrow();
                     let item: &i32 = query.get(id)?;
                     eprintln!("Item: {item}");
 

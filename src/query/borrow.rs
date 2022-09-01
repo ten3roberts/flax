@@ -40,7 +40,7 @@ where
     &'w F: Filter<'q>,
     'w: 'q,
 {
-    type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
+    type Item = <Q as FetchItem<'q>>::Item;
 
     type IntoIter = QueryIter<'q, 'w, Q, F>;
 

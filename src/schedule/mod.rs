@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, mem};
 use itertools::Itertools;
 use tracing::debug;
 
-use crate::{system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World, Write};
+use crate::{system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World};
 
 enum Systems {
     Unbatched(Vec<BoxedSystem>),
@@ -59,8 +59,8 @@ fn flush_system() -> BoxedSystem {
         .with_name("flush")
         .write::<World>()
         .write::<CommandBuffer>()
-        .build(|mut world: Write<World>, mut cmd: Write<CommandBuffer>| {
-            cmd.apply(&mut world)
+        .build(|world: &mut World, cmd: &mut CommandBuffer| {
+            cmd.apply(world)
                 .wrap_err("Failed to flush commandbuffer in schedule\n")
         })
         .boxed()
@@ -307,7 +307,7 @@ mod test {
     use itertools::Itertools;
 
     use crate::{
-        component, schedule::Schedule, system::System, EntityBuilder, Query, QueryData, World,
+        component, schedule::Schedule, system::System, EntityBuilder, Query, QueryBorrow, World,
     };
 
     use super::topo_sort;
@@ -328,8 +328,8 @@ mod test {
 
         let mut prev_count: i32 = 0;
         let system_a = System::builder().with(Query::new(a())).build(
-            move |mut a: QueryData<_>| -> eyre::Result<()> {
-                let count = a.borrow().iter().count() as i32;
+            move |mut a: QueryBorrow<_>| -> eyre::Result<()> {
+                let count = a.iter().count() as i32;
 
                 eprintln!("Change: {prev_count} -> {count}");
                 prev_count = count;
@@ -338,8 +338,7 @@ mod test {
         );
 
         let system_b = System::builder().with(Query::new(b())).build(
-            move |mut query: QueryData<_>| -> eyre::Result<()> {
-                let mut query = query.borrow();
+            move |mut query: QueryBorrow<_>| -> eyre::Result<()> {
                 let item: &i32 = query.get(id)?;
                 eprintln!("Item: {item}");
 
@@ -363,7 +362,6 @@ mod test {
     fn schedule_par() {
         use crate::{
             components::name, entity_ids, CmpExt, CommandBuffer, Component, EntityIds, Mutable,
-            Write,
         };
 
         #[derive(Debug, Clone)]
@@ -421,8 +419,8 @@ mod test {
         let heal = System::builder()
             .with(Query::new(health().as_mut()))
             .with_name("heal")
-            .build(|mut q: QueryData<crate::Mutable<f32>>| {
-                q.borrow().iter().for_each(|h| {
+            .build(|mut q: QueryBorrow<crate::Mutable<f32>>| {
+                q.iter().for_each(|h| {
                     if *h > 0.0 {
                         *h += 1.0
                     }
@@ -433,8 +431,8 @@ mod test {
             .with(Query::new(entity_ids()).filter(health().lte(0.0)))
             .write::<CommandBuffer>()
             .with_name("cleanup")
-            .build(|mut q: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
-                q.borrow().iter().for_each(|id| {
+            .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
+                q.iter().for_each(|id| {
                     eprintln!("Cleaning up: {id}");
                     cmd.despawn(id);
                 })
@@ -445,12 +443,8 @@ mod test {
             .with(Query::new((entity_ids(), pos(), health().as_mut())))
             .with_name("battle")
             .build(
-                |mut sub: QueryData<(_, _, Component<f32>, Component<(f32, f32)>)>,
-                 mut obj: QueryData<(_, Component<(f32, f32)>, Mutable<f32>)>| {
-                    // Lock the queries for the whole duration.
-                    // There is not much difference in calling `prepare().iter()` for each inner iteration of the loop.
-                    let mut sub = sub.borrow();
-                    let mut obj = obj.borrow();
+                |mut sub: QueryBorrow<(_, _, Component<f32>, Component<(f32, f32)>)>,
+                 mut obj: QueryBorrow<(_, Component<(f32, f32)>, Mutable<f32>)>| {
                     eprintln!("Prepared queries, commencing battles");
                     for (id1, damage, range, pos) in sub.iter() {
                         for (id2, other_pos, health) in obj.iter() {
@@ -469,8 +463,7 @@ mod test {
         let remaining = System::builder()
             .with_name("remaining")
             .with(Query::new(entity_ids()))
-            .build(|mut q: QueryData<EntityIds>| {
-                let mut q = q.borrow();
+            .build(|mut q: QueryBorrow<EntityIds>| {
                 eprintln!("Remaining: {:?}", q.iter().format(", "));
             });
 
