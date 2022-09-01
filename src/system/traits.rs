@@ -1,7 +1,6 @@
 use std::{
     fmt::{self, Formatter},
     marker::PhantomData,
-    ops::{Deref, DerefMut},
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
@@ -67,11 +66,14 @@ pub trait SystemFn<'this, Args, Ret> {
     fn execute(&'this mut self, args: Args) -> Ret;
     /// Debug for Fn
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
+    /// Returns a short name
+    fn name(&self) -> String;
     /// Returns the data accesses of a system function
     fn access(&self, world: &World) -> Vec<Access>;
 }
 
-struct Verbatim(String);
+#[derive(PartialEq, Eq, Clone)]
+pub(crate) struct Verbatim(pub String);
 impl fmt::Debug for Verbatim {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -108,6 +110,10 @@ macro_rules! tuple_impl {
 
             fn access(&self, _: &World) -> Vec<Access> {
                 vec![]
+            }
+
+            fn name(&self) -> String {
+                std::any::type_name::<Self>().to_string()
             }
         }
 
@@ -170,35 +176,6 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 pub struct Writable<T>(PhantomData<T>);
 #[doc(hidden)]
 pub struct Readable<T>(PhantomData<T>);
-#[derive(Debug)]
-/// Allows mutable access to data in the system context
-pub struct Write<'a, T>(pub(crate) AtomicRefMut<'a, T>);
-
-#[derive(Debug)]
-/// Allows immutable access to data in the system context
-pub struct Read<'a, T>(AtomicRef<'a, T>);
-
-impl<'a, T> Deref for Read<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.deref()
-    }
-}
-
-impl<'a, T> Deref for Write<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.deref()
-    }
-}
-
-impl<'a, T> DerefMut for Write<'a, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.deref_mut()
-    }
-}
 
 impl<T> Writable<T> {
     pub(crate) fn new() -> Self {

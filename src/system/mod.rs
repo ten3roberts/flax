@@ -66,6 +66,14 @@ where
     fn access(&self, _: &World) -> Vec<Access> {
         vec![]
     }
+
+    fn name(&self) -> String {
+        format!(
+            "for_each<{}, filter: {}>",
+            tynm::type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
+            tynm::type_name::<F>()
+        )
+    }
 }
 
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
@@ -179,8 +187,10 @@ where
     F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
     Err: Into<eyre::Error>,
 {
-    #[tracing::instrument(skip_all, fields(name = self.name))]
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("execute", name = self.name).entered();
+
         let data = self
             .data
             .acquire(ctx)
@@ -203,6 +213,10 @@ where
     fn access(&self, world: &World) -> Vec<Access> {
         self.data.access(world)
     }
+
+    fn name(&self) -> String {
+        self.name.clone()
+    }
 }
 
 impl<'this, F, Args> SystemFn<'this, &'this SystemContext<'this>, eyre::Result<()>>
@@ -211,8 +225,10 @@ where
     Args: SystemData<'this>,
     F: SystemFn<'this, Args::Value, ()>,
 {
-    #[tracing::instrument(skip_all, fields(name = self.name))]
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("execute", name = self.name).entered();
+
         let data = self
             .data
             .acquire(ctx)
@@ -226,12 +242,15 @@ where
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: ", self.name)?;
 
-        Ok(())
-        // self.func.describe(f)
+        self.func.describe(f)
     }
 
     fn access(&self, world: &World) -> Vec<Access> {
         self.data.access(world)
+    }
+
+    fn name(&self) -> String {
+        self.name.clone()
     }
 }
 
@@ -275,13 +294,15 @@ impl System<(), (), ()> {
 
 impl<F, Args, Ret> System<F, Args, Ret> {
     /// Run the system on the world. Any commands will be applied
-    #[tracing::instrument(skip_all, fields(name = ?self.name))]
     pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> Ret
     where
         Ret: 'static,
         for<'x> Args: SystemData<'x>,
         for<'x> F: SystemFn<'x, <Args as SystemData<'x>>::Value, Ret>,
     {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("run_on", name = self.name).entered();
+
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
 
@@ -377,6 +398,10 @@ impl<'a> SystemFn<'a, &'a SystemContext<'a>, eyre::Result<()>> for NeverSystem {
     fn access(&self, _: &World) -> Vec<Access> {
         vec![]
     }
+
+    fn name(&self) -> String {
+        "NeverSystem".to_string()
+    }
 }
 
 /// A type erased system
@@ -421,9 +446,14 @@ impl BoxedSystem {
         self.inner.describe(f)
     }
 
-    /// Returns the accesse of the system held within
+    /// Returns the accesses of the system held within
     pub fn access(&self, world: &World) -> Vec<Access> {
         self.inner.access(world)
+    }
+
+    /// Returns the boxed system's name
+    pub fn name(&self) -> String {
+        self.inner.name()
     }
 }
 

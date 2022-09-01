@@ -216,7 +216,8 @@ where
                     arch_id,
                 };
 
-                if (self.include_components || !arch.has(is_component().id()))
+                if !arch.is_empty()
+                    && (self.include_components || !arch.has(is_component().id()))
                     && self.fetch.matches(data)
                     && self.filter.matches(arch)
                     && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))

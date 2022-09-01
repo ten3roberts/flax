@@ -134,11 +134,13 @@ async fn main() -> Result<()> {
             acc -= dt;
             tracing::info!("Executing physics");
             physics_schedule.execute_par(&mut world)?;
+            tracing::info!("physics_schedule: {:#?}", physics_schedule.batch_info());
         }
 
         clear_background(BLACK);
 
         frame_schedule.execute_par(&mut world)?;
+        tracing::info!("frame_schedule: {:#?}", frame_schedule.batch_info());
 
         next_frame().await
     }

@@ -1,10 +1,12 @@
+use core::slice;
 use eyre::WrapErr;
 use std::{collections::BTreeMap, mem};
 
 use itertools::Itertools;
-use tracing::debug;
 
-use crate::{system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, World};
+use crate::{
+    system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, Verbatim, World,
+};
 
 enum Systems {
     Unbatched(Vec<BoxedSystem>),
@@ -92,7 +94,26 @@ impl ScheduleBuilder {
 
     /// Build the schedule
     pub fn build(&mut self) -> Schedule {
-        Schedule::from_systems(mem::take(&mut self.flush().systems))
+        Schedule::from_systems(mem::take(&mut self.systems))
+    }
+}
+
+/// Represents diagnostic information about a system
+#[derive(Debug, Clone)]
+pub struct SystemInfo {
+    name: String,
+    desc: Verbatim,
+}
+
+impl SystemInfo {
+    /// Returns a verbose system description
+    pub fn desc(&self) -> &str {
+        &self.desc.0
+    }
+
+    /// Returns the system name
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
     }
 }
 
@@ -100,9 +121,18 @@ impl ScheduleBuilder {
 #[derive(Default)]
 pub struct Schedule {
     systems: Systems,
+    cmd: CommandBuffer,
 
     archetype_gen: u32,
 }
+
+/// Holds information regarding a schedules batches
+#[derive(Debug, Clone)]
+pub struct BatchInfos(Vec<BatchInfo>);
+
+/// Holds information regarding a single batch
+#[derive(Debug, Clone)]
+pub struct BatchInfo(Vec<SystemInfo>);
 
 impl std::fmt::Debug for Schedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -129,6 +159,7 @@ impl Schedule {
         Self {
             systems: Systems::Unbatched(systems.into()),
             archetype_gen: 0,
+            cmd: CommandBuffer::new(),
         }
     }
 
@@ -153,23 +184,32 @@ impl Schedule {
 
     /// Execute all systems in the schedule sequentially on the world.
     /// Returns the first error and aborts if the execution fails.
-    #[tracing::instrument(skip(self, world))]
     pub fn execute_seq(&mut self, world: &mut World) -> eyre::Result<()> {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
+
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("execute_seq").entered();
+
         self.systems
             .as_unbatched()
             .iter_mut()
             .try_for_each(|system| system.execute(&ctx))?;
 
+        self.cmd
+            .apply(world)
+            .wrap_err("Failed to apply commandbuffer")?;
+
         Ok(())
     }
 
     #[cfg(feature = "parallel")]
-    #[tracing::instrument(skip(self, world))]
     /// Parallel version of [Self::execute_seq]
     pub fn execute_par(&mut self, world: &mut World) -> eyre::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("execute_par").entered();
 
         let w_gen = world.archetype_gen();
         // New archetypes
@@ -189,8 +229,7 @@ impl Schedule {
             Systems::Batched(v) => v,
         };
 
-        let mut cmd = CommandBuffer::new();
-        let ctx = SystemContext::new(world, &mut cmd);
+        let ctx = SystemContext::new(world, &mut self.cmd);
 
         let result = batches.iter_mut().try_for_each(|batch| {
             batch
@@ -198,19 +237,46 @@ impl Schedule {
                 .try_for_each(|system| system.execute(&ctx))
         });
 
+        self.cmd
+            .apply(world)
+            .wrap_err("Failed to apply commandbuffer")?;
+
         result
     }
 
-    #[tracing::instrument(skip_all)]
+    /// Returns information about the current multithreaded batch partioning and system accesses.
+    pub fn batch_info(&self) -> BatchInfos {
+        let batches = match &self.systems {
+            Systems::Unbatched(v) => slice::from_ref(v),
+            Systems::Batched(v) => v,
+        };
+
+        let batches = batches
+            .iter()
+            .map(|batch| {
+                let systems = batch
+                    .iter()
+                    .map(|system| SystemInfo {
+                        name: system.name(),
+                        desc: Verbatim(format!("{system:#?}")),
+                    })
+                    .collect_vec();
+                BatchInfo(systems)
+            })
+            .collect_vec();
+
+        BatchInfos(batches)
+    }
+
     fn build_dependencies(systems: &mut [BoxedSystem], world: &mut World) -> Vec<Vec<BoxedSystem>> {
-        debug!("Building batches");
+        #[cfg(feature = "tracing")]
+        let _span = tracing::debug_span!("build_dependencies", systems = ?systems).entered();
 
         let accesses = systems.iter_mut().map(|v| v.access(world)).collect_vec();
 
         let mut deps = BTreeMap::new();
 
         for (dst_idx, dst) in accesses.iter().enumerate() {
-            debug!("Generating deps for {dst_idx}");
             let accesses = &accesses;
             let dst_deps = dst
                 .iter()

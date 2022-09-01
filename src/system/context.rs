@@ -13,7 +13,7 @@ pub trait SharedResource {
     fn key(&self) -> u64;
 }
 
-impl<'a, T> SystemAccess for Arc<AtomicRefCell<T>>
+impl<T> SystemAccess for Arc<AtomicRefCell<T>>
 where
     T: SharedResource,
 {
@@ -45,10 +45,10 @@ where
 
 impl<T> SharedResource for T
 where
-    T: Send + Hash,
+    T: Send + Hash + 'static,
 {
     fn key(&self) -> u64 {
-        fxhash::hash64(self)
+        fxhash::hash64(&(std::any::TypeId::of::<T>(), self))
     }
 }
 

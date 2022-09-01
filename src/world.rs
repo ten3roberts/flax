@@ -82,11 +82,6 @@ impl Archetypes {
                 None => {
                     let new = Archetype::new(cur.components().copied().chain([*head]));
 
-                    tracing::debug!(
-                        "Creating new archetype: {:#?}",
-                        new.components().collect_vec()
-                    );
-
                     // Increase gen
                     self.gen.fetch_add(1, Ordering::Relaxed);
                     let id = self.inner.spawn(new);
