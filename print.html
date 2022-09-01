@@ -524,8 +524,8 @@ thrice could be turned into a query.</p>
         .with_name(&quot;update_distance&quot;)
         .with(query)
         .build(
-            |mut query: QueryData&lt;(_, Component&lt;(f32, f32)&gt;, Mutable&lt;f32&gt;), _&gt;| {
-                for (id, pos, dist) in &amp;mut query.borrow() {
+            |mut query: QueryBorrow&lt;(_, Component&lt;(f32, f32)&gt;, Mutable&lt;f32&gt;), _&gt;| {
+                for (id, pos, dist) in &amp;mut query {
                     tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
                     *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
                 }
@@ -575,19 +575,17 @@ as it may access anything.</p>
         .with_name(&quot;delete_outside_world&quot;)
         .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .write::&lt;CommandBuffer&gt;()
-        .build(
-            |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, &amp;dist) in &amp;mut query.borrow() {
-                    tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
-                    cmd.despawn(id);
-                }
-            },
-        );
+        .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
+            for (id, &amp;dist) in &amp;mut q {
+                tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
+                cmd.despawn(id);
+            }
+        });
 
     let debug_world = System::builder()
         .with_name(&quot;debug_world&quot;)
-        .write::&lt;World&gt;()
-        .build(|world: Write&lt;World&gt;| {
+        .read::&lt;World&gt;()
+        .build(|world: &amp;_| {
             tracing::debug!(&quot;World: {world:#?}&quot;);
         });
 
@@ -611,19 +609,17 @@ sequence.</p>
         .with_name(&quot;delete_outside_world&quot;)
         .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .write::&lt;CommandBuffer&gt;()
-        .build(
-            |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, &amp;dist) in &amp;mut query.borrow() {
-                    tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
-                    cmd.despawn(id);
-                }
-            },
-        );
+        .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
+            for (id, &amp;dist) in &amp;mut q {
+                tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
+                cmd.despawn(id);
+            }
+        });
 
     let debug_world = System::builder()
         .with_name(&quot;debug_world&quot;)
-        .write::&lt;World&gt;()
-        .build(|world: Write&lt;World&gt;| {
+        .read::&lt;World&gt;()
+        .build(|world: &amp;_| {
             tracing::debug!(&quot;World: {world:#?}&quot;);
         });
 
@@ -662,14 +658,14 @@ sequence.</p>
     let spawn = System::builder()
         .with_name(&quot;spawner&quot;)
         .write::&lt;CommandBuffer&gt;()
-        .build(move |mut cmd: Write&lt;CommandBuffer&gt;| {
+        .build(move |cmd: &amp;mut CommandBuffer| {
             for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
                 Entity::builder()
                     .set(position(), pos)
                     .set_default(distance())
-                    .spawn_into(&amp;mut cmd);
+                    .spawn_into(cmd);
             }
         });
 
@@ -679,8 +675,8 @@ sequence.</p>
     let count = System::builder()
         .with_name(&quot;count&quot;)
         .with(Query::new(()))
-        .build(move |mut query: QueryData&lt;()&gt;| {
-            let count: usize = query.borrow().iter_batched().map(|v| v.len()).sum();
+        .build(move |mut query: QueryBorrow&lt;()&gt;| {
+            let count: usize = query.iter_batched().map(|v| v.len()).sum();
             tracing::info!(&quot;[{frame_count}]: {count}&quot;);
             frame_count += 1;
         });
@@ -1017,8 +1013,8 @@ in other situations where a mutable reference to the world is not available.</p>
         .with_name(&quot;spawn_entities&quot;)
         .with(Query::new(()))
         .write::&lt;CommandBuffer&gt;()
-        .build(move |mut q: QueryData&lt;()&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-            let count = q.borrow().count();
+        .build(move |mut q: QueryBorrow&lt;()&gt;, cmd: &amp;mut CommandBuffer| {
+            let count = q.count();
 
             for _ in count..64 {
                 tracing::info!(&quot;Spawning new entity&quot;);
@@ -1036,8 +1032,8 @@ in other situations where a mutable reference to the world is not available.</p>
         .with(Query::new((entity_ids(), position())).without(world_matrix()))
         .write::&lt;CommandBuffer&gt;()
         .build(
-            |mut q: QueryData&lt;(EntityIds, Component&lt;Vec2&gt;), _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, pos) in &amp;mut q.borrow() {
+            |mut q: QueryBorrow&lt;(EntityIds, Component&lt;Vec2&gt;), _&gt;, mut cmd: &amp;mut CommandBuffer| {
+                for (id, pos) in &amp;mut q {
                     tracing::info!(&quot;Adding world matrix to {id}&quot;);
                     cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));
                 }
@@ -1161,8 +1157,8 @@ handle a 3d world.</p>
         )
         .write::&lt;CommandBuffer&gt;()
         .build(
-            |mut query: QueryData&lt;EntityIds, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for id in &amp;mut query.borrow() {
+            |mut query: QueryBorrow&lt;EntityIds, _&gt;, cmd: &amp;mut CommandBuffer| {
+                for id in &amp;mut query {
                     tracing::info!(&quot;Adding world matrix to {id}&quot;);
                     cmd.set(id, world_matrix(), Mat4::IDENTITY);
                 }

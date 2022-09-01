@@ -152,19 +152,17 @@ sequence.</p>
         .with_name(&quot;delete_outside_world&quot;)
         .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .write::&lt;CommandBuffer&gt;()
-        .build(
-            |mut query: QueryData&lt;_, _&gt;, mut cmd: Write&lt;CommandBuffer&gt;| {
-                for (id, &amp;dist) in &amp;mut query.borrow() {
-                    tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
-                    cmd.despawn(id);
-                }
-            },
-        );
+        .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
+            for (id, &amp;dist) in &amp;mut q {
+                tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
+                cmd.despawn(id);
+            }
+        });
 
     let debug_world = System::builder()
         .with_name(&quot;debug_world&quot;)
-        .write::&lt;World&gt;()
-        .build(|world: Write&lt;World&gt;| {
+        .read::&lt;World&gt;()
+        .build(|world: &amp;_| {
             tracing::debug!(&quot;World: {world:#?}&quot;);
         });
 
@@ -203,14 +201,14 @@ sequence.</p>
     let spawn = System::builder()
         .with_name(&quot;spawner&quot;)
         .write::&lt;CommandBuffer&gt;()
-        .build(move |mut cmd: Write&lt;CommandBuffer&gt;| {
+        .build(move |cmd: &amp;mut CommandBuffer| {
             for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
                 Entity::builder()
                     .set(position(), pos)
                     .set_default(distance())
-                    .spawn_into(&amp;mut cmd);
+                    .spawn_into(cmd);
             }
         });
 
@@ -220,8 +218,8 @@ sequence.</p>
     let count = System::builder()
         .with_name(&quot;count&quot;)
         .with(Query::new(()))
-        .build(move |mut query: QueryData&lt;()&gt;| {
-            let count: usize = query.borrow().iter_batched().map(|v| v.len()).sum();
+        .build(move |mut query: QueryBorrow&lt;()&gt;| {
+            let count: usize = query.iter_batched().map(|v| v.len()).sum();
             tracing::info!(&quot;[{frame_count}]: {count}&quot;);
             frame_count += 1;
         });
