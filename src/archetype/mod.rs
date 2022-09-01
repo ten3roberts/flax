@@ -129,10 +129,7 @@ impl Archetype {
     pub(crate) fn init_changes(&mut self, info: ComponentInfo) -> &mut Changes {
         self.changes
             .entry(info.id())
-            .or_insert_with(|| {
-                tracing::debug!("Initialized changes for {}", info.name);
-                AtomicRefCell::new(Changes::new(info))
-            })
+            .or_insert_with(|| AtomicRefCell::new(Changes::new(info)))
             .get_mut()
     }
 
