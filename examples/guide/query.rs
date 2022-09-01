@@ -1,6 +1,6 @@
 use flax::{
     component, entity_ids, CmpExt, CommandBuffer, Component, Debug, Entity, Mutable, Query,
-    QueryData, Schedule, System, World, Write,
+    QueryBorrow, Schedule, System, World,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::{
@@ -107,8 +107,8 @@ fn main() -> color_eyre::Result<()> {
         .with_name("update_distance")
         .with(query)
         .build(
-            |mut query: QueryData<(_, Component<(f32, f32)>, Mutable<f32>), _>| {
-                for (id, pos, dist) in &mut query.borrow() {
+            |mut query: QueryBorrow<(_, Component<(f32, f32)>, Mutable<f32>), _>| {
+                for (id, pos, dist) in &mut query {
                     tracing::info!("Updating distance for {id} with position: {pos:?}");
                     *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
                 }
@@ -143,19 +143,17 @@ fn main() -> color_eyre::Result<()> {
         .with_name("delete_outside_world")
         .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .write::<CommandBuffer>()
-        .build(
-            |mut query: QueryData<_, _>, mut cmd: Write<CommandBuffer>| {
-                for (id, &dist) in &mut query.borrow() {
-                    tracing::info!("Despawning {id} at: {dist}");
-                    cmd.despawn(id);
-                }
-            },
-        );
+        .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
+            for (id, &dist) in &mut q {
+                tracing::info!("Despawning {id} at: {dist}");
+                cmd.despawn(id);
+            }
+        });
 
     let debug_world = System::builder()
         .with_name("debug_world")
-        .write::<World>()
-        .build(|world: Write<World>| {
+        .read::<World>()
+        .build(|world: &_| {
             tracing::debug!("World: {world:#?}");
         });
 
@@ -195,14 +193,14 @@ fn main() -> color_eyre::Result<()> {
     let spawn = System::builder()
         .with_name("spawner")
         .write::<CommandBuffer>()
-        .build(move |mut cmd: Write<CommandBuffer>| {
+        .build(move |cmd: &mut CommandBuffer| {
             for _ in 0..100 {
                 let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!("Spawning new entity at: {pos:?}");
                 Entity::builder()
                     .set(position(), pos)
                     .set_default(distance())
-                    .spawn_into(&mut cmd);
+                    .spawn_into(cmd);
             }
         });
 
@@ -212,8 +210,8 @@ fn main() -> color_eyre::Result<()> {
     let count = System::builder()
         .with_name("count")
         .with(Query::new(()))
-        .build(move |mut query: QueryData<()>| {
-            let count: usize = query.borrow().iter_batched().map(|v| v.len()).sum();
+        .build(move |mut query: QueryBorrow<()>| {
+            let count: usize = query.iter_batched().map(|v| v.len()).sum();
             tracing::info!("[{frame_count}]: {count}");
             frame_count += 1;
         });

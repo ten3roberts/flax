@@ -78,8 +78,8 @@ fn main() -> color_eyre::Result<()> {
         )
         .write::<CommandBuffer>()
         .build(
-            |mut query: QueryData<EntityIds, _>, mut cmd: Write<CommandBuffer>| {
-                for id in &mut query.borrow() {
+            |mut query: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
+                for id in &mut query {
                     tracing::info!("Adding world matrix to {id}");
                     cmd.set(id, world_matrix(), Mat4::IDENTITY);
                 }

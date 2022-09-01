@@ -2,7 +2,7 @@ use std::{hash::Hash, sync::Arc};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{Access, AccessKind, CommandBuffer, SystemAccess, SystemData, World, Write};
+use crate::{Access, AccessKind, CommandBuffer, SystemAccess, SystemData, World};
 
 /// A resource that can be shared between systems
 /// The difference between this and an `Arc<Mutex<_>>` is that this will be
@@ -27,9 +27,9 @@ where
 
 impl<'a, T> SystemData<'a> for Arc<AtomicRefCell<T>>
 where
-    T: Send + 'a + SharedResource,
+    T: 'static + Send + SharedResource,
 {
-    type Value = Write<'a, T>;
+    type Value = AtomicRefMut<'a, T>;
 
     fn acquire(&'a mut self, _: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
         let borrow = self.try_borrow_mut().map_err(|_| {
@@ -39,7 +39,7 @@ where
             )
         })?;
 
-        Ok(Write(borrow))
+        Ok(borrow)
     }
 }
 

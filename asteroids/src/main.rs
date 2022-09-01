@@ -277,12 +277,10 @@ fn camera_systems(dt: f32) -> BoxedSystem {
         .with(Query::new(position()).with(player()))
         .with(Query::new((position().as_mut(), camera().as_mut())))
         .build(
-            move |mut players: QueryData<Component<Vec2>, _>,
-                  mut cameras: QueryData<_, _>|
+            move |mut players: QueryBorrow<Component<Vec2>, _>,
+                  mut cameras: QueryBorrow<_, _>|
                   -> Result<()> {
-                let mut cameras = cameras.borrow();
-
-                let player_pos = players.borrow().first().copied().unwrap_or_default();
+                let player_pos = players.first().copied().unwrap_or_default();
 
                 let (camera_pos, camera): (&mut Vec2, &mut Mat3) =
                     cameras.first().ok_or_else(|| eyre!("No camera"))?;
@@ -340,8 +338,8 @@ fn lifetime_system(dt: f32) -> BoxedSystem {
         .with(Query::new((entity_ids(), lifetime().as_mut())))
         .write::<CommandBuffer>()
         .build(
-            move |mut q: QueryData<(EntityIds, Mutable<f32>)>, mut cmd: Write<CommandBuffer>| {
-                for (id, lf) in &mut q.borrow() {
+            move |mut q: QueryBorrow<(EntityIds, Mutable<f32>)>, cmd: &mut CommandBuffer| {
+                for (id, lf) in &mut q {
                     if *lf <= 0.0 {
                         cmd.set(id, health(), 0.0);
                     }
@@ -360,13 +358,10 @@ fn collision_system() -> BoxedSystem {
         .read::<World>()
         .write::<CommandBuffer>()
         .build(
-            |mut a: QueryData<(EntityIds, CollisionQuery)>,
-             mut b: QueryData<(EntityIds, CollisionQuery)>,
-             world: Read<World>,
-             mut cmd: Write<CommandBuffer>| {
-                let mut a = a.borrow();
-                let mut b = b.borrow();
-
+            |mut a: QueryBorrow<(EntityIds, CollisionQuery)>,
+             mut b: QueryBorrow<(EntityIds, CollisionQuery)>,
+             world: &World,
+             cmd: &mut CommandBuffer| {
                 let mut collisions = Vec::new();
 
                 for (id_a, a) in &mut a {
@@ -421,7 +416,7 @@ fn collision_system() -> BoxedSystem {
                         });
 
                     if let Ok(on_collision) = entity.get(on_collision()) {
-                        (on_collision)(&world, collision)
+                        (on_collision)(world, collision)
                     };
                 }
             },
@@ -453,7 +448,7 @@ fn player_system(dt: f32) -> BoxedSystem {
         )
         .write::<CommandBuffer>()
         .build(
-            move |mut q: QueryData<
+            move |mut q: QueryBorrow<
                 (
                     EntityIds,
                     Component<Vec2>,
@@ -464,11 +459,11 @@ fn player_system(dt: f32) -> BoxedSystem {
                 ),
                 _,
             >,
-                  mut cmd: Write<CommandBuffer>| {
+                  cmd: &mut CommandBuffer| {
                 current_weapon_cooldown -= dt;
                 current_plume_cooldown -= dt;
 
-                for (player, pos, material, vel, rot, current_difficulty) in &mut q.borrow() {
+                for (player, pos, material, vel, rot, current_difficulty) in &mut q {
                     *current_difficulty = (*material * 0.001).max(1.0);
 
                     let forward = vec2(rot.sin(), -rot.cos());
@@ -486,7 +481,7 @@ fn player_system(dt: f32) -> BoxedSystem {
                         create_particle(8.0, 0.5, ORANGE)
                             .set(position(), *pos - 30.0 * forward)
                             .set(velocity(), *vel + -acc)
-                            .spawn_into(&mut cmd)
+                            .spawn_into(cmd)
                     }
 
                     if is_key_down(KeyCode::A) {
@@ -501,7 +496,7 @@ fn player_system(dt: f32) -> BoxedSystem {
                         create_bullet(player)
                             .set(velocity(), *vel + BULLET_SPEED * forward)
                             .set(position(), *pos + 30.0 * forward)
-                            .spawn_into(&mut cmd)
+                            .spawn_into(cmd)
                     }
 
                     *vel += acc * dt;
@@ -516,11 +511,11 @@ fn despawn_out_of_bounds() -> BoxedSystem {
         .with(Query::new(position()).with(player()))
         .with(Query::new((position(), health().as_mut())).without(player()))
         .build(
-            |mut player: QueryData<Component<Vec2>, _>,
-             mut asteroids: QueryData<(Component<Vec2>, Mutable<f32>), _>| {
-                let player_pos = *player.borrow().first().unwrap();
+            |mut player: QueryBorrow<Component<Vec2>, _>,
+             mut asteroids: QueryBorrow<(Component<Vec2>, Mutable<f32>), _>| {
+                let player_pos = *player.first().unwrap();
 
-                for (asteroid, health) in &mut asteroids.borrow() {
+                for (asteroid, health) in &mut asteroids {
                     if player_pos.distance(*asteroid) > 2000.0 {
                         *health = 0.0;
                     }
@@ -536,8 +531,8 @@ fn despawn_dead() -> BoxedSystem {
         .with(Query::new(entity_ids()).filter(health().lte(0.0)))
         .write::<CommandBuffer>()
         .build(
-            |mut q: QueryData<EntityIds, _>, mut cmd: Write<CommandBuffer>| {
-                for id in &mut q.borrow() {
+            |mut q: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
+                for id in &mut q {
                     cmd.despawn(id);
                 }
             },
@@ -554,17 +549,15 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
         .with(Query::new(asteroid()))
         .write::<CommandBuffer>()
         .build(
-            move |mut players: QueryData<(Component<Vec2>, Component<f32>), _>,
-                  mut existing: QueryData<Component<()>>,
-                  mut cmd: Write<CommandBuffer>| {
-                let mut players = players.borrow();
-
+            move |mut players: QueryBorrow<(Component<Vec2>, Component<f32>), _>,
+                  mut existing: QueryBorrow<Component<()>>,
+                  cmd: &mut CommandBuffer| {
                 let (player_pos, difficulty) = match players.first() {
                     Some(v) => v,
                     None => return,
                 };
 
-                let existing = existing.borrow().count();
+                let existing = existing.count();
 
                 let mut builder = Entity::builder();
 
@@ -600,7 +593,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                         .set(color(), hsl_to_rgb(0.75, 0.5, 0.5))
                         .set(velocity(), vel)
                         .set(angular_velocity(), rng.gen_range(-2.0..2.0))
-                        .spawn_into(&mut cmd);
+                        .spawn_into(cmd);
                 })
             },
         )
@@ -649,15 +642,13 @@ fn draw_shapes() -> BoxedSystem {
         .with(Query::new(camera()))
         .with(Query::new((TransformQuery::new(), shape(), color())))
         .build(
-            |_ctx: Write<GraphicsContext>,
-             mut camera: QueryData<Component<Mat3>>,
-             mut q: QueryData<(TransformQuery, Component<Shape>, Component<Color>), _>|
+            |_ctx: &mut GraphicsContext,
+             mut camera: QueryBorrow<Component<Mat3>>,
+             mut q: QueryBorrow<(TransformQuery, Component<Shape>, Component<Color>), _>|
              -> Result<()> {
-                let mut camera = camera.borrow();
-
                 let view = camera.first().context("Missing camera")?;
 
-                for (TransformQueryItem { pos, rot }, shape, color) in q.borrow().iter() {
+                for (TransformQueryItem { pos, rot }, shape, color) in &mut q {
                     shape.draw(view, *pos, *rot, *color);
                 }
 
@@ -674,12 +665,11 @@ fn draw_ui() -> BoxedSystem {
         .with(Query::new((material(), health(), difficulty())).with(player()))
         .with(Query::new(()))
         .build(
-            |_ctx: Write<GraphicsContext>,
-             mut players: QueryData<(Component<f32>, Component<f32>, Component<f32>), _>,
-             mut all: QueryData<(), _>| {
-                let count = all.borrow().count();
+            |_ctx: &mut GraphicsContext,
+             mut players: QueryBorrow<(Component<f32>, Component<f32>, Component<f32>), _>,
+             mut all: QueryBorrow<(), _>| {
+                let count = all.count();
 
-                let mut players = players.borrow();
                 let result = players.first();
 
                 if let Some((material, health, _difficulty)) = result {

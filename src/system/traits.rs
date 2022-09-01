@@ -9,6 +9,52 @@ use eyre::eyre;
 
 use crate::*;
 
+/// Allows dereferencing `AtomicRef<T>` to &T and similar "lock" types in a safe manner.
+pub trait AsBorrow<'a> {
+    /// The dereference target
+    type Borrowed: 'a;
+
+    /// Dereference a held borrow
+    fn as_borrow(&'a mut self) -> Self::Borrowed;
+}
+
+impl<'a, 'b, T: 'a> AsBorrow<'a> for AtomicRef<'b, T> {
+    type Borrowed = &'a T;
+
+    fn as_borrow(&'a mut self) -> Self::Borrowed {
+        &*self
+    }
+}
+
+impl<'a, 'b, T: 'a> AsBorrow<'a> for AtomicRefMut<'b, T> {
+    type Borrowed = &'a mut T;
+
+    fn as_borrow(&'a mut self) -> Self::Borrowed {
+        &mut *self
+    }
+}
+
+impl<'a, 'w, Q, F> AsBorrow<'a> for QueryData<'w, Q, F>
+where
+    Q: for<'x> Fetch<'x> + 'static,
+    F: for<'x> Filter<'x> + 'static,
+{
+    type Borrowed = QueryBorrow<'a, Q, F>;
+
+    fn as_borrow(&'a mut self) -> Self::Borrowed {
+        self.borrow()
+    }
+}
+
+/// Describes a type which can fetch assocated Data from the system context and
+/// provide it to the system.
+pub trait SystemData<'a>: SystemAccess {
+    /// The borrow from the system context
+    type Value;
+    /// Get the data from the system context
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value>;
+}
+
 /// Describe an access to the world in ters of shared and unique accesses
 pub trait SystemAccess {
     /// Returns all the accesses for a system
@@ -16,8 +62,8 @@ pub trait SystemAccess {
 }
 
 /// A callable function
-pub trait Callable<'this, Args, Ret> {
-    /// exe
+pub trait SystemFn<'this, Args, Ret> {
+    /// Execute the function
     fn execute(&'this mut self, args: Args) -> Ret;
     /// Debug for Fn
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
@@ -34,11 +80,15 @@ impl fmt::Debug for Verbatim {
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<'this, Func, Ret, $($ty,)*> Callable<'this, ($($ty,)*), Ret> for Func
-        where Func: FnMut($($ty,)*) -> Ret
+        impl<'this, Func, Ret, $($ty,)*> SystemFn<'this, ($($ty,)*), Ret> for Func
+        where
+            $(for<'x> $ty: AsBorrow<'x>,)*
+            // for<'x> Func: FnMut($($ty),*) -> Ret,
+            for<'x> Func: FnMut($(<$ty as AsBorrow<'x>>::Borrowed),*) -> Ret,
         {
-            fn execute(&'this mut self, _args: ($($ty,)*)) -> Ret {
-                (self)($(_args.$idx,)*)
+            fn execute(&'this mut self, mut args: ($($ty,)*)) -> Ret {
+                let borrowed = ($(args.$idx.as_borrow(),)*);
+                (self)($(borrowed.$idx,)*)
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -69,6 +119,17 @@ macro_rules! tuple_impl {
                 [
                     $(self.$idx.access(&*world)),*
                 ].concat()
+            }
+        }
+
+        impl<'a, $($ty,)*> AsBorrow<'a> for ($($ty,)*)
+        where
+            $($ty: AsBorrow<'a>,)*
+        {
+            type Borrowed = ($(<$ty as AsBorrow<'a>>::Borrowed,)*);
+
+            fn as_borrow(&'a mut self) -> Self::Borrowed {
+                ($((self.$idx).as_borrow(),)*)
             }
         }
 
@@ -103,15 +164,6 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 //     /// Initialize and fetch data from the system execution context
 //     fn init(ctx: &'ctx SystemContext<'w>) -> Self::Init;
 // }
-
-/// Describes a type which can fetch assocated Data from the system context and
-/// provide it to the system.
-pub trait SystemData<'a>: SystemAccess {
-    /// The borrow from the system context
-    type Value;
-    /// Get the data from the system context
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value>;
-}
 
 /// Access part of the context mutably.
 #[doc(hidden)]
@@ -173,24 +225,20 @@ impl<T> Default for Writable<T> {
 }
 
 impl<'a> SystemData<'a> for Writable<World> {
-    type Value = Write<'a, World>;
+    type Value = AtomicRefMut<'a, World>;
 
     fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
-        Ok(Write(
-            ctx.world_mut()
-                .map_err(|_| eyre!("Failed to borrow world mutably"))?,
-        ))
+        ctx.world_mut()
+            .map_err(|_| eyre!("Failed to borrow world mutably"))
     }
 }
 
 impl<'a> SystemData<'a> for Readable<World> {
-    type Value = Read<'a, World>;
+    type Value = AtomicRef<'a, World>;
 
     fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
-        Ok(Read(
-            ctx.world()
-                .map_err(|_| eyre!("Failed to borrow world mutably"))?,
-        ))
+        ctx.world()
+            .map_err(|_| eyre!("Failed to borrow world mutably"))
     }
 }
 
@@ -214,12 +262,11 @@ impl SystemAccess for Readable<World> {
 }
 
 impl<'a> SystemData<'a> for Writable<CommandBuffer> {
-    type Value = Write<'a, CommandBuffer>;
+    type Value = AtomicRefMut<'a, CommandBuffer>;
 
     fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
-        Ok(Write(ctx.cmd_mut().map_err(|_| {
-            eyre!("Failed to borrow commandbuffer mutably")
-        })?))
+        ctx.cmd_mut()
+            .map_err(|_| eyre!("Failed to borrow commandbuffer mutably"))
     }
 }
 
@@ -235,14 +282,15 @@ impl SystemAccess for Writable<CommandBuffer> {
 #[cfg(test)]
 mod test {
 
+    use atomic_refcell::AtomicRefMut;
     use itertools::Itertools;
 
     use crate::{
-        component, components::name, system::SystemContext, Callable, CommandBuffer, Entity, Query,
-        QueryData, SystemData, World,
+        component, components::name, system::SystemContext, All, CommandBuffer, Component, Entity,
+        Query, QueryBorrow, SystemData, SystemFn, World,
     };
 
-    use super::{Writable, Write};
+    use super::Writable;
 
     component! {
         health: f32,
@@ -254,30 +302,32 @@ mod test {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(&mut world, &mut cmd);
 
-        let mut spawner = |mut w: Write<_>| {
+        let mut spawner = |w: &mut World| {
             Entity::builder()
                 .set(name(), "Neo".to_string())
                 .set(health(), 90.0)
-                .spawn(&mut w);
+                .spawn(w);
 
             Entity::builder()
                 .set(name(), "Trinity".to_string())
                 .set(health(), 85.0)
-                .spawn(&mut w);
+                .spawn(w);
         };
 
-        let mut reader = |mut q: QueryData<_, _>| {
-            let names = q.borrow().iter().cloned().sorted().collect_vec();
+        let mut reader = |mut q: QueryBorrow<Component<String>, All>| {
+            let names = q.iter().cloned().sorted().collect_vec();
 
             assert_eq!(names, ["Neo", "Trinity"]);
         };
 
         let data = &mut (Writable::<World>::new(),);
-
-        (spawner).execute(data.acquire(&ctx).unwrap());
+        let mut data: (AtomicRefMut<World>,) = data.acquire(&ctx).unwrap();
+        SystemFn::<(AtomicRefMut<World>,), ()>::execute(&mut spawner, data);
+        // (spawner).execute(data);
 
         let data = &mut (Query::new(name()),);
-        (reader).execute(data.acquire(&ctx).unwrap());
+        let mut data = data.acquire(&ctx).unwrap();
+        // SystemFn::execute(&mut reader, data);
         Ok(())
     }
 }
