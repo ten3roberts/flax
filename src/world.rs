@@ -62,7 +62,9 @@ impl Archetypes {
     }
 
     pub fn get_mut(&mut self, arch_id: ArchetypeId) -> &mut Archetype {
-        self.inner.get_mut(arch_id).expect("Invalid archetype")
+        let arch = self.inner.get_mut(arch_id).expect("Invalid archetype");
+
+        arch
     }
 
     /// Get the archetype which has `components`.
@@ -106,18 +108,17 @@ impl Archetypes {
         a: Entity,
         b: Entity,
     ) -> Option<(&mut Archetype, &mut Archetype)> {
-        self.inner.get_disjoint(a, b)
+        let (a, b) = self.inner.get_disjoint(a, b)?;
+
+        Some((a, b))
     }
 
     pub fn iter(&self) -> EntityStoreIter<Archetype> {
         self.inner.iter()
     }
 
-    pub fn iter_mut(&mut self) -> EntityStoreIterMut<Archetype> {
-        self.inner.iter_mut()
-    }
-
     pub fn despawn(&mut self, id: Entity) -> Result<Archetype> {
+        self.gen.fetch_add(1, Ordering::Relaxed);
         let arch = self.inner.despawn(id)?;
         // Remove outgoing edges
         for (component, dst_id) in &arch.edges {
@@ -687,7 +688,7 @@ impl World {
         while let Some(id) = to_remove.pop() {
             for (_, arch) in self
                 .archetypes
-                .iter_mut()
+                .iter()
                 .filter(|(_, arch)| arch.relations().any(|v| v == relation.of(id).id()))
             {
                 to_remove.extend_from_slice(arch.entities());
@@ -933,6 +934,10 @@ impl World {
             slot: dst_slot,
             arch: dst_id,
         };
+
+        if src.is_empty() {
+            self.archetypes.gen.fetch_add(1, Ordering::Relaxed);
+        }
 
         *self.location_mut(id).expect("Entity is not valid") = loc;
 

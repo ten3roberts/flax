@@ -228,7 +228,6 @@ fn derive_data_struct(
     }
 }
 
-#[derive(Debug)]
 struct Attrs {
     extras: Option<MetaList>,
 }

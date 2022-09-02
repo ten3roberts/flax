@@ -112,19 +112,22 @@ where
             self.prepared = self
                 .archetypes
                 .iter()
-                .map(|&arch_id| {
+                .filter_map(|&arch_id| {
                     let arch = self.world.archetype(arch_id);
+                    if arch.is_empty() {
+                        return None;
+                    }
                     let data = FetchPrepareData {
                         world: self.world,
                         arch,
                         arch_id,
                     };
 
-                    PreparedArchetype {
+                    Some(PreparedArchetype {
                         arch_id,
                         arch,
                         fetch: self.fetch.prepare(data).expect("Mismathed archetype"),
-                    }
+                    })
                 })
                 .collect();
         }

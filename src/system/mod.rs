@@ -378,7 +378,7 @@ pub struct Access {
 impl Access {
     /// Returns true it both accesses can coexist
     pub fn is_compatible_with(&self, other: &Self) -> bool {
-        self.kind != other.kind || !(self.mutable || other.mutable)
+        !(self.kind == other.kind && self.mutable || other.mutable)
     }
 }
 
