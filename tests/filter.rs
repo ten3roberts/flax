@@ -98,6 +98,7 @@ fn filters() {
 
     assert_eq!(items, []);
     world.remove(id2, a()).unwrap();
+    eprintln!("Removed {id2}");
 
     let items = query.borrow(&world).iter().collect_vec();
 

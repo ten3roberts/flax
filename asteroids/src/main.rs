@@ -90,6 +90,7 @@ impl Shape {
 
 #[macroquad::main("Asteroids")]
 async fn main() -> Result<()> {
+    color_eyre::install()?;
     registry().with(HierarchicalLayer::default()).init();
 
     let mut world = World::new();
@@ -132,15 +133,19 @@ async fn main() -> Result<()> {
 
         while acc > 0.0 {
             acc -= dt;
+            let batch = physics_schedule.batch_info(&mut world);
+            // tracing::info!("physics_schedule: {batch:#?}",);
             tracing::info!("Executing physics");
             physics_schedule.execute_par(&mut world)?;
-            tracing::info!("physics_schedule: {:#?}", physics_schedule.batch_info());
         }
 
         clear_background(BLACK);
 
+        // tracing::info!(
+        //     "frame_schedule: {:#?}",
+        //     frame_schedule.batch_info(&mut world)
+        // );
         frame_schedule.execute_par(&mut world)?;
-        tracing::info!("frame_schedule: {:#?}", frame_schedule.batch_info());
 
         next_frame().await
     }
@@ -515,11 +520,11 @@ fn despawn_out_of_bounds() -> BoxedSystem {
         .build(
             |mut player: QueryBorrow<Component<Vec2>, _>,
              mut asteroids: QueryBorrow<(Component<Vec2>, Mutable<f32>), _>| {
-                let player_pos = *player.first().unwrap();
-
-                for (asteroid, health) in &mut asteroids {
-                    if player_pos.distance(*asteroid) > 2000.0 {
-                        *health = 0.0;
+                if let Some(player_pos) = player.first() {
+                    for (asteroid, health) in &mut asteroids {
+                        if player_pos.distance(*asteroid) > 2000.0 {
+                            *health = 0.0;
+                        }
                     }
                 }
             },

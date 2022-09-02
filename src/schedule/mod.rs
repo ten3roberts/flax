@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, mem};
 use itertools::Itertools;
 
 use crate::{
-    system::SystemContext, BoxedSystem, CommandBuffer, NeverSystem, System, Verbatim, World,
+    system::SystemContext, Access, BoxedSystem, CommandBuffer, NeverSystem, System, Verbatim, World,
 };
 
 enum Systems {
@@ -103,6 +103,7 @@ impl ScheduleBuilder {
 pub struct SystemInfo {
     name: String,
     desc: Verbatim,
+    access: Vec<Access>,
 }
 
 impl SystemInfo {
@@ -114,6 +115,11 @@ impl SystemInfo {
     /// Returns the system name
     pub fn name(&self) -> &str {
         self.name.as_ref()
+    }
+
+    /// Returns the system's current accesses
+    pub fn access(&self) -> &[Access] {
+        self.access.as_ref()
     }
 }
 
@@ -211,23 +217,9 @@ impl Schedule {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("execute_par").entered();
 
-        let w_gen = world.archetype_gen();
-        // New archetypes
-        if self.archetype_gen != w_gen {
-            self.systems.as_unbatched();
-            self.archetype_gen = w_gen;
-        }
+        self.calculate_batches(world);
 
-        // let systems = &mut self.systems[..];
-
-        let batches = match &mut self.systems {
-            Systems::Unbatched(systems) => {
-                let systems = Self::build_dependencies(systems, world);
-                self.systems = Systems::Batched(systems);
-                self.systems.as_batched().unwrap()
-            }
-            Systems::Batched(v) => v,
-        };
+        let batches = self.systems.as_batched().unwrap();
 
         let ctx = SystemContext::new(world, &mut self.cmd);
 
@@ -244,14 +236,28 @@ impl Schedule {
         result
     }
 
-    /// Returns information about the current multithreaded batch partioning and system accesses.
-    pub fn batch_info(&self) -> BatchInfos {
-        let batches = match &self.systems {
-            Systems::Unbatched(v) => slice::from_ref(v),
-            Systems::Batched(v) => v,
-        };
+    fn calculate_batches(&mut self, world: &mut World) -> &mut Vec<Vec<BoxedSystem>> {
+        let w_gen = world.archetype_gen();
+        // New archetypes
+        if self.archetype_gen != w_gen {
+            self.systems.as_unbatched();
+            self.archetype_gen = w_gen;
+        }
 
-        let batches = batches
+        match self.systems {
+            Systems::Unbatched(ref mut systems) => {
+                let systems = Self::build_dependencies(systems, world);
+                self.systems = Systems::Batched(systems);
+                self.systems.as_batched().unwrap()
+            }
+            Systems::Batched(ref mut v) => v,
+        }
+    }
+
+    /// Returns information about the current multithreaded batch partioning and system accesses.
+    pub fn batch_info(&mut self, world: &mut World) -> BatchInfos {
+        let batches = self
+            .calculate_batches(world)
             .iter()
             .map(|batch| {
                 let systems = batch
@@ -259,6 +265,7 @@ impl Schedule {
                     .map(|system| SystemInfo {
                         name: system.name(),
                         desc: Verbatim(format!("{system:#?}")),
+                        access: system.access(world),
                     })
                     .collect_vec();
                 BatchInfo(systems)
@@ -272,23 +279,32 @@ impl Schedule {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("build_dependencies", systems = ?systems).entered();
 
-        let accesses = systems.iter_mut().map(|v| v.access(world)).collect_vec();
+        let accesses = systems
+            .iter_mut()
+            .map(|v| (v.name(), v.access(world)))
+            .collect_vec();
 
         let mut deps = BTreeMap::new();
 
         for (dst_idx, dst) in accesses.iter().enumerate() {
             let accesses = &accesses;
             let dst_deps = dst
+                .1
                 .iter()
-                .flat_map(move |dst| {
+                .flat_map(move |dst_access| {
                     accesses
                         .iter()
                         .take(dst_idx)
                         .enumerate()
-                        .flat_map(|(src_idx, src)| src.iter().map(move |v| (src_idx, v)))
-                        .filter(|(_, src)| !src.is_compatible_with(dst))
-                        .map(|(src_idx, _)| src_idx)
+                        .find_map(|(src_idx, src)| {
+                            if src.1.iter().any(|v| !v.is_compatible_with(dst_access)) {
+                                Some(src_idx)
+                            } else {
+                                None
+                            }
+                        })
                 })
+                .dedup()
                 .collect_vec();
 
             deps.insert(dst_idx, dst_deps);

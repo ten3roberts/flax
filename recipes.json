@@ -4,7 +4,7 @@
     "kind": "term"
   },
   "check": {
-    "cmd": "cargo check --tests --examples --all-features --workspace"
+    "cmd": "cargo check --all-features --workspace"
   },
   "test": {
     "cmd": "cargo nextest run --all-features",

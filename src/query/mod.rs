@@ -183,8 +183,12 @@ where
     pub fn borrow<'w>(&'w mut self, world: &'w World) -> QueryBorrow<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
 
-        if world.archetype_gen() > self.archetype_gen {
-            self.archetypes = self.get_archetypes(world);
+        // Make sure the archetypes to visit are up to date
+        let archetype_gen = world.archetype_gen();
+        if archetype_gen > self.archetype_gen {
+            eprintln!("Recalculating archetypes");
+            self.archetypes = self.get_archetypes(world).collect_vec();
+            self.archetype_gen = archetype_gen;
         }
 
         QueryBorrow::new(
@@ -206,28 +210,24 @@ where
         prepared.iter().map(|v| v.cloned()).collect_vec()
     }
 
-    fn get_archetypes(&self, world: &World) -> Vec<ArchetypeId> {
-        world
-            .archetypes()
-            .filter_map(|(arch_id, arch)| {
-                let data = FetchPrepareData {
-                    world,
-                    arch,
-                    arch_id,
-                };
+    fn get_archetypes<'a>(&'a self, world: &'a World) -> impl Iterator<Item = ArchetypeId> + '_ {
+        world.archetypes().filter_map(|(arch_id, arch)| {
+            let data = FetchPrepareData {
+                world,
+                arch,
+                arch_id,
+            };
 
-                if !arch.is_empty()
-                    && (self.include_components || !arch.has(is_component().id()))
-                    && self.fetch.matches(data)
-                    && self.filter.matches(arch)
-                    && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
-                {
-                    Some(arch_id)
-                } else {
-                    None
-                }
-            })
-            .collect_vec()
+            if (self.include_components || !arch.has(is_component().id()))
+                && self.fetch.matches(data)
+                && self.filter.matches(arch)
+                && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
+            {
+                Some(arch_id)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -237,10 +237,9 @@ where
     F: for<'x> Filter<'x>,
 {
     fn access(&self, world: &World) -> Vec<crate::system::Access> {
-        let archetypes = self.get_archetypes(world);
-        let accesses = archetypes
-            .iter()
-            .flat_map(|&arch_id| {
+        let accesses = self
+            .get_archetypes(world)
+            .flat_map(|arch_id| {
                 let arch = world.archetype(arch_id);
                 let data = FetchPrepareData {
                     world,

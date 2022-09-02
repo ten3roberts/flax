@@ -124,6 +124,12 @@ impl Change {
     }
 }
 
+fn is_sorted<T>(a: &[T]) -> bool
+where
+    T: Ord,
+{
+    !a.windows(2).any(|v| v[0] > v[1])
+}
 impl Changes {
     pub(crate) fn new(info: ComponentInfo) -> Self {
         Self {
@@ -149,18 +155,42 @@ impl Changes {
     // }
     #[cfg(debug_assertions)]
     pub(crate) fn assert_ordered(&self, msg: &str) {
-        let groups = self.inner.iter().copied().group_by(|v| v.kind);
-
-        let sorted = groups
-            .into_iter()
-            .flat_map(|v| v.1.sorted_by_key(|v| v.slice.start))
+        let modified = self
+            .inner
+            .iter()
+            .filter(|v| v.kind == ChangeKind::Modified)
+            .map(|v| v.slice)
+            .collect_vec();
+        let inserted = self
+            .inner
+            .iter()
+            .filter(|v| v.kind == ChangeKind::Inserted)
+            .map(|v| v.slice)
+            .collect_vec();
+        let removed = self
+            .inner
+            .iter()
+            .filter(|v| v.kind == ChangeKind::Removed)
+            .map(|v| v.slice)
             .collect_vec();
 
-        if sorted != self.inner {
+        if !is_sorted(&modified) {
             panic!(
-                "Not sorted.\nSorted: {sorted:#?}\nexpected: {:#?}\n\n{msg}",
+                "Modified not sorted: {modified:?}. Found: {:#?}\n\n{msg}",
                 self.inner
-            )
+            );
+        }
+        if !is_sorted(&inserted) {
+            panic!(
+                "Inserted not sorted: {inserted:?}. Found: {:#?}\n\n{msg}",
+                self.inner
+            );
+        }
+        if !is_sorted(&removed) {
+            panic!(
+                "Removed not sorted: {removed:?}. Found: {:#?}\n\n{msg}",
+                self.inner
+            );
         }
     }
 
@@ -174,7 +204,7 @@ impl Changes {
 
         self.inner.retain_mut(|v| {
             // Remove older changes which are a subset of the newer slots
-            if v.tick < change.tick && v.kind == change.kind {
+            if v.kind == change.kind && v.tick < change.tick {
                 if let Some(diff) = v.slice.difference(change.slice) {
                     v.slice = diff;
                 }
@@ -196,7 +226,7 @@ impl Changes {
             }
 
             i += 1;
-            if v.slice.start < change.slice.start {
+            if v.kind == change.kind && v.slice < change.slice {
                 insert_point = i;
             }
 
@@ -208,7 +238,7 @@ impl Changes {
         }
 
         #[cfg(debug_assertions)]
-        self.assert_ordered("Not sorted after `set`");
+        self.assert_ordered(&format!("Not sorted after `set` inserting: {change:?}"));
 
         self
     }
@@ -238,33 +268,73 @@ impl Changes {
     /// Removes a slot from the change list
     pub fn remove(&mut self, slot: Slot) -> Vec<Change> {
         let slice = Slice::single(slot);
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(self.inner.capacity());
+
+        let mut right: Vec<Change> = Vec::new();
+
+        // =====-=====
+        //    ==-=========
+        //     =-===
+        //
+        // =====
+        //    ==
+        //     =
+        //
+        // right: ====, =========, ===
+
+        // ====
+        //   ==
+        //    =
+        //      ====
+        //      =========
+        //      ===
 
         #[cfg(debug_assertions)]
         self.assert_ordered("Not sorted before `remove`");
+
+        let old = self.inner.clone();
+
         let removed = self
             .inner
             .drain(..)
             .flat_map(|v| {
                 if let Some((l, _, r)) = v.slice.split_with(&slice) {
                     if !l.is_empty() {
+                        // If the pending elements are smaller, push them first
+                        if let Some(r) = right.first() {
+                            if r.slice < l {
+                                result.append(&mut right);
+                            }
+                        }
+
                         result.push(Change::new(l, v.tick, v.kind));
                     }
                     if !r.is_empty() {
-                        result.push(Change::new(r, v.tick, v.kind));
+                        right.push(Change::new(r, v.tick, v.kind));
                     }
 
                     Some(Change::new(slice, v.tick, v.kind))
                 } else {
+                    // If the pending elements are smaller, push them first
+                    if let Some(r) = right.first() {
+                        if r.slice < v.slice {
+                            result.append(&mut right);
+                        }
+                    }
+
                     result.push(v);
                     None
                 }
             })
             .collect_vec();
 
+        result.append(&mut right);
+
         self.inner = result;
         #[cfg(debug_assertions)]
-        self.assert_ordered("Not sorted after `remove`");
+        self.assert_ordered(&format!(
+            "Not sorted after `remove` while removing: {slot}\n\n{old:#?}"
+        ));
         removed
     }
 
