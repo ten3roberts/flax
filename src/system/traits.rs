@@ -173,35 +173,35 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 
 /// Access part of the context mutably.
 #[doc(hidden)]
-pub struct Writable<T>(PhantomData<T>);
+pub struct Write<T>(PhantomData<T>);
 #[doc(hidden)]
-pub struct Readable<T>(PhantomData<T>);
+pub struct Read<T>(PhantomData<T>);
 
-impl<T> Writable<T> {
+impl<T> Write<T> {
     pub(crate) fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<T> Readable<T> {
+impl<T> Read<T> {
     pub(crate) fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<T> Default for Readable<T> {
+impl<T> Default for Read<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> Default for Writable<T> {
+impl<T> Default for Write<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> SystemData<'a> for Writable<World> {
+impl<'a> SystemData<'a> for Write<World> {
     type Value = AtomicRefMut<'a, World>;
 
     fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
@@ -210,7 +210,7 @@ impl<'a> SystemData<'a> for Writable<World> {
     }
 }
 
-impl<'a> SystemData<'a> for Readable<World> {
+impl<'a> SystemData<'a> for Read<World> {
     type Value = AtomicRef<'a, World>;
 
     fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
@@ -219,7 +219,7 @@ impl<'a> SystemData<'a> for Readable<World> {
     }
 }
 
-impl SystemAccess for Writable<World> {
+impl SystemAccess for Write<World> {
     fn access(&self, _: &World) -> Vec<Access> {
         vec![Access {
             kind: AccessKind::World,
@@ -228,7 +228,7 @@ impl SystemAccess for Writable<World> {
     }
 }
 
-impl SystemAccess for Readable<World> {
+impl SystemAccess for Read<World> {
     fn access(&self, _: &World) -> Vec<Access> {
         vec![Access {
             kind: AccessKind::World,
@@ -238,7 +238,7 @@ impl SystemAccess for Readable<World> {
     }
 }
 
-impl<'a> SystemData<'a> for Writable<CommandBuffer> {
+impl<'a> SystemData<'a> for Write<CommandBuffer> {
     type Value = AtomicRefMut<'a, CommandBuffer>;
 
     fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
@@ -247,7 +247,7 @@ impl<'a> SystemData<'a> for Writable<CommandBuffer> {
     }
 }
 
-impl SystemAccess for Writable<CommandBuffer> {
+impl SystemAccess for Write<CommandBuffer> {
     fn access(&self, _: &World) -> Vec<Access> {
         vec![Access {
             kind: AccessKind::CommandBuffer,
@@ -267,7 +267,7 @@ mod test {
         Query, QueryBorrow, SystemData, SystemFn, World,
     };
 
-    use super::Writable;
+    use super::Write;
 
     component! {
         health: f32,
@@ -297,7 +297,7 @@ mod test {
             assert_eq!(names, ["Neo", "Trinity"]);
         };
 
-        let data = &mut (Writable::<World>::new(),);
+        let data = &mut (Write::<World>::new(),);
         let mut data: (AtomicRefMut<World>,) = data.acquire(&ctx).unwrap();
         SystemFn::<(AtomicRefMut<World>,), ()>::execute(&mut spawner, data);
         // (spawner).execute(data);

@@ -86,14 +86,27 @@ impl Slice {
     /// subtracted without splitting.
     #[inline]
     pub fn difference(&self, other: Self) -> Option<Self> {
-        // Subtract start
+        //   ====
+        // --==
         if other.start <= self.start {
-            Some(Slice::new(other.end.max(self.start), self.end))
+            Some(Self::new(other.end.clamp(self.start, self.end), self.end))
         } else if other.end >= self.end {
-            Some(Slice::new(self.start, other.start.min(self.end)))
+            Some(Self::new(
+                self.start,
+                other.start.clamp(self.start, self.end),
+            ))
         } else {
             None
         }
+
+        // if other.start <= self.start {
+        //     Some(Slice::new(other.end.max(self.start), self.end))
+        // } else if other.end >= self.end {
+        //     Some(Slice::new(self.start, other.start.min(self.end)))
+        // } else {
+        //     None
+        // }
+
         // Self::new((other.end + 1).min(self.start), (other.start).max(self.end))
     }
 

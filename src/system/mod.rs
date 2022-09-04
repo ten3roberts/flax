@@ -110,19 +110,19 @@ impl<Args> SystemBuilder<Args> {
     /// Access data data mutably in the system
     pub fn write<T>(self) -> SystemBuilder<Args::PushRight>
     where
-        Args: TupleCombine<Writable<T>>,
-        Writable<T>: for<'x> SystemData<'x>,
+        Args: TupleCombine<Write<T>>,
+        Write<T>: for<'x> SystemData<'x>,
     {
-        self.with(Writable::<T>::default())
+        self.with(Write::<T>::default())
     }
 
     /// Access data data mutably in the system
     pub fn read<T>(self) -> SystemBuilder<Args::PushRight>
     where
-        Args: TupleCombine<Readable<T>>,
-        Readable<T>: for<'x> SystemData<'x>,
+        Args: TupleCombine<Read<T>>,
+        Read<T>: for<'x> SystemData<'x>,
     {
-        self.with(Readable::<T>::default())
+        self.with(Read::<T>::default())
     }
 
     /// Set the systems name

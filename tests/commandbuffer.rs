@@ -136,7 +136,7 @@ fn commandbuffer() {
     // Well, there are only 99 unwounded soldiers left
     // Lets count them
     let soldiers = Query::new(name())
-        .filter(soldier().with() & health().gte(100.0))
+        .filter(soldier().with() & health().ge(100.0))
         .borrow(&world)
         .iter()
         .cloned()

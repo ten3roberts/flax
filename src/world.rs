@@ -169,7 +169,7 @@ impl World {
         Self {
             entities: EntityStores::default(),
             archetypes: Archetypes::new(),
-            change_tick: AtomicU32::new(0),
+            change_tick: AtomicU32::new(0b11),
             on_removed: EventRegistry::default(),
         }
     }
@@ -1057,12 +1057,28 @@ impl World {
     #[must_use]
     /// Returns the current world change tick
     pub fn change_tick(&self) -> u32 {
-        self.change_tick.load(Ordering::Relaxed)
+        self.change_tick.fetch_or(1, Ordering::Relaxed) >> 1
     }
 
     /// Increases the change tick and returns the new one
     pub fn advance_change_tick(&self) -> u32 {
-        self.change_tick.fetch_add(1, Ordering::Relaxed) + 1
+        let v = self
+            .change_tick
+            .fetch_update(Ordering::Acquire, Ordering::Relaxed, |v| {
+                // No read bit
+                // No need to update
+                if v & 1 == 0 {
+                    None
+                } else {
+                    Some((v + 1) % 2000)
+                    // v is not even and not read
+                }
+            });
+
+        match v {
+            Ok(v) => (v + 1) >> 1,
+            Err(v) => v >> 1,
+        }
     }
 
     /// Formats the world using the debug visitor.
