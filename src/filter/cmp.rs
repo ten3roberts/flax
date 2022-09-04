@@ -33,11 +33,11 @@ where
     where
         T: PartialOrd;
     /// Filter any component greater than or equal to `other`.
-    fn gte(self, other: T) -> OrdCmp<T>
+    fn ge(self, other: T) -> OrdCmp<T>
     where
         T: PartialOrd;
     /// Filter any component less than or equal to `other`.
-    fn lte(self, other: T) -> OrdCmp<T>
+    fn le(self, other: T) -> OrdCmp<T>
     where
         T: PartialOrd;
     /// Filter any component equal to `other`.
@@ -62,11 +62,11 @@ where
         OrdCmp::new(self, CmpMethod::Greater, other)
     }
 
-    fn gte(self, other: T) -> OrdCmp<T> {
+    fn ge(self, other: T) -> OrdCmp<T> {
         OrdCmp::new(self, CmpMethod::GreaterEq, other)
     }
 
-    fn lte(self, other: T) -> OrdCmp<T> {
+    fn le(self, other: T) -> OrdCmp<T> {
         OrdCmp::new(self, CmpMethod::LessEq, other)
     }
 

@@ -138,8 +138,10 @@ where
         //
         // It is only necessary to acquire a new change tick if the query will
         // change anything
+
         let new_tick = if Q::MUTABLE {
-            world.advance_change_tick()
+            world.advance_change_tick();
+            world.change_tick()
         } else {
             world.change_tick()
         };

@@ -214,7 +214,7 @@ macro_rules! tuple_impl {
 
             fn describe(&self, f: &mut dyn Write) -> fmt::Result {
                 f.write_str("(")?;
-                $( (self.$idx).describe(f)?;)*
+                $( (self.$idx).describe(f)?; f.write_str(", ")?;)*
                 f.write_str(")")
             }
 

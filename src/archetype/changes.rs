@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display, sync::mpsc::channel};
 
 use itertools::Itertools;
 
@@ -124,12 +124,13 @@ impl Change {
     }
 }
 
-fn is_sorted<T>(a: &[T]) -> bool
+fn is_sorted_by<T, U>(a: &[T], f: impl Fn(&T) -> U) -> bool
 where
-    T: Ord,
+    U: Ord,
 {
-    !a.windows(2).any(|v| v[0] > v[1])
+    !a.windows(2).any(|v| f(&v[0]) > f(&v[1]))
 }
+
 impl Changes {
     pub(crate) fn new(info: ComponentInfo) -> Self {
         Self {
@@ -174,19 +175,19 @@ impl Changes {
             .map(|v| v.slice)
             .collect_vec();
 
-        if !is_sorted(&modified) {
+        if !is_sorted_by(&modified, |v| v.start) {
             panic!(
                 "Modified not sorted: {modified:?}. Found: {:#?}\n\n{msg}",
                 self.inner
             );
         }
-        if !is_sorted(&inserted) {
+        if !is_sorted_by(&inserted, |v| v.start) {
             panic!(
                 "Inserted not sorted: {inserted:?}. Found: {:#?}\n\n{msg}",
                 self.inner
             );
         }
-        if !is_sorted(&removed) {
+        if !is_sorted_by(&removed, |v| v.start) {
             panic!(
                 "Removed not sorted: {removed:?}. Found: {:#?}\n\n{msg}",
                 self.inner
@@ -194,30 +195,35 @@ impl Changes {
         }
     }
 
-    pub(crate) fn set(&mut self, change: Change) -> &mut Self {
+    pub(crate) fn set(&mut self, mut change: Change) -> &mut Self {
         let mut insert_point = 0;
         let mut i = 0;
         let mut joined = false;
 
         #[cfg(debug_assertions)]
         self.assert_ordered("Not sorted at beginning");
+        let old = self.inner.clone();
 
         self.inner.retain_mut(|v| {
             // Remove older changes which are a subset of the newer slots
-            if v.kind == change.kind && v.tick < change.tick {
-                if let Some(diff) = v.slice.difference(change.slice) {
-                    v.slice = diff;
+            if v.kind == change.kind {
+                if v.tick < change.tick {
+                    if let Some(diff) = v.slice.difference(change.slice) {
+                        v.slice = diff;
+                    }
+                } else if let Some(diff) = change.slice.difference(v.slice) {
+                    change.slice = diff;
                 }
-            }
 
-            // Merge the change into an already existing change
-            // Do not change start as that will invalidate ordering
-            if v.slice.start < change.slice.start && v.tick == change.tick && v.kind == change.kind
-            {
-                // Merge atop change of the same change
-                if let Some(u) = v.slice.union(&change.slice) {
-                    joined = true;
-                    v.slice = u;
+                // Merge the change into an already existing change
+                // Do not change start as that will invalidate ordering
+                if v.slice.start < change.slice.start && v.tick == change.tick {
+                    eprintln!("Merging change: {v:?} + {change:?}");
+                    // Merge atop change of the same change
+                    if let Some(u) = v.slice.union(&change.slice) {
+                        joined = true;
+                        v.slice = u;
+                    }
                 }
             }
 
@@ -226,6 +232,7 @@ impl Changes {
             }
 
             i += 1;
+
             if v.kind == change.kind && v.slice < change.slice {
                 insert_point = i;
             }
@@ -233,12 +240,14 @@ impl Changes {
             true
         });
 
-        if !joined {
+        if !joined && !change.slice.is_empty() {
             self.inner.insert(insert_point, change);
         }
 
         #[cfg(debug_assertions)]
-        self.assert_ordered(&format!("Not sorted after `set` inserting: {change:?}"));
+        self.assert_ordered(&format!(
+            "Not sorted after `set` inserting: {change:?} old: {old:?}"
+        ));
 
         self
     }

@@ -125,6 +125,8 @@ async fn main() -> Result<()> {
     create_camera().spawn(&mut world);
 
     loop {
+        let change_tick = world.change_tick();
+        tracing::info!("Change tick: {change_tick}");
         if player_dead_rx.try_recv().is_ok() {
             create_player().spawn(&mut world);
         }
@@ -535,7 +537,7 @@ fn despawn_out_of_bounds() -> BoxedSystem {
 fn despawn_dead() -> BoxedSystem {
     System::builder()
         .with_name("despawn_dead")
-        .with(Query::new(entity_ids()).filter(health().lte(0.0)))
+        .with(Query::new(entity_ids()).filter(health().le(0.0)))
         .write::<CommandBuffer>()
         .build(
             |mut q: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
