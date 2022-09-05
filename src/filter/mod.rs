@@ -657,18 +657,15 @@ mod tests {
     use itertools::Itertools;
 
     use crate::{
-        archetype::{Change, Changes},
+        archetype::{Change, ChangeList},
         component, ChangeKind,
     };
 
     use super::*;
-    component! {
-        a: (),
-    }
 
     #[test]
     fn filter() {
-        let mut changes = Changes::new(a().info());
+        let mut changes = ChangeList::new();
 
         changes.set(Change::modified(Slice::new(40, 200), 1));
         changes.set(Change::modified(Slice::new(70, 349), 2));
@@ -679,7 +676,7 @@ mod tests {
 
         let changes = AtomicRefCell::new(changes);
 
-        let filter = PreparedKindFilter::from_borrow(changes.borrow(), 2, ChangeKind::Modified);
+        let filter = PreparedKindFilter::from_borrow(changes.borrow(), 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -698,8 +695,8 @@ mod tests {
 
     #[test]
     fn combinators() {
-        let mut changes_1 = Changes::new(a().info());
-        let mut changes_2 = Changes::new(a().info());
+        let mut changes_1 = ChangeList::new();
+        let mut changes_2 = ChangeList::new();
 
         changes_1.set(Change::modified(Slice::new(40, 65), 2));
         changes_1.set(Change::modified(Slice::new(59, 80), 3));
@@ -710,15 +707,15 @@ mod tests {
         let a_map = changes_1.as_changed_set(1);
         let b_map = changes_2.as_changed_set(2);
 
-        eprintln!("Changes: \n  {changes_1:?}\n  {changes_2:?}");
+        eprintln!("ChangeList: \n  {changes_1:?}\n  {changes_2:?}");
         let changes_1 = AtomicRefCell::new(changes_1);
         let changes_2 = AtomicRefCell::new(changes_2);
 
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedKindFilter::from_borrow(changes_1.borrow(), 1, ChangeKind::Modified);
-        let b = PreparedKindFilter::from_borrow(changes_2.borrow(), 2, ChangeKind::Modified);
+        let a = PreparedKindFilter::from_borrow(changes_1.borrow(), 1);
+        let b = PreparedKindFilter::from_borrow(changes_2.borrow(), 2);
 
         let filter = PreparedOr { left: a, right: b };
 
@@ -734,8 +731,8 @@ mod tests {
 
         // And
 
-        let a = PreparedKindFilter::from_borrow(changes_1.borrow(), 1, ChangeKind::Modified);
-        let b = PreparedKindFilter::from_borrow(changes_2.borrow(), 2, ChangeKind::Modified);
+        let a = PreparedKindFilter::from_borrow(changes_1.borrow(), 1);
+        let b = PreparedKindFilter::from_borrow(changes_2.borrow(), 2);
 
         let filter = PreparedAnd { left: a, right: b };
 
@@ -768,21 +765,24 @@ mod tests {
         let a_map = archetype
             .changes_mut(a().id())
             .unwrap()
-            .set(Change::modified(Slice::new(9, 80), 2))
-            .set(Change::modified(Slice::new(65, 83), 4))
+            .set_modified(Change::modified(Slice::new(9, 80), 2))
+            .set_inserted(Change::modified(Slice::new(65, 83), 4))
+            .modified()
             .as_changed_set(1);
 
         let b_map = archetype
             .changes_mut(b().id())
             .unwrap()
-            .set(Change::modified(Slice::new(16, 45), 2))
-            .set(Change::modified(Slice::new(68, 85), 2))
+            .set_modified(Change::modified(Slice::new(16, 45), 2))
+            .set_modified(Change::modified(Slice::new(68, 85), 2))
+            .modified()
             .as_changed_set(1);
 
         let c_map = archetype
             .changes_mut(c().id())
             .unwrap()
-            .set(Change::modified(Slice::new(96, 123), 3))
+            .set_modified(Change::modified(Slice::new(96, 123), 3))
+            .modified()
             .as_changed_set(1);
 
         // Brute force

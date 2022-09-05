@@ -166,7 +166,8 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
     }
 
     unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        self.changes.set(Change::modified(slots, change_tick));
+        self.changes
+            .set_modified(Change::modified(slots, change_tick));
     }
 }
 

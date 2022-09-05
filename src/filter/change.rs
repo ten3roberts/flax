@@ -1,7 +1,7 @@
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{Changes, Slice},
+    archetype::{ChangeList, Changes, Slice},
     filter::PreparedFilter,
     Access, Archetype, ArchetypeId, ChangeKind, Component, ComponentId, ComponentValue, Fetch,
     FetchItem, Filter,
@@ -82,7 +82,11 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
     type Prepared = PreparedKindFilter<'a>;
 
     fn prepare(&'a self, arch: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedKindFilter::new(arch, self.component.id(), change_tick, ChangeKind::Modified)
+        let changes = arch
+            .changes(self.component.id())
+            .map(|v| AtomicRef::map(v, |v| v.by_kind(self.kind)));
+
+        PreparedKindFilter::new(changes, change_tick)
     }
 
     fn matches(&self, archetype: &Archetype) -> bool {
@@ -107,44 +111,30 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
 #[derive(Debug)]
 #[doc(hidden)]
 pub struct PreparedKindFilter<'a> {
-    changes: Option<AtomicRef<'a, Changes>>,
+    changes: Option<AtomicRef<'a, ChangeList>>,
     cur: Option<Slice>,
     // The current change group.
     // Starts at the end and decrements
     index: usize,
     tick: u32,
-    kind: ChangeKind,
 }
 
 impl<'a> PreparedKindFilter<'a> {
-    pub fn new(
-        archetype: &'a Archetype,
-        component: ComponentId,
-        tick: u32,
-        kind: ChangeKind,
-    ) -> Self {
-        let changes = archetype.changes(component);
+    pub(crate) fn new(changes: Option<AtomicRef<'a, ChangeList>>, tick: u32) -> Self {
         Self {
             changes,
             cur: None,
             index: 0,
             tick,
-            kind,
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn from_borrow(
-        changes: AtomicRef<'a, Changes>,
-        tick: u32,
-        kind: ChangeKind,
-    ) -> Self {
+    pub(crate) fn from_borrow(changes: AtomicRef<'a, ChangeList>, tick: u32) -> Self {
         Self {
             changes: Some(changes),
             cur: None,
             index: 0,
             tick,
-            kind,
         }
     }
 
@@ -155,7 +145,7 @@ impl<'a> PreparedKindFilter<'a> {
                 let v = changes.get(self.index);
                 if let Some(change) = v {
                     self.index += 1;
-                    if change.tick > self.tick && self.kind == change.kind {
+                    if change.tick > self.tick {
                         break Some(*self.cur.get_or_insert(change.slice));
                     }
                 } else {
@@ -253,12 +243,11 @@ impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
     type Prepared = PreparedKindFilter<'a>;
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedKindFilter::new(
-            archetype,
-            self.component.id(),
-            change_tick,
-            ChangeKind::Removed,
-        )
+        let changes = archetype
+            .changes(self.component.id())
+            .map(|v| AtomicRef::map(v, |v| v.removed()));
+
+        PreparedKindFilter::new(changes, change_tick)
     }
 
     fn matches(&self, _: &Archetype) -> bool {

@@ -1,4 +1,3 @@
-use core::slice;
 use eyre::WrapErr;
 use std::{collections::BTreeMap, mem};
 
