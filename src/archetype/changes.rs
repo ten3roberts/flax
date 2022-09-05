@@ -1,4 +1,7 @@
-use std::{cmp::Ordering, fmt::Display, sync::mpsc::channel};
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
 use itertools::Itertools;
 
@@ -6,192 +9,26 @@ use crate::ComponentInfo;
 
 use super::{Slice, Slot};
 
-#[derive(Clone, PartialEq, Eq)]
-/// A self compacting change tracking which holds either singular changes or a
-/// range of changes, automatically merging adjacent ones.
-///
-///
-/// The changes are always stored in a non-overlapping ascending order.
-pub struct Changes {
-    info: ComponentInfo,
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ChangeList {
     inner: Vec<Change>,
 }
 
-impl std::fmt::Debug for Changes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Changes")
-            .field("name", &self.info.name())
-            .field("inner", &self.inner)
-            .finish()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-/// Represents a change for a slice of entities for a specific component
-pub enum ChangeKind {
-    /// Component was modified
-    Modified,
-    /// Component was inserted
-    Inserted,
-    /// Component was removed
-    Removed,
-}
-
-impl Display for ChangeKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ChangeKind::Modified => f.write_str("modified"),
-            ChangeKind::Inserted => f.write_str("inserted"),
-            ChangeKind::Removed => f.write_str("removed"),
-        }
-    }
-}
-
-impl ChangeKind {
-    /// Returns `true` if the change kind is [`Remove`].
-    ///
-    /// [`Remove`]: ChangeKind::Removed
-    #[must_use]
-    pub fn is_removed(&self) -> bool {
-        matches!(self, Self::Removed)
+impl ChangeList {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// Returns `true` if the change kind is [`Insert`].
-    ///
-    /// [`Insert`]: ChangeKind::Inserted
-    #[must_use]
-    pub fn is_inserted(&self) -> bool {
-        matches!(self, Self::Inserted)
-    }
-
-    /// Returns `true` if the change kind is [`ChangeKind::Modified`]
-    ///
-    /// [`Modified`]: ChangeKind::Modified
-    #[must_use]
-    pub fn is_modified(&self) -> bool {
-        matches!(self, Self::Modified)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn is_modified_or_inserted(&self) -> bool {
-        self.is_modified() || self.is_inserted()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-/// Represents a change over a slice of entities in an archetype which ocurred
-/// at a specific time.
-pub struct Change {
-    /// The slice of entities in the archetype which are affected
-    pub slice: Slice,
-    /// The world tick of the change event
-    pub tick: u32,
-    /// The kind of change
-    pub kind: ChangeKind,
-}
-
-impl Change {
-    /// Creates a new change
-    pub(crate) fn new(slice: Slice, tick: u32, kind: ChangeKind) -> Self {
-        Self { slice, tick, kind }
-    }
-
-    /// Create a new modification event
-    pub(crate) fn modified(slice: Slice, tick: u32) -> Change {
-        Self {
-            slice,
-            tick,
-            kind: ChangeKind::Modified,
-        }
-    }
-
-    /// Create a new insert event
-    pub(crate) fn inserted(slice: Slice, tick: u32) -> Change {
-        Self {
-            slice,
-            tick,
-            kind: ChangeKind::Inserted,
-        }
-    }
-
-    /// Create a new remove event
-    pub(crate) fn removed(slice: Slice, tick: u32) -> Change {
-        Self {
-            slice,
-            tick,
-            kind: ChangeKind::Removed,
-        }
-    }
-}
-
-fn is_sorted_by<T, U>(a: &[T], f: impl Fn(&T) -> U) -> bool
-where
-    U: Ord,
-{
-    !a.windows(2).any(|v| f(&v[0]) > f(&v[1]))
-}
-
-impl Changes {
-    pub(crate) fn new(info: ComponentInfo) -> Self {
-        Self {
-            info,
-            inner: Default::default(),
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn as_set(&self, f: impl Fn(&Change) -> bool) -> std::collections::BTreeSet<Slot> {
-        self.iter()
-            .filter_map(|v| if f(v) { Some(v.slice) } else { None })
-            .flatten()
-            .collect()
-    }
-
-    // #[cfg(test)]
-    // pub(crate) fn as_map(&self) -> std::collections::BTreeMap<Slot, (u32, ChangeKind)> {
-    //     self.inner
-    //         .iter()
-    //         .flat_map(|v| v.slice.iter().map(move |p| (p, (v.tick, v.kind))))
-    //         .collect()
-    // }
     #[cfg(debug_assertions)]
-    pub(crate) fn assert_ordered(&self, msg: &str) {
-        let modified = self
-            .inner
+    fn assert_ordered(&self, msg: &str) {
+        let ordered = self
             .iter()
-            .filter(|v| v.kind == ChangeKind::Modified)
-            .map(|v| v.slice)
-            .collect_vec();
-        let inserted = self
-            .inner
-            .iter()
-            .filter(|v| v.kind == ChangeKind::Inserted)
-            .map(|v| v.slice)
-            .collect_vec();
-        let removed = self
-            .inner
-            .iter()
-            .filter(|v| v.kind == ChangeKind::Removed)
-            .map(|v| v.slice)
+            .sorted_by_key(|v| v.slice.start)
+            .copied()
             .collect_vec();
 
-        if !is_sorted_by(&modified, |v| v.start) {
-            panic!(
-                "Modified not sorted: {modified:?}. Found: {:#?}\n\n{msg}",
-                self.inner
-            );
-        }
-        if !is_sorted_by(&inserted, |v| v.start) {
-            panic!(
-                "Inserted not sorted: {inserted:?}. Found: {:#?}\n\n{msg}",
-                self.inner
-            );
-        }
-        if !is_sorted_by(&removed, |v| v.start) {
-            panic!(
-                "Removed not sorted: {removed:?}. Found: {:#?}\n\n{msg}",
-                self.inner
-            );
+        if ordered != self.inner {
+            panic!("Not ordered {ordered:#?} found: {self:#?}\n\n{msg}");
         }
     }
 
@@ -205,25 +42,26 @@ impl Changes {
         let old = self.inner.clone();
 
         self.inner.retain_mut(|v| {
+            if change.slice.is_empty() {
+                return true;
+            }
             // Remove older changes which are a subset of the newer slots
-            if v.kind == change.kind {
-                if v.tick < change.tick {
-                    if let Some(diff) = v.slice.difference(change.slice) {
-                        v.slice = diff;
-                    }
-                } else if let Some(diff) = change.slice.difference(v.slice) {
-                    change.slice = diff;
+            if v.tick < change.tick {
+                if let Some(diff) = v.slice.difference(change.slice) {
+                    v.slice = diff;
                 }
+            } else if let Some(diff) = change.slice.difference(v.slice) {
+                change.slice = diff;
+            }
 
-                // Merge the change into an already existing change
-                // Do not change start as that will invalidate ordering
-                if v.slice.start < change.slice.start && v.tick == change.tick {
-                    eprintln!("Merging change: {v:?} + {change:?}");
-                    // Merge atop change of the same change
-                    if let Some(u) = v.slice.union(&change.slice) {
-                        joined = true;
-                        v.slice = u;
-                    }
+            // Merge the change into an already existing change
+            // Do not change start as that will invalidate ordering
+            if v.slice < change.slice && v.tick == change.tick {
+                eprintln!("Merging change: {v:?} + {change:?}");
+                // Merge atop change of the same change
+                if let Some(u) = v.slice.union(&change.slice) {
+                    joined = true;
+                    v.slice = u;
                 }
             }
 
@@ -233,7 +71,7 @@ impl Changes {
 
             i += 1;
 
-            if v.kind == change.kind && v.slice < change.slice {
+            if v.slice < change.slice {
                 insert_point = i;
             }
 
@@ -373,8 +211,243 @@ impl Changes {
         self.as_set(|v| v.kind.is_modified_or_inserted() && v.tick > tick)
     }
 
+    #[cfg(test)]
+    pub(crate) fn as_set(&self, f: impl Fn(&Change) -> bool) -> std::collections::BTreeSet<Slot> {
+        self.iter()
+            .filter_map(|v| if f(v) { Some(v.slice) } else { None })
+            .flatten()
+            .collect()
+    }
+}
+
+impl Deref for ChangeList {
+    type Target = Vec<Change>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for ChangeList {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// A self compacting change tracking which holds either singular changes or a
+/// range of changes, automatically merging adjacent ones.
+///
+///
+/// The changes are always stored in a non-overlapping ascending order.
+pub struct Changes {
+    info: ComponentInfo,
+
+    inserted: ChangeList,
+    modified: ChangeList,
+    removed: ChangeList,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+/// Represents a change for a slice of entities for a specific component
+pub enum ChangeKind {
+    /// Component was modified
+    Modified,
+    /// Component was inserted
+    Inserted,
+    /// Component was removed
+    Removed,
+}
+
+impl Display for ChangeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ChangeKind::Modified => f.write_str("modified"),
+            ChangeKind::Inserted => f.write_str("inserted"),
+            ChangeKind::Removed => f.write_str("removed"),
+        }
+    }
+}
+
+impl ChangeKind {
+    /// Returns `true` if the change kind is [`Remove`].
+    ///
+    /// [`Remove`]: ChangeKind::Removed
+    #[must_use]
+    pub fn is_removed(&self) -> bool {
+        matches!(self, Self::Removed)
+    }
+
+    /// Returns `true` if the change kind is [`Insert`].
+    ///
+    /// [`Insert`]: ChangeKind::Inserted
+    #[must_use]
+    pub fn is_inserted(&self) -> bool {
+        matches!(self, Self::Inserted)
+    }
+
+    /// Returns `true` if the change kind is [`ChangeKind::Modified`]
+    ///
+    /// [`Modified`]: ChangeKind::Modified
+    #[must_use]
+    pub fn is_modified(&self) -> bool {
+        matches!(self, Self::Modified)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_modified_or_inserted(&self) -> bool {
+        self.is_modified() || self.is_inserted()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+/// Represents a change over a slice of entities in an archetype which ocurred
+/// at a specific time.
+pub struct Change {
+    /// The slice of entities in the archetype which are affected
+    pub slice: Slice,
+    /// The world tick of the change event
+    pub tick: u32,
+    /// The kind of change
+    pub kind: ChangeKind,
+}
+
+impl Change {
+    /// Creates a new change
+    pub(crate) fn new(slice: Slice, tick: u32, kind: ChangeKind) -> Self {
+        Self { slice, tick, kind }
+    }
+
+    /// Create a new modification event
+    pub(crate) fn modified(slice: Slice, tick: u32) -> Change {
+        Self {
+            slice,
+            tick,
+            kind: ChangeKind::Modified,
+        }
+    }
+
+    /// Create a new insert event
+    pub(crate) fn inserted(slice: Slice, tick: u32) -> Change {
+        Self {
+            slice,
+            tick,
+            kind: ChangeKind::Inserted,
+        }
+    }
+
+    /// Create a new remove event
+    pub(crate) fn removed(slice: Slice, tick: u32) -> Change {
+        Self {
+            slice,
+            tick,
+            kind: ChangeKind::Removed,
+        }
+    }
+}
+
+fn is_sorted_by<T, U>(a: &[T], f: impl Fn(&T) -> U) -> bool
+where
+    U: Ord,
+{
+    !a.windows(2).any(|v| f(&v[0]) > f(&v[1]))
+}
+
+impl Changes {
+    pub(crate) fn new(info: ComponentInfo) -> Self {
+        Self {
+            info,
+            removed: Default::default(),
+            inserted: Default::default(),
+            modified: Default::default(),
+        }
+    }
+
+    pub(crate) fn by_kind(&self, kind: ChangeKind) -> &ChangeList {
+        match kind {
+            ChangeKind::Modified => &self.modified,
+            ChangeKind::Inserted => &self.inserted,
+            ChangeKind::Removed => &self.removed,
+        }
+    }
+
+    pub(crate) fn set_inserted(&mut self, change: Change) -> &mut Self {
+        self.inserted.set(change);
+        self
+    }
+
+    pub(crate) fn set_modified(&mut self, change: Change) -> &mut Self {
+        self.modified.set(change);
+        self
+    }
+
+    pub(crate) fn set_removed(&mut self, change: Change) -> &mut Self {
+        self.removed.set(change);
+        self
+    }
+
+    pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
+        self.removed
+            .migrate_to(&mut other.removed, src_slot, dst_slot);
+        self.inserted
+            .migrate_to(&mut other.inserted, src_slot, dst_slot);
+        self.modified
+            .migrate_to(&mut other.modified, src_slot, dst_slot);
+    }
+
+    /// Removes `src` by swapping `dst` into its place
+    pub(crate) fn swap_out(&mut self, src: Slot, dst: Slot) -> [Vec<Change>; 3] {
+        [
+            self.inserted.swap_out(src, dst),
+            self.modified.swap_out(src, dst),
+            self.removed.swap_out(src, dst),
+        ]
+    }
+
+    /// Removes a slot from the change list
+    pub fn remove(&mut self, slot: Slot) -> [Vec<Change>; 3] {
+        [
+            self.inserted.remove(slot),
+            self.modified.remove(slot),
+            self.removed.remove(slot),
+        ]
+    }
+
     pub(crate) fn info(&self) -> ComponentInfo {
         self.info
+    }
+
+    pub(crate) fn inserted(&self) -> &ChangeList {
+        &self.inserted
+    }
+
+    pub(crate) fn modified(&self) -> &ChangeList {
+        &self.modified
+    }
+
+    pub(crate) fn removed(&self) -> &ChangeList {
+        &self.removed
+    }
+
+    pub(crate) fn append_inserted(&mut self, changes: Vec<Change>) -> &mut Self {
+        for v in changes {
+            self.inserted.set(v);
+        }
+        self
+    }
+
+    pub(crate) fn append_modified(&mut self, changes: Vec<Change>) -> &mut Self {
+        for v in changes {
+            self.modified.set(v);
+        }
+        self
+    }
+
+    pub(crate) fn append_removed(&mut self, changes: Vec<Change>) -> &mut Self {
+        for v in changes {
+            self.removed.set(v);
+        }
+        self
     }
 }
 
@@ -390,7 +463,7 @@ mod tests {
 
     #[test]
     fn changes() {
-        let mut changes = Changes::new(a().info());
+        let mut changes = ChangeList::new();
 
         changes.set(Change::modified(Slice::new(0, 5), 1));
 
@@ -441,7 +514,7 @@ mod tests {
 
     #[test]
     fn changes_small() {
-        let mut changes = Changes::new(a().info());
+        let mut changes = ChangeList::new();
 
         for i in 0..239 {
             let perm = (i * (i + 2)) % 300;
@@ -458,7 +531,7 @@ mod tests {
 
     #[test]
     fn adjacent() {
-        let mut changes = Changes::new(a().info());
+        let mut changes = ChangeList::new();
 
         changes.set(Change::modified(Slice::new(0, 63), 1));
         changes.set(Change::modified(Slice::new(63, 182), 1));
@@ -471,8 +544,8 @@ mod tests {
 
     #[test]
     fn migrate() {
-        let mut changes_1 = Changes::new(a().info());
-        let mut changes_2 = Changes::new(a().info());
+        let mut changes_1 = ChangeList::new();
+        let mut changes_2 = ChangeList::new();
 
         changes_1
             .set(Change::modified(Slice::new(20, 48), 1))

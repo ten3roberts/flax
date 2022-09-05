@@ -1,7 +1,7 @@
 use std::{alloc::Layout, any::TypeId, collections::BTreeMap, mem};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use itertools::Itertools;
+use itertools::{IntersperseWith, Itertools};
 
 use crate::{buffer::ComponentBuffer, entity, Component, ComponentId, ComponentValue, Entity};
 
@@ -154,13 +154,24 @@ impl Archetype {
     unsafe fn remove_slot(
         &mut self,
         slot: Slot,
-        mut sink: impl FnMut(ComponentInfo, Vec<Change>),
+        mut dst: Option<(&mut Self, Slot)>,
     ) -> Option<(Entity, Slot)> {
         let last = self.len() - 1;
         if slot != last {
             for (_, changes) in self.changes.iter_mut() {
                 let changes = changes.get_mut();
-                sink(changes.info(), changes.swap_out(slot, last))
+                let info = changes.info();
+                let mut changes = changes.swap_out(slot, last);
+
+                if let Some((ref mut dst, dst_slot)) = dst {
+                    for v in changes.iter_mut().flatten() {
+                        v.slice = Slice::single(dst_slot);
+                    }
+
+                    let [i, m, r] = changes;
+                    let dst = dst.init_changes(info);
+                    dst.append_inserted(i).append_modified(m).append_removed(r);
+                }
             }
 
             self.entities[slot] = self.entities[last];
@@ -168,7 +179,11 @@ impl Archetype {
         } else {
             for (_, changes) in self.changes.iter_mut() {
                 let changes = changes.get_mut();
-                sink(changes.info(), changes.remove(slot));
+                if let Some((ref mut dst, dst_slot)) = dst {
+                    changes.migrate_to(dst.init_changes(changes.info()), slot, dst_slot)
+                } else {
+                    changes.remove(slot);
+                }
             }
             self.entities.pop().expect("Non empty");
 
@@ -368,14 +383,7 @@ impl Archetype {
             });
         }
 
-        let swapped = self.remove_slot(slot, |info, changes| {
-            let other = dst.init_changes(info);
-            for mut change in changes {
-                assert_eq!(change.slice, Slice::single(slot));
-                change.slice = Slice::single(dst_slot);
-                other.set(change);
-            }
-        });
+        let swapped = self.remove_slot(slot, Some((dst, dst_slot)));
 
         (dst_slot, swapped)
     }
@@ -401,7 +409,7 @@ impl Archetype {
             })
         }
 
-        self.remove_slot(slot, |_, _| {})
+        self.remove_slot(slot, None)
     }
 
     /// Move all entities from one archetype to another.

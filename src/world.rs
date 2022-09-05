@@ -219,8 +219,8 @@ impl World {
             }
 
             arch.init_changes(*storage.info())
-                .set(Change::inserted(slots, change_tick))
-                .set(Change::modified(slots, change_tick));
+                .set_inserted(Change::inserted(slots, change_tick))
+                .set_modified(Change::modified(slots, change_tick));
         }
 
         ids
@@ -278,8 +278,8 @@ impl World {
             }
 
             arch.init_changes(*storage.info())
-                .set(Change::inserted(slots, change_tick))
-                .set(Change::modified(slots, change_tick));
+                .set_inserted(Change::inserted(slots, change_tick))
+                .set_modified(Change::modified(slots, change_tick));
         }
 
         Ok(())
@@ -422,8 +422,8 @@ impl World {
             }
 
             arch.init_changes(component)
-                .set(Change::inserted(Slice::single(loc.slot), change_tick))
-                .set(Change::modified(Slice::single(loc.slot), change_tick));
+                .set_inserted(Change::inserted(Slice::single(loc.slot), change_tick))
+                .set_modified(Change::modified(Slice::single(loc.slot), change_tick));
         }
 
         for &component in buffer.components() {
@@ -464,8 +464,8 @@ impl World {
             }
 
             arch.init_changes(component)
-                .set(Change::inserted(Slice::single(loc.slot), change_tick))
-                .set(Change::modified(Slice::single(loc.slot), change_tick));
+                .set_inserted(Change::inserted(Slice::single(loc.slot), change_tick))
+                .set_modified(Change::modified(Slice::single(loc.slot), change_tick));
         }
 
         id
@@ -536,7 +536,7 @@ impl World {
 
                 src.changes_mut(component.id())
                     .unwrap()
-                    .set(Change::modified(Slice::single(slot), change_tick));
+                    .set_modified(Change::modified(Slice::single(slot), change_tick));
             } else {
                 // Component does not exist yet, so defer a move
 
@@ -572,8 +572,8 @@ impl World {
                         .expect("Insert should not fail");
 
                     dst.init_changes(component)
-                        .set(Change::inserted(Slice::single(dst_slot), change_tick))
-                        .set(Change::modified(Slice::single(dst_slot), change_tick));
+                        .set_inserted(Change::inserted(Slice::single(dst_slot), change_tick))
+                        .set_modified(Change::modified(Slice::single(dst_slot), change_tick));
                 }
 
                 assert_eq!(dst.entity(dst_slot), Some(id));
@@ -766,7 +766,7 @@ impl World {
         if let Some(old) = src.get_dyn(slot, info.id()) {
             src.changes_mut(info.id())
                 .expect("Missing change list")
-                .set(Change::modified(Slice::single(slot), change_tick));
+                .set_modified(Change::modified(Slice::single(slot), change_tick));
 
             // Make the caller responsible for drop or store
             (on_drop(old));
@@ -815,8 +815,8 @@ impl World {
             debug_assert_eq!(dst.entity(dst_slot), Some(id));
 
             dst.init_changes(info)
-                .set(Change::inserted(Slice::single(dst_slot), change_tick))
-                .set(Change::modified(Slice::single(dst_slot), change_tick));
+                .set_inserted(Change::inserted(Slice::single(dst_slot), change_tick))
+                .set_modified(Change::modified(Slice::single(dst_slot), change_tick));
 
             if let Some((swapped, slot)) = swapped {
                 // The last entity in src was moved into the slot occupied by id
@@ -922,7 +922,7 @@ impl World {
 
         // Migrate all changes
         dst.init_changes(component)
-            .set(Change::removed(Slice::single(dst_slot), change_tick));
+            .set_removed(Change::removed(Slice::single(dst_slot), change_tick));
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -1004,7 +1004,7 @@ impl World {
         archetype
             .changes_mut(component.id())
             .expect("Change list is empty")
-            .set(Change::modified(Slice::single(slot), change_tick));
+            .set_modified(Change::modified(Slice::single(slot), change_tick));
 
         archetype.get_mut(slot, component)
     }
