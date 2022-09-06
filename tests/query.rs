@@ -46,7 +46,7 @@ fn query_change() {
     let mut consumer = Query::new((name(), pos(), distance().as_mut())).filter(pos().modified());
 
     // Ignore spawn changes to only capture `move_alive`
-    consumer.ignore_changes(&world);
+    consumer.borrow(&world).iter().for_each(|_| {});
 
     let moved = move_alive
         .borrow(&world)

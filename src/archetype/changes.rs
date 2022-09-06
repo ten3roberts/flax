@@ -1,6 +1,7 @@
 use std::{
     fmt::Display,
     ops::{Deref, DerefMut},
+    sync::atomic::AtomicBool,
 };
 
 use itertools::Itertools;
@@ -233,29 +234,15 @@ impl DerefMut for ChangeList {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// A self compacting change tracking which holds either singular changes or a
-/// range of changes, automatically merging adjacent ones.
-///
-///
-/// The changes are always stored in a non-overlapping ascending order.
-pub struct Changes {
-    info: ComponentInfo,
-
-    inserted: ChangeList,
-    modified: ChangeList,
-    removed: ChangeList,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 /// Represents a change for a slice of entities for a specific component
 pub enum ChangeKind {
     /// Component was modified
-    Modified,
+    Modified = 0,
     /// Component was inserted
-    Inserted,
+    Inserted = 1,
     /// Component was removed
-    Removed,
+    Removed = 2,
 }
 
 impl Display for ChangeKind {
@@ -345,63 +332,79 @@ impl Change {
     }
 }
 
+#[derive(Debug)]
+/// A self compacting change tracking which holds either singular changes or a
+/// range of changes, automatically merging adjacent ones.
+///
+///
+/// The changes are always stored in a non-overlapping ascending order.
+pub struct Changes {
+    info: ComponentInfo,
+
+    map: [ChangeList; 3],
+    track_modified: AtomicBool,
+}
+
 impl Changes {
     pub(crate) fn new(info: ComponentInfo) -> Self {
         Self {
             info,
-            removed: ChangeList::new(),
-            inserted: ChangeList::new(),
-            modified: ChangeList::new(),
+
+            track_modified: AtomicBool::new(false),
+            map: Default::default(),
         }
     }
 
-    pub(crate) fn by_kind(&self, kind: ChangeKind) -> &ChangeList {
-        match kind {
-            ChangeKind::Modified => &self.modified,
-            ChangeKind::Inserted => &self.inserted,
-            ChangeKind::Removed => &self.removed,
-        }
+    #[inline]
+    pub(crate) fn get(&self, kind: ChangeKind) -> &ChangeList {
+        &self.map[kind as usize]
     }
 
     pub(crate) fn set_inserted(&mut self, change: Change) -> &mut Self {
-        self.inserted.set(change);
+        self.map[ChangeKind::Inserted as usize].set(change);
+        self.map[ChangeKind::Modified as usize].set(change);
+        self
+    }
+
+    pub(crate) fn set_modified_if_tracking(&mut self, change: Change) -> &mut Self {
+        if self.track_modified() {
+            self.set_modified(change);
+        }
+
         self
     }
 
     pub(crate) fn set_modified(&mut self, change: Change) -> &mut Self {
-        self.modified.set(change);
+        self.map[ChangeKind::Modified as usize].set(change);
         self
     }
 
     pub(crate) fn set_removed(&mut self, change: Change) -> &mut Self {
-        self.removed.set(change);
+        self.map[ChangeKind::Removed as usize].set(change);
         self
     }
 
     pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
-        self.removed
-            .migrate_to(&mut other.removed, src_slot, dst_slot);
-        self.inserted
-            .migrate_to(&mut other.inserted, src_slot, dst_slot);
-        self.modified
-            .migrate_to(&mut other.modified, src_slot, dst_slot);
+        for (a, b) in self.map.iter_mut().zip(other.map.iter_mut()) {
+            a.migrate_to(b, src_slot, dst_slot)
+        }
     }
 
     /// Removes `src` by swapping `dst` into its place
     pub(crate) fn swap_out(&mut self, src: Slot, dst: Slot) -> [Vec<Change>; 3] {
         [
-            self.inserted.swap_out(src, dst),
-            self.modified.swap_out(src, dst),
-            self.removed.swap_out(src, dst),
+            self.map[0].swap_out(src, dst),
+            self.map[1].swap_out(src, dst),
+            self.map[2].swap_out(src, dst),
         ]
     }
 
     /// Removes a slot from the change list
     pub fn remove(&mut self, slot: Slot) -> [Vec<Change>; 3] {
         [
-            self.inserted.remove(slot),
-            self.modified.remove(slot),
-            self.removed.remove(slot),
+            self.map[0].remove(slot),
+            self.map[1].remove(slot),
+            self.map[2].remove(slot),
         ]
     }
 
@@ -410,36 +413,46 @@ impl Changes {
     }
 
     pub(crate) fn inserted(&self) -> &ChangeList {
-        &self.inserted
+        self.get(ChangeKind::Inserted)
     }
 
     pub(crate) fn modified(&self) -> &ChangeList {
-        &self.modified
+        self.get(ChangeKind::Modified)
     }
 
     pub(crate) fn removed(&self) -> &ChangeList {
-        &self.removed
+        self.get(ChangeKind::Removed)
     }
 
     pub(crate) fn append_inserted(&mut self, changes: Vec<Change>) -> &mut Self {
         for v in changes {
-            self.inserted.set(v);
+            self.map[ChangeKind::Inserted as usize].set(v);
         }
         self
     }
 
     pub(crate) fn append_modified(&mut self, changes: Vec<Change>) -> &mut Self {
         for v in changes {
-            self.modified.set(v);
+            self.map[ChangeKind::Modified as usize].set(v);
         }
         self
     }
 
     pub(crate) fn append_removed(&mut self, changes: Vec<Change>) -> &mut Self {
         for v in changes {
-            self.removed.set(v);
+            self.map[ChangeKind::Removed as usize].set(v);
         }
         self
+    }
+
+    pub(crate) fn set_track_modified(&self) {
+        self.track_modified
+            .store(true, std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub(crate) fn track_modified(&self) -> bool {
+        self.track_modified
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
