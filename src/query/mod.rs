@@ -131,7 +131,7 @@ where
     /// the query ran
     fn prepare_tick(&mut self, world: &World) -> (u32, u32) {
         // The tick of the last iteration
-        let old_tick = self.change_tick;
+        let mut old_tick = self.change_tick;
 
         // Set the change_tick for self to that of the query, to make all
         // changes before this invocation too old
@@ -145,6 +145,10 @@ where
         } else {
             world.change_tick()
         };
+
+        if new_tick < old_tick {
+            old_tick = 0;
+        }
 
         self.change_tick = new_tick;
         (old_tick, new_tick)

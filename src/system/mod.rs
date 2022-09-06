@@ -194,7 +194,7 @@ where
         let data = self
             .data
             .acquire(ctx)
-            .wrap_err("Failed to bind system data")?;
+            .wrap_err_with(|| format!("Failed to bind system data for {}", self.name))?;
 
         let res: eyre::Result<()> = self.func.execute(data).map_err(Into::into);
         if let Err(err) = res {
@@ -232,7 +232,7 @@ where
         let data = self
             .data
             .acquire(ctx)
-            .wrap_err("Failed to bind system data")?;
+            .wrap_err_with(|| format!("Failed to bind system data for {}", self.name))?;
 
         self.func.execute(data);
 

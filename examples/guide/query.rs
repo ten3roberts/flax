@@ -126,7 +126,7 @@ fn main() -> color_eyre::Result<()> {
                 .filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
-            tracing::info!("Updating distance for {id} with position: {pos:?}");
+            tracing::debug!("Updating distance for {id} with position: {pos:?}");
             *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
         });
 
@@ -230,6 +230,7 @@ fn main() -> color_eyre::Result<()> {
 
     for i in 0..200 {
         tracing::info!("Frame: {i}");
+        tracing::info!("Batches: {:#?}", schedule.batch_info(&mut world));
         schedule.execute_par(&mut world)?;
         // sleep(Duration::from_secs_f32(0.1));
     }

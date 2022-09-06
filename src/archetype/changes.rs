@@ -57,7 +57,6 @@ impl ChangeList {
             // Merge the change into an already existing change
             // Do not change start as that will invalidate ordering
             if v.slice < change.slice && v.tick == change.tick {
-                eprintln!("Merging change: {v:?} + {change:?}");
                 // Merge atop change of the same change
                 if let Some(u) = v.slice.union(&change.slice) {
                     joined = true;
@@ -346,20 +345,13 @@ impl Change {
     }
 }
 
-fn is_sorted_by<T, U>(a: &[T], f: impl Fn(&T) -> U) -> bool
-where
-    U: Ord,
-{
-    !a.windows(2).any(|v| f(&v[0]) > f(&v[1]))
-}
-
 impl Changes {
     pub(crate) fn new(info: ComponentInfo) -> Self {
         Self {
             info,
-            removed: Default::default(),
-            inserted: Default::default(),
-            modified: Default::default(),
+            removed: ChangeList::new(),
+            inserted: ChangeList::new(),
+            modified: ChangeList::new(),
         }
     }
 
