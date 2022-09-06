@@ -1057,7 +1057,7 @@ impl World {
     #[must_use]
     /// Returns the current world change tick
     pub fn change_tick(&self) -> u32 {
-        self.change_tick.fetch_or(1, Ordering::Relaxed) >> 1
+        (self.change_tick.fetch_or(1, Ordering::Relaxed) >> 1) + 1
     }
 
     /// Increases the change tick and returns the new one
@@ -1070,14 +1070,14 @@ impl World {
                 if v & 1 == 0 {
                     None
                 } else {
-                    Some((v + 1) % 2000)
+                    Some(v + 1)
                     // v is not even and not read
                 }
             });
 
         match v {
-            Ok(v) => (v + 1) >> 1,
-            Err(v) => v >> 1,
+            Ok(v) => ((v + 1) >> 1) + 1,
+            Err(v) => (v >> 1) + 1,
         }
     }
 

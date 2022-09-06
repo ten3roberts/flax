@@ -287,24 +287,21 @@ impl Schedule {
 
         for (dst_idx, dst) in accesses.iter().enumerate() {
             let accesses = &accesses;
-            let dst_deps = dst
-                .1
-                .iter()
-                .flat_map(move |dst_access| {
-                    accesses
-                        .iter()
-                        .take(dst_idx)
-                        .enumerate()
-                        .find_map(|(src_idx, src)| {
-                            if src.1.iter().any(|v| !v.is_compatible_with(dst_access)) {
-                                Some(src_idx)
-                            } else {
-                                None
-                            }
-                        })
-                })
-                .dedup()
-                .collect_vec();
+            let dst_deps =
+                dst.1
+                    .iter()
+                    .flat_map(|dst_access| {
+                        accesses.iter().take(dst_idx).enumerate().filter_map(
+                            move |(src_idx, src)| {
+                                if src.1.iter().any(move |v| !v.is_compatible_with(dst_access)) {
+                                    Some(src_idx)
+                                } else {
+                                    None
+                                }
+                            },
+                        )
+                    })
+                    .collect_vec();
 
             deps.insert(dst_idx, dst_deps);
         }
