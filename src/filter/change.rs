@@ -1,10 +1,10 @@
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{ChangeList, Changes, Slice},
+    archetype::{ChangeList, Slice},
     filter::PreparedFilter,
-    Access, Archetype, ArchetypeId, ChangeKind, Component, ComponentId, ComponentValue, Fetch,
-    FetchItem, Filter,
+    Access, Archetype, ArchetypeId, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
+    Filter,
 };
 
 #[derive(Clone)]
@@ -133,15 +133,6 @@ impl<'a> PreparedKindFilter<'a> {
         }
     }
 
-    pub(crate) fn from_borrow(changes: AtomicRef<'a, ChangeList>, tick: u32) -> Self {
-        Self {
-            changes: Some(changes),
-            cur: None,
-            index: 0,
-            tick,
-        }
-    }
-
     pub fn current_slice(&mut self) -> Option<Slice> {
         match (self.cur, self.changes.as_mut()) {
             (Some(v), _) => Some(v),
@@ -249,7 +240,7 @@ impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         let changes = archetype
             .changes(self.component.id())
-            .map(|v| AtomicRef::map(v, |v| v.removed()));
+            .map(|v| AtomicRef::map(v, |v| v.get(ChangeKind::Removed)));
 
         PreparedKindFilter::new(changes, change_tick)
     }

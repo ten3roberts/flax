@@ -16,10 +16,6 @@ pub(crate) struct ChangeList {
 }
 
 impl ChangeList {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     #[cfg(debug_assertions)]
     fn assert_ordered(&self, msg: &str) {
         let ordered = self
@@ -188,17 +184,6 @@ impl ChangeList {
     /// Returns the changes in the change list at a particular index.
     pub fn get(&self, index: usize) -> Option<&Change> {
         self.inner.get(index)
-    }
-
-    /// Returns the number of changes
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    #[must_use]
-    /// Returns true if the change list is empty
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Iterate all changes in ascending order
@@ -412,18 +397,6 @@ impl Changes {
         self.info
     }
 
-    pub(crate) fn inserted(&self) -> &ChangeList {
-        self.get(ChangeKind::Inserted)
-    }
-
-    pub(crate) fn modified(&self) -> &ChangeList {
-        self.get(ChangeKind::Modified)
-    }
-
-    pub(crate) fn removed(&self) -> &ChangeList {
-        self.get(ChangeKind::Removed)
-    }
-
     pub(crate) fn append_inserted(&mut self, changes: Vec<Change>) -> &mut Self {
         for v in changes {
             self.map[ChangeKind::Inserted as usize].set(v);
@@ -462,13 +435,9 @@ mod tests {
 
     use super::*;
 
-    crate::component! {
-        a: (),
-    }
-
     #[test]
     fn changes() {
-        let mut changes = ChangeList::new();
+        let mut changes = ChangeList::default();
 
         changes.set(Change::modified(Slice::new(0, 5), 1));
 
@@ -519,7 +488,7 @@ mod tests {
 
     #[test]
     fn changes_small() {
-        let mut changes = ChangeList::new();
+        let mut changes = ChangeList::default();
 
         for i in 0..239 {
             let perm = (i * (i + 2)) % 300;
@@ -536,7 +505,7 @@ mod tests {
 
     #[test]
     fn adjacent() {
-        let mut changes = ChangeList::new();
+        let mut changes = ChangeList::default();
 
         changes.set(Change::modified(Slice::new(0, 63), 1));
         changes.set(Change::modified(Slice::new(63, 182), 1));
@@ -549,8 +518,8 @@ mod tests {
 
     #[test]
     fn migrate() {
-        let mut changes_1 = ChangeList::new();
-        let mut changes_2 = ChangeList::new();
+        let mut changes_1 = ChangeList::default();
+        let mut changes_2 = ChangeList::default();
 
         changes_1
             .set(Change::modified(Slice::new(20, 48), 1))

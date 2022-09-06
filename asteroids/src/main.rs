@@ -135,18 +135,12 @@ async fn main() -> Result<()> {
 
         while acc > 0.0 {
             acc -= dt;
-            let batch = physics_schedule.batch_info(&mut world);
-            // tracing::info!("physics_schedule: {batch:#?}",);
             tracing::info!("Executing physics");
             physics_schedule.execute_par(&mut world)?;
         }
 
         clear_background(BLACK);
 
-        // tracing::info!(
-        //     "frame_schedule: {:#?}",
-        //     frame_schedule.batch_info(&mut world)
-        // );
         frame_schedule.execute_par(&mut world)?;
 
         next_frame().await

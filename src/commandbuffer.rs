@@ -1,7 +1,4 @@
-use std::collections::{btree_map::Entry, BTreeMap};
-
 use eyre::Context;
-use itertools::Itertools;
 
 use crate::{
     buffer::BufferStorage, BatchSpawn, Component, ComponentInfo, ComponentValue, Entity,
