@@ -219,7 +219,7 @@ in other situations where a mutable reference to the world is not available.</p>
         .with(Query::new((entity_ids(), position())).without(world_matrix()))
         .write::&lt;CommandBuffer&gt;()
         .build(
-            |mut q: QueryBorrow&lt;(EntityIds, Component&lt;Vec2&gt;), _&gt;, mut cmd: &amp;mut CommandBuffer| {
+            |mut q: QueryBorrow&lt;(EntityIds, Component&lt;Vec2&gt;), _&gt;, cmd: &amp;mut CommandBuffer| {
                 for (id, pos) in &amp;mut q {
                     tracing::info!(&quot;Adding world matrix to {id}&quot;);
                     cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));
