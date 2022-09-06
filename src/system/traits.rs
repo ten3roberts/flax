@@ -264,7 +264,7 @@ mod test {
 
     use crate::{
         component, components::name, system::SystemContext, All, CommandBuffer, Component, Entity,
-        Query, QueryBorrow, SystemData, SystemFn, World,
+        Query, QueryBorrow, QueryData, SystemData, SystemFn, World,
     };
 
     use super::Write;
@@ -298,13 +298,13 @@ mod test {
         };
 
         let data = &mut (Write::<World>::new(),);
-        let mut data: (AtomicRefMut<World>,) = data.acquire(&ctx).unwrap();
+        let data: (AtomicRefMut<World>,) = data.acquire(&ctx).unwrap();
         SystemFn::<(AtomicRefMut<World>,), ()>::execute(&mut spawner, data);
         // (spawner).execute(data);
 
         let data = &mut (Query::new(name()),);
-        let mut data = data.acquire(&ctx).unwrap();
-        // SystemFn::execute(&mut reader, data);
+        let data = data.acquire(&ctx).unwrap();
+        SystemFn::<(QueryData<_>,), ()>::execute(&mut reader, data);
         Ok(())
     }
 }

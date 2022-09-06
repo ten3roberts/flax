@@ -85,7 +85,7 @@ fn main() -> color_eyre::Result<()> {
         .with(Query::new((entity_ids(), position())).without(world_matrix()))
         .write::<CommandBuffer>()
         .build(
-            |mut q: QueryBorrow<(EntityIds, Component<Vec2>), _>, mut cmd: &mut CommandBuffer| {
+            |mut q: QueryBorrow<(EntityIds, Component<Vec2>), _>, cmd: &mut CommandBuffer| {
                 for (id, pos) in &mut q {
                     tracing::info!("Adding world matrix to {id}");
                     cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));

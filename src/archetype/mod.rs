@@ -1,7 +1,7 @@
 use std::{alloc::Layout, any::TypeId, collections::BTreeMap, mem};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use itertools::{IntersperseWith, Itertools};
+use itertools::Itertools;
 
 use crate::{buffer::ComponentBuffer, entity, Component, ComponentId, ComponentValue, Entity};
 
