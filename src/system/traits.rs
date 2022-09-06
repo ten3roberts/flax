@@ -98,7 +98,7 @@ macro_rules! tuple_impl {
                 f.write_str("fn")?;
 
                 ($(
-                    Verbatim(tynm::type_name::<$ty>()),
+                    Verbatim(tynm::type_name::<<$ty as AsBorrow>::Borrowed>()),
                 )*).fmt(f)?;
 
                 if std::any::type_name::<Ret>() != std::any::type_name::<()>() {

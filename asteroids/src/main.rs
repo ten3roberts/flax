@@ -9,7 +9,7 @@ use flax::*;
 use glam::*;
 use macroquad::{
     color::hsl_to_rgb,
-    prelude::{is_key_down, Color, KeyCode, BLACK, BLUE, GRAY, GREEN, ORANGE},
+    prelude::{is_key_down, Color, KeyCode, BLACK, BLUE, DARKPURPLE, GRAY, GREEN, ORANGE},
     shapes::{draw_circle, draw_poly, draw_triangle},
     text::draw_text,
     time::get_frame_time,
@@ -531,12 +531,23 @@ fn despawn_out_of_bounds() -> BoxedSystem {
 fn despawn_dead() -> BoxedSystem {
     System::builder()
         .with_name("despawn_dead")
-        .with(Query::new(entity_ids()).filter(health().le(0.0)))
+        .with(
+            Query::new((entity_ids(), position(), velocity(), material().opt()))
+                .filter(health().modified() & health().le(0.0)),
+        )
         .write::<CommandBuffer>()
         .build(
-            |mut q: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
-                for id in &mut q {
+            |mut q: QueryBorrow<(EntityIds, Component<Vec2>, Component<_>, Opt<_>), _>,
+             cmd: &mut CommandBuffer| {
+                for (id, pos, vel, mat) in &mut q {
                     cmd.despawn(id);
+                    if let Some(mat) = mat {
+                        create_explosion((mat / 50.0) as _, *pos, 50.0, 8.0, 4.0, DARKPURPLE)
+                            .for_each(|mut v| {
+                                *v.get_mut(velocity()).unwrap() += *vel;
+                                cmd.spawn(v);
+                            });
+                    }
                 }
             },
         )
