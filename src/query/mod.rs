@@ -154,13 +154,6 @@ where
         (old_tick, new_tick)
     }
 
-    /// Advances and discards all changes up until now.
-    /// This has the same effect as iterating and ignoring the results, though
-    /// more idiomatic.
-    pub fn ignore_changes(&mut self, world: &World) {
-        self.change_tick = world.change_tick()
-    }
-
     /// Returns the last change tick the query was run on.
     /// Any changes > change_tick will be yielded in a query iteration.
     pub fn change_tick(&self) -> u32 {
