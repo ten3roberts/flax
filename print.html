@@ -548,7 +548,7 @@ single query.</p>
                 .filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
-            tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+            tracing::debug!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
             *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
         });
 
@@ -695,6 +695,7 @@ sequence.</p>
 
     for i in 0..200 {
         tracing::info!(&quot;Frame: {i}&quot;);
+        tracing::info!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;mut world));
         schedule.execute_par(&amp;mut world)?;
         // sleep(Duration::from_secs_f32(0.1));
     }

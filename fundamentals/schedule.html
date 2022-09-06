@@ -238,6 +238,7 @@ sequence.</p>
 
     for i in 0..200 {
         tracing::info!(&quot;Frame: {i}&quot;);
+        tracing::info!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;mut world));
         schedule.execute_par(&amp;mut world)?;
         // sleep(Duration::from_secs_f32(0.1));
     }
