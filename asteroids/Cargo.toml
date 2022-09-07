@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 flax = { path = "../" }
 macroquad = "0.3"
-glam = { version = "0.14", features = ["rand", "serde"] }
+glam = { version = "0.21", features = ["rand", "serde"] }
 rand = "0.8.5"
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
