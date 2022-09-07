@@ -84,8 +84,10 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
     fn prepare(&'a self, arch: &'a Archetype, change_tick: u32) -> Self::Prepared {
         let changes = arch.changes(self.component.id());
 
-        if let Some(ref changes) = changes && self.kind.is_modified() {
-            changes.set_track_modified()
+        if let Some(ref changes) = changes {
+            if self.kind.is_modified() {
+                changes.set_track_modified()
+            }
         }
 
         let changes = changes.map(|v| AtomicRef::map(v, |v| v.get(self.kind)));
