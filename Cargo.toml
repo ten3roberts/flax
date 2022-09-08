@@ -49,6 +49,7 @@ tracing = "0.1"
 [features]
 default = ["parallel"]
 serde = ["dep:serde", "erased-serde", "bytes/serde"]
+internal_assert = []
 parallel = ["rayon"]
 
 [[example]]
