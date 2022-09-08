@@ -2,14 +2,17 @@ mod context;
 mod traits;
 
 use core::fmt;
-use std::{any::type_name, fmt::Formatter, marker::PhantomData, sync::Arc};
+use std::{
+    any::{type_name, TypeId},
+    fmt::Formatter,
+    marker::PhantomData,
+};
 
 use crate::{
     fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, Fetch,
     FetchItem, Filter, Query, QueryData, World,
 };
 
-use atomic_refcell::AtomicRefCell;
 pub use context::*;
 use eyre::Context;
 pub use traits::*;
@@ -136,12 +139,12 @@ impl<Args> SystemBuilder<Args> {
     /// This is useful to avoid sharing `Arc<Mutex<_>>` and locking for each
     /// system. In addition, the resource will be taken into account for the
     /// schedule paralellization and will as such not block.
-    pub fn with_resource<T>(self, resource: T) -> SystemBuilder<Args::PushRight>
+    pub fn with_resource<T>(self, resource: SharedResource<T>) -> SystemBuilder<Args::PushRight>
     where
-        Args: TupleCombine<Arc<AtomicRefCell<T>>>,
-        T: SharedResource + Send + 'static,
+        Args: TupleCombine<SharedResource<T>>,
+        T: Send + 'static,
     {
-        self.with(Arc::new(AtomicRefCell::new(resource)))
+        self.with(resource)
     }
 
     /// Creates the system by suppling a function to act upon the systems data,
@@ -332,7 +335,7 @@ pub enum AccessKind {
         component: ComponentId,
     },
     /// A unit struct works as a synchronization barrier
-    External(u64),
+    External(TypeId),
     /// Borrow the whole world
     World,
     /// Borrow the commandbuffer

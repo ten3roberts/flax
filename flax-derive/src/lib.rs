@@ -203,7 +203,7 @@ fn derive_data_struct(
                         f.write_str("}")
                     }
 
-                    fn access(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<Access> {
+                    fn access(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<#crate_name::Access> {
                         [ #(self.#field_names.access(data)),* ].concat()
                     }
 
