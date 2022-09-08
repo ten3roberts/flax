@@ -548,7 +548,7 @@ impl World {
             new_components.extend(src.components().copied());
 
             // Make sure everything is in its order
-            new_components.sort_unstable();
+            // new_components.sort_unstable();
 
             let components = new_components;
 

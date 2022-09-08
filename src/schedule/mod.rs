@@ -331,9 +331,8 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
     let mut visited = BTreeMap::new();
     let mut result = Vec::new();
 
-    fn inner<T>(
+    fn inner(
         idx: usize,
-        items: &[T],
         deps: &BTreeMap<usize, Vec<usize>>,
         visited: &mut BTreeMap<usize, VisitedState>,
         result: &mut Vec<usize>,
@@ -346,7 +345,7 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
                     // Update self and children
                     *d = depth;
                     deps.get(&idx).into_iter().flatten().for_each(|&dep| {
-                        inner(dep, items, deps, visited, result, depth + 1);
+                        inner(dep, deps, visited, result, depth + 1);
                     });
                 }
             }
@@ -355,7 +354,7 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
 
                 // First, push all dependencies
                 deps.get(&idx).into_iter().flatten().for_each(|&dep| {
-                    inner(dep, items, deps, visited, result, depth + 1);
+                    inner(dep, deps, visited, result, depth + 1);
                 });
 
                 visited.insert(idx, VisitedState::Visited(depth));
@@ -365,7 +364,7 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
     }
 
     for i in 0..items.len() {
-        inner(i, items, deps, &mut visited, &mut result, 0)
+        inner(i, deps, &mut visited, &mut result, 0)
     }
 
     let groups = result.into_iter().group_by(|v| match visited.get(v) {

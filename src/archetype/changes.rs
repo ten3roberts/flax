@@ -16,7 +16,7 @@ pub(crate) struct ChangeList {
 }
 
 impl ChangeList {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "internal_assert")]
     fn assert_ordered(&self, msg: &str) {
         let ordered = self
             .iter()
@@ -34,7 +34,7 @@ impl ChangeList {
         let mut i = 0;
         let mut joined = false;
 
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "internal_assert")]
         self.assert_ordered("Not sorted at beginning");
         let old = self.inner.clone();
 
@@ -78,7 +78,7 @@ impl ChangeList {
             self.inner.insert(insert_point, change);
         }
 
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "internal_assert")]
         self.assert_ordered(&format!(
             "Not sorted after `set` inserting: {change:?} old: {old:?}"
         ));
@@ -132,7 +132,7 @@ impl ChangeList {
         //      =========
         //      ===
 
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "internal_assert")]
         self.assert_ordered("Not sorted before `remove`");
 
         let old = self.inner.clone();
@@ -174,7 +174,7 @@ impl ChangeList {
         result.append(&mut right);
 
         self.inner = result;
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "internal_assert")]
         self.assert_ordered(&format!(
             "Not sorted after `remove` while removing: {slot}\n\n{old:#?}"
         ));
