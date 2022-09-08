@@ -1,7 +1,5 @@
 use flax::components::{child_of, name};
-use flax::{
-    component, debug_visitor, entity::wildcard, util::TupleCloned, EntityBuilder, Query, World,
-};
+use flax::{component, debug_visitor, entity::wildcard, EntityBuilder, Query, World};
 use flax::{entity_ids, relations_like, Debug, Entity};
 use itertools::Itertools;
 
@@ -116,7 +114,7 @@ fn relations() {
     let items = query
         .borrow(&world)
         .iter()
-        .map(TupleCloned::cloned)
+        .map(|(a, b)| (a.clone(), *b))
         .sorted()
         .collect_vec();
 

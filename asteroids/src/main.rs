@@ -1,9 +1,8 @@
-use atomic_refcell::AtomicRefCell;
 use color_eyre::{
     eyre::{eyre, ContextCompat},
     Result,
 };
-use std::{f32::consts::TAU, sync::Arc};
+use std::f32::consts::TAU;
 use tracing_subscriber::{prelude::*, registry};
 
 use flax::*;
@@ -102,16 +101,17 @@ async fn main() -> Result<()> {
 
     world.on_removed(player(), player_dead_tx);
 
+    // Setup everthing required for the game logic and physics
     let mut physics_schedule = Schedule::builder()
         .with_system(spawn_asteroids(16))
         .with_system(player_system(dt))
-        .with_system(camera_systems(dt))
+        .with_system(camera_system(dt))
         .with_system(lifetime_system(dt))
-        .with_system(despawn_out_of_bounds())
         .with_system(particle_system())
         .with_system(collision_system())
         .with_system(integrate_velocity(dt))
         .with_system(integrate_ang_velocity(dt))
+        .with_system(despawn_out_of_bounds())
         .with_system(despawn_dead())
         .build();
 
@@ -129,6 +129,7 @@ async fn main() -> Result<()> {
         let change_tick = world.change_tick();
         tracing::info!("Change tick: {change_tick}");
         if player_dead_rx.try_recv().is_ok() {
+            world.despawn_many(asteroid().with());
             create_player().spawn(&mut world);
         }
 
@@ -137,6 +138,8 @@ async fn main() -> Result<()> {
         while acc > 0.0 {
             acc -= dt;
             tracing::info!("Executing physics");
+            let batches = physics_schedule.batch_info(&mut world);
+            tracing::info!("Batches: {batches:#?}");
             physics_schedule.execute_par(&mut world)?;
         }
 
@@ -182,6 +185,7 @@ fn create_player() -> EntityBuilder {
 fn create_camera() -> EntityBuilder {
     Entity::builder()
         .set_default(position())
+        .set_default(velocity())
         .set_default(rotation())
         .set(camera(), Mat3::IDENTITY)
         .into()
@@ -213,7 +217,7 @@ fn create_bullet(player: Entity) -> EntityBuilder {
 
                     *health -= BULLET_DAMAGE;
 
-                    if *health <= 0.0 {
+                    if *health <= 0.0 && player != coll.b {
                         if let Ok(mut material) = world.get_mut(player, material()) {
                             *material += world
                                 .get_mut(coll.b, self::material())
@@ -276,31 +280,36 @@ fn particle_system() -> BoxedSystem {
         .boxed()
 }
 
-fn camera_systems(dt: f32) -> BoxedSystem {
+fn camera_system(dt: f32) -> BoxedSystem {
     System::builder()
-        .with(Query::new(position()).with(player()))
-        .with(Query::new((position().as_mut(), camera().as_mut())))
+        .with(Query::new((position(), velocity())).with(player()))
+        .with(Query::new((
+            position().as_mut(),
+            velocity().as_mut(),
+            camera().as_mut(),
+        )))
         .build(
-            move |mut players: QueryBorrow<Component<Vec2>, _>,
-                  mut cameras: QueryBorrow<_, _>|
+            move |mut players: QueryBorrow<(Component<Vec2>, Component<Vec2>), And<All, With>>,
+                  mut cameras: QueryBorrow<(Mutable<Vec2>, Mutable<Vec2>, Mutable<Mat3>)>|
                   -> Result<()> {
-                let player_pos = players.first().copied().unwrap_or_default();
+                if let Some((player_pos, player_vel)) = players.first() {
+                    let (camera_pos, camera_vel, camera) =
+                        cameras.first().ok_or_else(|| eyre!("No camera"))?;
 
-                let (camera_pos, camera): (&mut Vec2, &mut Mat3) =
-                    cameras.first().ok_or_else(|| eyre!("No camera"))?;
+                    *camera_pos = camera_pos.lerp(*player_pos, dt).lerp(*player_pos, dt);
+                    *camera_vel = camera_vel.lerp(*player_vel, dt * 0.1);
 
-                *camera_pos =
-                    camera_pos.lerp(player_pos, (camera_pos.distance(player_pos) * 0.01) * dt);
+                    tracing::info!("Camera pos: {camera_pos} player: {player_pos}");
 
-                let screen_size = vec2(screen_width(), screen_height());
+                    let screen_size = vec2(screen_width(), screen_height());
 
-                *camera = Mat3::from_scale_angle_translation(
-                    Vec2::ONE,
-                    0.0,
-                    *camera_pos - screen_size * 0.5,
-                )
-                .inverse();
-
+                    *camera = Mat3::from_scale_angle_translation(
+                        Vec2::ONE,
+                        0.0,
+                        *camera_pos - screen_size * 0.5,
+                    )
+                    .inverse();
+                }
                 Ok(())
             },
         )

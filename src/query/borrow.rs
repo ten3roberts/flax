@@ -242,6 +242,12 @@ where
             slot,
         } = self.world.location(id)?;
 
+        #[cfg(debug_assertions)]
+        self.archetypes
+            .iter()
+            .find(|&&v| v == arch_id)
+            .expect("Entity not present in visited archetypes");
+
         let idx = self.prepare_archetype(arch_id).ok_or_else(|| {
             let arch = self.world.archetype(arch_id);
             let mut buf = String::new();
@@ -257,6 +263,7 @@ where
                 }),
             )
         })?;
+
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
         let p = &mut self.prepared[idx];

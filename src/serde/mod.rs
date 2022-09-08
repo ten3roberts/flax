@@ -64,15 +64,24 @@ impl<F> SerdeBuilder<F>
 where
     F: StaticFilter + 'static + Clone,
 {
+    /// Register a component using the component name.
+    ///
+    /// See [`Self::with_name`]
+    pub fn with<T>(&mut self, component: Component<T>) -> &mut Self
+    where
+        T: ComponentValue + Serialize + for<'de> Deserialize<'de>,
+    {
+        self.with_name(component.name(), component)
+    }
+
     /// Register a component for both serialization and deserialiaztion
-    pub fn with<T: ComponentValue + Serialize + for<'de> Deserialize<'de>>(
-        &mut self,
-        key: impl Into<String>,
-        component: Component<T>,
-    ) -> &mut Self {
+    pub fn with_name<T>(&mut self, key: impl Into<String>, component: Component<T>) -> &mut Self
+    where
+        T: ComponentValue + Serialize + for<'de> Deserialize<'de>,
+    {
         let key = key.into();
-        self.ser.with(key.clone(), component);
-        self.de.with(key, component);
+        self.ser.with_name(key.clone(), component);
+        self.de.with_name(key, component);
         self
     }
 
@@ -179,11 +188,11 @@ mod test {
         };
 
         let (serializer, deserializer) = SerdeBuilder::new()
-            .with("name", name())
-            .with("health", health())
-            .with("pos", pos())
-            .with("items", items())
-            .with("status_effects", status_effects())
+            .with(name())
+            .with(health())
+            .with(pos())
+            .with(items())
+            .with(status_effects())
             .build();
 
         let json = serde_json::to_string_pretty(

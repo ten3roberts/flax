@@ -84,10 +84,10 @@ fn merge_empty() -> color_eyre::Result<()> {
         });
 
     let (serializer, deserializer) = SerdeBuilder::new()
-        .with("position", position())
-        .with("rotation", rotation())
-        .with("scale", scale())
-        .with("name", name())
+        .with_name("position", position())
+        .with_name("rotation", rotation())
+        .with_name("scale", scale())
+        .with_name("name", name())
         .build();
 
     let bytes = bincode::serialize(&serializer.serialize(&world, SerializeFormat::ColumnMajor))?;

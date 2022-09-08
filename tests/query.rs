@@ -1,4 +1,4 @@
-use flax::{component, util::TupleCloned, CmpExt, EntityBuilder, FetchExt, Query, World};
+use flax::{component, CmpExt, EntityBuilder, FetchExt, Query, World};
 use itertools::Itertools;
 
 use flax::components::name;
@@ -110,7 +110,7 @@ fn query_opt() {
         .borrow(&world)
         .iter()
         .sorted_by_key(|v| v.0)
-        .map(|v| v.cloned())
+        .map(|(a, b, c)| (a.clone(), *b, *c))
         .collect_vec();
 
     assert_eq!(

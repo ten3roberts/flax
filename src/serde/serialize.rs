@@ -49,14 +49,23 @@ impl<F> SerializeBuilder<F>
 where
     F: StaticFilter + 'static + Clone,
 {
+    /// Register a component using the component name.
+    ///
+    /// See [`Self::with_name`]
+    pub fn with<T>(&mut self, component: Component<T>) -> &mut Self
+    where
+        T: ComponentValue + Serialize,
+    {
+        self.with_name(component.name(), component)
+    }
+
     /// Register a new component to be serialized if encountered.
     /// And entity will still be serialized if it only contains a non-empty
     /// subset of the registered components.
-    pub fn with<T: ComponentValue + serde::Serialize>(
-        &mut self,
-        key: impl Into<String>,
-        component: Component<T>,
-    ) -> &mut Self {
+    pub fn with_name<T>(&mut self, key: impl Into<String>, component: Component<T>) -> &mut Self
+    where
+        T: ComponentValue + serde::Serialize,
+    {
         fn ser_col<'a, T: serde::Serialize + ComponentValue>(
             storage: &'a StorageBorrowDyn<'_>,
             slot: usize,

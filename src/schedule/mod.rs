@@ -98,11 +98,21 @@ impl ScheduleBuilder {
 }
 
 /// Represents diagnostic information about a system
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SystemInfo {
     name: String,
     desc: Verbatim,
     access: Vec<Access>,
+}
+
+impl std::fmt::Debug for SystemInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SystemInfo")
+            .field("name", &self.name)
+            .field("desc", &self.desc)
+            .field("access", &self.access.len())
+            .finish()
+    }
 }
 
 impl SystemInfo {
@@ -301,6 +311,7 @@ impl Schedule {
                             },
                         )
                     })
+                    .dedup()
                     .collect_vec();
 
             deps.insert(dst_idx, dst_deps);

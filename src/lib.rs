@@ -15,9 +15,13 @@
 //! - Reflection through component metadata
 //! - Ergonomic entity builder
 //! - tracing
-//! - Runtime registered components
+//! - Serialization and deserialization
+//! - Runtime components
 //!
 //! ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
+//!
+//! For those of you who prefer a more complete example, consider checking out an asteroid game
+//! made by flax and macroquad [here](./asteroids/main.rs)
 //!
 //! ## Example Usage
 //!
@@ -140,7 +144,7 @@ mod meta;
 /// System execution
 pub mod schedule;
 /// Provides tuple utilities like `cloned`
-pub mod util;
+mod util;
 /// Provides a debug visitor
 pub mod visitors;
 
