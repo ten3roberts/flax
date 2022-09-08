@@ -61,8 +61,18 @@ impl DeserializeBuilder {
         Default::default()
     }
 
+    /// Register a component using the component name.
+    ///
+    /// See [`Self::with_name`]
+    pub fn with<T>(&mut self, component: Component<T>) -> &mut Self
+    where
+        T: ComponentValue + for<'x> Deserialize<'x>,
+    {
+        self.with_name(component.name(), component)
+    }
+
     /// Register a new component to be deserialized
-    pub fn with<T>(&mut self, key: impl Into<String>, component: Component<T>) -> &mut Self
+    pub fn with_name<T>(&mut self, key: impl Into<String>, component: Component<T>) -> &mut Self
     where
         T: ComponentValue + for<'x> Deserialize<'x>,
     {

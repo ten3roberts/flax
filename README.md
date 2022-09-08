@@ -22,9 +22,13 @@ provide the application logic.
 - Reflection through component metadata
 - Ergonomic entity builder
 - tracing
-- Runtime registered components
+- Serialization and deserialization
+- Runtime components
 
 ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
+
+For those of you who prefer a more complete example, consider checking out an asteroid game
+made by flax and macroquad [here](./asteroids/main.rs)
 
 ## Example Usage
 
@@ -53,7 +57,7 @@ provide the application logic.
   let mut query = Query::new((health().as_mut(), regen()));
 
   // Apply health regen for all match entites
-  for (health, regen) in &mut query.iter(&world) {
+  for (health, regen) in &mut query.borrow(&world) {
       *health = (*health + regen).min(100.0);
   }
 

@@ -1446,14 +1446,14 @@ mod tests {
         let mut world = World::new();
 
         // () -> (a) -> (ab) -> (abc)
-        let (_, archetype) = world.archetypes.init(&[a().info(), b().info(), c().info()]);
+        let (_, archetype) = world.archetypes.init([a().info(), b().info(), c().info()]);
         assert!(!archetype.has(d().id()));
         assert!(archetype.has(a().id()));
         assert!(archetype.has(b().id()));
 
         // () -> (a) -> (ab) -> (abc)
         //                   -> (abd)
-        let (_, archetype) = world.archetypes.init(&[a().info(), b().info(), d().info()]);
+        let (_, archetype) = world.archetypes.init([a().info(), b().info(), d().info()]);
         assert!(archetype.has(d().id()));
         assert!(!archetype.has(c().id()));
     }

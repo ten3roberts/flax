@@ -36,7 +36,6 @@ impl ChangeList {
 
         #[cfg(feature = "internal_assert")]
         self.assert_ordered("Not sorted at beginning");
-        let old = self.inner.clone();
 
         self.inner.retain_mut(|v| {
             if change.slice.is_empty() {
@@ -79,9 +78,7 @@ impl ChangeList {
         }
 
         #[cfg(feature = "internal_assert")]
-        self.assert_ordered(&format!(
-            "Not sorted after `set` inserting: {change:?} old: {old:?}"
-        ));
+        self.assert_ordered(&format!("Not sorted after `set` inserting: {change:?}"));
 
         self
     }
@@ -135,8 +132,6 @@ impl ChangeList {
         #[cfg(feature = "internal_assert")]
         self.assert_ordered("Not sorted before `remove`");
 
-        let old = self.inner.clone();
-
         let removed = self
             .inner
             .drain(..)
@@ -175,9 +170,7 @@ impl ChangeList {
 
         self.inner = result;
         #[cfg(feature = "internal_assert")]
-        self.assert_ordered(&format!(
-            "Not sorted after `remove` while removing: {slot}\n\n{old:#?}"
-        ));
+        self.assert_ordered(&format!("Not sorted after `remove` while removing: {slot}"));
         removed
     }
 
