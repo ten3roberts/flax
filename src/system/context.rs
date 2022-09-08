@@ -1,4 +1,4 @@
-use std::{hash::Hash, sync::Arc};
+use std::{any::TypeId, ops::Deref, sync::Arc};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
@@ -8,26 +8,45 @@ use crate::{Access, AccessKind, CommandBuffer, SystemAccess, SystemData, World};
 /// The difference between this and an `Arc<Mutex<_>>` is that this will be
 /// taken into consideration when multithreading in the schedule, and will as
 /// such not require locks.
-pub trait SharedResource {
-    /// Uniquely identify the access
-    fn key(&self) -> u64;
+///
+/// The implementation is an Arc<AtomicRefCell> and is thus cheap to clone
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SharedResource<T>(Arc<AtomicRefCell<T>>);
+
+impl<T: Send + 'static> SharedResource<T> {
+    /// Creates a new shared resource
+    pub fn new(value: T) -> Self {
+        Self(Arc::new(AtomicRefCell::new(value)))
+    }
 }
 
-impl<T> SystemAccess for Arc<AtomicRefCell<T>>
+impl<T> Deref for SharedResource<T> {
+    type Target = AtomicRefCell<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// pub trait SharedResource: SystemAccess + for<'x> SystemData<'x> {}
+
+// impl<T: Send + Sync + 'static> SharedResource for Arc<AtomicRefCell<T>> {}
+
+impl<T> SystemAccess for SharedResource<T>
 where
-    T: SharedResource,
+    T: Send + 'static,
 {
     fn access(&self, _: &World) -> Vec<crate::Access> {
         vec![Access {
-            kind: AccessKind::External(self.borrow().key()),
+            kind: AccessKind::External(TypeId::of::<Self>()),
             mutable: true,
         }]
     }
 }
 
-impl<'a, T> SystemData<'a> for Arc<AtomicRefCell<T>>
+impl<'a, T> SystemData<'a> for SharedResource<T>
 where
-    T: 'static + Send + SharedResource,
+    T: Send + 'static,
 {
     type Value = AtomicRefMut<'a, T>;
 
@@ -40,15 +59,6 @@ where
         })?;
 
         Ok(borrow)
-    }
-}
-
-impl<T> SharedResource for T
-where
-    T: Send + Hash + 'static,
-{
-    fn key(&self) -> u64 {
-        fxhash::hash64(&(std::any::TypeId::of::<T>(), self))
     }
 }
 

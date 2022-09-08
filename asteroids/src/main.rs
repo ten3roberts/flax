@@ -1,8 +1,9 @@
+use atomic_refcell::AtomicRefCell;
 use color_eyre::{
     eyre::{eyre, ContextCompat},
     Result,
 };
-use std::f32::consts::TAU;
+use std::{f32::consts::TAU, sync::Arc};
 use tracing_subscriber::{prelude::*, registry};
 
 use flax::*;
@@ -652,7 +653,7 @@ impl TransformQuery {
 fn draw_shapes() -> BoxedSystem {
     System::builder()
         .with_name("draw_asteroids")
-        .with_resource(GraphicsContext)
+        .with_resource(SharedResource::new(GraphicsContext))
         .with(Query::new(camera()))
         .with(Query::new((TransformQuery::new(), shape(), color())))
         .build(
@@ -675,7 +676,7 @@ fn draw_shapes() -> BoxedSystem {
 fn draw_ui() -> BoxedSystem {
     System::builder()
         .with_name("draw_ui")
-        .with_resource(GraphicsContext)
+        .with_resource(SharedResource::new(GraphicsContext))
         .with(Query::new((material(), health(), difficulty())).with(player()))
         .with(Query::new(()))
         .build(
