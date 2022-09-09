@@ -1,7 +1,7 @@
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ten3roberts/flax/main?style=for-the-badge)
-![Crates](https://img.shields.io/crates/v/flax?style=for-the-badge)
-![Docs](https://img.shields.io/docsrs/flax?style=for-the-badge)
-![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=for-the-badge)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ten3roberts/flax/main?style=flat)
+![Crates](https://img.shields.io/crates/v/flax?style=flat)
+![Docs](https://img.shields.io/docsrs/flax?style=flat)
+![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=flat)
 
 # Flax
 
@@ -15,7 +15,6 @@ Systems operate and iterate upon entities and their attached components and
 provide the application logic.
 
 ## Features
-
 - Queries
 - Change detection
 - Query filtering
@@ -24,14 +23,14 @@ provide the application logic.
 - Builtin many to many entity relation and graphs
 - Reflection through component metadata
 - Ergonomic entity builder
-- tracing
+- Tracing
 - Serialization and deserialization
 - Runtime components
 
 ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
 
 For those of you who prefer a more complete example, consider checking out an asteroid game
-made by flax and macroquad [here](./asteroids/main.rs)
+made by flax and macroquad [here](./asteroids/src/main.rs)
 
 ## Example Usage
 
@@ -66,6 +65,7 @@ made by flax and macroquad [here](./asteroids/main.rs)
 
 ```
 
+
 ## Comparison to other ECS
 
 Compared to other ecs implementations, a component is simply another `Entity`
@@ -89,13 +89,20 @@ let dt = 0.1;
 
 Instead of this:
 
-```rust,ignore
+```rust
+use flax::*
+component! {
+    velocity: glam::Vec3,
+    position: glam::Vec3,
+}
+let mut world = World::new();
 let vel = world.get(velocity(), entity);
 let mut pos = world.get_mut(position(), entity);
 let dt = 0.1;
 
 *pos = *pos + *vel;
 ```
+
 
 On a further note, since the components have to be declared beforehand (not
 always true, more on that later), it limits the amount of types which can be
@@ -112,12 +119,11 @@ During development of a game in school I used the `hecs` ECS. It is an awesome
 library, and the author [Ralith](https://github.com/Ralith) has been awesome in bringing some pull
 requests in.
 
-Despite this, I often made subtle bugs with _similar_ types. The game engine was
+Despite this, I often made subtle bugs with *similar* types. The game engine was
 cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
 coercions in order to coexist.
 
 ## Unsafe
-
 This library makes use of unsafe for type erasure and the allocation in storage
 of ComponentBuffers and Archetypes.
 
