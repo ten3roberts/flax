@@ -498,15 +498,13 @@ mod test {
         let mut fallible = System::builder()
             // .with_name("Fallible")
             .with(Query::new(b()))
-            .build(
-                move |mut query: QueryBorrow<Component<i32>>| -> eyre::Result<()> {
-                    // Lock archetypes
-                    let item: &i32 = query.get(id)?;
-                    eprintln!("Item: {item}");
+            .build(move |mut query: QueryBorrow<_>| -> eyre::Result<()> {
+                // Lock archetypes
+                let item: &i32 = query.get(id)?;
+                eprintln!("Item: {item}");
 
-                    Ok(())
-                },
-            );
+                Ok(())
+            });
 
         let mut cmd = CommandBuffer::new();
 
