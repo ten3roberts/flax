@@ -163,6 +163,9 @@ where
                 arch,
                 arch_id,
             };
+
+            let arch_id = *self.archetypes.iter().find(|&&v| v == arch_id)?;
+
             let fetch = self.fetch.prepare(data)?;
 
             prepared.push(PreparedArchetype {
@@ -177,10 +180,15 @@ where
 
     /// Access any number of entites which are disjoint.
     /// Return None if any `id` is not disjoint.
-    pub fn get_disjoint<const C: usize>(
-        &mut self,
+    /// See: [`Self::get`]
+    pub fn get_disjoint<'q, const C: usize>(
+        &'q mut self,
         ids: [Entity; C],
-    ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]> {
+    ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]>
+    where
+        'w: 'q,
+        &'w F: Filter<'q>,
+    {
         let mut sorted = ids;
         sorted.sort();
         if sorted.windows(C).any(|v| v[0] == v[1]) {
@@ -235,18 +243,12 @@ where
     }
 
     /// Get the fetch items for an entity.
-    /// **Note**: Filters are ignored.
+    /// **Note**: Components from filters are included in the match, such as `With`
     pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
         let EntityLocation {
             arch: arch_id,
             slot,
         } = self.world.location(id)?;
-
-        #[cfg(debug_assertions)]
-        self.archetypes
-            .iter()
-            .find(|&&v| v == arch_id)
-            .expect("Entity not present in visited archetypes");
 
         let idx = self.prepare_archetype(arch_id).ok_or_else(|| {
             let arch = self.world.archetype(arch_id);

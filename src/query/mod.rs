@@ -185,7 +185,6 @@ where
         // Make sure the archetypes to visit are up to date
         let archetype_gen = world.archetype_gen();
         if archetype_gen > self.archetype_gen {
-            eprintln!("Recalculating archetypes");
             self.archetypes = self.get_archetypes(world).collect_vec();
             self.archetype_gen = archetype_gen;
         }
