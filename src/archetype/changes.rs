@@ -179,11 +179,6 @@ impl ChangeList {
         self.inner.get(index)
     }
 
-    /// Iterate all changes in ascending order
-    pub fn iter(&self) -> std::slice::Iter<Change> {
-        self.inner.iter()
-    }
-
     #[cfg(test)]
     pub(crate) fn as_changed_set(&self, tick: u32) -> std::collections::BTreeSet<Slot> {
         self.as_set(|v| v.kind.is_modified_or_inserted() && v.tick > tick)

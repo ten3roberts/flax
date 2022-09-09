@@ -14,7 +14,7 @@
 //! - Builtin many to many entity relation and graphs
 //! - Reflection through component metadata
 //! - Ergonomic entity builder
-//! - tracing
+//! - Tracing
 //! - Serialization and deserialization
 //! - Runtime components
 //!
@@ -80,7 +80,13 @@
 //!
 //! Instead of this:
 //!
-//! ```rust,ignore
+//! ```rust
+//! use flax::*
+//! component! {
+//!     velocity: glam::Vec3,
+//!     position: glam::Vec3,
+//! }
+//! let mut world = World::new();
 //! let vel = world.get(velocity(), entity);
 //! let mut pos = world.get_mut(position(), entity);
 //! let dt = 0.1;
