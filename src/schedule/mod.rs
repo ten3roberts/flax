@@ -401,6 +401,7 @@ mod test {
     use super::topo_sort;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn schedule_seq() {
         component! {
             a: String,
@@ -447,6 +448,7 @@ mod test {
 
     #[test]
     #[cfg(feature = "parallel")]
+    #[cfg_attr(miri, ignore)]
     fn schedule_par() {
         use crate::{
             components::name, entity_ids, CmpExt, CommandBuffer, Component, EntityIds, Mutable,

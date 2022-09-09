@@ -164,14 +164,20 @@ impl<V> EntityStore<V> {
     }
 
     #[inline]
-    pub fn get_disjoint(&mut self, a: Entity, b: Entity) -> Option<(&mut V, &mut V)> {
-        if a == b {
+    pub(crate) fn get_disjoint(&mut self, a: Entity, b: Entity) -> Option<(&mut V, &mut V)> {
+        if a == b || !self.is_alive(a) || !self.is_alive(b) {
             return None;
         }
 
         unsafe {
-            let a = &mut *((self.get_mut(a)?) as *mut V);
-            let b = &mut *((self.get_mut(b)?) as *mut V);
+            let base = self.slots.as_mut_ptr();
+            let a = base.add(a.index().get() as usize - 1);
+            let b = base.add(b.index().get() as usize - 1);
+
+            assert_ne!(a, b);
+            let a = &mut (*a).value.occupied;
+            let b = &mut (*b).value.occupied;
+
             Some((a, b))
         }
     }

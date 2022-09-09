@@ -1,4 +1,6 @@
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ten3roberts/flax/main?style=for-the-badge)
+![Crates](https://img.shields.io/crates/v/flax?style=for-the-badge)
+![Docs](https://img.shields.io/docsrs/flax?style=for-the-badge)
 ![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=for-the-badge)
 
 # Flax
@@ -13,6 +15,7 @@ Systems operate and iterate upon entities and their attached components and
 provide the application logic.
 
 ## Features
+
 - Queries
 - Change detection
 - Query filtering
@@ -63,7 +66,6 @@ made by flax and macroquad [here](./asteroids/main.rs)
 
 ```
 
-
 ## Comparison to other ECS
 
 Compared to other ecs implementations, a component is simply another `Entity`
@@ -95,7 +97,6 @@ let dt = 0.1;
 *pos = *pos + *vel;
 ```
 
-
 On a further note, since the components have to be declared beforehand (not
 always true, more on that later), it limits the amount of types which can be
 inserted as components. This fixes subtle bugs which come by having the type
@@ -111,11 +112,12 @@ During development of a game in school I used the `hecs` ECS. It is an awesome
 library, and the author [Ralith](https://github.com/Ralith) has been awesome in bringing some pull
 requests in.
 
-Despite this, I often made subtle bugs with *similar* types. The game engine was
+Despite this, I often made subtle bugs with _similar_ types. The game engine was
 cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
 coercions in order to coexist.
 
 ## Unsafe
+
 This library makes use of unsafe for type erasure and the allocation in storage
 of ComponentBuffers and Archetypes.
 
