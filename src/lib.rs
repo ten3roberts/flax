@@ -21,7 +21,7 @@
 //! ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
 //!
 //! For those of you who prefer a more complete example, consider checking out an asteroid game
-//! made by flax and macroquad [here](./asteroids/main.rs)
+//! made by flax and macroquad [here](./asteroids/src/main.rs)
 //!
 //! ## Example Usage
 //!
