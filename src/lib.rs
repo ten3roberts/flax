@@ -128,15 +128,14 @@
 //! # }
 //!
 //! # fn main() -> color_eyre::Result<()> {
-//! let mut world = World::new();
-//! # let entity = EntityBuilder::new().set(velocity(), glam::vec3(1.0, 3.0,
-//! 5.0)).set_default(position()).spawn(&mut world);
+//! # let mut world = World::new();
+//! # let entity = EntityBuilder::new().set(velocity(), glam::vec3(1.0, 3.0, 5.0)).set_default(position()).spawn(&mut world);
 //!
 //! let vel = world.get(entity, velocity())?;
 //! let mut pos = world.get_mut(entity, position())?;
 //! let dt = 0.1;
 //!
-//! # *pos = *pos + *vel;
+//! *pos = *pos + *vel;
 //! # Ok(())
 //! }
 //! ```
