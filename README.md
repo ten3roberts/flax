@@ -65,6 +65,32 @@ made by flax and macroquad [here](./asteroids/src/main.rs)
 
 ```
 
+## Systems
+Queries with logic can be abstracted into a system, and multiple systems can be
+collected into a schedule.
+
+```rust
+
+
+
+let regen_system = System::builder()
+    .with(Query::new((health().as_mut(), regen())))
+    .for_each(|(health, regen)| {
+        *health = (*health + regen).min(100.0);
+    }).boxed();
+
+let despawn_system = System::builder()
+    .with(Query::new(entity_ids()).filter(health().le(0.0)))
+    .write::<CommandBuffer>()
+    .build(|mut q: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
+        for id in &mut q {
+            cmd.despawn(id);
+        }
+    }).boxed();
+
+let schedule = Schedule::from([regen_system, despawn_system]);
+
+```
 
 ## Comparison to other ECS
 
@@ -90,17 +116,15 @@ let dt = 0.1;
 Instead of this:
 
 ```rust
-use flax::*
-component! {
-    velocity: glam::Vec3,
-    position: glam::Vec3,
-}
+
 let mut world = World::new();
-let vel = world.get(velocity(), entity);
-let mut pos = world.get_mut(position(), entity);
+5.0)).set_default(position()).spawn(&mut world);
+
+let vel = world.get(entity, velocity())?;
+let mut pos = world.get_mut(entity, position())?;
 let dt = 0.1;
 
-*pos = *pos + *vel;
+}
 ```
 
 
