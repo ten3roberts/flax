@@ -76,7 +76,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="fundamentals/hierarchy.html"><strong aria-hidden="true">1.7.</strong> Hierarchy</a></li><li class="chapter-item expanded "><a href="fundamentals/builder.html"><strong aria-hidden="true">1.8.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="fundamentals/commandbuffer.html"><strong aria-hidden="true">1.9.</strong> CommandBuffer</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">2.1.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.2.</strong> Dynamic Components</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="fundamentals/hierarchy.html"><strong aria-hidden="true">1.7.</strong> Hierarchy</a></li><li class="chapter-item expanded "><a href="fundamentals/builder.html"><strong aria-hidden="true">1.8.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="fundamentals/commandbuffer.html"><strong aria-hidden="true">1.9.</strong> CommandBuffer</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">2.1.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="diving_deeper/serde.html"><strong aria-hidden="true">2.3.</strong> Serialization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -1312,6 +1312,101 @@ entity as the generation is not needed.</p>
 </span></code></pre></pre>
 <p>When despawning either the relation component or object entity, the &quot;parent&quot;,
 the component is removed from all entities.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="serialization-and-deserialization"><a class="header" href="#serialization-and-deserialization">Serialization and deserialization</a></h1>
+<p>While the built in reflection system could be used for serialization, similar
+to <code>Debug</code>, deserialization can not. This is because the lazy registration of
+components mean that the world may not know of the componenets deserialization
+upfront, especially since deserialization yields a new world.</p>
+<p>In addition, having serialization be <em>implicit</em> may lead to components not being
+serialized when they are expected to, or components which should not be
+serialized to be written to disk, such as local state. As such, it leads to
+unexpected, undesirable, or downright insecure behavior.</p>
+<p>A similar story is to be found for <em>deserialization</em>, where program behaviour
+can be intrusively modified due to anything being able to be deserialized and
+put into the world.</p>
+<p>As such [de]serialization is explicit and requires registering a subset of
+components.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    component! {
+        position: Vec3 =&gt; [Debug],
+        velocity: Vec3 =&gt; [Debug],
+    }
+
+    use flax::serde::{SerdeBuilder, SerializeFormat};
+
+    let mut world = World::new();
+
+    let mut rng = StdRng::seed_from_u64(239);
+
+    let mut batch = BatchSpawn::new(16);
+
+    batch.set(
+        position(),
+        (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
+    )?;
+    batch.set(velocity(), (&amp;mut rng).sample_iter(Standard))?;
+    batch.set(name(), (0..).map(|v| format!(&quot;id.{v}&quot;)))?;
+
+    batch.spawn(&amp;mut world);
+
+    let mut batch = BatchSpawn::new(8);
+
+    batch.set(
+        position(),
+        (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
+    )?;
+    batch.set(name(), (16..).map(|v| format!(&quot;id.{v}&quot;)))?;
+    batch.spawn(&amp;mut world);
+
+<span class="boring">}
+</span></code></pre></pre>
+<p>We are interested in <code>name</code>, <code>position</code>, and <code>velocity</code>, nothing else, even if
+it implements <code>Serialize</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    let (serializer, deserializer) = SerdeBuilder::new()
+        .with(name())
+        .with(position())
+        .with(velocity())
+        .build();
+
+    let json =
+        serde_json::to_string_pretty(&amp;serializer.serialize(&amp;world, SerializeFormat::RowMajor))?;
+
+    eprintln!(&quot;World: {json}&quot;);
+<span class="boring">}
+</span></code></pre></pre>
+<p>When deserializing a world it is often of interest in merging it or
+deserializing <em>into</em> another world.</p>
+<p>This is supported through the <code>merge_with</code> function, which will migrate
+colliding ids to new ones, returning a map in doing so.</p>
+<p>The advantage of doing it this way is that the world is left untouched if
+deserialization failed.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    // An existing world with entities in it
+    let mut world = World::new();
+
+    let mut batch = BatchSpawn::new(32);
+
+    batch.set(
+        position(),
+        (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
+    )?;
+    batch.set(name(), (0..).map(|v| format!(&quot;other_id.{v}&quot;)))?;
+    batch.spawn(&amp;mut world);
+
+    let mut result = deserializer.deserialize(&amp;mut serde_json::Deserializer::from_str(&amp;json))?;
+
+    // Merge `result` into `world`
+    world.merge_with(&amp;mut result);
+
+    eprintln!(&quot;World: {world:#?}&quot;);
+
+<span class="boring">}
+</span></code></pre></pre>
 
                     </main>
 
