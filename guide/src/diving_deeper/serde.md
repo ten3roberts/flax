@@ -16,3 +16,27 @@ put into the world.
 
 As such \[de\]serialization is explicit and requires registering a subset of
 components.
+
+```rust
+{{ #include ../../../examples/guide/serialize.rs:setup }}
+```
+
+We are interested in `name`, `position`, and `velocity`, nothing else, even if
+it implements `Serialize`.
+
+```rust
+{{ #include ../../../examples/guide/serialize.rs:serialize }}
+```
+
+When deserializing a world it is often of interest in merging it or
+deserializing _into_ another world.
+
+This is supported through the `merge_with` function, which will migrate
+colliding ids to new ones, returning a map in doing so.
+
+The advantage of doing it this way is that the world is left untouched if
+deserialization failed.
+
+```rust
+{{ #include ../../../examples/guide/serialize.rs:deserialize }}
+```

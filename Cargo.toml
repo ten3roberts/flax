@@ -71,3 +71,7 @@ path = "./examples/guide/relations.rs"
 [[example]]
 name = "commandbuffer"
 path = "./examples/guide/commandbuffer.rs"
+
+[[example]]
+name = "serialize"
+path = "./examples/guide/serialize.rs"
