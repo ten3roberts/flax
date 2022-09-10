@@ -89,7 +89,9 @@
 //!         }
 //!     }).boxed();
 //!
-//! let schedule = Schedule::from([regen_system, despawn_system]);
+//! let mut schedule = Schedule::from([regen_system, despawn_system]);
+//!
+//! schedule.execute_par(&mut world)?;
 //!
 //! # Ok(())
 //! # }

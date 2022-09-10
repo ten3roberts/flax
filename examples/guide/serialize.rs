@@ -2,6 +2,10 @@ use flax::*;
 use glam::*;
 use rand::{distributions::Standard, rngs::StdRng, Rng, SeedableRng};
 
+#[cfg(not(feature = "serde"))]
+fn main() {}
+
+#[cfg(feature = "serde")]
 fn main() -> color_eyre::Result<()> {
     // ANCHOR: setup
     component! {
