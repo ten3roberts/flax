@@ -56,6 +56,44 @@
 //!
 //! ```
 //!
+//! ## Systems
+//! Queries with logic can be abstracted into a system, and multiple systems can be
+//! collected into a schedule.
+//!
+//! ```rust
+//! # use flax::*;
+//! # component! {
+//! #   health: f32,
+//! #   regen: f32,
+//! #   pos: (f32, f32),
+//! #   player: (),
+//! #   items: Vec<String>,
+//! # }
+//!
+//! # fn main() -> color_eyre::Result<()> {
+//!
+//! # let mut world = World::new();
+//!
+//! let regen_system = System::builder()
+//!     .with(Query::new((health().as_mut(), regen())))
+//!     .for_each(|(health, regen)| {
+//!         *health = (*health + regen).min(100.0);
+//!     }).boxed();
+//!
+//! let despawn_system = System::builder()
+//!     .with(Query::new(entity_ids()).filter(health().le(0.0)))
+//!     .write::<CommandBuffer>()
+//!     .build(|mut q: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
+//!         for id in &mut q {
+//!             cmd.despawn(id);
+//!         }
+//!     }).boxed();
+//!
+//! let schedule = Schedule::from([regen_system, despawn_system]);
+//!
+//! # Ok(())
+//! # }
+//! ```
 //!
 //! ## Comparison to other ECS
 //!
@@ -81,17 +119,24 @@
 //! Instead of this:
 //!
 //! ```rust
-//! use flax::*
-//! component! {
-//!     velocity: glam::Vec3,
-//!     position: glam::Vec3,
-//! }
+//! # use flax::*;
+//! # component! {
+//! #     velocity: glam::Vec3,
+//! #     position: glam::Vec3,
+//! # }
+//!
+//! # fn main() -> color_eyre::Result<()> {
 //! let mut world = World::new();
-//! let vel = world.get(velocity(), entity);
-//! let mut pos = world.get_mut(position(), entity);
+//! # let entity = EntityBuilder::new().set(velocity(), glam::vec3(1.0, 3.0,
+//! 5.0)).set_default(position()).spawn(&mut world);
+//!
+//! let vel = world.get(entity, velocity())?;
+//! let mut pos = world.get_mut(entity, position())?;
 //! let dt = 0.1;
 //!
-//! *pos = *pos + *vel;
+//! # *pos = *pos + *vel;
+//! # Ok(())
+//! }
 //! ```
 //!
 //!

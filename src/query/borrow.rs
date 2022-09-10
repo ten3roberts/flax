@@ -113,7 +113,10 @@ where
                 .archetypes
                 .iter()
                 .filter_map(|&arch_id| {
-                    let arch = self.world.archetype(arch_id);
+                    let arch = {
+                        let ref this = self.world;
+                        this.archetypes.get(arch_id)
+                    };
                     if arch.is_empty() {
                         return None;
                     }
@@ -157,7 +160,10 @@ where
         if let Some(idx) = prepared.iter().position(|v| v.arch_id == arch_id) {
             Some(idx)
         } else {
-            let arch = world.archetype(arch_id);
+            let arch = {
+                let ref this = world;
+                this.archetypes.get(arch_id)
+            };
             let data = FetchPrepareData {
                 world: self.world,
                 arch,
@@ -207,7 +213,10 @@ where
             } = self.world.location(id)?;
             idxs[i] = (
                 self.prepare_archetype(arch_id).ok_or_else(|| {
-                    let arch = self.world.archetype(arch_id);
+                    let arch = {
+                        let ref this = self.world;
+                        this.archetypes.get(arch_id)
+                    };
                     let mut buf = String::new();
                     self.fetch.describe(&mut buf).unwrap();
 
@@ -251,7 +260,10 @@ where
         } = self.world.location(id)?;
 
         let idx = self.prepare_archetype(arch_id).ok_or_else(|| {
-            let arch = self.world.archetype(arch_id);
+            let arch = {
+                let ref this = self.world;
+                this.archetypes.get(arch_id)
+            };
             let mut buf = String::new();
             self.fetch.describe(&mut buf).unwrap();
 

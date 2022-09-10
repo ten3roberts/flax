@@ -37,7 +37,7 @@ impl<'a> EntityRefMut<'a> {
     /// Check if the entity currently has the specified component without
     /// borrowing.
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
-        self.world.archetype(self.loc.arch).has(component.id())
+        self.world.archetypes.get(self.loc.arch).has(component.id())
     }
 
     /// Set a component for the entity
@@ -115,7 +115,7 @@ impl<'a> EntityRef<'a> {
     /// Check if the entity currently has the specified component without
     /// borrowing.
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
-        self.world.archetype(self.loc.arch).has(component.id())
+        self.world.archetypes.get(self.loc.arch).has(component.id())
     }
 }
 
@@ -169,3 +169,4 @@ mod test {
         assert_eq!(*pos, (1.0, 0.0));
     }
 }
+
