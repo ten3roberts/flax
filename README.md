@@ -125,7 +125,6 @@ let mut pos = world.get_mut(entity, position())?;
 let dt = 0.1;
 
 *pos = *pos + *vel;
-}
 ```
 
 
