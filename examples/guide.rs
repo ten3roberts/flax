@@ -1,3 +1,5 @@
+mod serialize;
+
 use flax::{component, components::name, World};
 use itertools::Itertools;
 
