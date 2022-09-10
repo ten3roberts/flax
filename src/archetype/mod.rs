@@ -32,7 +32,6 @@ pub struct Archetype {
     cap: usize,
 
     // ComponentId => ArchetypeId
-    // If the key is an existing component, it means it is a backwards edge
     pub(crate) edges: BTreeMap<ComponentId, ArchetypeId>,
 }
 

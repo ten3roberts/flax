@@ -126,8 +126,12 @@ async fn main() -> Result<()> {
     create_camera().spawn(&mut world);
 
     loop {
-        let change_tick = world.change_tick();
-        tracing::info!("Change tick: {change_tick}");
+        tracing::info!(
+            "Archetype gen: {}\nChange tick: {}",
+            world.archetype_gen(),
+            world.change_tick()
+        );
+
         if player_dead_rx.try_recv().is_ok() {
             world.despawn_many(asteroid().with());
             create_player().spawn(&mut world);
@@ -137,9 +141,8 @@ async fn main() -> Result<()> {
 
         while acc > 0.0 {
             acc -= dt;
-            tracing::info!("Executing physics");
-            let batches = physics_schedule.batch_info(&mut world);
-            tracing::info!("Batches: {batches:#?}");
+            // let batches = physics_schedule.batch_info(&mut world);
+            // tracing::info!("Batches: {batches:#?}");
             physics_schedule.execute_par(&mut world)?;
         }
 

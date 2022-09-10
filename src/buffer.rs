@@ -276,6 +276,8 @@ impl ComponentBuffer {
     /// The yielded pointers needs to be dropped manually.
     /// If the returned iterator is dropped before being fully consumed, the
     /// remaining values will be safely dropped.
+    ///
+    /// The components are returned **in ComponentId order**
     pub fn take_all(&mut self) -> ComponentBufferIter {
         let components = &mut self.components;
         let storage = &mut self.storage;

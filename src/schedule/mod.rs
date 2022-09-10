@@ -1,5 +1,5 @@
 use eyre::WrapErr;
-use std::{collections::BTreeMap, mem};
+use std::{collections::BTreeMap, iter::FromIterator, mem};
 
 use itertools::Itertools;
 
@@ -158,6 +158,21 @@ impl std::fmt::Debug for Schedule {
     }
 }
 
+impl FromIterator<BoxedSystem> for Schedule {
+    fn from_iter<T: IntoIterator<Item = BoxedSystem>>(iter: T) -> Self {
+        Self::from_systems(iter.into_iter().collect_vec())
+    }
+}
+
+impl<T> From<T> for Schedule
+where
+    T: IntoIterator<Item = BoxedSystem>,
+{
+    fn from(v: T) -> Self {
+        Self::from_systems(v.into_iter().collect_vec())
+    }
+}
+
 impl Schedule {
     /// Creates a new schedule builder
     pub fn builder() -> ScheduleBuilder {
@@ -249,6 +264,7 @@ impl Schedule {
         let w_gen = world.archetype_gen();
         // New archetypes
         if self.archetype_gen != w_gen {
+            eprintln!("Recalculating batches");
             self.systems.as_unbatched();
             self.archetype_gen = w_gen;
         }
