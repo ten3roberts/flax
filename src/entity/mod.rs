@@ -43,12 +43,56 @@ pub struct Entity(NonZeroU64);
 #[cfg(feature = "serde")]
 mod serde_impl {
     use serde::{
-        de::{self, Visitor},
+        de::{self, Unexpected, Visitor},
         ser::SerializeTupleStruct,
         Deserialize, Serialize,
     };
 
-    use super::Entity;
+    use super::{Entity, EntityKind};
+
+    impl Serialize for EntityKind {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            self.bits().serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for EntityKind {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_u8(EntityKindVisitor)
+        }
+    }
+
+    struct EntityKindVisitor;
+
+    impl<'de> Visitor<'de> for EntityKindVisitor {
+        type Value = EntityKind;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "A valid entity kind bitfield")
+        }
+
+        fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            EntityKind::from_bits(v)
+                .ok_or_else(|| de::Error::invalid_value(Unexpected::Unsigned(v as _), &self))
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            EntityKind::from_bits(v as _)
+                .ok_or_else(|| de::Error::invalid_value(Unexpected::Unsigned(v as _), &self))
+        }
+    }
 
     impl Serialize for Entity {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -109,7 +153,6 @@ pub struct StrippedEntity(NonZeroU32);
 static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
 bitflags::bitflags! {
-    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     /// Declares the roles an entity id serves
     pub struct EntityKind: u8 {
         /// The entity is a component
@@ -388,4 +431,3 @@ mod tests {
         assert_eq!(parts, a.into_parts());
     }
 }
-
