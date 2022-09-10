@@ -119,13 +119,12 @@ Instead of this:
 
 ```rust
 
-let mut world = World::new();
-5.0)).set_default(position()).spawn(&mut world);
 
 let vel = world.get(entity, velocity())?;
 let mut pos = world.get_mut(entity, position())?;
 let dt = 0.1;
 
+*pos = *pos + *vel;
 }
 ```
 
