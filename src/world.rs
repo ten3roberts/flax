@@ -42,6 +42,7 @@ impl EntityStores {
 
 pub(crate) struct Archetypes {
     root: ArchetypeId,
+    gen: u32,
     inner: EntityStore<Archetype>,
 }
 
@@ -52,6 +53,7 @@ impl Archetypes {
         Self {
             root,
             inner: archetypes,
+            gen: 0,
         }
     }
 
@@ -83,6 +85,7 @@ impl Archetypes {
                     let new = Archetype::new(cur.components().copied().chain([*head]));
 
                     // Increase gen
+                    self.gen = self.gen.wrapping_add(1);
                     let id = self.inner.spawn(new);
 
                     let (cur, new) = self.inner.get_disjoint(cursor, id).unwrap();
@@ -125,6 +128,7 @@ impl Archetypes {
         for (component, dst_id) in &arch.edges {
             assert!(self.get_mut(*dst_id).edges.remove(component).is_some());
         }
+        self.gen = self.gen.wrapping_add(1);
 
         arch
     }
@@ -154,7 +158,6 @@ pub struct World {
     entities: EntityStores,
     pub(crate) archetypes: Archetypes,
     change_tick: AtomicU32,
-    archetype_gen: u32,
 
     on_removed: EventRegistry,
 }
@@ -167,7 +170,6 @@ impl World {
             archetypes: Archetypes::new(),
             change_tick: AtomicU32::new(0b11),
             on_removed: EventRegistry::default(),
-            archetype_gen: 0,
         }
     }
 
@@ -204,11 +206,6 @@ impl World {
                 })
             })
             .collect_vec();
-
-        if arch.is_empty() {
-            // eprintln!("bump: spawn batch");
-            self.archetype_gen = self.archetype_gen.wrapping_add(1);
-        }
 
         let slots = arch.allocate_n(&ids);
 
@@ -248,11 +245,6 @@ impl World {
         let change_tick = self.advance_change_tick();
 
         let (arch_id, arch) = self.archetypes.init(batch.components());
-
-        if arch.is_empty() {
-            // eprintln!("bump: spawn batch at");
-            self.archetype_gen = self.archetype_gen.wrapping_add(1);
-        }
 
         let base = arch.len();
         for (idx, &id) in ids.iter().enumerate() {
@@ -335,11 +327,6 @@ impl World {
 
         let arch = self.archetypes.get_mut(arch_id);
 
-        if arch.is_empty() {
-            // eprintln!("bump: spawn inner");
-            self.archetype_gen = self.archetype_gen.wrapping_add(1);
-        }
-
         let slot = arch.len();
 
         let loc = EntityLocation {
@@ -374,11 +361,6 @@ impl World {
 
         let store = self.entities.init(id.kind());
         let arch = self.archetypes.get_mut(arch_id);
-
-        if arch.is_empty() {
-            // eprintln!("bump: spawn at inner");
-            self.archetype_gen = self.archetype_gen.wrapping_add(1);
-        }
 
         let loc = store
             .spawn_at(
@@ -479,11 +461,6 @@ impl World {
                 .slot = slot;
         }
 
-        if src.is_empty() || self.archetypes.root().is_empty() {
-            // eprintln!("bump: clear");
-            self.archetype_gen = self.archetype_gen.wrapping_add(1);
-        }
-
         *self.location_mut(id).unwrap() = EntityLocation {
             slot: self.archetypes.root().allocate(id),
             arch: self.archetypes.root,
@@ -545,11 +522,6 @@ impl World {
 
             // Borrow disjoint
             let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
-
-            if src.len() == 1 || dst.is_empty() {
-                // eprintln!("bump: set_with");
-                self.archetype_gen = self.archetype_gen.wrapping_add(1);
-            }
 
             // dst.push is called immediately
             unsafe {
@@ -645,11 +617,6 @@ impl World {
                 .slot = slot;
         }
 
-        if src.is_empty() {
-            // eprintln!("bump: despawn");
-            self.archetype_gen = self.archetype_gen.wrapping_add(1);
-        }
-
         self.entities.init(id.kind()).despawn(id)?;
         self.detach(id);
         Ok(())
@@ -721,11 +688,6 @@ impl World {
             });
 
             let (dst_id, dst) = self.archetypes.init(components);
-
-            if dst.is_empty() {
-                // eprintln!("bump: detach");
-                self.archetype_gen = self.archetype_gen.wrapping_add(1);
-            }
 
             for (id, slot) in src.move_all(dst) {
                 *self.location_mut(id).expect("Entity id was not valid") =
@@ -819,10 +781,6 @@ impl World {
                 swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
             }
 
-            if src.is_empty() || dst.len() == 1 {
-                // eprintln!("bump: set_dyn");
-                self.archetype_gen = self.archetype_gen.wrapping_add(1);
-            }
             let ns = self.entities.init(id.kind());
             let loc = EntityLocation {
                 slot: dst_slot,
@@ -928,11 +886,6 @@ impl World {
             // The last entity in src was moved into the slot occupied by id
             let swapped_ns = self.entities.init(swapped.kind());
             swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
-        }
-
-        if src.is_empty() || dst.len() == 1 {
-            // eprintln!("bump: remove_inner");
-            self.archetype_gen = self.archetype_gen.wrapping_add(1);
         }
 
         let loc = EntityLocation {
@@ -1053,7 +1006,7 @@ impl World {
     /// Get a reference to the world's archetype generation
     #[must_use]
     pub fn archetype_gen(&self) -> u32 {
-        self.archetype_gen
+        self.archetypes.gen
     }
 
     #[must_use]

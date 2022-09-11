@@ -1,5 +1,5 @@
 use eyre::WrapErr;
-use std::{collections::BTreeMap, iter::FromIterator, mem};
+use std::{collections::BTreeMap, iter::FromIterator, mem, ops::Deref};
 
 use itertools::Itertools;
 
@@ -144,10 +144,25 @@ pub struct Schedule {
 /// Holds information regarding a schedules batches
 #[derive(Debug, Clone)]
 pub struct BatchInfos(Vec<BatchInfo>);
+impl Deref for BatchInfos {
+    type Target = [BatchInfo];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Holds information regarding a single batch
 #[derive(Debug, Clone)]
 pub struct BatchInfo(Vec<SystemInfo>);
+
+impl Deref for BatchInfo {
+    type Target = [SystemInfo];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl std::fmt::Debug for Schedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
