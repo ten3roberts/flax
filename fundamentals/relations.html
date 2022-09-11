@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Hierarchy - Flax Guide</title>
+        <title>Relations - Flax Guide</title>
         <!-- Custom HTML head -->
         <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
         <meta name="description" content="">
@@ -75,7 +75,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/hierarchy.html" class="active"><strong aria-hidden="true">1.7.</strong> Hierarchy</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.8.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.9.</strong> CommandBuffer</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">2.1.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">2.3.</strong> Serialization</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.5.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.6.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html" class="active"><strong aria-hidden="true">1.7.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.8.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.9.</strong> CommandBuffer</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">2.1.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">2.3.</strong> Serialization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -144,11 +144,12 @@ their parents.</p>
 <p>Think of it as the component accepting an argument entity prior to adding it to
 another entity.</p>
 <p>Relations are declared using the
-<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro.</p>
+<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    component! {
         child_of(parent): () =&gt; [Debug],
+        spring_joint(other): f32 =&gt; [Debug],
     }
 
     let mut world = World::new();
@@ -162,7 +163,7 @@ another entity.</p>
         .set_default(child_of(parent))
         .spawn(&amp;mut world);
 
-    let _child2 = Entity::builder()
+    let child2 = Entity::builder()
         .set(name(), &quot;Child2&quot;.into())
         .set_default(child_of(parent))
         .spawn(&amp;mut world);
@@ -172,20 +173,34 @@ another entity.</p>
 <p>Important to note is that the same <code>child_of</code> component with different <code>object</code>
 arguments are distinct, and can as such exist on an entity at the same time,
 allowing many-many relationsships between entities;</p>
+<p>There is no limatation of the number of relations an entity can have. As such,
+an entity can have multiple relations to other entities, allowing for any kind of graphs inside the ecs.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>    let parent_2 = Entity::builder()
+</span>    let parent2 = Entity::builder()
         .set(name(), &quot;Parent2&quot;.into())
         .spawn(&amp;mut world);
 
-    world.set(child1, child_of(parent_2), ())?;
+    world.set(child1, child_of(parent2), ())?;
 
     tracing::info!(&quot;World: {world:#?}&quot;);
+
+    // Connect child1 with two entities via springs of different strength
+    world.set(child1, spring_joint(child2), 1.5)?;
+    world.set(child1, spring_joint(parent2), 7.4)?;
+
+    tracing::info!(
+        &quot;Connections from child1({child1}): {:?}&quot;,
+        Query::new(relations_like(spring_joint))
+            .borrow(&amp;world)
+            .get(child1)?
+            .collect_vec()
+    );
 
 <span class="boring">}
 </span></code></pre></pre>
 <h2 id="queries"><a class="header" href="#queries">Queries</a></h2>
-<p>Since relations are normal components, the can be used in a query as normal, or
+<p>Since relations are normal components, they can be used in a query as normal, or
 used to exclude components.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
@@ -224,15 +239,15 @@ entity which does not exist.</p>
 </span>
 <span class="boring">fn main() {
 </span>    tracing::info!(
-        &quot;has relation to: {parent_2}: {}&quot;,
-        world.has(child1, child_of(parent_2))
+        &quot;has relation to: {parent2}: {}&quot;,
+        world.has(child1, child_of(parent2))
     );
 
-    world.despawn(parent_2)?;
+    world.despawn(parent2)?;
 
     tracing::info!(
-        &quot;has relation to: {parent_2}: {}&quot;,
-        world.has(child1, child_of(parent_2))
+        &quot;has relation to: {parent2}: {}&quot;,
+        world.has(child1, child_of(parent2))
     );
 
     tracing::info!(&quot;World: {world:#?}&quot;);
