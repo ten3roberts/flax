@@ -145,13 +145,13 @@ impl ChangeList {
                             }
                         }
 
-                        result.push(Change::new(l, v.tick, v.kind));
+                        result.push(Change::new(l, v.tick));
                     }
                     if !r.is_empty() {
-                        right.push(Change::new(r, v.tick, v.kind));
+                        right.push(Change::new(r, v.tick));
                     }
 
-                    Some(Change::new(slice, v.tick, v.kind))
+                    Some(Change::new(slice, v.tick))
                 } else {
                     // If the pending elements are smaller, push them first
                     if let Some(r) = right.first() {
@@ -181,7 +181,7 @@ impl ChangeList {
 
     #[cfg(test)]
     pub(crate) fn as_changed_set(&self, tick: u32) -> std::collections::BTreeSet<Slot> {
-        self.as_set(|v| v.kind.is_modified_or_inserted() && v.tick > tick)
+        self.as_set(|v| v.tick > tick)
     }
 
     #[cfg(test)]
@@ -252,56 +252,22 @@ impl ChangeKind {
     pub fn is_modified(&self) -> bool {
         matches!(self, Self::Modified)
     }
-
-    #[cfg(test)]
-    pub(crate) fn is_modified_or_inserted(&self) -> bool {
-        self.is_modified() || self.is_inserted()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 /// Represents a change over a slice of entities in an archetype which ocurred
 /// at a specific time.
-pub struct Change {
+pub(crate) struct Change {
     /// The slice of entities in the archetype which are affected
     pub slice: Slice,
     /// The world tick of the change event
     pub tick: u32,
-    /// The kind of change
-    pub kind: ChangeKind,
 }
 
 impl Change {
     /// Creates a new change
-    pub(crate) fn new(slice: Slice, tick: u32, kind: ChangeKind) -> Self {
-        Self { slice, tick, kind }
-    }
-
-    /// Create a new modification event
-    pub(crate) fn modified(slice: Slice, tick: u32) -> Change {
-        Self {
-            slice,
-            tick,
-            kind: ChangeKind::Modified,
-        }
-    }
-
-    /// Create a new insert event
-    pub(crate) fn inserted(slice: Slice, tick: u32) -> Change {
-        Self {
-            slice,
-            tick,
-            kind: ChangeKind::Inserted,
-        }
-    }
-
-    /// Create a new remove event
-    pub(crate) fn removed(slice: Slice, tick: u32) -> Change {
-        Self {
-            slice,
-            tick,
-            kind: ChangeKind::Removed,
-        }
+    pub(crate) fn new(slice: Slice, tick: u32) -> Self {
+        Self { slice, tick }
     }
 }
 
@@ -311,7 +277,7 @@ impl Change {
 ///
 ///
 /// The changes are always stored in a non-overlapping ascending order.
-pub struct Changes {
+pub(crate) struct Changes {
     info: ComponentInfo,
 
     map: [ChangeList; 3],
@@ -427,49 +393,49 @@ mod tests {
     fn changes() {
         let mut changes = ChangeList::default();
 
-        changes.set(Change::modified(Slice::new(0, 5), 1));
+        changes.set(Change::new(Slice::new(0, 5), 1));
 
-        changes.set(Change::modified(Slice::new(70, 92), 2));
+        changes.set(Change::new(Slice::new(70, 92), 2));
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                Change::modified(Slice::new(0, 5), 1),
-                Change::modified(Slice::new(70, 92), 2)
+                Change::new(Slice::new(0, 5), 1),
+                Change::new(Slice::new(70, 92), 2)
             ]
         );
 
-        changes.set(Change::modified(Slice::new(3, 5), 3));
+        changes.set(Change::new(Slice::new(3, 5), 3));
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                Change::modified(Slice::new(0, 3), 1),
-                Change::modified(Slice::new(3, 5), 3),
-                Change::modified(Slice::new(70, 92), 2),
+                Change::new(Slice::new(0, 3), 1),
+                Change::new(Slice::new(3, 5), 3),
+                Change::new(Slice::new(70, 92), 2),
             ]
         );
 
         // Extend previous change
-        changes.set(Change::modified(Slice::new(4, 14), 3));
+        changes.set(Change::new(Slice::new(4, 14), 3));
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                Change::modified(Slice::new(0, 3), 1),
-                Change::modified(Slice::new(3, 14), 3),
-                Change::modified(Slice::new(70, 92), 2),
+                Change::new(Slice::new(0, 3), 1),
+                Change::new(Slice::new(3, 14), 3),
+                Change::new(Slice::new(70, 92), 2),
             ]
         );
 
         // Overwrite almost all
-        changes.set(Change::modified(Slice::new(0, 89), 4));
+        changes.set(Change::new(Slice::new(0, 89), 4));
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
             [
-                Change::modified(Slice::new(0, 89), 4),
-                Change::modified(Slice::new(89, 92), 2),
+                Change::new(Slice::new(0, 89), 4),
+                Change::new(Slice::new(89, 92), 2),
             ]
         );
     }
@@ -481,12 +447,12 @@ mod tests {
         for i in 0..239 {
             let perm = (i * (i + 2)) % 300;
             // let perm = i;
-            changes.set(Change::modified(Slice::single(perm), i as _));
+            changes.set(Change::new(Slice::single(perm), i as _));
         }
 
-        changes.set(Change::modified(Slice::new(70, 249), 300));
-        changes.set(Change::modified(Slice::new(0, 89), 301));
-        changes.set(Change::modified(Slice::new(209, 300), 302));
+        changes.set(Change::new(Slice::new(70, 249), 300));
+        changes.set(Change::new(Slice::new(0, 89), 301));
+        changes.set(Change::new(Slice::new(209, 300), 302));
 
         eprintln!("Changes: {changes:#?}");
     }
@@ -495,12 +461,12 @@ mod tests {
     fn adjacent() {
         let mut changes = ChangeList::default();
 
-        changes.set(Change::modified(Slice::new(0, 63), 1));
-        changes.set(Change::modified(Slice::new(63, 182), 1));
+        changes.set(Change::new(Slice::new(0, 63), 1));
+        changes.set(Change::new(Slice::new(63, 182), 1));
 
         assert_eq!(
             changes.iter().copied().collect_vec(),
-            [Change::modified(Slice::new(0, 182), 1)]
+            [Change::new(Slice::new(0, 182), 1)]
         );
     }
 
@@ -510,14 +476,14 @@ mod tests {
         let mut changes_2 = ChangeList::default();
 
         changes_1
-            .set(Change::modified(Slice::new(20, 48), 1))
-            .set(Change::modified(Slice::new(32, 98), 2));
+            .set(Change::new(Slice::new(20, 48), 1))
+            .set(Change::new(Slice::new(32, 98), 2));
 
         assert_eq!(
             changes_1.inner,
             [
-                Change::modified(Slice::new(20, 32), 1),
-                Change::modified(Slice::new(32, 98), 2)
+                Change::new(Slice::new(20, 32), 1),
+                Change::new(Slice::new(32, 98), 2)
             ]
         );
 
@@ -526,12 +492,12 @@ mod tests {
         assert_eq!(
             changes_1.inner,
             [
-                Change::modified(Slice::new(20, 25), 1),
-                Change::modified(Slice::new(26, 32), 1),
-                Change::modified(Slice::new(32, 98), 2)
+                Change::new(Slice::new(20, 25), 1),
+                Change::new(Slice::new(26, 32), 1),
+                Change::new(Slice::new(32, 98), 2)
             ]
         );
 
-        assert_eq!(changes_2.inner, [Change::modified(Slice::single(67), 1)])
+        assert_eq!(changes_2.inner, [Change::new(Slice::single(67), 1)])
     }
 }

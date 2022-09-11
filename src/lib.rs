@@ -163,9 +163,6 @@
 //! ## Unsafe
 //! This library makes use of unsafe for type erasure and the allocation in storage
 //! of ComponentBuffers and Archetypes.
-//!
-//! As such, there are tests covering most, if not all of the unsafe parts of the
-//! code, both directly through unit tests and indirectly using integration tests.
 
 #![deny(missing_docs)]
 
@@ -206,9 +203,8 @@ pub mod visitors;
 pub mod serde;
 
 // Required due to macro
-pub use paste::paste;
-
-pub use archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ChangeKind, ComponentInfo};
+pub(crate) use archetype::*;
+pub use archetype::{ArchetypeId, BatchSpawn, ChangeKind, ComponentInfo};
 pub use commandbuffer::*;
 pub use component::*;
 pub use components::*;
@@ -220,6 +216,7 @@ pub use fetch::{
 };
 pub use filter::{All, And, CmpExt, Filter, Or, StaticFilter, With, Without};
 pub use meta::*;
+pub use paste::paste;
 pub use query::*;
 pub use schedule::*;
 pub use system::*;

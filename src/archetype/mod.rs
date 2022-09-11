@@ -18,9 +18,10 @@ mod storage;
 pub use batch::*;
 pub use changes::*;
 pub use slice::*;
-pub use storage::*;
+pub(crate) use storage::*;
 
 #[derive(Debug)]
+#[doc(hidden)]
 /// A collection of entities with the same components.
 /// Stored as columns of contiguous component data.
 pub struct Archetype {
@@ -199,13 +200,13 @@ impl Archetype {
     }
 
     /// Borrow the change list
-    pub fn changes(&self, component: ComponentId) -> Option<AtomicRef<Changes>> {
+    pub(crate) fn changes(&self, component: ComponentId) -> Option<AtomicRef<Changes>> {
         let changes = self.changes.get(&component)?.borrow();
         Some(changes)
     }
 
     /// Borrow the change list mutably
-    pub fn changes_mut(&self, component: ComponentId) -> Option<AtomicRefMut<Changes>> {
+    pub(crate) fn changes_mut(&self, component: ComponentId) -> Option<AtomicRefMut<Changes>> {
         let changes = self.changes.get(&component)?.borrow_mut();
         Some(changes)
     }
@@ -221,7 +222,7 @@ impl Archetype {
     ///
     /// # Panics
     /// If the storage is already borrowed mutably
-    pub fn borrow_dyn(&self, component: ComponentId) -> Option<StorageBorrowDyn> {
+    pub(crate) fn borrow_dyn(&self, component: ComponentId) -> Option<StorageBorrowDyn> {
         Some(unsafe { self.storage.get(&component)?.borrow_dyn() })
     }
 
@@ -510,7 +511,7 @@ impl Archetype {
     }
 
     /// Returns a iterator which borrows each storage in the archetype
-    pub fn borrow_all(&self) -> impl Iterator<Item = StorageBorrowDyn> {
+    pub(crate) fn borrow_all(&self) -> impl Iterator<Item = StorageBorrowDyn> {
         self.components().map(|v| self.borrow_dyn(v.id()).unwrap())
     }
 
