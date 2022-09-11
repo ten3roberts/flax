@@ -14,7 +14,7 @@ members = ["flax-derive", "asteroids"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flax-derive = { path = "./flax-derive" }
+flax-derive = { path = "./flax-derive", version = "0.1.0" }
 
 atomic_refcell = "0.1.8"
 bitflags = "1.3.2"
