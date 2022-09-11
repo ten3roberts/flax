@@ -10,6 +10,7 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR: relation_basic
     component! {
         child_of(parent): () => [Debug],
+        spring_joint(other): f32 => [Debug],
     }
 
     let mut world = World::new();
@@ -23,23 +24,35 @@ fn main() -> color_eyre::Result<()> {
         .set_default(child_of(parent))
         .spawn(&mut world);
 
-    let _child2 = Entity::builder()
+    let child2 = Entity::builder()
         .set(name(), "Child2".into())
         .set_default(child_of(parent))
         .spawn(&mut world);
 
     // ANCHOR_END: relation_basic
+
     // ANCHOR: many_to_many
-    let parent_2 = Entity::builder()
+    let parent2 = Entity::builder()
         .set(name(), "Parent2".into())
         .spawn(&mut world);
 
-    world.set(child1, child_of(parent_2), ())?;
+    world.set(child1, child_of(parent2), ())?;
 
     tracing::info!("World: {world:#?}");
 
-    // ANCHOR_END: many_to_many
+    // Connect child1 with two entities via springs of different strength
+    world.set(child1, spring_joint(child2), 1.5)?;
+    world.set(child1, spring_joint(parent2), 7.4)?;
 
+    tracing::info!(
+        "Connections from child1({child1}): {:?}",
+        Query::new(relations_like(spring_joint))
+            .borrow(&world)
+            .get(child1)?
+            .collect_vec()
+    );
+
+    // ANCHOR_END: many_to_many
     // ANCHOR: query
 
     let children_of_parent = Query::new(entity_ids())
@@ -71,15 +84,15 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR: lifetime
 
     tracing::info!(
-        "has relation to: {parent_2}: {}",
-        world.has(child1, child_of(parent_2))
+        "has relation to: {parent2}: {}",
+        world.has(child1, child_of(parent2))
     );
 
-    world.despawn(parent_2)?;
+    world.despawn(parent2)?;
 
     tracing::info!(
-        "has relation to: {parent_2}: {}",
-        world.has(child1, child_of(parent_2))
+        "has relation to: {parent2}: {}",
+        world.has(child1, child_of(parent2))
     );
 
     tracing::info!("World: {world:#?}");
