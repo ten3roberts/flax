@@ -2,6 +2,7 @@ use color_eyre::{
     eyre::{eyre, ContextCompat},
     Result,
 };
+use itertools::Itertools;
 use std::f32::consts::TAU;
 use tracing_subscriber::{prelude::*, registry};
 
@@ -103,10 +104,10 @@ async fn main() -> Result<()> {
 
     // Setup everthing required for the game logic and physics
     let mut physics_schedule = Schedule::builder()
-        .with_system(spawn_asteroids(16))
         .with_system(player_system(dt))
         .with_system(camera_system(dt))
         .with_system(lifetime_system(dt))
+        .with_system(spawn_asteroids(16))
         .with_system(particle_system())
         .with_system(collision_system())
         .with_system(integrate_velocity(dt))
@@ -126,12 +127,6 @@ async fn main() -> Result<()> {
     create_camera().spawn(&mut world);
 
     loop {
-        tracing::info!(
-            "Archetype gen: {}\nChange tick: {}",
-            world.archetype_gen(),
-            world.change_tick()
-        );
-
         if player_dead_rx.try_recv().is_ok() {
             world.despawn_many(asteroid().with());
             create_player().spawn(&mut world);
@@ -141,8 +136,14 @@ async fn main() -> Result<()> {
 
         while acc > 0.0 {
             acc -= dt;
-            // let batches = physics_schedule.batch_info(&mut world);
-            // tracing::info!("Batches: {batches:#?}");
+            let batches = physics_schedule.batch_info(&mut world);
+            tracing::info!(
+                "Batches: {:#?}",
+                batches
+                    .iter()
+                    .map(|v| v.iter().map(|v| v.name()).collect_vec())
+                    .collect_vec()
+            );
             physics_schedule.execute_par(&mut world)?;
         }
 
@@ -301,8 +302,6 @@ fn camera_system(dt: f32) -> BoxedSystem {
 
                     *camera_pos = camera_pos.lerp(*player_pos, dt).lerp(*player_pos, dt);
                     *camera_vel = camera_vel.lerp(*player_vel, dt * 0.1);
-
-                    tracing::info!("Camera pos: {camera_pos} player: {player_pos}");
 
                     let screen_size = vec2(screen_width(), screen_height());
 
@@ -691,10 +690,12 @@ fn draw_ui() -> BoxedSystem {
         .with_resource(SharedResource::new(GraphicsContext))
         .with(Query::new((material(), health(), difficulty())).with(player()))
         .with(Query::new(()))
+        .read::<World>()
         .build(
             |_ctx: &mut GraphicsContext,
              mut players: QueryBorrow<(Component<f32>, Component<f32>, Component<f32>), _>,
-             mut all: QueryBorrow<(), _>| {
+             mut all: QueryBorrow<(), _>,
+             world: &World| {
                 let count = all.count();
 
                 let result = players.first();
@@ -719,6 +720,18 @@ fn draw_ui() -> BoxedSystem {
                     );
 
                     draw_text(&format!("Entities: {count}"), 10.0, 96.0, 16.0, GRAY);
+
+                    draw_text(
+                        &format!(
+                            "Archetype Gen: {}, Change Tick: {}",
+                            world.archetype_gen(),
+                            world.change_tick()
+                        ),
+                        10.0,
+                        128.0,
+                        16.0,
+                        GRAY,
+                    );
 
                     // draw_rectangle(10.0, 10.0, 256.0, 16.0, DARKPURPLE);
                     // draw_rectangle(
