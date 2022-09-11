@@ -77,7 +77,8 @@ let regen_system = System::builder()
     .with(Query::new((health().as_mut(), regen())))
     .for_each(|(health, regen)| {
         *health = (*health + regen).min(100.0);
-    }).boxed();
+    })
+    .boxed();
 
 let despawn_system = System::builder()
     .with(Query::new(entity_ids()).filter(health().le(0.0)))
@@ -86,13 +87,44 @@ let despawn_system = System::builder()
         for id in &mut q {
             cmd.despawn(id);
         }
-    }).boxed();
+    })
+    .boxed();
 
 let mut schedule = Schedule::from([regen_system, despawn_system]);
 
 schedule.execute_par(&mut world)?;
 
 ```
+## Relations
+
+Flax provides first class many-many relations between entities, which is useful for tree scene
+hierarchies, graphs, and physics joints between entities.
+
+Relations can be both state-less or have associated data, like spring or joint strengths
+
+Relations are cache friendly and querying children of does not require random access. In
+addition, relations are cleaned up on despawns and are stable during serialization, even if the
+entity ids migrate due to collisions.
+
+```rust
+component! {
+     child_of(parent): () => [Debug],
+ }
+
+ let mut world = World::new();
+
+ let parent = Entity::builder()
+     .set(name(), "Parent".into())
+     .spawn(&mut world);
+
+ let child1 = Entity::builder()
+     .set(name(), "Child1".into())
+     .set_default(child_of(parent))
+     .spawn(&mut world);
+
+
+```
+
 
 ## Comparison to other ECS
 
@@ -108,6 +140,9 @@ This leads to having to forward all trait implementations trough e.g
 This can lead to situations such as this:
 
 ```rust,ignore
+struct Position(Vec3);
+struct Velocity(Vec3);
+
 let vel = world.get::<Velocity>(entity);
 let mut pos = world.get_mut::<Position>(entity);
 let dt = 0.1;
@@ -115,10 +150,13 @@ let dt = 0.1;
 *pos = Position(**pos + **vel * dt);
 ```
 
-Instead of this:
+Which in Flax is:
 
 ```rust
-
+component! {
+    velocity: Vec3,
+    position: Vec3,
+}
 
 let vel = world.get(entity, velocity())?;
 let mut pos = world.get_mut(entity, position())?;
@@ -126,7 +164,6 @@ let dt = 0.1;
 
 *pos = *pos + *vel * dt;
 ```
-
 
 On a further note, since the components have to be declared beforehand (not
 always true, more on that later), it limits the amount of types which can be

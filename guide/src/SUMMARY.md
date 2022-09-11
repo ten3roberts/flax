@@ -9,7 +9,7 @@
   - [Query](fundamentals/query.md)
   - [Systems](fundamentals/systems.md)
   - [Schedule](fundamentals/schedule.md)
-  - [Hierarchy](fundamentals/hierarchy.md)
+  - [Relations](fundamentals/relations.md)
   - [EntityBuilder](fundamentals/builder.md)
   - [CommandBuffer](fundamentals/commandbuffer.md)
 - [ Diving deeper ](diving_deeper/index.md)
