@@ -6,6 +6,8 @@ use syn::*;
 
 /// ```rust
 /// use glam::*;
+/// #[derive(Fetch)]
+/// #[fetch(Debug)]
 /// struct CustomFetch {
 ///     position: Component<Vec3>,
 ///     rotation: Mutable<Quat>,
