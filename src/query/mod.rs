@@ -171,8 +171,8 @@ where
     /// See: [`QueryBorrow::get`] and [`QueryBorrow::iter`]
     ///
     /// The returned value holds the borrows of the query fetch. As such, all
-    /// references from iteration or using [`PreparedQuery::get`] will have a
-    /// lifetime of the [`PreparedQuery`].
+    /// references from iteration or using [QueryBorrow::get`] will have a
+    /// lifetime of the [`QueryBorrow`].
     ///
     /// This is because iterators can not yield references to internal state as
     /// all items returned by the iterator need to coexist.
