@@ -6,9 +6,9 @@ use syn::*;
 
 /// ```rust
 /// use glam::*;
-/// struct CustomFetch<'a> {
-///     position: &'a Vec2,
-///     rotation: &'a Quat,
+/// struct CustomFetch {
+///     position: Component<Vec3>,
+///     rotation: Mutable<Quat>,
 /// }
 /// ```
 #[proc_macro_derive(Fetch, attributes(fetch))]
