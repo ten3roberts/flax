@@ -667,12 +667,12 @@ mod tests {
     fn filter() {
         let mut changes = ChangeList::default();
 
-        changes.set(Change::modified(Slice::new(40, 200), 1));
-        changes.set(Change::modified(Slice::new(70, 349), 2));
-        changes.set(Change::modified(Slice::new(560, 893), 5));
-        changes.set(Change::modified(Slice::new(39, 60), 6));
-        changes.set(Change::inserted(Slice::new(784, 800), 7));
-        changes.set(Change::modified(Slice::new(945, 1139), 8));
+        changes.set(Change::new(Slice::new(40, 200), 1));
+        changes.set(Change::new(Slice::new(70, 349), 2));
+        changes.set(Change::new(Slice::new(560, 893), 5));
+        changes.set(Change::new(Slice::new(39, 60), 6));
+        changes.set(Change::new(Slice::new(784, 800), 7));
+        changes.set(Change::new(Slice::new(945, 1139), 8));
 
         let changes = AtomicRefCell::new(changes);
 
@@ -698,11 +698,11 @@ mod tests {
         let mut changes_1 = ChangeList::default();
         let mut changes_2 = ChangeList::default();
 
-        changes_1.set(Change::modified(Slice::new(40, 65), 2));
-        changes_1.set(Change::modified(Slice::new(59, 80), 3));
-        changes_1.set(Change::modified(Slice::new(90, 234), 3));
-        changes_2.set(Change::modified(Slice::new(50, 70), 3));
-        changes_2.set(Change::modified(Slice::new(99, 210), 4));
+        changes_1.set(Change::new(Slice::new(40, 65), 2));
+        changes_1.set(Change::new(Slice::new(59, 80), 3));
+        changes_1.set(Change::new(Slice::new(90, 234), 3));
+        changes_2.set(Change::new(Slice::new(50, 70), 3));
+        changes_2.set(Change::new(Slice::new(99, 210), 4));
 
         let a_map = changes_1.as_changed_set(1);
         let b_map = changes_2.as_changed_set(2);
@@ -765,23 +765,23 @@ mod tests {
         let a_map = archetype
             .changes_mut(a().id())
             .unwrap()
-            .set_modified(Change::modified(Slice::new(9, 80), 2))
-            .set_inserted(Change::modified(Slice::new(65, 83), 4))
+            .set_modified(Change::new(Slice::new(9, 80), 2))
+            .set_inserted(Change::new(Slice::new(65, 83), 4))
             .get(ChangeKind::Modified)
             .as_changed_set(1);
 
         let b_map = archetype
             .changes_mut(b().id())
             .unwrap()
-            .set_modified(Change::modified(Slice::new(16, 45), 2))
-            .set_modified(Change::modified(Slice::new(68, 85), 2))
+            .set_modified(Change::new(Slice::new(16, 45), 2))
+            .set_modified(Change::new(Slice::new(68, 85), 2))
             .get(ChangeKind::Modified)
             .as_changed_set(1);
 
         let c_map = archetype
             .changes_mut(c().id())
             .unwrap()
-            .set_modified(Change::modified(Slice::new(96, 123), 3))
+            .set_modified(Change::new(Slice::new(96, 123), 3))
             .get(ChangeKind::Modified)
             .as_changed_set(1);
 

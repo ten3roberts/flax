@@ -1,4 +1,3 @@
-use core::slice;
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, realloc, Layout},
     mem,
@@ -273,7 +272,7 @@ impl Drop for Storage {
 }
 
 /// Type erased atomic borrow of a component
-pub struct StorageBorrowDyn<'a> {
+pub(crate) struct StorageBorrowDyn<'a> {
     data: AtomicRef<'a, NonNull<u8>>,
     info: ComponentInfo,
     len: usize,
@@ -296,14 +295,6 @@ impl<'a> StorageBorrowDyn<'a> {
         self.info
     }
 
-    /// Convert the type erased storage to a slice of the underlying type.
-    ///
-    /// # Safety
-    /// The type `T` must be the same type as the stored component
-    pub unsafe fn as_slice<T>(&self) -> &[T] {
-        slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
-    }
-
     /// Returns the number of items in the storage
     pub fn len(&self) -> usize {
         self.len
@@ -311,6 +302,7 @@ impl<'a> StorageBorrowDyn<'a> {
 
     #[must_use]
     /// Returns true if the storage is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
