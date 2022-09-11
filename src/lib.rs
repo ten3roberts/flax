@@ -113,20 +113,21 @@
 //! details.
 //!
 //! ```rust
+//! # use flax::*;
 //! component! {
-//!      child_of(parent): () => [Debug],
-//!  }
+//!     child_of(parent): () => [Debug],
+//! }
 //!
-//!  let mut world = World::new();
+//! let mut world = World::new();
 //!
-//!  let parent = Entity::builder()
-//!      .set(name(), "Parent".into())
-//!      .spawn(&mut world);
+//! let parent = Entity::builder()
+//!     .set(name(), "Parent".into())
+//!     .spawn(&mut world);
 //!
-//!  let child1 = Entity::builder()
-//!      .set(name(), "Child1".into())
-//!      .set_default(child_of(parent))
-//!      .spawn(&mut world);
+//! let child1 = Entity::builder()
+//!     .set(name(), "Child1".into())
+//!     .set_default(child_of(parent))
+//!     .spawn(&mut world);
 //!
 //!
 //! ```
