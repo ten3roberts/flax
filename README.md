@@ -106,24 +106,24 @@ Relations are cache friendly and querying children of does not require random ac
 addition, relations are cleaned up on despawns and are stable during serialization, even if the
 entity ids migrate due to collisions.
     
-See [guide:relations](https://ten3roberts.github.io/flax/fundamentals/relations.html) for more
+See [the guide](https://ten3roberts.github.io/flax/fundamentals/relations.html) for more
 details.
 
 ```rust
 component! {
-     child_of(parent): () => [Debug],
- }
+    child_of(parent): () => [Debug],
+}
 
- let mut world = World::new();
+let mut world = World::new();
 
- let parent = Entity::builder()
-     .set(name(), "Parent".into())
-     .spawn(&mut world);
+let parent = Entity::builder()
+    .set(name(), "Parent".into())
+    .spawn(&mut world);
 
- let child1 = Entity::builder()
-     .set(name(), "Child1".into())
-     .set_default(child_of(parent))
-     .spawn(&mut world);
+let child1 = Entity::builder()
+    .set(name(), "Child1".into())
+    .set_default(child_of(parent))
+    .spawn(&mut world);
 
 
 ```
