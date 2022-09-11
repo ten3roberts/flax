@@ -2,6 +2,7 @@
 ![Crates](https://img.shields.io/crates/v/flax?style=flat)
 ![Docs](https://img.shields.io/docsrs/flax?style=flat)
 ![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=flat)
+![Guide](https://img.shields.io/badge/guide-Read%20the%20guide-blue)
 
 # Flax
 
