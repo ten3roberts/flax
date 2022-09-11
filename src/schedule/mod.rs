@@ -279,7 +279,6 @@ impl Schedule {
         let w_gen = world.archetype_gen();
         // New archetypes
         if self.archetype_gen != w_gen {
-            eprintln!("Recalculating batches");
             self.systems.as_unbatched();
             self.archetype_gen = w_gen;
         }
