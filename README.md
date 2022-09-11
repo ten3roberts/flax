@@ -100,11 +100,14 @@ schedule.execute_par(&mut world)?;
 Flax provides first class many-many relations between entities, which is useful for tree scene
 hierarchies, graphs, and physics joints between entities.
 
-Relations can be both state-less or have associated data, like spring or joint strengths
+Relations can be both state-less or have associated data, like spring or joint strengths.
 
 Relations are cache friendly and querying children of does not require random access. In
 addition, relations are cleaned up on despawns and are stable during serialization, even if the
 entity ids migrate due to collisions.
+    
+See [guide:relations](https://ten3roberts.github.io/flax/fundamentals/relations.html) for more
+details.
 
 ```rust
 component! {
