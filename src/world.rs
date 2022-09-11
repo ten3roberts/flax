@@ -1224,7 +1224,7 @@ impl World {
                         }
                     }
 
-                    batch.insert(storage).expect("Batch is incomplete");
+                    batch.append(storage).expect("Batch is incomplete");
                 }
 
                 self.spawn_batch_at(arch.entities(), &mut batch)

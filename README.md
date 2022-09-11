@@ -151,9 +151,6 @@ coercions in order to coexist.
 This library makes use of unsafe for type erasure and the allocation in storage
 of ComponentBuffers and Archetypes.
 
-As such, there are tests covering most, if not all of the unsafe parts of the
-code, both directly through unit tests and indirectly using integration tests.
-
 <!-- cargo-sync-readme end -->
 
 License: MIT

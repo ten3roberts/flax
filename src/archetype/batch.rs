@@ -50,11 +50,11 @@ impl BatchSpawn {
             storage.push(item)
         }
 
-        self.insert(storage)
+        self.append(storage)
     }
 
     /// Inserts a storage directly
-    pub(crate) fn insert(&mut self, storage: Storage) -> crate::error::Result<()> {
+    pub(crate) fn append(&mut self, storage: Storage) -> crate::error::Result<()> {
         let info = storage.info();
         if storage.len() != self.len {
             Err(Error::IncompleteBatch)

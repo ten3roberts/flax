@@ -568,7 +568,7 @@ impl<'de, 'a> Visitor<'de> for StoragesVisitor<'a> {
                 len: self.len,
             })?;
 
-            batch.insert(storage).map_err(de::Error::custom)?;
+            batch.append(storage).map_err(de::Error::custom)?;
         }
 
         Ok(batch)
