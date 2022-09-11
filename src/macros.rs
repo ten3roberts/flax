@@ -59,7 +59,7 @@
 /// A component is nothing more but a mere typesafe entity id.
 ///
 /// This macro uses an atomic to generate a lazily acquired
-/// unique entity id through the [`crate::EntityKind::STATIC`] bitflag. This flag
+/// unique entity id through the [`crate::entity::EntityKind::STATIC`] bitflag. This flag
 /// signifies to the world that the id essentially has a `'static` lifetime and
 /// shall be treated as always existing, this allows one or more world to work
 /// independently of the static components, alleviating the need for an `init`

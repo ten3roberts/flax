@@ -52,8 +52,8 @@ where
 /// Represents a query that is bounded to the lifetime of the world.
 /// Contains the borrows and holds them until it is dropped.
 ///
-/// The borrowing is lazy, as such, calling [`PreparedQuery::get`] will only borrow the one required archetype.
-/// [`PreparedQuery::iter`] will borrow the components from all archetypes and release them once the prepared query drops.
+/// The borrowing is lazy, as such, calling [`QueryBorrow::get`] will only borrow the one required archetype.
+/// [`QueryBorrow::iter`] will borrow the components from all archetypes and release them once the prepared query drops.
 /// Subsequent calls to iter will use the same borrow.
 impl<'w, Q, F> QueryBorrow<'w, Q, F>
 where
