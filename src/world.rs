@@ -1016,7 +1016,7 @@ impl World {
     }
 
     /// Increases the change tick and returns the new one
-    pub fn advance_change_tick(&self) -> u32 {
+    pub(crate) fn advance_change_tick(&self) -> u32 {
         let v = self
             .change_tick
             .fetch_update(Ordering::Acquire, Ordering::Relaxed, |v| {
@@ -1144,7 +1144,7 @@ impl World {
     ///
     /// `other` will be left empty
     ///
-    /// **Note**: The components from `other` will all be marked as `inserted`
+    /// **Note**: The data from `other` will all be marked as `inserted`
     /// as change events do not carry over.
     pub fn merge_with(&mut self, other: &mut World) -> Migrated {
         let mut archetypes = mem::replace(&mut other.archetypes, Archetypes::new());
