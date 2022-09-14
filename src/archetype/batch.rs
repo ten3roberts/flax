@@ -42,7 +42,7 @@ impl BatchSpawn {
         &mut self,
         component: Component<T>,
         iter: impl IntoIterator<Item = T>,
-    ) -> crate::error::Result<()> {
+    ) -> crate::error::Result<&mut Self> {
         let info = component.info();
         let mut storage = Storage::with_capacity(info, self.len);
 
@@ -50,7 +50,10 @@ impl BatchSpawn {
             storage.push(item)
         }
 
-        self.append(storage)
+        debug_assert_eq!(storage.capacity(), self.len());
+
+        self.append(storage)?;
+        Ok(self)
     }
 
     /// Inserts a storage directly
@@ -76,6 +79,10 @@ impl BatchSpawn {
 
 #[cfg(test)]
 mod test {
+    use std::iter::repeat;
+
+    use glam::{Mat4, Vec3};
+
     use crate::{component, components::name, World};
 
     use super::*;
@@ -111,5 +118,27 @@ mod test {
         for (&id, n) in ids.iter().zip(('a'..).map(|v| v.to_string())) {
             assert_eq!(world.get(id, name()).as_deref(), Ok(&n));
         }
+    }
+
+    #[test]
+    fn batch_spawn() {
+        component! {
+            transform: Mat4,
+            position: Vec3,
+            rotation: Vec3,
+            velocity: Vec3,
+        }
+
+        let mut world = World::new();
+        let mut batch = BatchSpawn::new(10_000);
+
+        batch
+            .set(transform(), repeat(Mat4::from_scale(Vec3::ONE)))
+            .unwrap();
+
+        batch.set(position(), repeat(Vec3::X)).unwrap();
+        batch.set(rotation(), repeat(Vec3::X)).unwrap();
+        batch.set(velocity(), repeat(Vec3::X)).unwrap();
+        batch.spawn(&mut world);
     }
 }

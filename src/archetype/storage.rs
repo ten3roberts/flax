@@ -63,10 +63,11 @@ impl Storage {
     /// Allocates more space for the storage
     pub fn reserve(&mut self, additional: usize) {
         let old_cap = self.cap;
-        let new_cap = (self.len + additional).next_power_of_two();
-        if new_cap <= old_cap {
+        if self.len + additional <= old_cap {
             return;
         }
+
+        let new_cap = (self.len + additional).next_power_of_two();
 
         // tracing::debug!(
         //     "Reserving size: {old_cap}[{}] + {additional} => {new_cap} for: {:?}",
@@ -86,7 +87,7 @@ impl Storage {
         assert!(new_layout.size() < isize::MAX as usize);
 
         let ptr = if old_cap == 0 {
-            assert_eq!(*self.data.get_mut(), NonNull::dangling());
+            debug_assert_eq!(*self.data.get_mut(), NonNull::dangling());
             unsafe { alloc(new_layout) }
         } else {
             let ptr = self.data.get_mut().as_ptr();
@@ -235,12 +236,16 @@ impl Storage {
         self.len
     }
 
-    pub(crate) fn push<T: ComponentValue>(&mut self, mut item: T) {
-        assert!(self.info.is::<T>(), "Mismatched types");
+    #[inline]
+    pub(crate) fn push<T: ComponentValue>(&mut self, item: T) {
+        debug_assert!(self.info.is::<T>(), "Mismatched types");
         unsafe {
-            self.extend(&mut item as *mut T as *mut u8, 1);
+            self.reserve(1);
+
+            std::ptr::write(self.as_ptr().cast::<T>().add(self.len), item);
+
+            self.len += 1
         }
-        mem::forget(item);
     }
 
     /// Changes the id of the stored component.
@@ -249,6 +254,10 @@ impl Storage {
     pub(crate) unsafe fn set_id(&mut self, id: ComponentId) {
         self.info.id = id
     }
+
+    pub(crate) fn capacity(&self) -> usize {
+        self.cap
+    }
 }
 
 impl Drop for Storage {
@@ -256,17 +265,16 @@ impl Drop for Storage {
         self.clear();
 
         // ZST
-        if self.cap == 0 || self.info().size() > 0 {
+        if self.cap == 0 || self.info().size() == 0 {
             return;
         }
 
         let ptr = self.as_ptr();
+        let layout =
+            Layout::from_size_align(self.info.size() * self.cap, self.info.layout.align()).unwrap();
+
         unsafe {
-            dealloc(
-                ptr,
-                Layout::from_size_align(self.info.size() * self.cap, self.info.layout.align())
-                    .unwrap(),
-            );
+            dealloc(ptr, layout);
         }
     }
 }
