@@ -44,6 +44,7 @@ tracing-tree = "0.2"
 bincode = "1.3.3"
 ron = "0.8"
 tracing = "0.1"
+criterion = "0.4"
 
 [profile.release]
 debug = true
@@ -77,3 +78,7 @@ path = "./examples/guide/commandbuffer.rs"
 [[example]]
 name = "serialize"
 path = "./examples/guide/serialize.rs"
+
+[[bench]]
+name = "benchmarks"
+harness = false
