@@ -1,9 +1,9 @@
-mod deserialize;
-mod serialize;
+mod de;
+mod ser;
 
-pub use deserialize::*;
+pub use de::*;
+pub use ser::*;
 use serde::{Deserialize, Serialize};
-pub use serialize::*;
 
 use crate::{
     filter::And, filter::StaticFilter, filter::Without, Component, ComponentId, ComponentValue,
