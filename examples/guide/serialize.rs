@@ -13,7 +13,7 @@ fn main() -> color_eyre::Result<()> {
         velocity: Vec3 => [Debug],
     }
 
-    use flax::serde::{SerdeBuilder, SerializeFormat};
+    use flax::serialize::{SerdeBuilder, SerializeFormat};
 
     let mut world = World::new();
 

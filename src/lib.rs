@@ -238,7 +238,7 @@ pub mod visitors;
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein
 #[cfg(feature = "serde")]
-pub mod serde;
+pub mod serialize;
 
 // Required due to macro
 pub(crate) use archetype::*;
