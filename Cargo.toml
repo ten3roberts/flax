@@ -3,7 +3,7 @@ name = "flax"
 version = "0.2.0"
 edition = "2021"
 authors = ["Tei Leelo Roberts <ten3roberts@gmail.com>"]
-description = "An ergonimic archetypical ECS"
+description = "An ergonomic archetypical ECS"
 documentation = "https://docs.rs/flax"
 repository = "https://github.com/ten3roberts/flax"
 license = "MIT"
@@ -42,6 +42,7 @@ glam = { version = "0.21.3", features = ["rand", "serde"] }
 rand = "0.8.5"
 tracing-tree = "0.2"
 bincode = "1.3.3"
+ron = "0.8"
 tracing = "0.1"
 
 [profile.release]

@@ -10,7 +10,7 @@ use crate::{
     Component, ComponentInfo, ComponentValue, Entity, EntityBuilder, World,
 };
 
-use super::{SerializeFormat, WorldFields};
+use super::{RowFields, SerializeFormat, WorldFields};
 
 #[derive(Clone)]
 struct Slot {
@@ -355,13 +355,13 @@ impl<'de, 'a> Visitor<'de> for WorldRowVisitor<'a> {
         A: de::MapAccess<'de>,
     {
         let mut world = World::new();
+
         while let Some(key) = map.next_key()? {
             match key {
-                "entities" => map.next_value_seed(DeserializeEntities {
+                RowFields::Entities => map.next_value_seed(DeserializeEntities {
                     context: self.context,
                     world: &mut world,
                 })?,
-                key => return Err(de::Error::unknown_field(key, &["entities"])),
             }
         }
 

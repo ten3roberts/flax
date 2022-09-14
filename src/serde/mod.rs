@@ -15,10 +15,16 @@ struct ComponentKey {
     id: ComponentId,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize)]
+#[serde(field_identifier, rename_all = "lowercase")]
 enum WorldFields {
-    #[serde(rename = "archetypes")]
     Archetypes,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(field_identifier, rename_all = "lowercase")]
+enum RowFields {
+    Entities,
 }
 
 /// Describes the serialialization format
@@ -217,6 +223,22 @@ mod test {
             .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
             .expect("Failed to deserialize world");
 
-        test_eq(&world, &new_world)
+        test_eq(&world, &new_world);
+
+        let encoded =
+            ron::to_string(&serializer.serialize(&world, SerializeFormat::RowMajor)).unwrap();
+        let new_world = deserializer
+            .deserialize(&mut ron::Deserializer::from_str(&encoded).unwrap())
+            .unwrap();
+
+        test_eq(&world, &new_world);
+
+        let encoded =
+            ron::to_string(&serializer.serialize(&world, SerializeFormat::ColumnMajor)).unwrap();
+        let new_world = deserializer
+            .deserialize(&mut ron::Deserializer::from_str(&encoded).unwrap())
+            .unwrap();
+
+        test_eq(&world, &new_world);
     }
 }
