@@ -161,16 +161,15 @@ impl Archetype {
             for (_, changes) in self.changes.iter_mut() {
                 let changes = changes.get_mut();
                 let info = changes.info();
-                let mut changes = changes.swap_out(slot, last);
-
                 if let Some((ref mut dst, dst_slot)) = dst {
-                    for v in changes.iter_mut().flatten() {
-                        v.slice = Slice::single(dst_slot);
-                    }
-
-                    let [i, m, r] = changes;
                     let dst = dst.init_changes(info);
-                    dst.append_inserted(i).append_modified(m).append_removed(r);
+
+                    changes.swap_remove(slot, last, |kind, mut v| {
+                        v.slice = Slice::single(dst_slot);
+                        dst.set(kind, v);
+                    });
+                } else {
+                    changes.swap_remove(slot, last, |_, _| {});
                 }
             }
 
