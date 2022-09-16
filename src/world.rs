@@ -876,7 +876,7 @@ impl World {
             (drop)(p);
         });
 
-        assert_eq!(dst.entity(dst_slot), Some(id));
+        debug_assert_eq!(dst.entity(dst_slot), Some(id));
 
         // Migrate all changes
         dst.init_changes(component)
@@ -905,6 +905,7 @@ impl World {
             self.remove_inner(id, component.info(), |ptr| {
                 res.write(ptr.cast::<T>().read());
             })?;
+
             res.assume_init()
         };
         Ok(res)

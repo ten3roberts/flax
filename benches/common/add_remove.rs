@@ -29,4 +29,14 @@ impl Benchmark {
             self.0.remove(*id, b()).unwrap();
         }
     }
+
+    pub fn run_alt(&mut self) {
+        for id in &self.1 {
+            self.0.set(*id, b(), 0.0).unwrap();
+        }
+
+        for id in &self.1 {
+            self.0.remove(*id, b()).unwrap();
+        }
+    }
 }
