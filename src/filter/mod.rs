@@ -4,7 +4,7 @@ mod cmp;
 use std::{iter::FusedIterator, ops::Neg};
 
 use crate::{
-    archetype::{Archetype, Slice},
+    archetype::{Archetype, Slice, Slot},
     Access, ArchetypeId, ComponentId, ComponentValue,
 };
 
@@ -589,6 +589,35 @@ impl<'w, F: Filter<'w>> Filter<'w> for GatedFilter<F> {
 
     fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
         self.filter.access(id, arch)
+    }
+}
+
+#[derive(Copy, Debug, Clone)]
+/// Limit the batch size for a query
+pub struct BatchSize(pub(crate) Slot);
+
+impl PreparedFilter for BatchSize {
+    fn filter(&mut self, slots: Slice) -> Slice {
+        Slice::new(slots.start, slots.end.min(slots.start + self.0))
+    }
+}
+
+impl<'w> Filter<'w> for BatchSize {
+    type Prepared = BatchSize;
+
+    fn prepare(&'w self, _: &'w Archetype, _: u32) -> Self::Prepared {
+        if self.0 == 0 {
+            panic!("Batch size of 0 will never yield");
+        }
+        *self
+    }
+
+    fn matches(&self, _: &Archetype) -> bool {
+        true
+    }
+
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+        vec![]
     }
 }
 

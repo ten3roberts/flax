@@ -1,4 +1,4 @@
-use std::iter::repeat;
+use std::{iter::repeat, sync::atomic::AtomicUsize};
 
 use flax::*;
 use glam::*;
@@ -43,6 +43,7 @@ impl Benchmark {
 
     pub fn run(&mut self) {
         Query::new((position().as_mut(), mat().as_mut()))
+            .batch_size(64)
             .borrow(&self.0)
             .iter_batched()
             .par_bridge()
@@ -54,6 +55,19 @@ impl Benchmark {
 
                     *pos = mat.transform_vector3(*pos);
                 }
+            });
+    }
+
+    pub fn run_seq(&mut self) {
+        Query::new((position().as_mut(), mat().as_mut()))
+            .borrow(&self.0)
+            .iter()
+            .for_each(|(pos, mat)| {
+                for _ in 0..100 {
+                    *mat = mat.inverse();
+                }
+
+                *pos = mat.transform_vector3(*pos);
             });
     }
 }
