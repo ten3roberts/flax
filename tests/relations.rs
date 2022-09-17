@@ -85,6 +85,7 @@ fn relations() -> color_eyre::Result<()> {
     assert_eq!(
         Query::new(())
             .filter(child_of.with())
+            .batch_size(1)
             .borrow(&world)
             .count(),
         3

@@ -7,7 +7,7 @@ use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
 use crate::{
-    archetype::ArchetypeId,
+    archetype::{ArchetypeId, Slot},
     fetch::*,
     filter::*,
     is_component,
@@ -115,6 +115,11 @@ where
             fetch: self.fetch,
             include_components: self.include_components,
         }
+    }
+
+    /// Limits the size of each batch using [`QueryBorrow::iter_batched`]
+    pub fn batch_size(self, size: Slot) -> Query<Q, And<F, BatchSize>> {
+        self.filter(BatchSize(size))
     }
 
     /// Shortcut for filter(without)
