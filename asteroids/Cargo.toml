@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flax = { path = "../" }
+flax = { path = "../", features = ["internal_assert"] }
 macroquad = "0.3"
 glam = { version = "0.21", features = ["rand", "serde"] }
 rand = "0.8.5"

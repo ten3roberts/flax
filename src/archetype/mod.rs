@@ -157,6 +157,7 @@ impl Archetype {
         mut dst: Option<(&mut Self, Slot)>,
     ) -> Option<(Entity, Slot)> {
         let last = self.len() - 1;
+        let len = self.len();
         if slot != last {
             for (_, changes) in self.changes.iter_mut() {
                 let changes = changes.get_mut();
@@ -171,6 +172,10 @@ impl Archetype {
                 } else {
                     changes.swap_remove(slot, last, |_, _| {});
                 }
+
+                changes.get(ChangeKind::Inserted).iter().for_each(|v| {
+                    assert!(v.slice.end <= len, "Changes have more slots than archetype")
+                });
             }
 
             self.entities[slot] = self.entities[last];
