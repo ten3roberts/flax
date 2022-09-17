@@ -12,6 +12,10 @@ fn benchmarks(c: &mut Criterion) {
         let mut bench = simple_iter::Benchmark::new();
         b.iter(|| bench.run())
     })
+    .bench_function("add_remove", |b| {
+        let mut bench = add_remove::Benchmark::new();
+        b.iter(|| bench.run())
+    })
     .bench_function("frag_iter", |b| {
         let mut bench = frag_iter::Benchmark::new();
         b.iter(|| bench.run())
@@ -20,16 +24,6 @@ fn benchmarks(c: &mut Criterion) {
         let mut bench = heavy_compute::Benchmark::new();
         b.iter(|| bench.run())
     });
-
-    c.benchmark_group("add_remove")
-        .bench_function("current", |b| {
-            let mut bench = add_remove::Benchmark::new();
-            b.iter(|| bench.run())
-        })
-        .bench_function("alt", |b| {
-            let mut bench = add_remove::Benchmark::new();
-            b.iter(|| bench.run_alt())
-        });
 }
 
 criterion_group!(benches, benchmarks);

@@ -17,7 +17,7 @@ pub(crate) struct ChangeList {
 
 impl ChangeList {
     #[cfg(feature = "internal_assert")]
-    fn assert_ordered(&self, msg: &str) {
+    fn assert_normal(&self, msg: &str) {
         let ordered = self
             .iter()
             .sorted_by_key(|v| v.slice.start)
@@ -27,6 +27,14 @@ impl ChangeList {
         if ordered != self.inner {
             panic!("Not ordered {self:#?}\nexpected: {ordered:#?}\n\n{msg}");
         }
+
+        self.iter().for_each(|v| {
+            assert!(!v.slice.is_empty(), "Slice {v:?} is empty: {self:#?} {msg}");
+            assert!(
+                v.slice.start < v.slice.end,
+                "Slice {v:?} {self:#?} is inverted: {msg}"
+            );
+        })
     }
 
     pub(crate) fn set(&mut self, mut change: Change) -> &mut Self {
@@ -35,7 +43,7 @@ impl ChangeList {
         let mut joined = false;
 
         #[cfg(feature = "internal_assert")]
-        self.assert_ordered("Not sorted at beginning");
+        self.assert_normal("Not sorted at beginning");
 
         self.inner.retain_mut(|v| {
             if change.slice.is_empty() {
@@ -78,7 +86,7 @@ impl ChangeList {
         }
 
         #[cfg(feature = "internal_assert")]
-        self.assert_ordered(&format!("Not sorted after `set` inserting: {change:?}"));
+        self.assert_normal(&format!("Not sorted after `set` inserting: {change:?}"));
 
         self
     }
@@ -105,6 +113,7 @@ impl ChangeList {
         src_changes
     }
 
+    #[cfg(test)]
     pub(crate) fn swap_remove_collect(&mut self, slot: Slot, last: Slot) -> Vec<Change> {
         let mut res = Vec::new();
         self.swap_remove_with(slot, last, |v| res.push(v));
@@ -119,8 +128,12 @@ impl ChangeList {
         last: Slot,
         mut on_removed: impl FnMut(Change),
     ) {
-        eprintln!("Removing: {slot}");
+        #[cfg(feature = "internal_assert")]
+        self.assert_normal(&format!("Invalid before swap remove: {slot}, last: {last}"));
+        // self.swap_out(slot, last).into_iter().for_each(on_removed);
+        // return;
 
+        #[cfg(feature = "internal_assert")]
         assert!(
             self.iter().all(|v| v.slice.end <= last + 1),
             "last: {last}, {self:#?}"
@@ -131,8 +144,9 @@ impl ChangeList {
         }
 
         if slot == last {
-            for v in self.iter_mut().filter(|v| v.slice.end == last + 1) {
+            for v in self.iter_mut().filter(|v| v.slice.contains(last)) {
                 v.slice.end = last;
+                assert!(!v.slice.is_empty());
 
                 on_removed(Change::single(slot, v.tick))
             }
@@ -142,30 +156,27 @@ impl ChangeList {
         // Pop off the changes from the very end
         let mut last_changes = self
             .iter_mut()
-            .filter(|v| v.slice.end == last + 1)
+            .filter(|v| v.slice.contains(last))
             .map(|v| {
                 v.slice.end = last;
-                Change::new(Slice::single(slot), v.tick)
+                Change::single(slot, v.tick)
             })
             .collect_vec();
 
-        eprintln!("Last changes: {last_changes:?}");
+        let start = self.iter().position(|v| v.slice.contains(slot));
 
-        let start = match self.iter().position(|v| v.slice.contains(slot)) {
-            Some(v) => v,
-            None => return,
+        let end = self.iter().positions(|v| v.slice.contains(slot)).last();
+
+        let (end, src) = match (start, end) {
+            (Some(start), Some(end)) => {
+                debug_assert!(start <= end, "{start}..{end}");
+                (end, &mut self[start..=end])
+            }
+            (None, None) => (0, &mut self[0..0]),
+            _ => {
+                unreachable!()
+            }
         };
-
-        let end = self
-            .iter()
-            .positions(|v| v.slice.contains(slot))
-            .last()
-            .unwrap();
-
-        assert!(start <= end, "{start}..{end}");
-
-        let src = &mut self[start..=end];
-        eprintln!("Slices containing src: {src:?}");
 
         // Depending on if the last slot has a change at the same tick we either change the slot,
         // or split the change in three parts.
@@ -179,14 +190,15 @@ impl ChangeList {
             if let Some(index) = last_changes.iter().position(|&v| v.tick == change.tick) {
                 // The whole change is valid, even though the meaning of `slot` changed
                 last_changes.swap_remove(index);
-                eprintln!("Found corresponding change in last slot at: {index}");
             } else {
                 // This change needs to be split in two parts, with slot inbetween
                 let slice = change.slice;
-                assert!(slice.contains(slot));
+
+                debug_assert!(slice.contains(slot), "slice: {slice:?}, slot: {slot}");
 
                 let l = Change::new(Slice::new(slice.start, slot), change.tick);
 
+                debug_assert!(slot < slice.end, "slot: {slot}, slice: {slice:?}");
                 let r = Change::new(Slice::new(slot + 1, slice.end), change.tick);
 
                 // Order is still kept if change is replaced with `l`
@@ -201,27 +213,24 @@ impl ChangeList {
         // all changes inside the slice have now been kept or overwritten
 
         if !split.is_empty() {
-            let index = end;
-            eprintln!(
-                "Splicing vec {:#?}: at: {index} with: {:#?} {:#?}",
-                self.inner, last_changes, split
-            );
+            let index = end + 1;
             let tail = self.len() - index;
 
             // insert the changes after the overwritten parts
             self.append(&mut last_changes);
             self.append(&mut split);
 
-            dbg!(tail);
-            self[index + 1..].rotate_left(tail - 1)
+            self[index..].rotate_left(tail)
         }
 
         self.retain(|v| !v.slice.is_empty());
-
         #[cfg(feature = "internal_assert")]
-        self.assert_ordered(&format!(
+        self.assert_normal(&format!(
             "Not sorted after `swap_remove` while removing: {slot}"
         ));
+
+        self.iter()
+            .for_each(|v| assert!(v.slice.start <= v.slice.end));
     }
 
     /// Removes a slot from the change list
@@ -249,7 +258,7 @@ impl ChangeList {
         //      ===
 
         #[cfg(feature = "internal_assert")]
-        self.assert_ordered("Not sorted before `remove`");
+        self.assert_normal("Not sorted before `remove`");
 
         let removed = self
             .inner
@@ -289,7 +298,7 @@ impl ChangeList {
 
         self.inner = result;
         #[cfg(feature = "internal_assert")]
-        self.assert_ordered(&format!("Not sorted after `remove` while removing: {slot}"));
+        self.assert_normal(&format!("Not sorted after `remove` while removing: {slot}"));
 
         removed
     }
@@ -464,8 +473,8 @@ impl Changes {
         last: Slot,
         mut on_removed: impl FnMut(ChangeKind, Change),
     ) {
-        self.map[0].swap_remove_with(slot, last, |v| on_removed(ChangeKind::Inserted, v));
-        self.map[1].swap_remove_with(slot, last, |v| on_removed(ChangeKind::Modified, v));
+        self.map[0].swap_remove_with(slot, last, |v| on_removed(ChangeKind::Modified, v));
+        self.map[1].swap_remove_with(slot, last, |v| on_removed(ChangeKind::Inserted, v));
         self.map[2].swap_remove_with(slot, last, |v| on_removed(ChangeKind::Removed, v));
     }
 

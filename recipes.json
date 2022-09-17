@@ -3,6 +3,15 @@
     "cmd": "cargo run -p asteroids",
     "kind": "term"
   },
+  "debug-asteroids": {
+    "cmd": "./target/debug/asteroids",
+    "depends_on": [
+      {
+        "cmd": "cargo build -p asteroids"
+      }
+    ],
+    "kind": "dap"
+  },
   "check": {
     "cmd": "cargo check --all-features --workspace"
   },
