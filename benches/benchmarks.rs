@@ -19,11 +19,17 @@ fn benchmarks(c: &mut Criterion) {
     .bench_function("frag_iter", |b| {
         let mut bench = frag_iter::Benchmark::new();
         b.iter(|| bench.run())
-    })
-    .bench_function("heavy_compute", |b| {
-        let mut bench = heavy_compute::Benchmark::new();
-        b.iter(|| bench.run())
     });
+
+    c.benchmark_group("heavy_compute")
+        .bench_function("par", |b| {
+            let mut bench = heavy_compute::Benchmark::new();
+            b.iter(|| bench.run())
+        })
+        .bench_function("seq", |b| {
+            let mut bench = heavy_compute::Benchmark::new();
+            b.iter(|| bench.run_seq())
+        });
 }
 
 criterion_group!(benches, benchmarks);

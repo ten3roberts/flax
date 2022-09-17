@@ -5,6 +5,7 @@ use std::{
 };
 
 use itertools::Itertools;
+use smallvec::SmallVec;
 
 use crate::ComponentInfo;
 
@@ -154,14 +155,14 @@ impl ChangeList {
         }
 
         // Pop off the changes from the very end
-        let mut last_changes = self
+        let mut last_changes: SmallVec<[_; 8]> = self
             .iter_mut()
             .filter(|v| v.slice.contains(last))
             .map(|v| {
                 v.slice.end = last;
                 Change::single(slot, v.tick)
             })
-            .collect_vec();
+            .collect();
 
         let start = self.iter().position(|v| v.slice.contains(slot));
 
@@ -182,7 +183,7 @@ impl ChangeList {
         // or split the change in three parts.
         //
         // Order is kept
-        let mut split = Vec::new();
+        let mut split = SmallVec::<[_; 8]>::new();
 
         for change in src {
             on_removed(Change::single(slot, change.tick));
@@ -217,8 +218,8 @@ impl ChangeList {
             let tail = self.len() - index;
 
             // insert the changes after the overwritten parts
-            self.append(&mut last_changes);
-            self.append(&mut split);
+            self.extend_from_slice(&last_changes);
+            self.extend_from_slice(&split);
 
             self[index..].rotate_left(tail)
         }
