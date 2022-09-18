@@ -11,7 +11,7 @@ component! {
     velocity: Vec3,
 }
 
-pub struct Benchmark(World);
+pub struct Benchmark(World, Query<(Component<Vec3>, Mutable<Vec3>)>);
 
 impl Benchmark {
     pub fn new() -> Self {
@@ -27,8 +27,8 @@ impl Benchmark {
         batch.set(velocity(), repeat(Vec3::X)).unwrap();
 
         batch.spawn(&mut world);
-
-        Self(world)
+        let query = Query::new((velocity(), position().as_mut()));
+        Self(world, query)
     }
 
     pub fn run(&mut self) {

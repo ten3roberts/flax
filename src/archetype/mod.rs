@@ -4,8 +4,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    buffer::ComponentBuffer, entity, util::TupleCloned, Component, ComponentId, ComponentValue,
-    Entity, Verbatim,
+    buffer::ComponentBuffer, entity, Component, ComponentId, ComponentValue, Entity, Verbatim,
 };
 
 /// Unique archetype id
@@ -24,9 +23,28 @@ pub use slice::*;
 pub(crate) use storage::*;
 
 #[derive(Debug, Clone)]
-struct StorageInfo {
+/// Holds information of a single component storage buffer
+pub struct StorageInfo {
     cap: usize,
     len: usize,
+}
+
+impl StorageInfo {
+    /// Returns the storage capacity
+    pub fn cap(&self) -> usize {
+        self.cap
+    }
+
+    /// Returns the length of the buffer
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[must_use]
+    /// Returns true if the storage is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 const SHORT_DEBUG_LEN: usize = 8;
@@ -62,6 +80,23 @@ pub struct ArchetypeInfo {
     storage: Vec<StorageInfo>,
     components: Vec<ComponentInfo>,
     entities: ShortDebugVec<Entity>,
+}
+
+impl ArchetypeInfo {
+    /// Returns information about archetype storages
+    pub fn storage(&self) -> &[StorageInfo] {
+        self.storage.as_ref()
+    }
+
+    /// Returns the components in the archetype
+    pub fn components(&self) -> &[ComponentInfo] {
+        self.components.as_ref()
+    }
+
+    /// Returns the entities in the archetype
+    pub fn entities(&self) -> &[Entity] {
+        &self.entities.0
+    }
 }
 
 #[derive(Debug)]
@@ -515,10 +550,9 @@ impl Archetype {
     /// Does nothing if the remaining capacity < additional.
     /// len remains unchanged, as does the internal order
     pub fn reserve(&mut self, additional: usize) {
-
-        // for storage in self.storage.values_mut() {
-        //     storage.reserve(additional);
-        // }
+        for storage in self.storage.values_mut() {
+            storage.reserve(additional);
+        }
     }
 
     /// Returns the entity at `slot`

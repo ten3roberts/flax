@@ -93,25 +93,11 @@ impl ChangeList {
     }
 
     pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
-        for mut removed in self.remove(src_slot) {
+        self.remove(src_slot, |mut v| {
             // Change the slot
-            removed.slice = Slice::single(dst_slot);
-            other.set(removed);
-        }
-    }
-
-    /// Removes `src` by swapping `dst` into its place
-    pub(crate) fn swap_out(&mut self, src: Slot, dst: Slot) -> Vec<Change> {
-        let src_changes = self.remove(src);
-        let dst_changes = self.remove(dst);
-
-        for mut v in dst_changes {
-            assert_eq!(v.slice, Slice::single(dst));
-            v.slice = Slice::single(src);
-            self.set(v);
-        }
-
-        src_changes
+            v.slice = Slice::single(dst_slot);
+            other.set(v);
+        })
     }
 
     #[cfg(test)]
@@ -212,16 +198,9 @@ impl ChangeList {
         }
 
         // all changes inside the slice have now been kept or overwritten
-
         if !split.is_empty() {
             let index = end + 1;
-            let tail = self.len() - index;
-
-            // insert the changes after the overwritten parts
-            self.extend_from_slice(&last_changes);
-            self.extend_from_slice(&split);
-
-            self[index..].rotate_left(tail)
+            self.splice(index..index, last_changes.into_iter().chain(split));
         }
 
         self.retain(|v| !v.slice.is_empty());
@@ -235,7 +214,7 @@ impl ChangeList {
     }
 
     /// Removes a slot from the change list
-    pub fn remove(&mut self, slot: Slot) -> Vec<Change> {
+    pub fn remove(&mut self, slot: Slot, mut on_removed: impl FnMut(Change)) {
         let slice = Slice::single(slot);
         let mut result = Vec::with_capacity(self.inner.capacity());
 
@@ -261,47 +240,40 @@ impl ChangeList {
         #[cfg(feature = "internal_assert")]
         self.assert_normal("Not sorted before `remove`");
 
-        let removed = self
-            .inner
-            .drain(..)
-            .flat_map(|v| {
-                if let Some((l, _, r)) = v.slice.split_with(&slice) {
-                    if !l.is_empty() {
-                        // If the pending elements are smaller, push them first
-                        if let Some(r) = right.first() {
-                            if r.slice < l {
-                                result.append(&mut right);
-                            }
-                        }
-
-                        result.push(Change::new(l, v.tick));
-                    }
-                    if !r.is_empty() {
-                        right.push(Change::new(r, v.tick));
-                    }
-
-                    Some(Change::new(slice, v.tick))
-                } else {
+        self.inner.drain(..).for_each(|v| {
+            if let Some((l, _, r)) = v.slice.split_with(&slice) {
+                if !l.is_empty() {
                     // If the pending elements are smaller, push them first
                     if let Some(r) = right.first() {
-                        if r.slice < v.slice {
+                        if r.slice < l {
                             result.append(&mut right);
                         }
                     }
 
-                    result.push(v);
-                    None
+                    result.push(Change::new(l, v.tick));
                 }
-            })
-            .collect_vec();
+                if !r.is_empty() {
+                    right.push(Change::new(r, v.tick));
+                }
+
+                on_removed(Change::new(slice, v.tick))
+            } else {
+                // If the pending elements are smaller, push them first
+                if let Some(r) = right.first() {
+                    if r.slice < v.slice {
+                        result.append(&mut right);
+                    }
+                }
+
+                result.push(v);
+            }
+        });
 
         result.append(&mut right);
 
         self.inner = result;
         #[cfg(feature = "internal_assert")]
         self.assert_normal(&format!("Not sorted after `remove` while removing: {slot}"));
-
-        removed
     }
 
     /// Returns the changes in the change list at a particular index.
@@ -432,12 +404,14 @@ impl Changes {
         &self.map[kind as usize]
     }
 
+    #[inline]
     pub(crate) fn set_inserted(&mut self, change: Change) -> &mut Self {
         self.map[ChangeKind::Inserted as usize].set(change);
         self.map[ChangeKind::Modified as usize].set(change);
         self
     }
 
+    #[inline]
     pub(crate) fn set_modified_if_tracking(&mut self, change: Change) -> &mut Self {
         if self.track_modified() {
             self.set_modified(change);
@@ -446,11 +420,13 @@ impl Changes {
         self
     }
 
+    #[inline]
     pub(crate) fn set(&mut self, kind: ChangeKind, change: Change) -> &mut Self {
         self.map[kind as usize].set(change);
         self
     }
 
+    #[inline]
     pub(crate) fn set_modified(&mut self, change: Change) -> &mut Self {
         self.map[ChangeKind::Modified as usize].set(change);
         self
@@ -480,37 +456,14 @@ impl Changes {
     }
 
     /// Removes a slot from the change list
-    pub fn remove(&mut self, slot: Slot) -> [Vec<Change>; 3] {
-        [
-            self.map[0].remove(slot),
-            self.map[1].remove(slot),
-            self.map[2].remove(slot),
-        ]
+    pub fn remove(&mut self, slot: Slot) {
+        self.map[0].remove(slot, |_| {});
+        self.map[1].remove(slot, |_| {});
+        self.map[2].remove(slot, |_| {});
     }
 
     pub(crate) fn info(&self) -> ComponentInfo {
         self.info
-    }
-
-    pub(crate) fn append_inserted(&mut self, changes: Vec<Change>) -> &mut Self {
-        for v in changes {
-            self.map[ChangeKind::Inserted as usize].set(v);
-        }
-        self
-    }
-
-    pub(crate) fn append_modified(&mut self, changes: Vec<Change>) -> &mut Self {
-        for v in changes {
-            self.map[ChangeKind::Modified as usize].set(v);
-        }
-        self
-    }
-
-    pub(crate) fn append_removed(&mut self, changes: Vec<Change>) -> &mut Self {
-        for v in changes {
-            self.map[ChangeKind::Removed as usize].set(v);
-        }
-        self
     }
 
     pub(crate) fn set_track_modified(&self) {
