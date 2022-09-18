@@ -121,6 +121,7 @@ fn commandbuffer() {
         .collect_vec();
 
     // Ensure all soldiers are present and up to health
+    assert_eq!(soldiers.len(), 100);
     assert_eq!(soldiers, [100.0; 100]);
 
     // Oh no, one got shot

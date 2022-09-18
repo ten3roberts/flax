@@ -13,7 +13,7 @@ use crate::{
     archetype::{Archetype, Slice, Slot},
     filter::Nothing,
     system::Access,
-    All, ArchetypeId, Entity, Filter, World,
+    ArchetypeId, ComponentId, Entity, Filter, World,
 };
 
 /// Represents the world data necessary for preparing a fetch
@@ -53,14 +53,15 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     fn matches(&self, data: FetchPrepareData) -> bool;
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, data: FetchPrepareData) -> Vec<Access>;
-    /// Returns the required elements in self which are not in archetype
-    fn difference(&self, data: FetchPrepareData) -> Vec<String>;
 
     /// Describes the fetch in a human-readable fashion
     fn describe(&self, f: &mut dyn Write) -> fmt::Result;
 
     /// Returns the filter if any
     fn filter(&self) -> Self::Filter;
+
+    /// Returns the required component for the fetch
+    fn components(&self, result: &mut Vec<ComponentId>);
 }
 
 impl<'w> Fetch<'w> for () {
@@ -82,10 +83,6 @@ impl<'w> Fetch<'w> for () {
         vec![]
     }
 
-    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
-        vec![]
-    }
-
     fn describe(&self, f: &mut dyn Write) -> fmt::Result {
         write!(f, "()")
     }
@@ -93,6 +90,8 @@ impl<'w> Fetch<'w> for () {
     fn filter(&self) -> Self::Filter {
         Nothing
     }
+
+    fn components(&self, result: &mut Vec<ComponentId>) {}
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -164,10 +163,6 @@ impl<'w> Fetch<'w> for EntityIds {
         f.write_str("entities")
     }
 
-    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
-        vec![]
-    }
-
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         vec![]
     }
@@ -175,6 +170,10 @@ impl<'w> Fetch<'w> for EntityIds {
     fn filter(&self) -> Self::Filter {
         Nothing
     }
+
+    const HAS_FILTER: bool = false;
+
+    fn components(&self, result: &mut Vec<ComponentId>) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
@@ -224,8 +223,8 @@ macro_rules! tuple_impl {
                 )* ].concat()
             }
 
-            fn difference(&self, data: FetchPrepareData) -> Vec<String> {
-                [$((self.$idx).difference(data)),*].concat()
+            fn components(&self, result: &mut Vec<ComponentId>) {
+                $((self.$idx).components(result));*
             }
 
             fn filter(&self) -> Self::Filter {

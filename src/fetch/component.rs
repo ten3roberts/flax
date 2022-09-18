@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 use crate::{
     archetype::{Changes, Slice, Slot},
     entity::wildcard,
-    AccessKind, All, Change, Component, ComponentValue,
+    AccessKind, Change, Component, ComponentValue,
 };
 
 use super::*;
@@ -50,14 +50,6 @@ where
         data.arch.has(self.id())
     }
 
-    fn difference(&self, data: FetchPrepareData) -> Vec<String> {
-        if data.arch.has(self.id()) {
-            vec![]
-        } else {
-            vec![self.name().to_string()]
-        }
-    }
-
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
         if data.arch.has(self.id()) {
             vec![Access {
@@ -79,6 +71,10 @@ where
     fn filter(&self) -> Self::Filter {
         Nothing
     }
+
+    fn components(&self, result: &mut Vec<ComponentId>) {
+        result.push(self.id())
+    }
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Component<T> {
@@ -95,6 +91,8 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = true;
+    const HAS_FILTER: bool = false;
+
     type Filter = Nothing;
 
     type Prepared = PreparedComponentMut<'w, T>;
@@ -108,19 +106,6 @@ where
 
     fn matches(&self, data: FetchPrepareData) -> bool {
         data.arch.has(self.0.id())
-    }
-
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
-        f.write_str("mut ")?;
-        f.write_str(self.0.name())
-    }
-
-    fn difference(&self, data: FetchPrepareData) -> Vec<String> {
-        if data.arch.has(self.0.id()) {
-            vec![]
-        } else {
-            vec![self.0.name().to_string()]
-        }
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
@@ -145,8 +130,17 @@ where
             vec![]
         }
     }
+
+    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+        f.write_str("mut ")?;
+        f.write_str(self.0.name())
+    }
     fn filter(&self) -> Self::Filter {
         Nothing
+    }
+
+    fn components(&self, result: &mut Vec<ComponentId>) {
+        result.push(self.0.id())
     }
 }
 
@@ -244,13 +238,11 @@ where
             .collect_vec()
     }
 
-    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
-        vec![]
-    }
-
     fn filter(&self) -> Self::Filter {
         Nothing
     }
+
+    fn components(&self, result: &mut Vec<ComponentId>) {}
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {

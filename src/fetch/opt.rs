@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use crate::{fetch::FetchPrepareData, fetch::PreparedFetch, ComponentValue, Fetch};
+use crate::{fetch::FetchPrepareData, fetch::PreparedFetch, ComponentId, ComponentValue, Fetch};
 
 use super::FetchItem;
 
@@ -30,22 +30,20 @@ where
         true
     }
 
+    fn access(&self, data: FetchPrepareData) -> Vec<crate::Access> {
+        self.0.access(data)
+    }
+
     fn describe(&self, f: &mut dyn Write) -> fmt::Result {
         f.write_str("opt")?;
         self.0.describe(f)
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<crate::Access> {
-        self.0.access(data)
-    }
-
-    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
-        vec![]
-    }
-
     fn filter(&self) -> Self::Filter {
         self.0.filter()
     }
+
+    fn components(&self, result: &mut Vec<ComponentId>) {}
 }
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
@@ -104,23 +102,21 @@ where
         true
     }
 
+    fn access(&self, data: FetchPrepareData) -> Vec<crate::Access> {
+        self.inner.access(data)
+    }
+
     fn describe(&self, f: &mut dyn Write) -> fmt::Result {
         f.write_str("opt_or(")?;
         self.inner.describe(f)?;
         f.write_str(")")
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<crate::Access> {
-        self.inner.access(data)
-    }
-
-    fn difference(&self, _: FetchPrepareData) -> Vec<String> {
-        vec![]
-    }
-
     fn filter(&self) -> Self::Filter {
         self.inner.filter()
     }
+
+    fn components(&self, result: &mut Vec<ComponentId>) {}
 }
 
 impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {
