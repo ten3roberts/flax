@@ -13,7 +13,7 @@ use crate::{
     archetype::{Archetype, Slice, Slot},
     filter::Nothing,
     system::Access,
-    ArchetypeId, Entity, Filter, World,
+    All, ArchetypeId, Entity, Filter, World,
 };
 
 /// Represents the world data necessary for preparing a fetch

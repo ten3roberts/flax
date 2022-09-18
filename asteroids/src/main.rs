@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
         .with_system(player_system(dt))
         .with_system(camera_system(dt))
         .with_system(lifetime_system(dt))
-        .with_system(spawn_asteroids(16))
+        .with_system(spawn_asteroids(64))
         .with_system(particle_system())
         .with_system(collision_system())
         .with_system(integrate_velocity(dt))
@@ -530,7 +530,7 @@ fn despawn_out_of_bounds() -> BoxedSystem {
              mut asteroids: QueryBorrow<(Component<Vec2>, Mutable<f32>), _>| {
                 if let Some(player_pos) = player.first() {
                     for (asteroid, health) in &mut asteroids {
-                        if player_pos.distance(*asteroid) > 2000.0 {
+                        if player_pos.distance(*asteroid) > 2500.0 {
                             *health = 0.0;
                         }
                     }
@@ -591,7 +591,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                     // Spawn around player
                     let dir = rng.gen_range(0f32..TAU);
                     let pos =
-                        *player_pos + vec2(dir.cos(), dir.sin()) * rng.gen_range(128.0..1024.0);
+                        *player_pos + vec2(dir.cos(), dir.sin()) * rng.gen_range(128.0..2048.0);
 
                     let size = rng.gen_range(0.2..1.0);
                     let radius = size * ASTEROID_SIZE;

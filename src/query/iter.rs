@@ -97,12 +97,12 @@ where
     type Item = Batch<'q, Q::Prepared>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Fetch will never change and all calls are disjoint
-        let fetch = unsafe { &mut *(self.fetch as *mut Q::Prepared) };
-
         // Get the next chunk
         let chunk = self.filter.next();
         let chunk = chunk?;
+
+        // Fetch will never change and all calls are disjoint
+        let fetch = unsafe { &mut *(self.fetch as *mut Q::Prepared) };
 
         // Set the chunk as visited
         unsafe { fetch.set_visited(chunk, self.new_tick) }
@@ -117,7 +117,7 @@ where
     Q: Fetch<'w>,
     &'w F: Filter<'q>,
 {
-    pub(crate) inner: Flatten<BatchedIter<'q, 'w, Q, F>>,
+    iter: Flatten<BatchedIter<'q, 'w, Q, F>>,
 }
 
 impl<'q, 'w, Q, F> QueryIter<'q, 'w, Q, F>
@@ -125,9 +125,9 @@ where
     Q: Fetch<'w>,
     &'w F: Filter<'q>,
 {
-    pub fn new(batch: BatchedIter<'q, 'w, Q, F>) -> Self {
+    pub fn new(iter: BatchedIter<'q, 'w, Q, F>) -> Self {
         Self {
-            inner: batch.flatten(),
+            iter: iter.flatten(),
         }
     }
 }
@@ -141,7 +141,7 @@ where
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.iter.next()
     }
 }
 

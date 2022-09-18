@@ -3,9 +3,13 @@ use std::mem::{self, MaybeUninit};
 use smallvec::SmallVec;
 
 use crate::{
-    entity::EntityLocation, error::Result, fetch::FetchPrepareData, fetch::PreparedFetch,
-    filter::All, filter::And, filter::GatedFilter, Archetype, ArchetypeId, Entity, Error, Fetch,
-    FetchItem, Filter, World,
+    entity::EntityLocation,
+    error::Result,
+    fetch::FetchPrepareData,
+    fetch::PreparedFetch,
+    filter::All,
+    filter::{And, GatedFilter},
+    Archetype, ArchetypeId, Entity, Error, Fetch, FetchItem, Filter, World,
 };
 
 use super::{
@@ -85,9 +89,7 @@ where
         'w: 'q,
         &'w F: Filter<'q>,
     {
-        QueryIter {
-            inner: self.iter_batched().flatten(),
-        }
+        QueryIter::new(self.iter_batched())
     }
 
     /// Returns the first item
@@ -126,7 +128,7 @@ where
                     Some(PreparedArchetype {
                         arch_id,
                         arch,
-                        fetch: self.fetch.prepare(data).expect("Mismathed archetype"),
+                        fetch: self.fetch.prepare(data).unwrap(),
                     })
                 })
                 .collect();
