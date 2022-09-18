@@ -4,13 +4,17 @@ mod traits;
 use core::fmt;
 use std::{
     any::{type_name, TypeId},
+    collections::BTreeMap,
     fmt::Formatter,
     marker::PhantomData,
 };
 
 use crate::{
-    fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer, ComponentId, Fetch,
-    FetchItem, Filter, Query, QueryData, World,
+    archetype::{self, ArchetypeInfo},
+    fetch::PreparedFetch,
+    util::TupleCombine,
+    ArchetypeId, CommandBuffer, ComponentId, ComponentInfo, Fetch, FetchItem, Filter, Query,
+    QueryData, World,
 };
 
 pub use context::*;
@@ -366,6 +370,30 @@ impl AccessKind {
     pub fn is_command_buffer(&self) -> bool {
         matches!(self, Self::CommandBuffer)
     }
+}
+
+/// An access for a component in an archetype
+#[derive(Default, Debug, Clone)]
+struct ArchetypeAccess {
+    arch: ArchetypeInfo,
+    components: Vec<ComponentAccessInfo>,
+    change_events: Vec<ComponentAccessInfo>,
+}
+
+#[derive(Debug, Clone)]
+struct ComponentAccessInfo {
+    mutable: bool,
+    name: &'static str,
+    id: ComponentId,
+}
+
+/// Human friendly system access
+#[derive(Default, Debug, Clone)]
+pub struct AccessInfo {
+    archetypes: BTreeMap<ArchetypeId, ArchetypeAccess>,
+    world: Option<bool>,
+    cmd: Option<bool>,
+    external: Vec<TypeId>,
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]

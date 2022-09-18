@@ -4,7 +4,8 @@ use std::{collections::BTreeMap, iter::FromIterator, mem, ops::Deref};
 use itertools::Itertools;
 
 use crate::{
-    system::SystemContext, Access, BoxedSystem, CommandBuffer, NeverSystem, System, Verbatim, World,
+    access_info, system::SystemContext, AccessInfo, BoxedSystem, CommandBuffer, NeverSystem,
+    System, Verbatim, World,
 };
 
 enum Systems {
@@ -98,21 +99,11 @@ impl ScheduleBuilder {
 }
 
 /// Represents diagnostic information about a system
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SystemInfo {
     name: String,
     desc: Verbatim,
-    access: Vec<Access>,
-}
-
-impl std::fmt::Debug for SystemInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SystemInfo")
-            .field("name", &self.name)
-            .field("desc", &self.desc)
-            .field("access", &self.access.len())
-            .finish()
-    }
+    access: AccessInfo,
 }
 
 impl SystemInfo {
@@ -127,8 +118,8 @@ impl SystemInfo {
     }
 
     /// Returns the system's current accesses
-    pub fn access(&self) -> &[Access] {
-        self.access.as_ref()
+    pub fn access(&self) -> &AccessInfo {
+        &self.access
     }
 }
 
@@ -304,7 +295,7 @@ impl Schedule {
                     .map(|system| SystemInfo {
                         name: system.name(),
                         desc: Verbatim(format!("{system:#?}")),
-                        access: system.access(world),
+                        access: access_info(&system.access(world), world),
                     })
                     .collect_vec();
                 BatchInfo(systems)
@@ -380,7 +371,7 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
         depth: u32,
     ) {
         match visited.get_mut(&idx) {
-            Some(VisitedState::Pending) => panic!("cyclic dependency"),
+            Some(VisitedState::Pending) => unreachable!("cyclic dependency"),
             Some(VisitedState::Visited(d)) => {
                 if depth > *d {
                     // Update self and children
