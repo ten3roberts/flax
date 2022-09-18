@@ -11,7 +11,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, BatchSpawn, Change, ComponentInfo, Slice},
+    archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
     buffer::ComponentBuffer,
     components::{is_component, name},
     debug_visitor,
@@ -932,6 +932,7 @@ impl World {
     ) -> Option<AtomicRef<T>> {
         self.archetypes.get(arch).get(slot, component)
     }
+
     /// Randomly access an entity's component.
     pub fn get_mut<T: ComponentValue>(
         &self,
@@ -1051,6 +1052,11 @@ impl World {
     /// Formats a set of entities using the debug visitor.
     pub fn format_entities<'a>(&'a self, ids: &'a [Entity]) -> EntityFormatter<'a> {
         EntityFormatter { world: self, ids }
+    }
+
+    /// Returns a human friendly breakdown of the archetypes in the world
+    pub fn archetype_info(&self) -> BTreeMap<ArchetypeId, ArchetypeInfo> {
+        self.archetypes.iter().map(|(k, v)| (k, v.info())).collect()
     }
 
     /// Attempt to find an alive entity given the id

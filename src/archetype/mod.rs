@@ -1,9 +1,12 @@
-use std::{alloc::Layout, any::TypeId, collections::BTreeMap, mem};
+use std::{alloc::Layout, any::TypeId, collections::BTreeMap, fmt::Debug, mem};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::{buffer::ComponentBuffer, entity, Component, ComponentId, ComponentValue, Entity};
+use crate::{
+    buffer::ComponentBuffer, entity, util::TupleCloned, Component, ComponentId, ComponentValue,
+    Entity, Verbatim,
+};
 
 /// Unique archetype id
 pub type ArchetypeId = Entity;
@@ -20,6 +23,47 @@ pub use changes::*;
 pub use slice::*;
 pub(crate) use storage::*;
 
+#[derive(Debug, Clone)]
+struct StorageInfo {
+    cap: usize,
+    len: usize,
+}
+
+const SHORT_DEBUG_LEN: usize = 8;
+#[derive(Clone)]
+/// Shows only a handful of entries to avoid cluttering the terminal with gigantic vecs
+struct ShortDebugVec<T>(Vec<T>);
+
+impl<T> Default for ShortDebugVec<T> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl<T: Debug> Debug for ShortDebugVec<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = f.debug_list();
+        s.entries(self.0.iter().take(SHORT_DEBUG_LEN));
+
+        if self.0.len() > SHORT_DEBUG_LEN {
+            s.entry(&Verbatim(format!(
+                "+{} more",
+                self.0.len() - SHORT_DEBUG_LEN
+            )));
+        }
+
+        s.finish()
+    }
+}
+
+/// Human friendly archetype inspection
+#[derive(Default, Debug, Clone)]
+pub struct ArchetypeInfo {
+    storage: Vec<StorageInfo>,
+    components: Vec<ComponentInfo>,
+    entities: ShortDebugVec<Entity>,
+}
+
 #[derive(Debug)]
 #[doc(hidden)]
 /// A collection of entities with the same components.
@@ -29,8 +73,6 @@ pub struct Archetype {
     changes: BTreeMap<ComponentId, AtomicRefCell<Changes>>,
     /// Slot to entity id
     pub(crate) entities: Vec<Entity>,
-    // Number of slots
-    cap: usize,
 
     // ComponentId => ArchetypeId
     pub(crate) edges: BTreeMap<ComponentId, ArchetypeId>,
@@ -45,7 +87,6 @@ impl Archetype {
         Self {
             storage: BTreeMap::new(),
             changes: BTreeMap::new(),
-            cap: 0,
             edges: BTreeMap::new(),
             entities: Vec::new(),
         }
@@ -93,7 +134,6 @@ impl Archetype {
             .unzip();
 
         Self {
-            cap: 0,
             storage,
             changes,
             edges: BTreeMap::new(),
@@ -192,6 +232,29 @@ impl Archetype {
             self.entities.pop().expect("Non empty");
 
             None
+        }
+    }
+
+    /// Returns human friendly debug info
+    pub fn info(&self) -> ArchetypeInfo {
+        let (components, storage) = self
+            .storage
+            .values()
+            .map(|v| {
+                (
+                    *v.info(),
+                    StorageInfo {
+                        cap: v.capacity(),
+                        len: v.len(),
+                    },
+                )
+            })
+            .unzip();
+
+        ArchetypeInfo {
+            components,
+            storage,
+            entities: ShortDebugVec(self.entities.clone()),
         }
     }
 
@@ -452,23 +515,10 @@ impl Archetype {
     /// Does nothing if the remaining capacity < additional.
     /// len remains unchanged, as does the internal order
     pub fn reserve(&mut self, additional: usize) {
-        let len = self.len();
-        let old_cap = self.cap;
-        let new_cap = (len + additional).next_power_of_two();
-
-        if additional == 0 || new_cap <= old_cap {
-            return;
-        }
 
         // for storage in self.storage.values_mut() {
         //     storage.reserve(additional);
         // }
-
-        // Copy over entity ids
-        // let mut new_entities = vec![None; new_cap].into_boxed_slice();
-        // new_entities[0..self.len].copy_from_slice(&self.entities[0..self.len]);
-        // self.entities = new_entities;
-        self.cap = new_cap;
     }
 
     /// Returns the entity at `slot`
@@ -495,12 +545,6 @@ impl Archetype {
     /// Returns true if the archetype contains no entities
     pub fn is_empty(&self) -> bool {
         self.entities.is_empty()
-    }
-
-    #[must_use]
-    /// Get the archetype's capacity.
-    pub fn cap(&self) -> usize {
-        self.cap
     }
 
     /// Get a reference to the archetype's components.
@@ -536,6 +580,10 @@ impl Archetype {
     pub(crate) fn entities_mut(&mut self) -> &mut [Entity] {
         &mut self.entities
     }
+
+    pub(crate) fn component(&self, component: Entity) -> Option<&ComponentInfo> {
+        self.storage.get(&component).map(|v| v.info())
+    }
 }
 
 impl Drop for Archetype {
@@ -544,7 +592,7 @@ impl Drop for Archetype {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Clone, PartialEq, Eq, Copy)]
 /// Represents a type erased component along with its memory layout and drop fn.
 /// Is essentially a vtable
 pub struct ComponentInfo {
@@ -554,6 +602,15 @@ pub struct ComponentInfo {
     pub(crate) drop: unsafe fn(*mut u8),
     pub(crate) type_id: TypeId,
     meta: fn(Self) -> ComponentBuffer,
+}
+
+impl Debug for ComponentInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ComponentInfo")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .finish()
+    }
 }
 
 // impl std::fmt::Debug for ComponentInfo {

@@ -30,6 +30,16 @@ fn benchmarks(c: &mut Criterion) {
             let mut bench = heavy_compute::Benchmark::new();
             b.iter(|| bench.run_seq())
         });
+
+    c.benchmark_group("schedule")
+        .bench_function("par", |b| {
+            let mut bench = schedule::Benchmark::new();
+            b.iter(|| bench.run())
+        })
+        .bench_function("seq", |b| {
+            let mut bench = schedule::Benchmark::new();
+            b.iter(|| bench.run_seq())
+        });
 }
 
 criterion_group!(benches, benchmarks);
