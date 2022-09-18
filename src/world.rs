@@ -79,19 +79,20 @@ impl Archetypes {
             let head = head.borrow();
             let cur = &mut self.inner.get(cursor).expect("Invalid archetype id");
 
-            cursor = match cur.edge_to(head.id) {
-                Some(id) => id,
+            cursor = match cur.outgoing(head.id) {
+                Some((_, id)) => id,
                 None => {
                     let new = Archetype::new(cur.components().copied().chain([*head]));
 
                     // Increase gen
                     self.gen = self.gen.wrapping_add(1);
-                    let id = self.inner.spawn(new);
+                    let new_id = self.inner.spawn(new);
 
-                    let (cur, new) = self.inner.get_disjoint(cursor, id).unwrap();
-                    cur.add_edge_to(new, id, cursor, head.id);
+                    let (cur, new) = self.inner.get_disjoint(cursor, new_id).unwrap();
+                    cur.add_outgoing(new_id, true, head.id);
+                    new.add_incoming(cursor, head.id);
 
-                    id
+                    new_id
                 }
             };
         }
@@ -99,8 +100,11 @@ impl Archetypes {
         (cursor, self.inner.get_mut(cursor).unwrap())
     }
 
-    pub fn root(&mut self) -> &mut Archetype {
+    pub fn get_root(&mut self) -> &mut Archetype {
         self.get_mut(self.root)
+    }
+    pub fn root(&self) -> ArchetypeId {
+        self.root
     }
 
     pub fn get_disjoint(
@@ -120,13 +124,13 @@ impl Archetypes {
     /// Despawn an archetype, leaving a hole in the tree.
     ///
     /// It is the callers responibility to cleanup child nodes if the node is internal
-    /// Children are detached from the tree, but still accesible by id
+    /// Children are detached from the tree, but still accessible by id
     fn despawn(&mut self, id: Entity) -> Archetype {
         let arch = self.inner.despawn(id).expect("Invalid archetype");
 
         // Remove outgoing edges
-        for (component, dst_id) in &arch.edges {
-            assert!(self.get_mut(*dst_id).edges.remove(component).is_some());
+        for (component, dst_id) in &arch.incoming {
+            assert!(self.get_mut(*dst_id).outgoing.remove(component).is_some());
         }
         self.gen = self.gen.wrapping_add(1);
 
@@ -462,7 +466,7 @@ impl World {
         }
 
         *self.location_mut(id).unwrap() = EntityLocation {
-            slot: self.archetypes.root().allocate(id),
+            slot: self.archetypes.get_root().allocate(id),
             arch: self.archetypes.root,
         };
 
@@ -737,8 +741,8 @@ impl World {
         }
 
         // Pick up the entity and move it to the destination archetype
-        let dst_id = match src.edge_to(info.id()) {
-            Some(dst) => dst,
+        let dst_id = match src.outgoing(info.id()) {
+            Some((_, dst)) => dst,
             None => {
                 let pivot = src.components().take_while(|v| v.id < info.id()).count();
 
@@ -765,7 +769,8 @@ impl World {
                 src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
 
             // Add a quick edge to refer to later
-            src.add_edge_to(dst, dst_id, src_id, info.id());
+            src.add_outgoing(dst_id, false, info.id());
+            dst.add_incoming(src_id, info.id());
 
             // Insert the missing component
             dst.push(info.id, value).expect("Insert should not fail");
@@ -840,8 +845,8 @@ impl World {
             return Err(Error::MissingComponent(id, component.name));
         }
 
-        let dst_id = match src.edge_to(component.id()) {
-            Some(dst) => dst,
+        let dst_id = match src.outgoing(component.id()) {
+            Some((_, dst)) => dst,
             None => {
                 let components: Vec<_> = src
                     .components()
@@ -860,9 +865,8 @@ impl World {
         assert_ne!(src_id, dst_id);
         // Borrow disjoint
         let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
-
-        // Add a quick edge to refer to later
-        src.add_edge_to(dst, dst_id, src_id, component.id());
+        src.add_incoming(dst_id, component.id());
+        dst.add_outgoing(src_id, false, component.id());
 
         // Take the value
         // This moves the differing value out of the archetype before it is

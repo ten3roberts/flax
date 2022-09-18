@@ -76,7 +76,5 @@ fn schedule_granularity() {
     eprintln!("Batches: {batches:#?}");
     assert_eq!(batches.len(), 1);
 
-    for _ in 0..10000 {
-        schedule.execute_par(&mut world).unwrap();
-    }
+    schedule.execute_par(&mut world).unwrap();
 }
