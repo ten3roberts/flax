@@ -406,10 +406,62 @@ pub struct Access {
     pub mutable: bool,
 }
 
+/// Transform accesses into a human friendly format
+pub(crate) fn access_info(accesses: &[Access], world: &World) -> AccessInfo {
+    let mut result = AccessInfo::default();
+    for access in accesses {
+        match access.kind {
+            AccessKind::Archetype { id, component } => {
+                let arch = world.archetypes.get(id);
+                result
+                    .archetypes
+                    .entry(id)
+                    .or_insert_with(|| ArchetypeAccess {
+                        arch: arch.info(),
+                        ..Default::default()
+                    })
+                    .components
+                    .push(ComponentAccessInfo {
+                        mutable: access.mutable,
+                        name: arch.component(component).unwrap().name(),
+                        id: component,
+                    })
+            }
+            AccessKind::ChangeEvent { id, component } => {
+                let arch = world.archetypes.get(id);
+                result
+                    .archetypes
+                    .entry(id)
+                    .or_insert_with(|| ArchetypeAccess {
+                        arch: arch.info(),
+                        ..Default::default()
+                    })
+                    .change_events
+                    .push(ComponentAccessInfo {
+                        mutable: access.mutable,
+                        name: arch.component(component).unwrap().name(),
+                        id: component,
+                    })
+            }
+            AccessKind::External(ty) => result.external.push(ty),
+            AccessKind::World => match result.world {
+                Some(true) => result.world = Some(true),
+                _ => result.world = Some(access.mutable),
+            },
+            AccessKind::CommandBuffer => match result.cmd {
+                Some(true) => result.cmd = Some(true),
+                _ => result.cmd = Some(access.mutable),
+            },
+        }
+    }
+
+    result
+}
+
 impl Access {
     /// Returns true it both accesses can coexist
     pub(crate) fn is_compatible_with(&self, other: &Self) -> bool {
-        !(self.kind == other.kind && self.mutable || other.mutable)
+        !(self.kind == other.kind && (self.mutable || other.mutable))
     }
 }
 
