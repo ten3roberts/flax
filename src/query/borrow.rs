@@ -1,5 +1,9 @@
-use std::mem::{self, MaybeUninit};
+use std::{
+    iter::Peekable,
+    mem::{self, MaybeUninit},
+};
 
+use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{
@@ -9,7 +13,7 @@ use crate::{
     fetch::PreparedFetch,
     filter::All,
     filter::{And, GatedFilter},
-    Archetype, ArchetypeId, Entity, Error, Fetch, FetchItem, Filter, World,
+    is_component, Archetype, ArchetypeId, Entity, Error, Fetch, FetchItem, Filter, World,
 };
 
 use super::{
@@ -50,6 +54,57 @@ where
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+struct DifferenceIter<T, L: Iterator<Item = T>, R: Iterator<Item = T>> {
+    left: Peekable<L>,
+    right: Peekable<R>,
+}
+
+impl<T, L: Iterator<Item = T>, R: Iterator<Item = T>> DifferenceIter<T, L, R> {
+    fn new(left: L, right: R) -> Self {
+        Self {
+            left: left.peekable(),
+            right: right.peekable(),
+        }
+    }
+}
+
+impl<T: Ord, L: Iterator<Item = T>, R: Iterator<Item = T>> Iterator for DifferenceIter<T, L, R> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (l, r) = match (self.left.peek(), self.right.peek()) {
+                (None, None) => return None,
+                (None, Some(_)) => return self.right.next(),
+                (Some(_), None) => return self.left.next(),
+                (Some(l), Some(r)) => (l, r),
+            };
+
+            match l.cmp(r) {
+                std::cmp::Ordering::Less => return self.left.next(),
+                std::cmp::Ordering::Equal => {
+                    self.left.next();
+                    self.right.next();
+                }
+                std::cmp::Ordering::Greater => return self.right.next(),
+            }
+        }
+    }
+}
+#[cfg(test)]
+mod test {
+    use itertools::Itertools;
+
+    use super::DifferenceIter;
+
+    #[test]
+    fn difference_iter() {
+        let diff = DifferenceIter::new([1, 2, 6, 7].into_iter(), [1, 2, 4, 5, 6, 8].into_iter())
+            .collect_vec();
+        assert_eq!(diff, [4, 5, 7, 8]);
     }
 }
 
@@ -212,14 +267,23 @@ where
                     let mut buf = String::new();
                     self.fetch.describe(&mut buf).unwrap();
 
+                    let mut components = Vec::new();
+                    self.fetch.components(&mut components);
                     Error::UnmatchedFetch(
                         id,
                         buf,
-                        self.fetch.difference(FetchPrepareData {
-                            world: self.world,
-                            arch,
-                            arch_id,
-                        }),
+                        DifferenceIter::new(
+                            arch.components().map(|v| v.id()),
+                            components.into_iter(),
+                        )
+                        .map(|v| {
+                            self.world
+                                .get(v, is_component())
+                                .unwrap()
+                                .name()
+                                .to_string()
+                        })
+                        .collect_vec(),
                     )
                 })?,
                 slot,
@@ -256,14 +320,20 @@ where
             let mut buf = String::new();
             self.fetch.describe(&mut buf).unwrap();
 
+            let mut components = Vec::new();
+            self.fetch.components(&mut components);
             Error::UnmatchedFetch(
                 id,
                 buf,
-                self.fetch.difference(FetchPrepareData {
-                    world: self.world,
-                    arch,
-                    arch_id,
-                }),
+                DifferenceIter::new(arch.components().map(|v| v.id()), components.into_iter())
+                    .map(|v| {
+                        self.world
+                            .get(v, is_component())
+                            .unwrap()
+                            .name()
+                            .to_string()
+                    })
+                    .collect_vec(),
             )
         })?;
 

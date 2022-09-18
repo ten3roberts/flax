@@ -60,10 +60,6 @@ where
         self.component.access(data)
     }
 
-    fn difference(&self, data: crate::fetch::FetchPrepareData) -> Vec<String> {
-        self.component.difference(data)
-    }
-
     fn describe(&self, f: &mut dyn std::fmt::Write) -> core::fmt::Result {
         f.write_str(&self.kind.to_string())?;
         f.write_str(" ")?;
@@ -75,6 +71,10 @@ where
             component: self.component,
             kind: self.kind,
         }
+    }
+
+    fn components(&self, result: &mut Vec<crate::ComponentId>) {
+        result.push(self.component.id())
     }
 }
 
@@ -220,10 +220,6 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
         vec![]
     }
 
-    fn difference(&self, _: crate::fetch::FetchPrepareData) -> Vec<String> {
-        vec![]
-    }
-
     fn describe(&self, f: &mut dyn std::fmt::Write) -> core::fmt::Result {
         f.write_str(&ChangeKind::Removed.to_string())?;
         f.write_str(" ")?;
@@ -235,7 +231,10 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
             component: self.component,
         }
     }
+
+    fn components(&self, result: &mut Vec<crate::ComponentId>) {}
 }
+
 impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
     type Prepared = PreparedKindFilter<'a>;
 

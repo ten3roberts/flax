@@ -110,7 +110,8 @@ pub struct Archetype {
     pub(crate) entities: Vec<Entity>,
 
     // ComponentId => ArchetypeId
-    pub(crate) edges: BTreeMap<ComponentId, ArchetypeId>,
+    pub(crate) outgoing: BTreeMap<ComponentId, (bool, ArchetypeId)>,
+    pub(crate) incoming: BTreeMap<ComponentId, ArchetypeId>,
 }
 
 /// Since all components are Send + Sync, the archetype is as well
@@ -122,7 +123,8 @@ impl Archetype {
         Self {
             storage: BTreeMap::new(),
             changes: BTreeMap::new(),
-            edges: BTreeMap::new(),
+            outgoing: BTreeMap::new(),
+            incoming: BTreeMap::new(),
             entities: Vec::new(),
         }
     }
@@ -171,7 +173,8 @@ impl Archetype {
         Self {
             storage,
             changes,
-            edges: BTreeMap::new(),
+            incoming: BTreeMap::new(),
+            outgoing: BTreeMap::new(),
             entities: Vec::new(),
         }
     }
@@ -186,19 +189,30 @@ impl Archetype {
         self.storage.get(&component).is_some()
     }
 
-    pub(crate) fn edge_to(&self, component: ComponentId) -> Option<ArchetypeId> {
-        self.edges.get(&component).copied()
+    pub(crate) fn outgoing(&self, component: ComponentId) -> Option<(bool, ArchetypeId)> {
+        self.outgoing.get(&component).copied()
     }
 
-    pub(crate) fn add_edge_to(
+    pub(crate) fn incoming(&self, component: ComponentId) -> Option<ArchetypeId> {
+        self.incoming.get(&component).copied()
+    }
+
+    pub(crate) fn add_incoming(&mut self, dst_id: ArchetypeId, component: ComponentId) {
+        self.incoming.insert(component, dst_id);
+    }
+
+    pub(crate) fn add_outgoing(
         &mut self,
-        dst: &mut Archetype,
         dst_id: ArchetypeId,
-        src_id: ArchetypeId,
+        strong_link: bool,
         component: ComponentId,
     ) {
-        self.edges.insert(component, dst_id);
-        dst.edges.insert(component, src_id);
+        let link = self
+            .outgoing
+            .entry(component)
+            .or_insert((strong_link, dst_id));
+
+        link.0 = link.0 || strong_link;
     }
 
     pub(crate) fn init_changes(&mut self, info: ComponentInfo) -> &mut Changes {

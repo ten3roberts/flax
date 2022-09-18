@@ -209,8 +209,8 @@ fn derive_data_struct(
                         [ #(self.#field_names.access(data)),* ].concat()
                     }
 
-                    fn difference(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<String> {
-                        [ #(self.#field_names.difference(data)),* ].concat()
+                    fn components(&self, result: &mut Vec<#crate_name::ComponentId>) {
+                        #(self.#field_names.components(result));*
                     }
 
                     fn filter(&self) -> Self::Filter {

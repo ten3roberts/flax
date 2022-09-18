@@ -7,13 +7,14 @@ use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
 use crate::{
-    archetype::{ArchetypeId, Slot},
+    archetype::{Archetype, ArchetypeId, Slot},
     fetch::*,
     filter::*,
     is_component,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, Component, ComponentValue, FetchItem, Filter, World,
+    Access, AccessKind, Archetypes, Component, ComponentId, ComponentValue, FetchItem, Filter,
+    World,
 };
 
 pub use borrow::*;
@@ -190,7 +191,7 @@ where
         // Make sure the archetypes to visit are up to date
         let archetype_gen = world.archetype_gen();
         if archetype_gen > self.archetype_gen {
-            self.archetypes = self.get_archetypes(world).collect_vec();
+            self.archetypes = self.get_archetypes(world);
             self.archetype_gen = archetype_gen;
         }
 
@@ -213,24 +214,54 @@ where
         prepared.iter().map(|v| v.cloned()).collect_vec()
     }
 
-    fn get_archetypes<'a>(&'a self, world: &'a World) -> impl Iterator<Item = ArchetypeId> + '_ {
-        world.archetypes().filter_map(|(arch_id, arch)| {
+    fn get_archetypes<'a>(&'a self, world: &'a World) -> Vec<ArchetypeId> {
+        let mut components = Vec::new();
+        self.fetch.components(&mut components);
+        components.sort();
+        components.dedup();
+
+        let mut result = Vec::new();
+        let archetypes = &world.archetypes;
+
+        let filter = |arch_id: ArchetypeId, arch: &Archetype| {
             let data = FetchPrepareData {
                 world,
                 arch,
                 arch_id,
             };
-
-            if (self.include_components || !arch.has(is_component().id()))
+            (self.include_components || !arch.has(is_component().id()))
                 && self.fetch.matches(data)
                 && self.filter.matches(arch)
                 && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
-            {
-                Some(arch_id)
-            } else {
-                None
-            }
-        })
+        };
+
+        let root = archetypes.root();
+        let root_arch = archetypes.get(root);
+
+        if components.is_empty() && filter(root, root_arch) {
+            result.push(root);
+        }
+
+        traverse_archetypes(archetypes, root_arch, &components, &mut result, &filter);
+
+        result
+        // world.archetypes().filter_map(|(arch_id, arch)| {
+        //     let data = FetchPrepareData {
+        //         world,
+        //         arch,
+        //         arch_id,
+        //     };
+
+        //     if (self.include_components || !arch.has(is_component().id()))
+        //         && self.fetch.matches(data)
+        //         && self.filter.matches(arch)
+        //         && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
+        //     {
+        //         Some(arch_id)
+        //     } else {
+        //         None
+        //     }
+        // })
     }
 }
 
@@ -240,8 +271,8 @@ where
     F: for<'x> Filter<'x>,
 {
     fn access(&self, world: &World) -> Vec<crate::system::Access> {
-        let accesses = self
-            .get_archetypes(world)
+        self.get_archetypes(world)
+            .into_iter()
             .flat_map(|arch_id| {
                 let arch = world.archetypes.get(arch_id);
                 let data = FetchPrepareData {
@@ -257,9 +288,57 @@ where
                 kind: AccessKind::World,
                 mutable: false,
             }])
-            .collect_vec();
+            .collect_vec()
+    }
+}
 
-        accesses
+fn traverse_archetypes(
+    archetypes: &Archetypes,
+    cur: &Archetype,
+    components: &[ComponentId],
+    result: &mut Vec<ArchetypeId>,
+    filter: &impl Fn(ArchetypeId, &Archetype) -> bool,
+) {
+    match components {
+        // All components are found, every archetype from now on is now matched
+        [] => {
+            for (&component, &(strong, arch_id)) in &cur.outgoing {
+                if strong {
+                    let arch = archetypes.get(arch_id);
+                    debug_assert!(arch.components().any(|&v| v.id() == component));
+                    // This matches
+                    if filter(arch_id, arch) {
+                        result.push(arch_id);
+                    }
+                    traverse_archetypes(archetypes, arch, components, result, filter);
+                }
+            }
+        }
+        [head, tail @ ..] => {
+            // Since the components in the trie are in order, a value greater than head means the
+            // current component will never occur
+            for (&component, &(strong, arch_id)) in &cur.outgoing {
+                if strong {
+                    let arch = archetypes.get(arch_id);
+                    match component.cmp(head) {
+                        std::cmp::Ordering::Less => {
+                            // Not quite, keep looking
+                            traverse_archetypes(archetypes, arch, components, result, filter);
+                        }
+                        std::cmp::Ordering::Equal => {
+                            // One more component has been found, continue to search for the remaining ones
+                            if filter(arch_id, arch) {
+                                result.push(arch_id);
+                            }
+                            traverse_archetypes(archetypes, arch, tail, result, filter);
+                        }
+                        std::cmp::Ordering::Greater => {
+                            // We won't find anything of interest further down the tree
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
