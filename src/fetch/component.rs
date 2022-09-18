@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 use crate::{
     archetype::{Changes, Slice, Slot},
     entity::wildcard,
-    AccessKind, Change, Component, ComponentValue,
+    AccessKind, All, Change, Component, ComponentValue,
 };
 
 use super::*;
@@ -27,7 +27,8 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
     type Item = &'q T;
 
     unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        &self.borrow[slot]
+        // Safety: bounds guaranteed by callee
+        self.borrow.get_unchecked(slot)
     }
 }
 
@@ -160,9 +161,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
-        (&mut self.borrow[slot] as *mut T)
-            .as_mut()
-            .expect("Non null")
+        &mut *(self.borrow.get_unchecked_mut(slot) as *mut T)
     }
 
     unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {

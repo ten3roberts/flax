@@ -77,7 +77,6 @@ impl Benchmark {
     }
 
     pub fn run(&mut self) {
-        assert_eq!(self.1.batch_info(&mut self.0).len(), 1);
         self.1.execute_par(&mut self.0).unwrap();
     }
     pub fn run_seq(&mut self) {
