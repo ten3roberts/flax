@@ -55,7 +55,29 @@ impl Benchmark {
         Self(world)
     }
 
-    pub fn run(&mut self) {
+    pub fn run_col(&mut self) {
+        let Self(world) = self;
+
+        let (serializer, deserializer) = SerdeBuilder::new()
+            .with(transform())
+            .with(position())
+            .with(rotation())
+            .with(velocity())
+            .build();
+
+        let encoded = bincode::options()
+            .serialize(&serializer.serialize(world, SerializeFormat::ColumnMajor))
+            .unwrap();
+
+        deserializer
+            .deserialize(&mut bincode::Deserializer::from_slice(
+                &encoded,
+                bincode::options(),
+            ))
+            .unwrap();
+    }
+
+    pub fn run_row(&mut self) {
         let Self(world) = self;
 
         let (serializer, deserializer) = SerdeBuilder::new()
