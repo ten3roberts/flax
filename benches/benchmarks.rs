@@ -40,6 +40,17 @@ fn benchmarks(c: &mut Criterion) {
             let mut bench = schedule::Benchmark::new();
             b.iter(|| bench.run_seq())
         });
+
+    #[cfg(feature = "serde")]
+    c.benchmark_group("benchmark")
+        .bench_function("binary", |b| {
+            let mut bench = serialize_binary::Benchmark::new();
+            b.iter(|| bench.run())
+        })
+        .bench_function("text", |b| {
+            let mut bench = serialize_text::Benchmark::new();
+            b.iter(|| bench.run())
+        });
 }
 
 criterion_group!(benches, benchmarks);
