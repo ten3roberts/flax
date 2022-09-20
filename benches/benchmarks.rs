@@ -43,13 +43,21 @@ fn benchmarks(c: &mut Criterion) {
 
     #[cfg(feature = "serde")]
     c.benchmark_group("benchmark")
-        .bench_function("binary", |b| {
+        .bench_function("binary_row", |b| {
             let mut bench = serialize_binary::Benchmark::new();
-            b.iter(|| bench.run())
+            b.iter(|| bench.run_row())
         })
-        .bench_function("text", |b| {
+        .bench_function("binary_col", |b| {
+            let mut bench = serialize_binary::Benchmark::new();
+            b.iter(|| bench.run_col())
+        })
+        .bench_function("text_row", |b| {
             let mut bench = serialize_text::Benchmark::new();
-            b.iter(|| bench.run())
+            b.iter(|| bench.run_row())
+        })
+        .bench_function("text_col", |b| {
+            let mut bench = serialize_text::Benchmark::new();
+            b.iter(|| bench.run_col())
         });
 }
 
