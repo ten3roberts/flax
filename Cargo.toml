@@ -49,6 +49,9 @@ criterion = "0.4"
 [profile.release]
 debug = true
 
+[profile.test]
+debug = true
+
 [features]
 default = ["parallel"]
 serde = ["dep:serde", "erased-serde"]

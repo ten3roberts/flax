@@ -4,6 +4,7 @@ pub mod add_remove;
 pub mod frag_iter;
 pub mod heavy_compute;
 pub mod schedule;
+pub mod schedule_inner_par;
 #[cfg(feature = "serde")]
 pub mod serialize_binary;
 #[cfg(feature = "serde")]
