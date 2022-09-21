@@ -1,4 +1,4 @@
-use std::{iter::Flatten, slice::IterMut};
+use std::slice::IterMut;
 
 use crate::{
     archetype::{Slice, Slot},
@@ -123,7 +123,8 @@ where
     Q: Fetch<'w>,
     &'w F: Filter<'q>,
 {
-    iter: Flatten<BatchedIter<'q, 'w, Q, F>>,
+    iter: BatchedIter<'q, 'w, Q, F>,
+    current: Option<<BatchedIter<'q, 'w, Q, F> as Iterator>::Item>,
 }
 
 impl<'q, 'w, Q, F> QueryIter<'q, 'w, Q, F>
@@ -133,7 +134,8 @@ where
 {
     pub(crate) fn new(iter: BatchedIter<'q, 'w, Q, F>) -> Self {
         Self {
-            iter: iter.flatten(),
+            iter,
+            current: None,
         }
     }
 }
@@ -147,7 +149,15 @@ where
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+        loop {
+            if let Some(ref mut batch) = self.current {
+                if let Some(item) = batch.next() {
+                    return Some(item);
+                }
+            }
+
+            self.current = Some(self.iter.next()?);
+        }
     }
 }
 

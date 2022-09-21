@@ -208,6 +208,7 @@ where
     L: PreparedFilter,
     R: PreparedFilter,
 {
+    #[inline(always)]
     fn filter(&mut self, slots: Slice) -> Slice {
         let l = self.left.filter(slots);
         let r = self.right.filter(slots);
@@ -323,6 +324,7 @@ where
     L: PreparedFilter,
     R: PreparedFilter,
 {
+    #[inline(always)]
     fn filter(&mut self, slots: Slice) -> Slice {
         let l = self.left.filter(slots);
         let r = self.right.filter(slots);
@@ -352,14 +354,17 @@ pub struct Nothing;
 impl<'a> Filter<'a> for Nothing {
     type Prepared = BooleanFilter;
 
+    #[inline(always)]
     fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(false)
     }
 
+    #[inline(always)]
     fn matches(&self, _: &Archetype) -> bool {
         false
     }
 
+    #[inline(always)]
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
@@ -378,14 +383,17 @@ pub struct All;
 impl<'a> Filter<'a> for All {
     type Prepared = BooleanFilter;
 
+    #[inline(always)]
     fn prepare(&self, _: &Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(true)
     }
 
+    #[inline(always)]
     fn matches(&self, _: &Archetype) -> bool {
         true
     }
 
+    #[inline(always)]
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
@@ -507,20 +515,24 @@ pub struct BooleanFilter(pub bool);
 impl<'w> Filter<'w> for BooleanFilter {
     type Prepared = Self;
 
+    #[inline(always)]
     fn prepare(&'w self, _: &'w Archetype, _: u32) -> Self::Prepared {
         *self
     }
 
+    #[inline(always)]
     fn matches(&self, _: &Archetype) -> bool {
         self.0
     }
 
+    #[inline(always)]
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         vec![]
     }
 }
 
 impl PreparedFilter for BooleanFilter {
+    #[inline(always)]
     fn filter(&mut self, slots: Slice) -> Slice {
         if self.0 {
             slots
