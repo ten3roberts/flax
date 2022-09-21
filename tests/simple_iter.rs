@@ -15,7 +15,7 @@ component! {
 pub fn simple_iter() {
     let mut world = World::new();
 
-    let mut batch = BatchSpawn::new(10000);
+    let mut batch = BatchSpawn::new(100000);
     batch
         .set(transform(), repeat(Mat4::from_scale(Vec3::ONE)))
         .unwrap();
@@ -27,7 +27,9 @@ pub fn simple_iter() {
     batch.spawn(&mut world);
     let mut query = Query::new((velocity(), position().as_mut()));
 
+    // for _ in 0..1_000_000 {
     for (velocity, position) in &mut query.borrow(&world) {
         *position += *velocity
     }
+    // }
 }

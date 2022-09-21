@@ -29,7 +29,7 @@ impl<'q, Q> std::fmt::Debug for Batch<'q, Q> {
 }
 
 impl<'q, Q> Batch<'q, Q> {
-    pub fn new(arch: &'q Archetype, fetch: &'q mut Q, slice: Slice) -> Self {
+    pub(crate) fn new(arch: &'q Archetype, fetch: &'q mut Q, slice: Slice) -> Self {
         Self {
             arch,
             fetch,
@@ -38,7 +38,7 @@ impl<'q, Q> Batch<'q, Q> {
         }
     }
 
-    pub fn slots(&self) -> Slice {
+    pub(crate) fn slots(&self) -> Slice {
         Slice::new(self.pos, self.end)
     }
 
@@ -52,6 +52,11 @@ impl<'q, Q> Batch<'q, Q> {
     /// Returns the number of items which would be yielded by this batch
     pub fn len(&self) -> usize {
         self.slots().len()
+    }
+
+    /// Returns true if the batch is empty
+    pub fn is_empty(&self) -> bool {
+        self.slots().is_empty()
     }
 }
 
@@ -112,6 +117,7 @@ where
     }
 }
 
+/// The query iterator
 pub struct QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
@@ -125,7 +131,7 @@ where
     Q: Fetch<'w>,
     &'w F: Filter<'q>,
 {
-    pub fn new(iter: BatchedIter<'q, 'w, Q, F>) -> Self {
+    pub(crate) fn new(iter: BatchedIter<'q, 'w, Q, F>) -> Self {
         Self {
             iter: iter.flatten(),
         }

@@ -13,12 +13,13 @@ use crate::{
     archetype::{self, ArchetypeInfo},
     fetch::PreparedFetch,
     util::TupleCombine,
-    ArchetypeId, CommandBuffer, ComponentId, ComponentInfo, Fetch, FetchItem, Filter, Query,
+    ArchetypeId, Batch, BatchedIter, CommandBuffer, ComponentId, Fetch, FetchItem, Filter, Query,
     QueryData, World,
 };
 
 pub use context::*;
 use eyre::Context;
+use rayon::prelude::{ParallelBridge, ParallelIterator};
 pub use traits::*;
 
 /// A system builder which allows incrementally adding data to a system
@@ -83,6 +84,50 @@ where
     }
 }
 
+/// Execute a function for each item in the query in parallel batches
+#[cfg(feature = "parallel")]
+pub struct ParForEach<F> {
+    func: F,
+}
+
+#[cfg(feature = "parallel")]
+impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ParForEach<Func>
+where
+    for<'x> Q: Fetch<'x> + std::fmt::Debug,
+    for<'x> F: Filter<'x> + std::fmt::Debug,
+    for<'x, 'y> BatchedIter<'x, 'y, Q, F>: Send,
+    for<'x, 'y> Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
+    for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
+{
+    fn execute(&mut self, mut data: QueryData<Q, F>) {
+        let mut borrow = data.borrow();
+        borrow
+            .iter_batched()
+            .par_bridge()
+            .for_each(|v| v.for_each(&self.func));
+    }
+
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "par_for_each<{}, filter: {}>",
+            tynm::type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
+            tynm::type_name::<F>()
+        )
+    }
+
+    fn access(&self, _: &World) -> Vec<Access> {
+        vec![]
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "par_for_each<{}, filter: {}>",
+            tynm::type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
+            tynm::type_name::<F>()
+        )
+    }
+}
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
     for<'x> Q: Fetch<'x> + std::fmt::Debug + 'static,
@@ -96,6 +141,27 @@ where
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             ForEach { func },
+            self.data.0,
+        )
+    }
+}
+
+#[cfg(feature = "parallel")]
+impl<Q, F> SystemBuilder<(Query<Q, F>,)>
+where
+    for<'x> Q: Fetch<'x> + std::fmt::Debug + 'static + Send,
+    for<'x> F: Filter<'x> + std::fmt::Debug + 'static + Send,
+    for<'x, 'y> BatchedIter<'x, 'y, Q, F>: Send,
+    for<'x, 'y> Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
+{
+    /// Execute a function for each item in the query in parallel batches
+    pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, Query<Q, F>, ()>
+    where
+        for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
+    {
+        System::new(
+            self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
+            ParForEach { func },
             self.data.0,
         )
     }

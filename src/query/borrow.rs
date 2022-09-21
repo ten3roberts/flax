@@ -4,6 +4,7 @@ use std::{
 };
 
 use itertools::Itertools;
+use rayon::prelude::{ParallelBridge, ParallelIterator};
 use smallvec::SmallVec;
 
 use crate::{
@@ -195,6 +196,39 @@ where
             &self.filter,
             self.prepared.iter_mut(),
         )
+    }
+
+    /// Shorthand for:
+    /// ```
+    /// self.iter().for_each(&func)
+    /// ```
+    pub fn for_each<'q>(&'q mut self, func: impl Fn(<Q as FetchItem<'q>>::Item) + Send + Sync)
+    where
+        'w: 'q,
+        Q::Prepared: Send,
+        BatchedIter<'q, 'w, Q, F>: Send,
+        &'w F: Filter<'q>,
+    {
+        self.iter().for_each(&func)
+    }
+
+    /// Shorthand for:
+    /// ```
+    /// self.iter_batched()
+    ///     .par_bridge()
+    ///     .for_each(|v| v.for_each(&func))
+    /// ```
+    #[cfg(feature = "parallel")]
+    pub fn par_for_each<'q>(&'q mut self, func: impl Fn(<Q as FetchItem<'q>>::Item) + Send + Sync)
+    where
+        'w: 'q,
+        Q::Prepared: Send,
+        BatchedIter<'q, 'w, Q, F>: Send,
+        &'w F: Filter<'q>,
+    {
+        self.iter_batched()
+            .par_bridge()
+            .for_each(|v| v.for_each(&func))
     }
 
     /// Consumes the iterator and returns the number of entities visited.

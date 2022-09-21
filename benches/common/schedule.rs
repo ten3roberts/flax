@@ -79,6 +79,7 @@ impl Benchmark {
     pub fn run(&mut self) {
         self.1.execute_par(&mut self.0).unwrap();
     }
+
     pub fn run_seq(&mut self) {
         self.1.execute_seq(&mut self.0).unwrap();
     }

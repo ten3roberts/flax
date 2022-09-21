@@ -18,6 +18,7 @@ use crate::{
 };
 
 pub use borrow::*;
+pub use iter::*;
 
 type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Represents a query and state for a given world.
