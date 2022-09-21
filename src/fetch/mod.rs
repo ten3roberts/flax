@@ -237,6 +237,7 @@ macro_rules! tuple_impl {
         {
             type Item = ($(<$ty as PreparedFetch<'q>>::Item,)*);
 
+            #[inline(always)]
             unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),

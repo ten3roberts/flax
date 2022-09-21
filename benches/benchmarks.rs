@@ -8,10 +8,6 @@ fn benchmarks(c: &mut Criterion) {
         let mut bench = simple_insert::Benchmark::new();
         b.iter(|| bench.run())
     })
-    .bench_function("simple_iter", |b| {
-        let mut bench = simple_iter::Benchmark::new();
-        b.iter(|| bench.run())
-    })
     .bench_function("add_remove", |b| {
         let mut bench = add_remove::Benchmark::new();
         b.iter(|| bench.run())
@@ -20,6 +16,16 @@ fn benchmarks(c: &mut Criterion) {
         let mut bench = frag_iter::Benchmark::new();
         b.iter(|| bench.run())
     });
+
+    c.benchmark_group("simple_iter")
+        .bench_function("iter", |b| {
+            let mut bench = simple_iter::Benchmark::new();
+            b.iter(|| bench.run())
+        })
+        .bench_function("manual_flatten", |b| {
+            let mut bench = simple_iter::Benchmark::new();
+            b.iter(|| bench.run_manual_flatten())
+        });
 
     c.benchmark_group("heavy_compute")
         .bench_function("par", |b| {

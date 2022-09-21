@@ -38,4 +38,14 @@ impl Benchmark {
             *position += *velocity
         }
     }
+
+    pub fn run_manual_flatten(&mut self) {
+        for (velocity, position) in &mut Query::new((velocity(), position().as_mut()))
+            .borrow(&self.0)
+            .iter_batched()
+            .flatten()
+        {
+            *position += *velocity
+        }
+    }
 }
