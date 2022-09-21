@@ -4,7 +4,7 @@ use std::iter::repeat;
 fn ab_system() -> BoxedSystem {
     System::builder()
         .with(Query::new((a().as_mut(), b().as_mut())))
-        .for_each(|(a, b)| {
+        .par_for_each(|(a, b)| {
             std::mem::swap(a, b);
         })
         .boxed()
@@ -13,7 +13,7 @@ fn ab_system() -> BoxedSystem {
 fn cd_system() -> BoxedSystem {
     System::builder()
         .with(Query::new((c().as_mut(), d().as_mut())))
-        .for_each(|(c, d)| {
+        .par_for_each(|(c, d)| {
             std::mem::swap(c, d);
         })
         .boxed()
@@ -22,7 +22,7 @@ fn cd_system() -> BoxedSystem {
 fn ce_system() -> BoxedSystem {
     System::builder()
         .with(Query::new((c().as_mut(), e().as_mut())))
-        .for_each(|(c, e)| {
+        .par_for_each(|(c, e)| {
             std::mem::swap(c, e);
         })
         .boxed()
@@ -79,8 +79,5 @@ impl Benchmark {
     pub fn run(&mut self) {
         self.1.execute_par(&mut self.0).unwrap();
     }
-
-    pub fn run_seq(&mut self) {
-        self.1.execute_seq(&mut self.0).unwrap();
-    }
 }
+

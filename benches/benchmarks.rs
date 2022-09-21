@@ -32,6 +32,10 @@ fn benchmarks(c: &mut Criterion) {
         });
 
     c.benchmark_group("schedule")
+        .bench_function("inner_par", |b| {
+            let mut bench = schedule_inner_par::Benchmark::new();
+            b.iter(|| bench.run())
+        })
         .bench_function("par", |b| {
             let mut bench = schedule::Benchmark::new();
             b.iter(|| bench.run())
