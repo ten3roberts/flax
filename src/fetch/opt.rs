@@ -43,7 +43,7 @@ where
         self.0.filter()
     }
 
-    fn components(&self, result: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentId>) {}
 }
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
@@ -116,7 +116,7 @@ where
         self.inner.filter()
     }
 
-    fn components(&self, result: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentId>) {}
 }
 
 impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {
