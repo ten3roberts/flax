@@ -53,7 +53,7 @@ impl Slice {
         slot >= self.start && slot < self.end
     }
 
-    #[inline]
+    #[inline(always)]
     /// Returns the intersection of self and other
     pub fn intersect(&self, other: &Self) -> Self {
         let start = self.start.max(other.start);
@@ -63,7 +63,7 @@ impl Slice {
     }
 
     /// Returns the union of two slices if contiguous.
-    #[inline]
+    #[inline(always)]
     pub fn union(&self, other: &Self) -> Option<Self> {
         let start = self.start.min(other.start);
         let end = self.end.max(other.end);
