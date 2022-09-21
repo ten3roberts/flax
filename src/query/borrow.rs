@@ -199,7 +199,7 @@ where
     }
 
     /// Shorthand for:
-    /// ```
+    /// ```rust,ignore
     /// self.iter().for_each(&func)
     /// ```
     pub fn for_each<'q>(&'q mut self, func: impl Fn(<Q as FetchItem<'q>>::Item) + Send + Sync)
@@ -213,7 +213,7 @@ where
     }
 
     /// Shorthand for:
-    /// ```
+    /// ```rust,ignore
     /// self.iter_batched()
     ///     .par_bridge()
     ///     .for_each(|v| v.for_each(&func))
