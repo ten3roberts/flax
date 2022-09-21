@@ -232,7 +232,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
         }
     }
 
-    fn components(&self, result: &mut Vec<crate::ComponentId>) {}
+    fn components(&self, _: &mut Vec<crate::ComponentId>) {}
 }
 
 impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {

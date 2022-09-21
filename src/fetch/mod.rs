@@ -91,7 +91,7 @@ impl<'w> Fetch<'w> for () {
         Nothing
     }
 
-    fn components(&self, result: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentId>) {}
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -173,7 +173,7 @@ impl<'w> Fetch<'w> for EntityIds {
 
     const HAS_FILTER: bool = false;
 
-    fn components(&self, result: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentId>) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {

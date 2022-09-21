@@ -4,6 +4,7 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(feature = "parallel")]
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use smallvec::SmallVec;
 

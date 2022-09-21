@@ -845,8 +845,8 @@ impl World {
             return Err(Error::MissingComponent(id, component.name));
         }
 
-        let dst_id = match src.outgoing(component.id()) {
-            Some((_, dst)) => dst,
+        let dst_id = match src.incoming(component.id()) {
+            Some(dst) => dst,
             None => {
                 let components: Vec<_> = src
                     .components()
