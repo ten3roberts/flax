@@ -242,7 +242,7 @@ where
         Nothing
     }
 
-    fn components(&self, result: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentId>) {}
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {

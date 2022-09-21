@@ -10,15 +10,13 @@ use std::{
 };
 
 use crate::{
-    archetype::{self, ArchetypeInfo},
-    fetch::PreparedFetch,
-    util::TupleCombine,
-    ArchetypeId, Batch, BatchedIter, CommandBuffer, ComponentId, Fetch, FetchItem, Filter, Query,
-    QueryData, World,
+    archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, Batch,
+    BatchedIter, CommandBuffer, ComponentId, Fetch, FetchItem, Filter, Query, QueryData, World,
 };
 
 pub use context::*;
 use eyre::Context;
+#[cfg(feature = "parallel")]
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 pub use traits::*;
 
@@ -440,6 +438,7 @@ impl AccessKind {
 
 /// An access for a component in an archetype
 #[derive(Default, Debug, Clone)]
+#[allow(dead_code)]
 struct ArchetypeAccess {
     arch: ArchetypeInfo,
     components: Vec<ComponentAccessInfo>,
@@ -447,6 +446,7 @@ struct ArchetypeAccess {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ComponentAccessInfo {
     mutable: bool,
     name: &'static str,
