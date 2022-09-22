@@ -67,7 +67,8 @@ impl Storage {
             return;
         }
 
-        let new_cap = (self.len + additional).next_power_of_two();
+        let new_cap = (self.len + additional).next_power_of_two().max(4);
+        assert_ne!(new_cap, 0);
 
         // tracing::debug!(
         //     "Reserving size: {old_cap}[{}] + {additional} => {new_cap} for: {:?}",
@@ -80,7 +81,9 @@ impl Storage {
         let new_layout =
             Layout::from_size_align(self.info.size() * new_cap, self.info.layout.align()).unwrap();
 
+        // Handle zst
         if new_layout.size() == 0 {
+            self.cap = new_cap;
             return;
         }
 
