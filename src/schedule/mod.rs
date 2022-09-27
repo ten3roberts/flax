@@ -7,7 +7,7 @@ use itertools::Itertools;
 
 use crate::{
     access_info, system::SystemContext, AccessInfo, BoxedSystem, CommandBuffer, NeverSystem,
-    System, Verbatim, World,
+    System, World,
 };
 
 enum Systems {
@@ -104,14 +104,14 @@ impl ScheduleBuilder {
 #[derive(Debug, Clone)]
 pub struct SystemInfo {
     name: String,
-    desc: Verbatim,
+    desc: String,
     access: AccessInfo,
 }
 
 impl SystemInfo {
     /// Returns a verbose system description
     pub fn desc(&self) -> &str {
-        &self.desc.0
+        &self.desc
     }
 
     /// Returns the system name
@@ -296,7 +296,7 @@ impl Schedule {
                     .iter()
                     .map(|system| SystemInfo {
                         name: system.name(),
-                        desc: Verbatim(alloc::format!("{system:#?}")),
+                        desc: alloc::format!("{system:#?}"),
                         access: access_info(&system.access(world), world),
                     })
                     .collect_vec();

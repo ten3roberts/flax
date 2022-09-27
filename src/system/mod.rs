@@ -71,8 +71,8 @@ where
         write!(
             f,
             "for_each<{}, filter: {}>",
-            tynm::type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
-            tynm::type_name::<F>()
+            type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
+            type_name::<F>()
         )
     }
 
@@ -83,8 +83,8 @@ where
     fn name(&self) -> String {
         format!(
             "for_each<{}, filter: {}>",
-            tynm::type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
-            tynm::type_name::<F>()
+            type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
+            type_name::<F>()
         )
     }
 }
@@ -116,8 +116,8 @@ where
         write!(
             f,
             "par_for_each<{}, filter: {}>",
-            tynm::type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
-            tynm::type_name::<F>()
+            type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
+            type_name::<F>()
         )
     }
 
@@ -128,8 +128,8 @@ where
     fn name(&self) -> String {
         format!(
             "par_for_each<{}, filter: {}>",
-            tynm::type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
-            tynm::type_name::<F>()
+            type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
+            type_name::<F>()
         )
     }
 }

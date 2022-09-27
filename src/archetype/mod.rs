@@ -65,7 +65,7 @@ impl<T: Debug> Debug for ShortDebugVec<T> {
         s.entries(self.0.iter().take(SHORT_DEBUG_LEN));
 
         if self.0.len() > SHORT_DEBUG_LEN {
-            s.entry(&Verbatim(format!(
+            s.entry(&Verbatim(&format!(
                 "+{} more",
                 self.0.len() - SHORT_DEBUG_LEN
             )));

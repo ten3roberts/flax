@@ -1,3 +1,4 @@
+use any::type_name;
 use core::any;
 use core::fmt::{self, Formatter};
 use core::marker::PhantomData;
@@ -74,8 +75,8 @@ pub trait SystemFn<'this, Args, Ret> {
 }
 
 #[derive(PartialEq, Eq, Clone)]
-pub(crate) struct Verbatim(pub String);
-impl fmt::Debug for Verbatim {
+pub(crate) struct Verbatim<'a>(pub(crate) &'a str);
+impl<'a> fmt::Debug for Verbatim<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
@@ -99,11 +100,11 @@ macro_rules! tuple_impl {
                 f.write_str("fn")?;
 
                 ($(
-                    Verbatim(tynm::type_name::<<$ty as AsBorrow>::Borrowed>()),
+                    Verbatim(type_name::<<$ty as AsBorrow>::Borrowed>()),
                 )*).fmt(f)?;
 
-                if any::type_name::<Ret>() != any::type_name::<()>() {
-                    write!(f, " -> {}", tynm::type_name::<Ret>())?;
+                if type_name::<Ret>() != type_name::<()>() {
+                    write!(f, " -> {}", type_name::<Ret>())?;
                 }
 
                 Ok(())
