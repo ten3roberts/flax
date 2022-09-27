@@ -1,7 +1,7 @@
-use std::{
-    alloc::{alloc, dealloc, handle_alloc_error, realloc, Layout},
-    mem,
-    ptr::NonNull,
+use core::{mem, ptr::NonNull};
+
+use alloc::{
+    alloc::alloc, alloc::dealloc, alloc::handle_alloc_error, alloc::realloc, alloc::Layout,
 };
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
@@ -18,8 +18,8 @@ pub(crate) struct Storage {
     info: ComponentInfo,
 }
 
-impl std::fmt::Debug for Storage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Storage {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Storage")
             .field("len", &self.len)
             .field("info", &self.info)
@@ -120,7 +120,7 @@ impl Storage {
 
             let src = ptr.add((self.len - 1) * self.info.size());
 
-            std::ptr::copy(src, dst, self.info.size())
+            core::ptr::copy(src, dst, self.info.size())
         }
         self.len -= 1;
     }
@@ -143,7 +143,7 @@ impl Storage {
     pub(crate) unsafe fn extend(&mut self, src: *mut u8, len: usize) {
         self.reserve(len);
 
-        std::ptr::copy_nonoverlapping(
+        core::ptr::copy_nonoverlapping(
             src,
             self.as_ptr().add(self.len * self.info.size()),
             len * self.info.size(),
@@ -168,7 +168,7 @@ impl Storage {
 
         self.reserve(other.len);
 
-        std::ptr::copy_nonoverlapping(
+        core::ptr::copy_nonoverlapping(
             other.as_ptr(),
             self.as_ptr().add(self.len * self.info.size()),
             other.len * self.info.size(),
@@ -192,7 +192,7 @@ impl Storage {
         };
 
         AtomicRefMut::map(data, |v| {
-            std::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
+            core::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
         })
     }
 
@@ -205,7 +205,7 @@ impl Storage {
         };
 
         AtomicRef::map(data, |v| {
-            std::slice::from_raw_parts(v.as_ptr().cast::<T>(), self.len)
+            core::slice::from_raw_parts(v.as_ptr().cast::<T>(), self.len)
         })
     }
 
@@ -245,7 +245,7 @@ impl Storage {
         unsafe {
             self.reserve(1);
 
-            std::ptr::write(self.as_ptr().cast::<T>().add(self.len), item);
+            core::ptr::write(self.as_ptr().cast::<T>().add(self.len), item);
 
             self.len += 1
         }

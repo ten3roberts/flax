@@ -1,4 +1,6 @@
-use std::{collections::BTreeSet, ops::Range};
+use core::ops::Range;
+
+use alloc::collections::BTreeSet;
 
 use super::Slot;
 
@@ -133,8 +135,8 @@ impl Slice {
     }
 }
 
-impl std::fmt::Debug for Slice {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Slice {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "({}..{})", self.start, self.end)
     }
 }
@@ -197,7 +199,7 @@ mod tests {
         let d = Slice::new(140, 1000);
         let e = Slice::new(30, 121);
 
-        dbg!(a);
+        // dbg!(a);
         assert_eq!(a.difference(b), Some(Slice::new(20, 190)));
 
         assert_eq!(a.difference(c), Some(Slice::new(30, 190)));

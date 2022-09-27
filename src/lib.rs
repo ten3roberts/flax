@@ -203,12 +203,16 @@
 //! of ComponentBuffers and Archetypes.
 
 #![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
 
 /// Structured component storage
 pub mod archetype;
 /// Provides a buffer for holding multiple types simultaneously
 pub mod buffer;
-mod commandbuffer;
+/// Contains a commandbuffer
+pub mod commands;
 mod component;
 /// Provides entity identifiers
 pub mod entity;
@@ -243,7 +247,7 @@ pub mod serialize;
 // Required due to macro
 pub(crate) use archetype::*;
 pub use archetype::{ArchetypeId, BatchSpawn, ChangeKind, ComponentInfo};
-pub use commandbuffer::*;
+pub use commands::CommandBuffer;
 pub use component::*;
 pub use components::*;
 pub use entity::{entity_ids, Entity, EntityBuilder};

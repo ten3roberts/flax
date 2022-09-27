@@ -1,4 +1,4 @@
-use std::iter::repeat;
+use core::iter::repeat;
 
 use flax::*;
 use glam::*;

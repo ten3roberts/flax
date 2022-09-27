@@ -1,5 +1,6 @@
-use std::{any::TypeId, ops::Deref, sync::Arc};
+use core::{any::TypeId, ops::Deref};
 
+use alloc::{sync::Arc, vec::Vec};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
 use crate::{Access, AccessKind, CommandBuffer, SystemAccess, SystemData, World};
@@ -37,7 +38,7 @@ where
     T: Send + 'static,
 {
     fn access(&self, _: &World) -> Vec<crate::Access> {
-        vec![Access {
+        alloc::vec![Access {
             kind: AccessKind::External(TypeId::of::<Self>()),
             mutable: true,
         }]
@@ -54,7 +55,7 @@ where
         let borrow = self.try_borrow_mut().map_err(|_| {
             eyre::eyre!(
                 "Failed to borrow shared resource of {}",
-                std::any::type_name::<T>()
+                core::any::type_name::<T>()
             )
         })?;
 

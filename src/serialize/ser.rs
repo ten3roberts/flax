@@ -1,10 +1,9 @@
-use std::collections::BTreeMap;
-
 use crate::{
     archetype::StorageBorrowDyn, components::is_component, filter::And, filter::StaticFilter,
     filter::Without, Archetype, ArchetypeId, Component, ComponentId, ComponentValue, Entity, World,
 };
 
+use alloc::{boxed::Box, collections::BTreeMap, string::String};
 use serde::{
     ser::{SerializeMap, SerializeSeq, SerializeStructVariant, SerializeTupleStruct},
     Serialize, Serializer,

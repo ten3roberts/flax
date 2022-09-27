@@ -24,8 +24,7 @@ eyre = "0.6.8"
 itertools = "0.10.3"
 paste = "1.0.7"
 rayon = { version = "1.5.3", optional = true }
-smallvec = "1.8.0"
-thiserror = "1.0.31"
+smallvec = { version = "1.8.0", default_features = false }
 tracing = { version = "0.1.35", optional = true }
 tynm = "0.1.6"
 serde = { version = "1.0", features = ["derive"], optional = true }
@@ -33,7 +32,7 @@ erased-serde = { version = "0.3", optional = true }
 flume = "0.10.14"
 
 [dev-dependencies]
-itertools = "0.10.3"
+itertools = { version = "0.10.3", default_features = false }
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 test-log = { version = "0.2.11", default_features = false, features = [
   "trace",
@@ -55,35 +54,48 @@ debug = true
 debug = true
 
 [features]
+std = ["itertools/use_std", "itertools/use_alloc"]
 default = ["parallel"]
 serde = ["dep:serde", "erased-serde"]
 internal_assert = []
 parallel = ["rayon"]
 
 [[example]]
+name = "guide"
+required-features = ["std"]
+path = "./examples/guide.rs"
+
+[[example]]
 name = "query"
+required-features = ["std"]
 path = "./examples/guide/query.rs"
 
 [[example]]
 name = "builder"
 path = "./examples/guide/builder.rs"
+required-features = ["std"]
 
 [[example]]
 name = "query_advanced"
 path = "./examples/guide/query_advanced.rs"
+required-features = ["std"]
 
 [[example]]
 name = "relations"
 path = "./examples/guide/relations.rs"
+required-features = ["std"]
 
 [[example]]
 name = "commandbuffer"
 path = "./examples/guide/commandbuffer.rs"
+required-features = ["std"]
 
 [[example]]
 name = "serialize"
 path = "./examples/guide/serialize.rs"
+required-features = ["std"]
 
 [[bench]]
 name = "benchmarks"
 harness = false
+required-features = ["std"]

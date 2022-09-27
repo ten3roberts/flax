@@ -2,7 +2,7 @@ use flax::{filter::All, *};
 use itertools::Itertools;
 
 #[test]
-fn relations() -> color_eyre::Result<()> {
+fn relations() {
     component! {
         child_of(parent): () => [Debug],
     }
@@ -27,7 +27,7 @@ fn relations() -> color_eyre::Result<()> {
         .set(name(), "Parent2".into())
         .spawn(&mut world);
 
-    world.set(child1, child_of(parent2), ())?;
+    world.set(child1, child_of(parent2), ()).unwrap();
 
     assert_eq!(world.get(child1, child_of(parent2)).as_deref(), Ok(&()));
 
@@ -50,12 +50,12 @@ fn relations() -> color_eyre::Result<()> {
     assert_eq!(parents, [parent, parent2]);
     assert!(world.has(child1, child_of(parent2)));
 
-    world.despawn(parent2)?;
+    world.despawn(parent2).unwrap();
 
     assert!(!world.has(child1, child_of(parent2)));
     assert!(world.has(child1, child_of(parent)));
 
-    world.despawn_recursive(parent, child_of)?;
+    world.despawn_recursive(parent, child_of).unwrap();
 
     assert!(!world.is_alive(child1));
     assert!(!world.is_alive(child2));
@@ -90,6 +90,4 @@ fn relations() -> color_eyre::Result<()> {
             .count(),
         3
     );
-
-    Ok(())
 }

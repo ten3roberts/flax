@@ -1,7 +1,9 @@
 mod borrow;
+use alloc::string::String;
+use alloc::vec::Vec;
 mod iter;
-
-use std::fmt::Debug;
+use core::cmp;
+use core::fmt::{self, Debug};
 
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
@@ -47,9 +49,9 @@ impl<Q, F> Debug for Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
-    F: std::fmt::Debug,
+    F: core::fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
         let mut buf = String::new();
         self.fetch.describe(&mut buf).unwrap();
 
@@ -322,18 +324,18 @@ fn traverse_archetypes(
                 if strong {
                     let arch = archetypes.get(arch_id);
                     match component.cmp(head) {
-                        std::cmp::Ordering::Less => {
+                        cmp::Ordering::Less => {
                             // Not quite, keep looking
                             traverse_archetypes(archetypes, arch, components, result, filter);
                         }
-                        std::cmp::Ordering::Equal => {
+                        cmp::Ordering::Equal => {
                             // One more component has been found, continue to search for the remaining ones
                             if filter(arch_id, arch) {
                                 result.push(arch_id);
                             }
                             traverse_archetypes(archetypes, arch, tail, result, filter);
                         }
-                        std::cmp::Ordering::Greater => {
+                        cmp::Ordering::Greater => {
                             // We won't find anything of interest further down the tree
                         }
                     }
@@ -361,9 +363,12 @@ where
     type Value = QueryData<'a, Q, F>;
 
     fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
-        let world = ctx
-            .world()
-            .map_err(|_| eyre::eyre!(format!("Failed to borrow world for query: {:?}", self)))?;
+        let world = ctx.world().map_err(|_| {
+            eyre::eyre!(alloc::format!(
+                "Failed to borrow world for query: {:?}",
+                self
+            ))
+        })?;
 
         Ok(QueryData { world, query: self })
     }

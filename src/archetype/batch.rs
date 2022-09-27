@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, mem};
+use core::mem;
+
+use alloc::{collections::BTreeMap, vec::Vec};
 
 use crate::{Component, ComponentId, ComponentInfo, ComponentValue, Entity, Error};
 
@@ -79,7 +81,8 @@ impl BatchSpawn {
 
 #[cfg(test)]
 mod test {
-    use std::iter::repeat;
+
+    use core::iter::repeat;
 
     use glam::{Mat4, Vec3};
 
@@ -110,12 +113,12 @@ mod test {
             )
             .unwrap();
 
-        batch.set(name(), ('a'..).map(|v| v.to_string())).unwrap();
+        batch.set(name(), ('a'..).map(|v| v.into())).unwrap();
 
         let mut world = World::new();
         let ids = world.spawn_batch(&mut batch);
 
-        for (&id, n) in ids.iter().zip(('a'..).map(|v| v.to_string())) {
+        for (&id, n) in ids.iter().zip(('a'..).map(|v| v.into())) {
             assert_eq!(world.get(id, name()).as_deref(), Ok(&n));
         }
     }

@@ -1,4 +1,6 @@
-use std::{
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::{
     iter::Peekable,
     mem::{self, MaybeUninit},
 };
@@ -86,12 +88,12 @@ impl<T: Ord, L: Iterator<Item = T>, R: Iterator<Item = T>> Iterator for Differen
             };
 
             match l.cmp(r) {
-                std::cmp::Ordering::Less => return self.left.next(),
-                std::cmp::Ordering::Equal => {
+                core::cmp::Ordering::Less => return self.left.next(),
+                core::cmp::Ordering::Equal => {
                     self.left.next();
                     self.right.next();
                 }
-                std::cmp::Ordering::Greater => return self.right.next(),
+                core::cmp::Ordering::Greater => return self.right.next(),
             }
         }
     }
@@ -361,13 +363,7 @@ where
                 id,
                 buf,
                 DifferenceIter::new(arch.components().map(|v| v.id()), components.into_iter())
-                    .map(|v| {
-                        self.world
-                            .get(v, is_component())
-                            .unwrap()
-                            .name()
-                            .to_string()
-                    })
+                    .map(|v| self.world.get(v, is_component()).unwrap().name().into())
                     .collect_vec(),
             )
         })?;

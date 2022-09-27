@@ -1,4 +1,4 @@
-use std::mem::MaybeUninit;
+use core::mem::MaybeUninit;
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
@@ -135,17 +135,17 @@ mod test {
         let mut world = World::new();
 
         let id = EntityBuilder::new()
-            .set(name(), "Foo".to_string())
+            .set(name(), "Foo".into())
             .spawn(&mut world);
 
         let mut entity = world.entity_mut(id).unwrap();
 
-        assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".to_string()));
+        assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".into()));
 
         entity.set(health(), 100.0).unwrap();
         // panic!("");
 
-        assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".to_string()));
+        assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".into()));
         assert_eq!(entity.get(health()).as_deref(), Ok(&100.0));
 
         assert!(entity.remove(pos()).is_err());
@@ -156,7 +156,7 @@ mod test {
 
         let entity = world.entity(id).unwrap();
 
-        assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".to_string()));
+        assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".into()));
 
         assert!(entity.get(pos()).is_err());
         assert!(entity.get(health()).is_err());
@@ -169,4 +169,3 @@ mod test {
         assert_eq!(*pos, (1.0, 0.0));
     }
 }
-
