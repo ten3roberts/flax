@@ -1,6 +1,8 @@
 //! This module contains standard components that different libraries can agree
 //! on, though they don't have to.
 
+use alloc::string::String;
+
 use crate::component;
 
 use crate::ComponentInfo;

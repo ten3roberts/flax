@@ -81,12 +81,14 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 
 
 #[cfg(test)]
 mod test {
+    use alloc::string::String;
+
     use super::{TupleCloned, TupleCombine};
 
     #[test]
     fn tuples_clone() {
         let a: i32 = 5;
-        let b = "foo".to_string();
+        let b = "foo".into();
 
         let tuple = (&a, &b);
 

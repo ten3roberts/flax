@@ -1,7 +1,11 @@
 mod change;
 mod cmp;
+use alloc::vec::Vec;
 
-use std::{iter::FusedIterator, ops::Neg};
+use core::{
+    iter::FusedIterator,
+    ops::{self, Neg},
+};
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
@@ -13,7 +17,7 @@ pub use cmp::CmpExt;
 
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
-        impl<R, $($p: ComponentValue),*> std::ops::BitOr<R> for $ty<$($p),*>
+        impl<R, $($p: ComponentValue),*> ops::BitOr<R> for $ty<$($p),*>
         {
             type Output = Or<Self, R>;
 
@@ -22,7 +26,7 @@ macro_rules! gen_bitops {
             }
         }
 
-        impl<R, $($p: ComponentValue),*> std::ops::BitAnd<R> for $ty<$($p),*>
+        impl<R, $($p: ComponentValue),*> ops::BitAnd<R> for $ty<$($p),*>
         {
             type Output = And<Self, R>;
 
@@ -31,7 +35,7 @@ macro_rules! gen_bitops {
             }
         }
 
-        impl<$($p: ComponentValue),*> std::ops::Neg for $ty<$($p),*>
+        impl<$($p: ComponentValue),*> ops::Neg for $ty<$($p),*>
         {
             type Output = Not<Self>;
 
@@ -72,7 +76,7 @@ pub trait StaticFilter {
 /// A filter requires Debug for error messages for user conveniance
 pub trait Filter<'w>
 where
-    Self: Sized + std::fmt::Debug,
+    Self: Sized + core::fmt::Debug,
 {
     /// The filter holding possible borrows
     type Prepared: PreparedFilter + 'w;
@@ -257,7 +261,7 @@ where
     }
 }
 
-impl<R, T> std::ops::BitOr<R> for Not<T>
+impl<R, T> ops::BitOr<R> for Not<T>
 where
     Self: for<'x> Filter<'x>,
     R: for<'x> Filter<'x>,
@@ -269,7 +273,7 @@ where
     }
 }
 
-impl<R, T> std::ops::BitAnd<R> for Not<T>
+impl<R, T> ops::BitAnd<R> for Not<T>
 where
     Self: for<'x> Filter<'x>,
     R: for<'x> Filter<'x>,
@@ -366,7 +370,7 @@ impl<'a> Filter<'a> for Nothing {
 
     #[inline(always)]
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
-        vec![]
+        Default::default()
     }
 }
 
@@ -395,7 +399,7 @@ impl<'a> Filter<'a> for All {
 
     #[inline(always)]
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
-        vec![]
+        Default::default()
     }
 }
 
@@ -473,7 +477,7 @@ impl<'a> Filter<'a> for With {
     }
 
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
-        vec![]
+        Default::default()
     }
 }
 
@@ -499,7 +503,7 @@ impl<'a> Filter<'a> for Without {
     }
 
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
-        vec![]
+        Default::default()
     }
 }
 
@@ -527,7 +531,7 @@ impl<'w> Filter<'w> for BooleanFilter {
 
     #[inline(always)]
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
-        vec![]
+        Default::default()
     }
 }
 
@@ -629,7 +633,7 @@ impl<'w> Filter<'w> for BatchSize {
     }
 
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
-        vec![]
+        Default::default()
     }
 }
 
@@ -694,6 +698,7 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 
 #[cfg(test)]
 mod tests {
 
+    use alloc::string::String;
     use atomic_refcell::AtomicRefCell;
     use itertools::Itertools;
 
@@ -748,7 +753,7 @@ mod tests {
         let a_map = changes_1.as_changed_set(1);
         let b_map = changes_2.as_changed_set(2);
 
-        eprintln!("ChangeList: \n  {changes_1:?}\n  {changes_2:?}");
+        // eprintln!("ChangeList: \n  {changes_1:?}\n  {changes_2:?}");
         let changes_1 = AtomicRefCell::new(changes_1);
         let changes_2 = AtomicRefCell::new(changes_2);
 

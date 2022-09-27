@@ -1,8 +1,9 @@
-use std::{
-    fmt::{self, Formatter},
-    marker::PhantomData,
-};
+use core::any;
+use core::fmt::{self, Formatter};
+use core::marker::PhantomData;
 
+use alloc::vec;
+use alloc::{string::String, vec::Vec};
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use eyre::eyre;
 
@@ -94,14 +95,14 @@ macro_rules! tuple_impl {
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                use std::fmt::Debug;
+                use fmt::Debug;
                 f.write_str("fn")?;
 
                 ($(
                     Verbatim(tynm::type_name::<<$ty as AsBorrow>::Borrowed>()),
                 )*).fmt(f)?;
 
-                if std::any::type_name::<Ret>() != std::any::type_name::<()>() {
+                if any::type_name::<Ret>() != any::type_name::<()>() {
                     write!(f, " -> {}", tynm::type_name::<Ret>())?;
                 }
 
@@ -109,11 +110,11 @@ macro_rules! tuple_impl {
             }
 
             fn access(&self, _: &World) -> Vec<Access> {
-                vec![]
+    Default::default()
             }
 
             fn name(&self) -> String {
-                std::any::type_name::<Self>().to_string()
+                any::type_name::<Self>().into()
             }
         }
 
@@ -259,6 +260,7 @@ impl SystemAccess for Write<CommandBuffer> {
 #[cfg(test)]
 mod test {
 
+    use alloc::string::String;
     use atomic_refcell::AtomicRefMut;
     use itertools::Itertools;
 
@@ -281,12 +283,12 @@ mod test {
 
         let mut spawner = |w: &mut World| {
             Entity::builder()
-                .set(name(), "Neo".to_string())
+                .set(name(), "Neo".into())
                 .set(health(), 90.0)
                 .spawn(w);
 
             Entity::builder()
-                .set(name(), "Trinity".to_string())
+                .set(name(), "Trinity".into())
                 .set(health(), 85.0)
                 .spawn(w);
         };

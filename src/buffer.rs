@@ -1,10 +1,8 @@
-use std::alloc::{alloc, handle_alloc_error};
-use std::collections::{btree_map, BTreeMap, HashMap};
-use std::mem;
-use std::{
-    alloc::{dealloc, Layout},
-    ptr::NonNull,
-};
+use core::alloc::Layout;
+use core::ptr::NonNull;
+
+use alloc::alloc::{dealloc, handle_alloc_error};
+use alloc::collections::{btree_map, BTreeMap};
 
 use crate::ComponentId;
 use crate::{archetype::ComponentInfo, Component, ComponentValue};
@@ -18,7 +16,7 @@ pub(crate) struct BufferStorage {
     data: NonNull<u8>,
     cursor: usize,
     layout: Layout,
-    drops: HashMap<Offset, unsafe fn(*mut u8)>,
+    drops: BTreeMap<Offset, unsafe fn(*mut u8)>,
 }
 
 impl BufferStorage {
@@ -27,7 +25,7 @@ impl BufferStorage {
             data: NonNull::dangling(),
             cursor: 0,
             layout: Layout::from_size_align(0, 2).unwrap(),
-            drops: HashMap::new(),
+            drops: BTreeMap::new(),
         }
     }
 
@@ -44,7 +42,7 @@ impl BufferStorage {
 
             unsafe {
                 // Don't realloc since layout may change
-                let new_data = alloc(new_layout);
+                let new_data = alloc::alloc::alloc(new_layout);
 
                 let new_data = match NonNull::new(new_data) {
                     Some(v) => v,
@@ -52,7 +50,7 @@ impl BufferStorage {
                 };
 
                 if self.layout.size() > 0 {
-                    std::ptr::copy_nonoverlapping(
+                    core::ptr::copy_nonoverlapping(
                         self.data.as_ptr(),
                         new_data.as_ptr(),
                         self.cursor,
@@ -76,7 +74,7 @@ impl BufferStorage {
     ///
     /// The data at `offset` must be of type T and acquired from [`Self::allocate`]
     pub(crate) unsafe fn take<T>(&mut self, offset: Offset) -> T {
-        let data = std::ptr::read(self.data.as_ptr().add(offset).cast::<T>());
+        let data = core::ptr::read(self.data.as_ptr().add(offset).cast::<T>());
         if self.drops.remove(&offset).is_none() {
             panic!("Attempt to take non existent value");
         }
@@ -138,16 +136,16 @@ impl BufferStorage {
 
         assert_eq!(dst as usize % layout.align(), 0);
 
-        std::ptr::write(dst, data);
+        core::ptr::write(dst, data);
 
         // Add a function to drop this stored value
         self.drops
-            .insert(offset, |ptr| std::ptr::drop_in_place(ptr.cast::<T>()));
+            .insert(offset, |ptr| core::ptr::drop_in_place(ptr.cast::<T>()));
     }
 
     /// Drops all values stored inside while keeping the allocation
     pub(crate) fn clear(&mut self) {
-        let drops = std::mem::take(&mut self.drops);
+        let drops = core::mem::take(&mut self.drops);
         for (offset, drop_func) in drops {
             unsafe {
                 let ptr = self.data.as_ptr().add(offset);
@@ -206,8 +204,8 @@ impl<'a> IntoIterator for &'a mut ComponentBuffer {
     }
 }
 
-impl std::fmt::Debug for ComponentBuffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for ComponentBuffer {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list()
             .entries(self.components().map(|v| v.name()))
             .finish()
@@ -282,7 +280,7 @@ impl ComponentBuffer {
         let components = &mut self.components;
         let storage = &mut self.storage;
         ComponentBufferIter {
-            components: mem::take(components).into_iter(),
+            components: core::mem::take(components).into_iter(),
             storage,
         }
     }
@@ -314,7 +312,8 @@ impl<'a> Drop for ComponentBufferIter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+
+    use alloc::{string::String, sync::Arc};
 
     use crate::component;
 
@@ -330,18 +329,18 @@ mod tests {
 
     #[test]
     pub fn component_buffer() {
-        let shared = Arc::new("abc".to_string());
+        let shared: Arc<String> = Arc::new("abc".into());
         let mut buffer = ComponentBuffer::new();
         buffer.set(a(), 7);
         buffer.set(c(), 9);
-        buffer.set(b(), "Hello, World".to_string());
+        buffer.set(b(), "Hello, World".into());
         buffer.set(e(), [5.0; 100]);
 
         buffer.set(f(), shared.clone());
 
         assert_eq!(buffer.get(a()), Some(&7));
         assert_eq!(buffer.get(c()), Some(&9));
-        assert_eq!(buffer.get(b()), Some(&"Hello, World".to_string()));
+        assert_eq!(buffer.get(b()), Some(&"Hello, World".into()));
         assert_eq!(buffer.get(d()), None);
         assert_eq!(buffer.get(e()), Some(&[5.0; 100]));
 
@@ -354,8 +353,8 @@ mod tests {
     pub fn component_buffer_reinsert() {
         let mut buffer = ComponentBuffer::new();
 
-        let shared = Arc::new("abc".to_string());
-        let shared_2 = Arc::new("abc".to_string());
+        let shared: Arc<String> = Arc::new("abc".into());
+        let shared_2: Arc<String> = Arc::new("abc".into());
         buffer.set(f(), shared.clone());
         buffer.set(f(), shared_2.clone());
 

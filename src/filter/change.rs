@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+use alloc::{string::ToString, vec};
 use atomic_refcell::AtomicRef;
 
 use crate::{
@@ -14,8 +16,8 @@ pub struct ChangeFilter<T: ComponentValue> {
     kind: ChangeKind,
 }
 
-impl<T: ComponentValue> std::fmt::Debug for ChangeFilter<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: ComponentValue> core::fmt::Debug for ChangeFilter<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ModifiedFilter")
             .field("component", &self.component)
             .field("kind", &self.kind)
@@ -60,7 +62,7 @@ where
         self.component.access(data)
     }
 
-    fn describe(&self, f: &mut dyn std::fmt::Write) -> core::fmt::Result {
+    fn describe(&self, f: &mut dyn core::fmt::Write) -> core::fmt::Result {
         f.write_str(&self.kind.to_string())?;
         f.write_str(" ")?;
         self.component.describe(f)
@@ -181,8 +183,8 @@ pub struct RemovedFilter<T: ComponentValue> {
     component: Component<T>,
 }
 
-impl<T: ComponentValue> std::fmt::Debug for RemovedFilter<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: ComponentValue> core::fmt::Debug for RemovedFilter<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RemovedFilter")
             .field("component", &self.component)
             .finish()
@@ -217,10 +219,10 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
     }
 
     fn access(&self, _: crate::fetch::FetchPrepareData) -> Vec<Access> {
-        vec![]
+        Default::default()
     }
 
-    fn describe(&self, f: &mut dyn std::fmt::Write) -> core::fmt::Result {
+    fn describe(&self, f: &mut dyn core::fmt::Write) -> core::fmt::Result {
         f.write_str(&ChangeKind::Removed.to_string())?;
         f.write_str(" ")?;
         self.component.describe(f)

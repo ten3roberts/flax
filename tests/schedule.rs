@@ -37,6 +37,7 @@ component! {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 fn schedule_granularity() {
     let mut world = World::default();
 

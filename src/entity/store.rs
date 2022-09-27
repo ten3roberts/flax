@@ -1,17 +1,17 @@
 use itertools::Itertools;
 
+use super::{Entity, EntityIndex};
 use crate::{
     archetype::ArchetypeId, entity::EntityGen, entity::EntityKind, entity::StrippedEntity,
     error::Result, Error,
 };
-use std::{
+use alloc::vec::Vec;
+use core::{
     iter::Enumerate,
     mem::{self, ManuallyDrop},
     num::NonZeroU32,
     slice,
 };
-
-use super::{Entity, EntityIndex};
 
 #[derive(Clone, Copy, Debug)]
 struct Vacant {
@@ -57,11 +57,11 @@ pub(crate) struct EntityStore<V = EntityLocation> {
     len: usize,
 }
 
-impl<V> std::fmt::Debug for EntityStore<V>
+impl<V> core::fmt::Debug for EntityStore<V>
 where
-    V: std::fmt::Debug,
+    V: core::fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("EntityStore")
             .field(
                 "slots",

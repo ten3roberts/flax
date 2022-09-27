@@ -1,6 +1,6 @@
-use core::fmt;
-use std::{collections::BTreeMap, fmt::Formatter};
+use core::fmt::{self, Formatter};
 
+use alloc::collections::BTreeMap;
 use atomic_refcell::AtomicRef;
 
 use crate::{
@@ -18,7 +18,7 @@ impl DebugVisitor {
     /// Creates a new debug visitor visiting values of type `T`
     fn new<T>() -> Self
     where
-        T: ComponentValue + std::fmt::Debug,
+        T: ComponentValue + core::fmt::Debug,
     {
         Self {
             visit: |storage, slot| unsafe {
@@ -44,7 +44,7 @@ pub struct Debug;
 
 impl<T> MetaData<T> for Debug
 where
-    T: std::fmt::Debug + ComponentValue,
+    T: core::fmt::Debug + ComponentValue,
 {
     fn attach(_: ComponentInfo, buffer: &mut ComponentBuffer) {
         buffer.set(debug_visitor(), DebugVisitor::new::<T>());

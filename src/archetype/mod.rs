@@ -1,4 +1,5 @@
-use std::{alloc::Layout, any::TypeId, collections::BTreeMap, fmt::Debug, mem};
+use alloc::{collections::BTreeMap, format, vec::Vec};
+use core::{alloc::Layout, any::TypeId, fmt::Debug, mem};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
@@ -59,7 +60,7 @@ impl<T> Default for ShortDebugVec<T> {
 }
 
 impl<T: Debug> Debug for ShortDebugVec<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut s = f.debug_list();
         s.entries(self.0.iter().take(SHORT_DEBUG_LEN));
 
@@ -653,7 +654,7 @@ pub struct ComponentInfo {
 }
 
 impl Debug for ComponentInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ComponentInfo")
             .field("id", &self.id)
             .field("name", &self.name)
@@ -661,8 +662,8 @@ impl Debug for ComponentInfo {
     }
 }
 
-// impl std::fmt::Debug for ComponentInfo {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+// impl core::fmt::Debug for ComponentInfo {
+//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 //         f.debug_struct("ComponentInfo")
 //             .field("id", &self.id)
 //             .field("name", &self.name)
@@ -677,13 +678,13 @@ impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
 }
 
 impl PartialOrd for ComponentInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         self.id.partial_cmp(&other.id)
     }
 }
 
 impl Ord for ComponentInfo {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.id.cmp(&other.id)
     }
 }
@@ -730,12 +731,14 @@ impl ComponentInfo {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
 
     use crate::{component, entity::EntityKind};
+    use alloc::string::{String, ToString};
+    use alloc::sync::Arc;
+    use alloc::vec;
 
     use super::*;
-    use std::num::NonZeroU32;
+    use core::num::NonZeroU32;
 
     component! {
         a: i32,
@@ -762,7 +765,6 @@ mod tests {
         let id_2 = Entity::from_parts(NonZeroU32::new(5).unwrap(), 2, EntityKind::empty());
 
         let slot = arch.insert(id, &mut buffer);
-        eprintln!("Slot: {slot}");
 
         // Reuse buffer and insert again
         buffer.set(a(), 9);

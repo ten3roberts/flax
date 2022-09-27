@@ -1,8 +1,10 @@
-use std::{
-    fmt::Display,
+use core::{
+    fmt::{self, Display, Formatter},
     ops::{Deref, DerefMut},
-    sync::atomic::AtomicBool,
+    sync::{self, atomic::AtomicBool},
 };
+
+use alloc::{format, vec::Vec};
 
 use itertools::Itertools;
 use smallvec::SmallVec;
@@ -282,12 +284,12 @@ impl ChangeList {
     }
 
     #[cfg(test)]
-    pub(crate) fn as_changed_set(&self, tick: u32) -> std::collections::BTreeSet<Slot> {
+    pub(crate) fn as_changed_set(&self, tick: u32) -> alloc::collections::BTreeSet<Slot> {
         self.as_set(|v| v.tick > tick)
     }
 
     #[cfg(test)]
-    pub(crate) fn as_set(&self, f: impl Fn(&Change) -> bool) -> std::collections::BTreeSet<Slot> {
+    pub(crate) fn as_set(&self, f: impl Fn(&Change) -> bool) -> alloc::collections::BTreeSet<Slot> {
         self.iter()
             .filter_map(|v| if f(v) { Some(v.slice) } else { None })
             .flatten()
@@ -321,7 +323,7 @@ pub enum ChangeKind {
 }
 
 impl Display for ChangeKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             ChangeKind::Modified => f.write_str("modified"),
             ChangeKind::Inserted => f.write_str("inserted"),
@@ -468,12 +470,11 @@ impl Changes {
 
     pub(crate) fn set_track_modified(&self) {
         self.track_modified
-            .store(true, std::sync::atomic::Ordering::Relaxed)
+            .store(true, sync::atomic::Ordering::Relaxed)
     }
 
     pub(crate) fn track_modified(&self) -> bool {
-        self.track_modified
-            .load(std::sync::atomic::Ordering::Relaxed)
+        self.track_modified.load(sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -548,7 +549,7 @@ mod tests {
         changes.set(Change::new(Slice::new(0, 89), 301));
         changes.set(Change::new(Slice::new(209, 300), 302));
 
-        eprintln!("Changes: {changes:#?}");
+        // eprintln!("Changes: {changes:#?}");
     }
 
     #[test]
@@ -603,7 +604,7 @@ mod tests {
         changes.set(Change::new(Slice::new(1, 4), 2));
         changes.set(Change::new(Slice::new(1, 3), 8));
         changes.set(Change::new(Slice::new(5, 6), 1));
-        eprintln!("Changes: {changes:#?}");
+        // eprintln!("Changes: {changes:#?}");
         // changes.swap_remove(1);
         assert_eq!(changes.swap_remove_collect(6, 6), [Change::single(6, 6)]);
         assert_eq!(changes.swap_remove_collect(6, 6), []);
@@ -612,13 +613,13 @@ mod tests {
         changes.set(Change::new(Slice::new(3, 7), 3));
         changes.set(Change::new(Slice::new(3, 4), 5));
 
-        dbg!(&changes);
+        // dbg!(&changes);
         assert_eq!(
             changes.swap_remove_collect(4, 9),
             [Change::single(4, 3), Change::single(4, 6)]
         );
 
         assert_eq!(changes.swap_remove_collect(4, 9), []);
-        eprintln!("Changes: {changes:#?}");
+        // eprintln!("Changes: {changes:#?}");
     }
 }

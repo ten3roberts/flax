@@ -6,8 +6,15 @@
 //! An alternative may be a "modify guard", a Notify on Write, or NOW if you
 //! want :P.
 
-use std::{any::type_name, cmp::Ordering, fmt::Debug};
+use core::{
+    any::type_name,
+    cmp::Ordering,
+    fmt::{self, Debug},
+    ops,
+};
 
+use alloc::vec;
+use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
 
 use crate::{
@@ -105,7 +112,7 @@ impl<T> Debug for OrdCmp<T>
 where
     T: ComponentValue,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("OrdCmp")
             .field("component", &self.component)
             .field("method", &self.method)
@@ -229,7 +236,7 @@ impl<T, F> Debug for Cmp<T, F>
 where
     T: ComponentValue,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Cmp")
             .field("component", &self.component)
             .field("func", &type_name::<F>())
@@ -313,7 +320,7 @@ where
     }
 }
 
-impl<R, T> std::ops::BitOr<R> for OrdCmp<T>
+impl<R, T> ops::BitOr<R> for OrdCmp<T>
 where
     Self: for<'x> Filter<'x>,
     R: for<'x> Filter<'x>,
@@ -326,7 +333,7 @@ where
     }
 }
 
-impl<R, T> std::ops::BitAnd<R> for OrdCmp<T>
+impl<R, T> ops::BitAnd<R> for OrdCmp<T>
 where
     Self: for<'x> Filter<'x>,
     T: ComponentValue + PartialOrd,
@@ -339,7 +346,7 @@ where
     }
 }
 
-impl<T> std::ops::Neg for OrdCmp<T>
+impl<T> ops::Neg for OrdCmp<T>
 where
     Self: for<'x> Filter<'x>,
     T: ComponentValue + PartialOrd,
@@ -351,7 +358,7 @@ where
     }
 }
 
-impl<R, T, F> std::ops::BitOr<R> for Cmp<T, F>
+impl<R, T, F> ops::BitOr<R> for Cmp<T, F>
 where
     Self: for<'x> Filter<'x>,
     F: Fn(&T) -> bool + Send + Sync + 'static,
@@ -365,7 +372,7 @@ where
     }
 }
 
-impl<R, T, F> std::ops::BitAnd<R> for Cmp<T, F>
+impl<R, T, F> ops::BitAnd<R> for Cmp<T, F>
 where
     Self: for<'x> Filter<'x>,
     F: Fn(&T) -> bool + Send + Sync + 'static,
@@ -379,7 +386,7 @@ where
     }
 }
 
-impl<T, F> std::ops::Neg for Cmp<T, F>
+impl<T, F> ops::Neg for Cmp<T, F>
 where
     Self: for<'x> Filter<'x>,
     F: Fn(&T) -> bool + Send + Sync + 'static,

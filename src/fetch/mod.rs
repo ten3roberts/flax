@@ -3,7 +3,10 @@ mod ext;
 mod opt;
 
 use core::fmt;
-use std::fmt::Write;
+use core::fmt::Write;
+
+use alloc::vec;
+use alloc::vec::Vec;
 
 pub use component::*;
 pub use ext::*;

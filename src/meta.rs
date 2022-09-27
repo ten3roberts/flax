@@ -20,12 +20,14 @@ where
     T: ComponentValue,
 {
     fn attach(component: ComponentInfo, buffer: &mut ComponentBuffer) {
-        buffer.set(name(), component.name().to_string());
+        buffer.set(name(), component.name().into());
     }
 }
 
 #[cfg(test)]
 mod test {
+    use alloc::string::String;
+
     use crate::{component, debug_visitor};
 
     use super::*;
@@ -39,6 +41,6 @@ mod test {
         let meta = foo().get_meta();
 
         assert!(meta.get(debug_visitor()).is_some());
-        assert_eq!(meta.get(name()), Some(&"foo".to_string()));
+        assert_eq!(meta.get(name()), Some(&"foo".into()));
     }
 }

@@ -1,5 +1,7 @@
+use core::{mem, ops::Deref};
+
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use eyre::WrapErr;
-use std::{collections::BTreeMap, iter::FromIterator, mem, ops::Deref};
 
 use itertools::Itertools;
 
@@ -40,8 +42,8 @@ impl Systems {
     }
 }
 
-impl std::fmt::Debug for Systems {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Systems {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut list = f.debug_list();
         match self {
             Self::Unbatched(v) => {
@@ -155,8 +157,8 @@ impl Deref for BatchInfo {
     }
 }
 
-impl std::fmt::Debug for Schedule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Schedule {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Schedule")
             .field("systems", &self.systems)
             .field("archetype_gen", &self.archetype_gen)
@@ -294,7 +296,7 @@ impl Schedule {
                     .iter()
                     .map(|system| SystemInfo {
                         name: system.name(),
-                        desc: Verbatim(format!("{system:#?}")),
+                        desc: Verbatim(alloc::format!("{system:#?}")),
                         access: access_info(&system.access(world), world),
                     })
                     .collect_vec();
@@ -413,6 +415,7 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
 #[cfg(test)]
 mod test {
 
+    use alloc::{string::String, vec};
     use itertools::Itertools;
 
     use crate::{
@@ -432,7 +435,7 @@ mod test {
         let mut world = World::new();
 
         let id = EntityBuilder::new()
-            .set(a(), "Foo".to_string())
+            .set(a(), "Foo".into())
             .set(b(), 5)
             .spawn(&mut world);
 
@@ -441,7 +444,7 @@ mod test {
             move |mut a: QueryBorrow<_>| -> eyre::Result<()> {
                 let count = a.iter().count() as i32;
 
-                eprintln!("Change: {prev_count} -> {count}");
+                // eprintln!("Change: {prev_count} -> {count}");
                 prev_count = count;
                 Ok(())
             },
@@ -449,8 +452,8 @@ mod test {
 
         let system_b = System::builder().with(Query::new(b())).build(
             move |mut query: QueryBorrow<_>| -> eyre::Result<()> {
-                let item: &i32 = query.get(id)?;
-                eprintln!("Item: {item}");
+                let item: &i32 = query.get(id).map_err(|v| v.into_eyre())?;
+                // eprintln!("Item: {item}");
 
                 Ok(())
             },
@@ -463,12 +466,13 @@ mod test {
         world.despawn(id).unwrap();
         let result: eyre::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
 
-        eprintln!("{result:?}");
-        eprintln!("Err: {:?}", result.unwrap_err());
+        // eprintln!("{result:?}");
+        assert!(result.is_err());
     }
 
     #[test]
     #[cfg(feature = "parallel")]
+    #[cfg(feature = "std")]
     #[cfg_attr(miri, ignore)]
     fn schedule_par() {
         use crate::{

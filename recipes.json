@@ -3,6 +3,11 @@
     "cmd": "cargo run -p asteroids",
     "kind": "term"
   },
+  "deploy-asteroids": {
+    "cmd": "cargo make asteroids",
+    "restart": true,
+    "kind": "term"
+  },
   "debug-asteroids": {
     "cmd": "./target/debug/asteroids",
     "depends_on": [

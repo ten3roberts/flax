@@ -7,9 +7,9 @@ use std::f32::consts::TAU;
 use tracing_subscriber::{prelude::*, registry};
 
 use flax::*;
-use glam::*;
 use macroquad::{
     color::hsl_to_rgb,
+    math::*,
     prelude::{is_key_down, Color, KeyCode, BLACK, BLUE, DARKPURPLE, GRAY, GREEN, ORANGE},
     shapes::{draw_circle, draw_poly, draw_triangle},
     text::draw_text,

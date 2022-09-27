@@ -1,10 +1,10 @@
+use alloc::string::ToString;
 mod context;
 mod traits;
 
 use core::fmt;
-use std::{
+use core::{
     any::{type_name, TypeId},
-    collections::BTreeMap,
     fmt::Formatter,
     marker::PhantomData,
 };
@@ -13,6 +13,13 @@ use crate::{
     archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, Batch,
     BatchedIter, CommandBuffer, ComponentId, Fetch, FetchItem, Filter, Query, QueryData, World,
 };
+
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 pub use context::*;
 use eyre::Context;
@@ -50,8 +57,8 @@ pub struct ForEach<F> {
 
 impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ForEach<Func>
 where
-    for<'x> Q: Fetch<'x> + std::fmt::Debug,
-    for<'x> F: Filter<'x> + std::fmt::Debug,
+    for<'x> Q: Fetch<'x> + core::fmt::Debug,
+    for<'x> F: Filter<'x> + core::fmt::Debug,
     for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
 {
     fn execute(&mut self, mut data: QueryData<Q, F>) {
@@ -91,8 +98,8 @@ pub struct ParForEach<F> {
 #[cfg(feature = "parallel")]
 impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ParForEach<Func>
 where
-    for<'x> Q: Fetch<'x> + std::fmt::Debug,
-    for<'x> F: Filter<'x> + std::fmt::Debug,
+    for<'x> Q: Fetch<'x> + core::fmt::Debug,
+    for<'x> F: Filter<'x> + core::fmt::Debug,
     for<'x, 'y> BatchedIter<'x, 'y, Q, F>: Send,
     for<'x, 'y> Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
@@ -128,8 +135,8 @@ where
 }
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
-    for<'x> Q: Fetch<'x> + std::fmt::Debug + 'static,
-    for<'x> F: Filter<'x> + std::fmt::Debug + 'static,
+    for<'x> Q: Fetch<'x> + core::fmt::Debug + 'static,
+    for<'x> F: Filter<'x> + core::fmt::Debug + 'static,
 {
     /// Execute a function for each item in the query
     pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, Query<Q, F>, ()>
@@ -147,8 +154,8 @@ where
 #[cfg(feature = "parallel")]
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
-    for<'x> Q: Fetch<'x> + std::fmt::Debug + 'static + Send,
-    for<'x> F: Filter<'x> + std::fmt::Debug + 'static + Send,
+    for<'x> Q: Fetch<'x> + core::fmt::Debug + 'static + Send,
+    for<'x> F: Filter<'x> + core::fmt::Debug + 'static + Send,
     for<'x, 'y> BatchedIter<'x, 'y, Q, F>: Send,
     for<'x, 'y> Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
 {
@@ -275,7 +282,7 @@ where
         Ok(())
     }
 
-    fn describe(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}: ", self.name)?;
 
         self.func.describe(f)
@@ -310,7 +317,7 @@ where
         Ok(())
     }
 
-    fn describe(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}: ", self.name)?;
 
         self.func.describe(f)
@@ -540,7 +547,7 @@ impl<'a> SystemFn<'a, &'a SystemContext<'a>, eyre::Result<()>> for NeverSystem {
         panic!("This system should never be executed as it is a placeholder");
     }
 
-    fn describe(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+    fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "NeverSystem")
     }
 
@@ -558,8 +565,8 @@ pub struct BoxedSystem {
     inner: Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>> + Send + Sync>,
 }
 
-impl std::fmt::Debug for BoxedSystem {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for BoxedSystem {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.inner.describe(f)
     }
 }
@@ -616,6 +623,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg(feature = "std")]
 mod test {
 
     use crate::{component, CommandBuffer, Component, EntityBuilder, Query, QueryBorrow, World};

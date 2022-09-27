@@ -1,10 +1,9 @@
 mod builder;
 mod store;
 
-use core::fmt;
 use core::num::NonZeroU64;
-use std::sync::atomic::AtomicU32;
-use std::{num::NonZeroU32, sync::atomic::Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
+use core::{fmt, num::NonZeroU32};
 
 pub use builder::*;
 pub(super) use store::*;
@@ -73,7 +72,7 @@ mod serde_impl {
     impl<'de> Visitor<'de> for EntityKindVisitor {
         type Value = EntityKind;
 
-        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fn expecting(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             write!(f, "A valid entity kind bitfield")
         }
 
@@ -122,7 +121,7 @@ mod serde_impl {
     impl<'de> Visitor<'de> for EntityVisitor {
         type Value = Entity;
 
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
             write!(formatter, "a sequence of entity parts")
         }
 
@@ -181,7 +180,7 @@ component! {
 impl Entity {
     /// Generate a new static id
     pub fn acquire_static_id(kind: EntityKind) -> Entity {
-        let index = STATIC_IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let index = STATIC_IDS.fetch_add(1, Ordering::Relaxed);
         Entity::from_parts(
             NonZeroU32::new(index).unwrap(),
             0,
@@ -390,7 +389,8 @@ pub fn entity_ids() -> EntityIds {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU32;
+
+    use core::num::NonZeroU32;
 
     use crate::{entity::EntityKind, Entity};
 
@@ -405,7 +405,7 @@ mod tests {
 
         store.despawn(b).unwrap();
 
-        eprintln!("Despawning: {b:?}");
+        // eprintln!("Despawning: {b:?}");
         assert!(store.is_alive(a));
         assert!(!store.is_alive(b));
         assert!(store.is_alive(c));
@@ -425,7 +425,7 @@ mod tests {
 
         let a = Entity::from_parts(parts.0, parts.1, parts.2);
 
-        eprintln!("a: {:b}", a.0.get());
+        // eprintln!("a: {:b}", a.0.get());
 
         assert_eq!(parts.0, a.index());
         assert_eq!(parts, a.into_parts());

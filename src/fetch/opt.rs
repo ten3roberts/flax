@@ -1,4 +1,6 @@
-use std::fmt::{self, Write};
+use core::fmt::{self, Write};
+
+use alloc::vec::Vec;
 
 use crate::{fetch::FetchPrepareData, fetch::PreparedFetch, ComponentId, ComponentValue, Fetch};
 
