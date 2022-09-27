@@ -1,9 +1,8 @@
-use std::mem;
-
 use crate::{
     buffer::ComponentBuffer, entity::wildcard, CommandBuffer, Component, ComponentInfo,
     ComponentValue, Entity, RelationExt, World,
 };
+use alloc::vec::Vec;
 
 #[derive(Debug)]
 /// Incrementally build a single entity which allows for more efficient
@@ -130,7 +129,7 @@ impl EntityBuilder {
 
     /// Spawns the entity into the world through a commandbuffer
     pub fn spawn_into(&mut self, cmd: &mut CommandBuffer) {
-        cmd.spawn(mem::take(self));
+        cmd.spawn(core::mem::take(self));
     }
 }
 
@@ -142,6 +141,6 @@ impl Default for EntityBuilder {
 
 impl From<&mut EntityBuilder> for EntityBuilder {
     fn from(builder: &mut EntityBuilder) -> Self {
-        mem::take(builder)
+        core::mem::take(builder)
     }
 }

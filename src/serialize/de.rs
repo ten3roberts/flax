@@ -1,5 +1,6 @@
-use std::{collections::BTreeMap, marker::PhantomData};
+use core::marker::PhantomData;
 
+use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 use serde::{
     de::{self, DeserializeSeed, SeqAccess, VariantAccess, Visitor},
     Deserialize, Deserializer,
@@ -132,7 +133,7 @@ impl DeserializeContext {
     /// Deserializes the world from the supplied deserializer.
     /// Automatically uses the row or column major format depending on the
     /// underlying data.
-    pub fn deserialize<'de, D>(&self, deserializer: D) -> std::result::Result<World, D::Error>
+    pub fn deserialize<'de, D>(&self, deserializer: D) -> core::result::Result<World, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -153,7 +154,7 @@ struct WorldVisitor<'a> {
 impl<'a, 'de> Visitor<'de> for WorldVisitor<'a> {
     type Value = World;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "A map like structure containing the world")
     }
 
@@ -199,7 +200,7 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntities<'a> {
 impl<'de, 'a> Visitor<'de> for DeserializeEntities<'a> {
     type Value = ();
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "an entity id followed by a map of components")
     }
 
@@ -239,7 +240,7 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntity<'a> {
 impl<'de, 'a> Visitor<'de> for DeserializeEntity<'a> {
     type Value = ();
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "an entity id followed by a map of components")
     }
 
@@ -282,7 +283,7 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntityData<'a> {
 impl<'de, 'a> Visitor<'de> for DeserializeEntityData<'a> {
     type Value = ();
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "a map of component values")
     }
 
@@ -331,7 +332,7 @@ struct WorldRowVisitor<'a> {
 impl<'de, 'a> Visitor<'de> for WorldRowVisitor<'a> {
     type Value = World;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "a struct containing a sequence of entities")
     }
 
@@ -377,7 +378,7 @@ struct WorldColumnVisitor<'a> {
 impl<'de, 'a> Visitor<'de> for WorldColumnVisitor<'a> {
     type Value = World;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "a struct containing a sequence of archetypes")
     }
 
@@ -452,7 +453,7 @@ struct ArchetypesVisitor<'a> {
 impl<'a, 'de> Visitor<'de> for ArchetypesVisitor<'a> {
     type Value = ();
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "expected a sequence of archetypes")
     }
 
@@ -501,7 +502,7 @@ struct ArchetypeVisitor<'a> {
 impl<'a, 'de> Visitor<'de> for ArchetypeVisitor<'a> {
     type Value = (Vec<Entity>, BatchSpawn);
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "an archetype of entities and components")
     }
 
@@ -551,7 +552,7 @@ struct StoragesVisitor<'a> {
 impl<'de, 'a> Visitor<'de> for StoragesVisitor<'a> {
     type Value = BatchSpawn;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "a map of component values")
     }
 
@@ -585,7 +586,7 @@ struct StorageVisitor<T: ComponentValue> {
 impl<'de, T: ComponentValue + de::Deserialize<'de>> Visitor<'de> for StorageVisitor<T> {
     type Value = Storage;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "A sequence of component values of the same type")
     }
 

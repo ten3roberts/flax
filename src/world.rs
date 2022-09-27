@@ -1,6 +1,8 @@
-use core::fmt;
-use std::{
-    collections::BTreeMap,
+use alloc::vec;
+use alloc::vec::Vec;
+use alloc::{boxed::Box, collections::BTreeMap};
+use core::{
+    fmt,
     fmt::Formatter,
     mem::{self, MaybeUninit},
     ptr,
@@ -69,7 +71,7 @@ impl Archetypes {
 
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    fn init<I: std::borrow::Borrow<ComponentInfo>>(
+    fn init<I: core::borrow::Borrow<ComponentInfo>>(
         &mut self,
         components: impl IntoIterator<Item = I>,
     ) -> (ArchetypeId, &mut Archetype) {
@@ -582,7 +584,7 @@ impl World {
 
         let mut meta = info.meta()(info);
         meta.set(is_component(), info);
-        meta.set(name(), info.name().to_string());
+        meta.set(name(), info.name().into());
 
         if info.id().is_static() {
             meta.set(is_static_component(), ());
@@ -1320,7 +1322,7 @@ pub struct WorldFormatter<'a, F> {
     filter: F,
 }
 
-impl<'a, F> std::fmt::Debug for WorldFormatter<'a, F>
+impl<'a, F> fmt::Debug for WorldFormatter<'a, F>
 where
     F: for<'x> Filter<'x>,
 {
@@ -1362,7 +1364,7 @@ pub struct EntityFormatter<'a> {
     ids: &'a [Entity],
 }
 
-impl<'a> std::fmt::Debug for EntityFormatter<'a> {
+impl<'a> fmt::Debug for EntityFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut meta = BTreeMap::new();
         let mut list = f.debug_map();
@@ -1391,7 +1393,7 @@ impl Default for World {
     }
 }
 
-impl std::fmt::Debug for World {
+impl fmt::Debug for World {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.format_debug(is_component().without()).fmt(f)
     }
@@ -1399,7 +1401,8 @@ impl std::fmt::Debug for World {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+
+    use alloc::{string::String, sync::Arc};
 
     use crate::{component, EntityBuilder, Query};
 
@@ -1436,7 +1439,7 @@ mod tests {
         let id = world.spawn();
 
         world.set(id, a(), 65).unwrap();
-        let shared = Arc::new("Foo".to_string());
+        let shared: Arc<String> = Arc::new("Foo".into());
 
         assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
         assert_eq!(
@@ -1448,9 +1451,9 @@ mod tests {
         let id2 = world.spawn();
         world.set(id2, a(), 7).unwrap();
 
-        world.set(id2, c(), "Foo".to_string()).unwrap();
+        world.set(id2, c(), "Foo".into()).unwrap();
 
-        eprintln!("a: {}, b: {}, c: {}, id: {}", a(), a(), c(), id);
+        // eprintln!("a: {}, b: {}, c: {}, id: {}", a(), a(), c(), id);
 
         assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
         assert_eq!(
@@ -1461,11 +1464,11 @@ mod tests {
         assert!(!world.has(id, c()));
 
         assert_eq!(world.get(id2, a()).as_deref(), Ok(&7));
-        assert_eq!(world.get(id2, c()).as_deref(), Ok(&"Foo".to_string()));
+        assert_eq!(world.get(id2, c()).as_deref(), Ok(&"Foo".into()));
         world.set(id, e(), shared.clone()).unwrap();
         assert_eq!(
             world.get(id, e()).as_deref().map(|v| &**v),
-            Ok(&"Foo".to_string())
+            Ok(&"Foo".into())
         );
 
         assert_eq!(Arc::strong_count(&shared), 2);
@@ -1504,16 +1507,16 @@ mod tests {
         let id = EntityBuilder::new()
             .set(a(), 9)
             .set(b(), 0.3)
-            .set(c(), "Foo".to_string())
+            .set(c(), "Foo".into())
             .spawn(&mut world);
 
-        let shared = Arc::new("The meaning of life is ...".to_string());
+        let shared: Arc<String> = Arc::new("The meaning of life is ...".into());
 
         world.set(id, e(), shared.clone()).unwrap();
         let id2 = EntityBuilder::new()
             .set(a(), 6)
             .set(b(), 0.219)
-            .set(c(), "Bar".to_string())
+            .set(c(), "Bar".into())
             .set(e(), shared.clone())
             .spawn(&mut world);
 
@@ -1523,7 +1526,7 @@ mod tests {
         assert_eq!(world.remove(id, e()).as_ref(), Ok(&shared));
 
         assert_eq!(world.get(id, a()).as_deref(), Ok(&9));
-        assert_eq!(world.get(id, c()).as_deref(), Ok(&"Foo".to_string()));
+        assert_eq!(world.get(id, c()).as_deref(), Ok(&"Foo".into()));
         assert_eq!(
             world.get(id, e()).as_deref(),
             Err(&Error::MissingComponent(id, "e"))
@@ -1536,7 +1539,7 @@ mod tests {
         assert_eq!(world.get(id, e()).as_deref(), Err(&Error::NoSuchEntity(id)));
 
         assert_eq!(world.get(id2, e()).as_deref(), Ok(&shared));
-        assert_eq!(world.get(id2, c()).as_deref(), Ok(&"Bar".to_string()));
+        assert_eq!(world.get(id2, c()).as_deref(), Ok(&"Bar".into()));
 
         assert_eq!(world.get(id, e()).as_deref(), Err(&Error::NoSuchEntity(id)));
 
@@ -1547,6 +1550,6 @@ mod tests {
         let mut query = Query::new((a(), c()));
         let items = query.as_vec(&world);
 
-        assert_eq!(items, [(6, "Bar".to_string())]);
+        assert_eq!(items, [(6, "Bar".into())]);
     }
 }

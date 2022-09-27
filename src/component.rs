@@ -1,4 +1,8 @@
-use std::{fmt::Display, marker::PhantomData, sync::atomic::AtomicU32};
+use core::{
+    fmt::{self, Display, Formatter},
+    marker::PhantomData,
+    sync::atomic::AtomicU32,
+};
 
 use crate::{
     archetype::ComponentInfo, buffer::ComponentBuffer, entity::wildcard, entity::EntityKind,
@@ -90,14 +94,14 @@ impl<T: ComponentValue> Clone for Component<T> {
     }
 }
 
-impl<T: ComponentValue> std::fmt::Debug for Component<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: ComponentValue> fmt::Debug for Component<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Component").field("id", &self.id).finish()
     }
 }
 
 impl<T: ComponentValue> Display for Component<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}({})", self.name, self.id)
     }
 }
@@ -257,8 +261,8 @@ mod tests {
     #[test]
     fn component_ids() {
         let c_foo = foo();
-        eprintln!("Foo: {c_foo:?}");
-        eprintln!("Bar: {:?}", bar().id());
+        // eprintln!("Foo: {c_foo:?}");
+        // eprintln!("Bar: {:?}", bar().id());
         assert_ne!(foo().id(), bar().id());
         assert_eq!(foo(), foo());
     }

@@ -1,3 +1,6 @@
+use core::fmt;
+
+use alloc::{boxed::Box, format, vec::Vec};
 use eyre::Context;
 
 use crate::{
@@ -7,25 +10,29 @@ use crate::{
 
 type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
 
+/// A recorded action to be applied to the world.
 enum Command {
+    /// Spawn a new entity
     Spawn(EntityBuilder),
+    /// Spawn a batch of entities with the same components
     SpawnBatch(BatchSpawn),
+    /// Set a component for an entity
     Set {
         id: Entity,
         info: ComponentInfo,
         offset: usize,
     },
+    /// Despawn an entity
     Despawn(Entity),
-    Remove {
-        id: Entity,
-        info: ComponentInfo,
-    },
+    /// Remove a component from an entity
+    Remove { id: Entity, info: ComponentInfo },
 
+    /// Execute an arbitrary function with a mutable reference to the world.
     Defer(DeferFn),
 }
 
-impl std::fmt::Debug for Command {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Spawn(arg0) => f.debug_tuple("Spawn").field(arg0).finish(),
             Self::SpawnBatch(arg0) => f.debug_tuple("SpawnBatch").field(arg0).finish(),
@@ -58,8 +65,8 @@ pub struct CommandBuffer {
     commands: Vec<Command>,
 }
 
-impl std::fmt::Debug for CommandBuffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for CommandBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CommandBuffer")
             .field("commands", &self.commands)
             .finish()
@@ -152,11 +159,16 @@ impl CommandBuffer {
                     let value = self.inserts.take_dyn(offset);
                     world
                         .set_dyn(id, info, value, |v| (info.drop)(v.cast()))
+                        .map_err(|v| v.into_eyre())
                         .wrap_err_with(|| format!("Failed to set component {}", info.name()))?;
                 },
-                Command::Despawn(id) => world.despawn(id).wrap_err("Failed to despawn entity")?,
+                Command::Despawn(id) => world
+                    .despawn(id)
+                    .map_err(|v| v.into_eyre())
+                    .wrap_err("Failed to despawn entity")?,
                 Command::Remove { id, info } => world
                     .remove_dyn(id, info)
+                    .map_err(|v| v.into_eyre())
                     .wrap_err_with(|| format!("Failed to remove component {}", info.name))?,
                 Command::Defer(func) => {
                     func(world).wrap_err("Failed to execute deferred function")?

@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 /// Helper trait to convert a tuple to a closure with distinct arguments
 pub trait TupleArgs {
     type Func;

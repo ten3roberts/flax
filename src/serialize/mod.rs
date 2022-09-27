@@ -1,6 +1,7 @@
 mod de;
 mod ser;
 
+use alloc::string::String;
 pub use de::*;
 pub use ser::*;
 use serde::{Deserialize, Serialize};
@@ -107,6 +108,9 @@ where
 
 #[cfg(test)]
 mod test {
+    use alloc::format;
+    use alloc::vec;
+    use alloc::vec::Vec;
     use rand::{
         distributions::{Standard, Uniform},
         rngs::StdRng,
@@ -129,9 +133,9 @@ mod test {
         }
 
         let player = Entity::builder()
-            .set(name(), "Player".to_string())
+            .set(name(), "Player".into())
             .set(pos(), (1.4, 5.3))
-            .set(items(), vec!["Dagger".to_string(), "Estradiol".to_string()])
+            .set(items(), vec!["Dagger".into(), "Estradiol".into()])
             .set(health(), 67.8)
             .spawn(&mut world);
 
@@ -158,13 +162,13 @@ mod test {
             .entry(enemies[2], status_effects())
             .unwrap()
             .or_default()
-            .push("Poison".to_string());
+            .push("Poison".into());
 
         world
             .entry(enemies[5], status_effects())
             .unwrap()
             .or_default()
-            .push("Fire".to_string());
+            .push("Fire".into());
 
         let all_entities = [vec![player], enemies].concat();
 
@@ -205,7 +209,7 @@ mod test {
             &serializer.serialize(&world, SerializeFormat::ColumnMajor),
         )
         .unwrap();
-        eprintln!("World: {json}");
+        // eprintln!("World: {json}");
 
         let new_world: World = deserializer
             .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
@@ -216,7 +220,7 @@ mod test {
         let json =
             serde_json::to_string_pretty(&serializer.serialize(&world, SerializeFormat::RowMajor))
                 .unwrap();
-        eprintln!("World: {json}");
+        // eprintln!("World: {json}");
 
         let world = new_world;
         let new_world = deserializer

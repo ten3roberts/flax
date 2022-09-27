@@ -1,27 +1,80 @@
-use thiserror::Error;
+use core::fmt::Display;
+
+use alloc::{string::String, vec::Vec};
 
 use crate::Entity;
 
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 /// The different kind of errors which can occur
 pub enum Error {
     /// The requested entity did not exist
-    #[error("Entity {0} does not exist or has been despawned.")]
     NoSuchEntity(Entity),
     /// The entity did not have the specified component
-    #[error("Entity {0} does not have the component {1:?}.")]
     MissingComponent(Entity, &'static str),
     /// The fetch_one failed due to missing components
-    #[error("Entity {0} did not match the fetch {1:?}.\nMissing {2:?}.")]
     UnmatchedFetch(Entity, String, Vec<String>),
     /// Attempt to access the same entity mutably
-    #[error("Entities {0:?} were not disjoint")]
     Disjoint(Vec<Entity>),
     /// The batch is not complete
-    #[error("Attempt to spawn batch with an insufficient number of components")]
     IncompleteBatch,
 }
 
+impl Error {
+    #[cfg(feature = "std")]
+    pub(crate) fn into_eyre(self) -> eyre::Report {
+        eyre::Report::new(self)
+    }
+
+    #[cfg(not(feature = "std"))]
+    pub(crate) fn into_eyre(self) -> eyre::Report {
+        eyre::Report::msg(self)
+    }
+}
+
 /// Result alias for [crate::error::Result]
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
+
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::NoSuchEntity(id) => write!(f, "Entity {id} does not exist"),
+            Error::MissingComponent(id, name) => {
+                write!(f, "Entity {id} does not have the component {name:?}")
+            }
+            Error::UnmatchedFetch(id, fetch, missing) => write!(
+                f,
+                "Entity {id} did not match the fetch {fetch:?}.\nMissing: {missing:?}"
+            ),
+            Error::Disjoint(ids) => write!(f, "Entities {ids:?} were not disjoint"),
+            Error::IncompleteBatch => write!(
+                f,
+                "Attempt to spawn batch with insufficient number of components"
+            ),
+        }
+    }
+}
+
+// #[derive(Debug)]
+// /// Commandbuffer failed to apply.
+// /// Each fallible variant of [`crate::commands::Command`] has a corresponding error variant
+// enum ApplyError {
+//     Set { inner: Error, name: &'static str },
+//     Despawn(Error),
+//     Remove { inner: Error, name: &'static str },
+//     Defer(eyre::Result<()>),
+// }
+
+// impl Display for ApplyError {
+//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//         match self {
+//             ApplyError::Set { name, .. } => write!(f, "Failed to set component {:?}", name),
+//             ApplyError::Despawn(_) => write!(f, "Failed to despawn entity"),
+//             ApplyError::Remove { name, .. } => write!(f, "Failed to remove component {name}"),
+//             ApplyError::Defer(_) => todo!(),
+//         }
+//     }
+// }
