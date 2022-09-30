@@ -95,7 +95,8 @@ macro_rules! component {
                 }
 
                 use $crate::entity::EntityKind;
-                $crate::Component::static_init_pair(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT | EntityKind::RELATION, stringify!($name), meta, $obj)
+                use $crate::RelationExt;
+                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT, stringify!($name), meta).of($obj)
             }
         }
 

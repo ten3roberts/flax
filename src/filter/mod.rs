@@ -3,13 +3,14 @@ mod cmp;
 use alloc::vec::Vec;
 
 use core::{
+    any::type_name,
     iter::FusedIterator,
     ops::{self, Neg},
 };
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    Access, ArchetypeId, ComponentId, ComponentValue,
+    Access, ArchetypeId, ComponentKey, ComponentValue, Entity,
 };
 
 pub use change::*;
@@ -84,7 +85,7 @@ where
     /// Prepare the filter for an archetype.
     /// `change_tick` refers to the last time this query was run. Useful for
     /// change detection.
-    fn prepare(&'w self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared;
+    fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared;
 
     /// Returns true if the filter will yield at least one entity from the
     /// archetype.
@@ -452,7 +453,7 @@ impl<F: PreparedFilter> FusedIterator for FilterIter<F> {}
 #[derive(Debug, Clone)]
 /// Filter which only yields true if the entity has the specified component
 pub struct With {
-    pub(crate) component: ComponentId,
+    pub(crate) component: ComponentKey,
 }
 
 impl StaticFilter for With {
@@ -469,11 +470,7 @@ impl<'a> Filter<'a> for With {
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
-        if self.component.is_relation() {
-            arch.matches_relation(self.component).next().is_some()
-        } else {
-            arch.has(self.component)
-        }
+        arch.has(self.component)
     }
 
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
@@ -484,7 +481,7 @@ impl<'a> Filter<'a> for With {
 #[derive(Debug, Clone)]
 /// Opposite of [crate::Without]
 pub struct Without {
-    pub(crate) component: ComponentId,
+    pub(crate) component: ComponentKey,
 }
 
 impl<'a> Filter<'a> for Without {
@@ -494,12 +491,8 @@ impl<'a> Filter<'a> for Without {
         BooleanFilter(self.matches(arch))
     }
 
-    fn matches(&self, archetype: &Archetype) -> bool {
-        if self.component.is_relation() {
-            archetype.matches_relation(self.component).next().is_none()
-        } else {
-            !archetype.has(self.component)
-        }
+    fn matches(&self, arch: &Archetype) -> bool {
+        self.static_matches(arch)
     }
 
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
@@ -510,6 +503,129 @@ impl<'a> Filter<'a> for Without {
 impl StaticFilter for Without {
     fn static_matches(&self, arch: &Archetype) -> bool {
         !arch.has(self.component)
+    }
+}
+#[derive(Debug, Clone)]
+/// Yields all entitiens with the relation of the specified kind
+pub(crate) struct WithObject {
+    pub(crate) object: Entity,
+}
+
+impl StaticFilter for WithObject {
+    fn static_matches(&self, arch: &Archetype) -> bool {
+        arch.components().any(|v| {
+            if let Some(v) = v.id().object {
+                if v == self.object {
+                    return true;
+                }
+            }
+
+            false
+        })
+    }
+}
+
+impl<'a> Filter<'a> for WithObject {
+    type Prepared = BooleanFilter;
+
+    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(arch))
+    }
+
+    fn matches(&self, arch: &Archetype) -> bool {
+        self.static_matches(arch)
+    }
+
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+        Default::default()
+    }
+}
+
+pub(crate) struct ArchetypeFilter<F>(pub(crate) F);
+
+impl<F> core::fmt::Debug for ArchetypeFilter<F> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("ArchetypeFilter")
+            .field(&type_name::<F>())
+            .finish()
+    }
+}
+
+impl<F: Fn(&Archetype) -> bool> StaticFilter for ArchetypeFilter<F> {
+    fn static_matches(&self, arch: &Archetype) -> bool {
+        (self.0)(arch)
+    }
+}
+
+impl<'w, F: Fn(&Archetype) -> bool> Filter<'w> for ArchetypeFilter<F> {
+    type Prepared = BooleanFilter;
+
+    fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(arch))
+    }
+
+    fn matches(&self, arch: &Archetype) -> bool {
+        self.static_matches(arch)
+    }
+
+    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
+        Default::default()
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Yields all entitiens with the relation of the specified kind
+pub struct WithRelation {
+    pub(crate) relation: Entity,
+}
+
+impl StaticFilter for WithRelation {
+    fn static_matches(&self, arch: &Archetype) -> bool {
+        arch.relations_like(self.relation).next().is_some()
+    }
+}
+
+impl<'a> Filter<'a> for WithRelation {
+    type Prepared = BooleanFilter;
+
+    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(arch))
+    }
+
+    fn matches(&self, arch: &Archetype) -> bool {
+        self.static_matches(arch)
+    }
+
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+        Default::default()
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Opposite of [crate::Without]
+pub struct WithoutRelation {
+    pub(crate) relation: Entity,
+}
+
+impl<'a> Filter<'a> for WithoutRelation {
+    type Prepared = BooleanFilter;
+
+    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(arch))
+    }
+
+    fn matches(&self, arch: &Archetype) -> bool {
+        self.static_matches(arch)
+    }
+
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+        Default::default()
+    }
+}
+
+impl StaticFilter for WithoutRelation {
+    fn static_matches(&self, arch: &Archetype) -> bool {
+        arch.relations_like(self.relation).next().is_none()
     }
 }
 
@@ -809,7 +925,7 @@ mod tests {
 
         // Mock changes
         let a_map = archetype
-            .changes_mut(a().id())
+            .changes_mut(a().key())
             .unwrap()
             .set_modified(Change::new(Slice::new(9, 80), 2))
             .set_inserted(Change::new(Slice::new(65, 83), 4))
@@ -817,7 +933,7 @@ mod tests {
             .as_changed_set(1);
 
         let b_map = archetype
-            .changes_mut(b().id())
+            .changes_mut(b().key())
             .unwrap()
             .set_modified(Change::new(Slice::new(16, 45), 2))
             .set_modified(Change::new(Slice::new(68, 85), 2))
@@ -825,7 +941,7 @@ mod tests {
             .as_changed_set(1);
 
         let c_map = archetype
-            .changes_mut(c().id())
+            .changes_mut(c().key())
             .unwrap()
             .set_modified(Change::new(Slice::new(96, 123), 3))
             .get(ChangeKind::Modified)

@@ -6,7 +6,7 @@ use atomic_refcell::AtomicRef;
 use crate::{
     archetype::{Slot, StorageBorrowDyn},
     buffer::ComponentBuffer,
-    component, Archetype, ComponentId, ComponentInfo, ComponentValue, MetaData,
+    component, Archetype, ComponentInfo, ComponentKey, ComponentValue, MetaData,
 };
 
 /// Format a component with debug
@@ -53,7 +53,7 @@ where
 pub(crate) struct RowFormatter<'a> {
     pub arch: &'a Archetype,
     pub slot: Slot,
-    pub meta: &'a BTreeMap<ComponentId, AtomicRef<'a, DebugVisitor>>,
+    pub meta: &'a BTreeMap<ComponentKey, AtomicRef<'a, DebugVisitor>>,
 }
 
 struct MissingDebug;
@@ -68,7 +68,7 @@ impl<'a> RowFormatter<'a> {
     pub fn new(
         arch: &'a Archetype,
         slot: Slot,
-        meta: &'a BTreeMap<ComponentId, AtomicRef<'a, DebugVisitor>>,
+        meta: &'a BTreeMap<ComponentKey, AtomicRef<'a, DebugVisitor>>,
     ) -> Self {
         Self { arch, slot, meta }
     }
@@ -76,16 +76,12 @@ impl<'a> RowFormatter<'a> {
 
 struct ComponentName {
     base_name: &'static str,
-    id: ComponentId,
+    id: ComponentKey,
 }
 
 impl fmt::Debug for ComponentName {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.id.is_relation() {
-            write!(f, "{}({})", self.base_name, self.id.high())
-        } else {
-            write!(f, "{}", self.base_name)
-        }
+        write!(f, "{}:{}", self.base_name, self.id)
     }
 }
 

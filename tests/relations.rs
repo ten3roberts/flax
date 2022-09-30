@@ -42,7 +42,7 @@ fn relations() {
     tracing::info!("Children: {children:?}");
 
     let parents = Query::new(entity_ids())
-        .filter(child_of.without())
+        .filter(child_of.without_relation())
         .borrow(&world)
         .iter()
         .collect_vec();
@@ -84,7 +84,7 @@ fn relations() {
     assert_eq!(Query::new(child_of(root)).borrow(&world).count(), 2);
     assert_eq!(
         Query::new(())
-            .filter(child_of.with())
+            .filter(child_of.with_relation())
             .batch_size(1)
             .borrow(&world)
             .count(),

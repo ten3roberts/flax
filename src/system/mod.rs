@@ -11,7 +11,7 @@ use core::{
 
 use crate::{
     archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, Batch,
-    BatchedIter, CommandBuffer, ComponentId, Fetch, FetchItem, Filter, Query, QueryData, World,
+    BatchedIter, CommandBuffer, ComponentKey, Fetch, FetchItem, Filter, Query, QueryData, World,
 };
 
 use alloc::boxed::Box;
@@ -400,14 +400,14 @@ pub enum AccessKind {
         /// The archetype id
         id: ArchetypeId,
         /// The accessed component
-        component: ComponentId,
+        component: ComponentKey,
     },
     /// Borrow a single change event of an archetype
     ChangeEvent {
         /// The archetype id
         id: ArchetypeId,
         /// The accessed component
-        component: ComponentId,
+        component: ComponentKey,
     },
     /// A unit struct works as a synchronization barrier
     External(TypeId),
@@ -457,7 +457,7 @@ struct ArchetypeAccess {
 struct ComponentAccessInfo {
     mutable: bool,
     name: &'static str,
-    id: ComponentId,
+    id: ComponentKey,
 }
 
 /// Human friendly system access

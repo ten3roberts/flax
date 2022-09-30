@@ -1,6 +1,6 @@
 use crate::{
-    buffer::ComponentBuffer, entity::wildcard, CommandBuffer, Component, ComponentInfo,
-    ComponentValue, Entity, RelationExt, World,
+    buffer::ComponentBuffer, dummy, CommandBuffer, Component, ComponentInfo, ComponentValue,
+    Entity, RelationExt, World,
 };
 use alloc::vec::Vec;
 
@@ -79,7 +79,7 @@ impl EntityBuilder {
         other: impl Into<Self>,
     ) -> &mut Self {
         let mut other = other.into();
-        other.set(relation.of(wildcard()), value);
+        other.set(relation.of(dummy()), value);
         self.children.push(other);
         self
     }
@@ -104,13 +104,17 @@ impl EntityBuilder {
     fn spawn_inner(&mut self, world: &mut World, parent: Option<Entity>) -> Entity {
         self.buffer.components_mut().for_each(|info| {
             let id = info.id();
-            if id.is_relation() && id.high() == wildcard().low() {
+            if let Some(object) = id.object {
+                if object==dummy() {
                 if let Some(parent) = parent {
-                    let rel = id.low();
-                    info.id = Entity::join_pair(rel, parent.low())
-                } else {
+                        info.id.object=Some(parent);
+                }
+                else {
+
                     panic!("Attempt to build entity with an unknown parent, but entity requires a parent relation")
                 }
+                }
+
             }
         });
 

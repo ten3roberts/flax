@@ -6,7 +6,7 @@ use alloc::{
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{ComponentId, ComponentInfo, ComponentValue};
+use crate::{ComponentInfo, ComponentKey, ComponentValue};
 
 use super::Slot;
 
@@ -254,7 +254,7 @@ impl Storage {
     /// Changes the id of the stored component.
     /// This is safe as the underlying vtable is not changed, as long as the id
     /// points to a component of the same kind.
-    pub(crate) unsafe fn set_id(&mut self, id: ComponentId) {
+    pub(crate) unsafe fn set_id(&mut self, id: ComponentKey) {
         self.info.id = id
     }
 

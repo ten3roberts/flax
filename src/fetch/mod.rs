@@ -16,7 +16,7 @@ use crate::{
     archetype::{Archetype, Slice, Slot},
     filter::Nothing,
     system::Access,
-    ArchetypeId, ComponentId, Entity, Filter, World,
+    ArchetypeId, ComponentKey, Entity, Filter, World,
 };
 
 /// Represents the world data necessary for preparing a fetch
@@ -64,7 +64,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     fn filter(&self) -> Self::Filter;
 
     /// Returns the required component for the fetch
-    fn components(&self, result: &mut Vec<ComponentId>);
+    fn components(&self, result: &mut Vec<ComponentKey>);
 }
 
 impl<'w> Fetch<'w> for () {
@@ -94,7 +94,7 @@ impl<'w> Fetch<'w> for () {
         Nothing
     }
 
-    fn components(&self, _: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentKey>) {}
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -176,7 +176,7 @@ impl<'w> Fetch<'w> for EntityIds {
 
     const HAS_FILTER: bool = false;
 
-    fn components(&self, _: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentKey>) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
@@ -226,7 +226,7 @@ macro_rules! tuple_impl {
                 )* ].concat()
             }
 
-            fn components(&self, result: &mut Vec<ComponentId>) {
+            fn components(&self, result: &mut Vec<ComponentKey>) {
                 $((self.$idx).components(result));*
             }
 

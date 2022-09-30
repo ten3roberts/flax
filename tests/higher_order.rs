@@ -1,5 +1,5 @@
 use flax::components::{child_of, name};
-use flax::{component, debug_visitor, entity::wildcard, EntityBuilder, Query, World};
+use flax::{component, debug_visitor, EntityBuilder, Query, World};
 use flax::{entity_ids, relations_like, Debug, Entity};
 use itertools::Itertools;
 
@@ -59,7 +59,7 @@ fn visitors() {
     eprintln!("World: {world:#?}");
 }
 
-#[test_log::test]
+#[test]
 fn relations() {
     #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
     enum RelationKind {
@@ -79,6 +79,7 @@ fn relations() {
         .set(name(), "Jessica".to_string())
         .set(hobby(), "Reading")
         .spawn(&mut world);
+    dbg!(child_of(parent));
 
     let parent2 = EntityBuilder::new()
         .set(name(), "Jack".to_string())
@@ -151,6 +152,7 @@ fn relations() {
 
     drop(query);
 
+    eprintln!("Detaching parent: {parent}");
     // If we remove a parent, the children will be detached.
     world.detach(parent);
 
@@ -239,7 +241,7 @@ fn hierarchy_manipulation() {
         .spawn(&mut world);
 
     // Query all entities with no `child_of` relation
-    let mut q = Query::new(entity_ids()).without(child_of(wildcard()));
+    let mut q = Query::new(entity_ids()).without_relation(child_of);
 
     let roots = q.borrow(&world).iter().sorted().collect_vec();
     assert_eq!(roots, [a, b]);
@@ -252,7 +254,7 @@ fn hierarchy_manipulation() {
     world.detach(b);
     assert_eq!(world.get(b, name()).as_deref(), Ok(&"b".to_string()));
 
-    let mut q = Query::new(name()).without(child_of(wildcard()));
+    let mut q = Query::new(name()).without_relation(child_of);
     let mut roots = q.borrow(&world);
     let roots = roots.iter().sorted().collect_vec();
 

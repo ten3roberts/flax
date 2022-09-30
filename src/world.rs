@@ -12,6 +12,8 @@ use core::{
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
+use crate::dummy;
+use crate::filter::{ArchetypeFilter, WithObject, WithRelation};
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
     buffer::ComponentBuffer,
@@ -21,7 +23,7 @@ use crate::{
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    is_static_component, Component, ComponentId, ComponentValue, Entity, Error, Filter, Query,
+    is_static_component, Component, ComponentKey, ComponentValue, Entity, Error, Filter, Query,
     RelationExt, RowFormatter, StaticFilter,
 };
 
@@ -128,10 +130,11 @@ impl Archetypes {
     /// It is the callers responibility to cleanup child nodes if the node is internal
     /// Children are detached from the tree, but still accessible by id
     fn despawn(&mut self, id: Entity) -> Archetype {
-        let arch = self.inner.despawn(id).expect("Invalid archetype");
+        let arch = self.inner.despawn(id).expect("Despawn invalid archetype");
 
         // Remove outgoing edges
         for (component, dst_id) in &arch.incoming {
+            eprintln!("Outgoing: {dst_id}");
             assert!(self.get_mut(*dst_id).outgoing.remove(component).is_some());
         }
         self.gen = self.gen.wrapping_add(1);
@@ -144,15 +147,15 @@ type EventSender = Box<dyn Fn(Entity, *const u8) -> bool + Send + Sync>;
 
 #[derive(Default)]
 struct EventRegistry {
-    inner: BTreeMap<ComponentId, Vec<EventSender>>,
+    inner: BTreeMap<ComponentKey, Vec<EventSender>>,
 }
 
 impl EventRegistry {
-    fn register(&mut self, component: ComponentId, sender: EventSender) {
+    fn register(&mut self, component: ComponentKey, sender: EventSender) {
         self.inner.entry(component).or_default().push(sender)
     }
 
-    fn send(&mut self, component: ComponentId, id: Entity, value: *const u8) {
+    fn send(&mut self, component: ComponentKey, id: Entity, value: *const u8) {
         if let Some(senders) = self.inner.get_mut(&component) {
             senders.retain_mut(|v| v(id, value));
         }
@@ -260,7 +263,7 @@ impl World {
             store
                 .spawn_at(
                     id.index(),
-                    id.generation(),
+                    id.gen(),
                     EntityLocation {
                         slot: base + idx,
                         arch: arch_id,
@@ -298,7 +301,7 @@ impl World {
 
         // Safety
         // The id is not used by anything else
-        let component = unsafe { Component::from_raw_id(id, name, meta) };
+        let component = unsafe { Component::from_raw_id(ComponentKey::new(id, None), name, meta) };
 
         self.init_component(component.info()).unwrap();
         component
@@ -311,16 +314,8 @@ impl World {
         &mut self,
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
-    ) -> impl Fn(Entity) -> Component<T> {
-        let (id, _, _) = self.spawn_inner(
-            self.archetypes.root,
-            EntityKind::COMPONENT | EntityKind::RELATION,
-        );
-
-        let relation = move |object| unsafe { Component::from_pair(id, name, meta, object) };
-        self.init_component(relation(wildcard()).info()).unwrap();
-
-        relation
+    ) -> impl RelationExt<T> + Copy {
+        self.spawn_component::<T>(name, meta)
     }
 
     fn spawn_inner(
@@ -360,18 +355,22 @@ impl World {
         id: Entity,
         arch_id: ArchetypeId,
     ) -> (EntityLocation, &mut Archetype) {
-        assert!(matches!(
-            self.despawn(id),
-            Err(Error::NoSuchEntity(..)) | Ok(())
-        ));
+        match self.despawn(id) {
+            Ok(()) => {}
+            Err(Error::NoSuchEntity(..)) => {}
+            Err(_) => {
+                panic!("Failed o despawn entity");
+            }
+        }
 
         let store = self.entities.init(id.kind());
         let arch = self.archetypes.get_mut(arch_id);
+        dbg!(id);
 
         let loc = store
             .spawn_at(
-                id.index(),
-                id.generation(),
+                id.index,
+                id.gen,
                 EntityLocation {
                     slot: 0,
                     arch: arch_id,
@@ -562,7 +561,7 @@ impl World {
         }
 
         for (component, _) in new_data {
-            if component.id != id {
+            if component.id.id != id {
                 self.init_component(component)
                     .expect("Failed to initialize component");
             }
@@ -574,11 +573,12 @@ impl World {
     /// Set metadata for a given component if they do not already exist
     fn init_component(&mut self, info: ComponentInfo) -> Result<ComponentInfo> {
         assert!(
-            info.id().kind().contains(EntityKind::COMPONENT),
+            info.id().id.kind().contains(EntityKind::COMPONENT),
             "Component is not a component kind id"
         );
 
-        if self.has(info.id(), is_component()) {
+        let id = info.id().id;
+        if self.has(info.id().id, is_component()) {
             return Ok(info);
         }
 
@@ -586,12 +586,12 @@ impl World {
         meta.set(is_component(), info);
         meta.set(name(), info.name().into());
 
-        if info.id().is_static() {
+        if id.is_static() {
             meta.set(is_static_component(), ());
         }
 
-        self.spawn_at(info.id());
-        self.set_with(info.id(), &mut meta).unwrap();
+        self.spawn_at(id);
+        self.set_with(id, &mut meta).unwrap();
 
         Ok(info)
     }
@@ -624,6 +624,7 @@ impl World {
         }
 
         self.entities.init(id.kind()).despawn(id)?;
+        eprintln!("Despawned {id}");
         self.detach(id);
         Ok(())
     }
@@ -654,7 +655,7 @@ impl World {
             for (_, arch) in self
                 .archetypes
                 .iter()
-                .filter(|(_, arch)| arch.relations().any(|v| v == relation.of(id).id()))
+                .filter(|(_, arch)| arch.relations().any(|v| v == relation.of(id).key()))
             {
                 to_remove.extend_from_slice(arch.entities());
             }
@@ -668,29 +669,33 @@ impl World {
     /// Removes all instances of relations and component of the given entities
     /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
     /// on all the children.
-    pub fn detach(&mut self, id: ComponentId) {
+    pub fn detach(&mut self, id: Entity) {
+        let archetypes = Query::new(())
+            .filter(ArchetypeFilter(|arch: &Archetype| {
+                arch.components()
+                    .any(|v| v.id().id == id || v.id().object == Some(id))
+            }))
+            .get_archetypes(self);
+
+        eprintln!("Detaching: {id}");
         // The archetypes to remove
-        let archetypes = self
-            .archetypes()
-            .filter(|(_, v)| {
-                let remove = v.components().any(|v| {
-                    v.id() == id
-                        || (id.is_relation() && v.id().low() == id.low())
-                        || (!id.is_relation() && v.id().high() == id.low())
-                });
+        // let archetypes = self
+        //     .archetypes()
+        //     .filter(|(_, v)| {
+        //         let remove = v.components().any(|v| {});
 
-                remove
-            })
-            .map(|v| v.0)
-            .collect_vec();
+        //         remove
+        //     })
+        //     .map(|v| v.0)
+        //     .collect_vec();
 
-        for src in archetypes {
+        for src in archetypes.into_iter().rev() {
+            eprintln!("Removing archetype: {src}");
             let mut src = self.archetypes.despawn(src);
 
             let components = src.components().filter(|v| {
-                !(v.id() == id
-                    || (id.is_relation() && v.id().low() == id.low())
-                    || (!id.is_relation() && v.id().high() == id.low()))
+                let cid = v.id();
+                !(cid.id == id || cid.object == Some(id))
             });
 
             let (dst_id, dst) = self.archetypes.init(components);
@@ -794,11 +799,6 @@ impl World {
                 arch: dst_id,
             };
             *ns.get_mut(id).expect("Entity is not valid") = loc;
-
-            if info.id() != id {
-                self.init_component(info)
-                    .expect("Failed to initialize component");
-            }
 
             Ok(loc)
         }
@@ -960,12 +960,12 @@ impl World {
 
         let change_tick = self.advance_change_tick();
 
-        if !archetype.has(component.id()) {
+        if !archetype.has(component.key()) {
             return None;
         }
 
         archetype
-            .changes_mut(component.id())
+            .changes_mut(component.key())
             .expect("Change list is empty")
             .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
 
@@ -977,7 +977,7 @@ impl World {
     /// specified component
     pub fn has<T: ComponentValue>(&self, id: Entity, component: Component<T>) -> bool {
         if let Ok(loc) = self.location(id) {
-            self.archetypes.get(loc.arch).has(component.id())
+            self.archetypes.get(loc.arch).has(component.key())
         } else {
             false
         }
@@ -1066,20 +1066,20 @@ impl World {
     }
 
     /// Attempt to find an alive entity given the id
-    pub fn find_alive(&self, id: StrippedEntity) -> Option<Entity> {
-        let ns = self.entities.get(id.kind())?;
+    pub fn find_alive(&self, index: EntityIndex, kind: EntityKind) -> Option<Entity> {
+        let ns = self.entities.get(kind)?;
 
-        ns.reconstruct(id).map(|v| v.0)
+        ns.reconstruct(index).map(|v| v.0)
     }
 
     /// Attempt to find a component from the given id
-    pub fn find_component<T: ComponentValue>(&self, id: ComponentId) -> Option<Component<T>> {
-        let e = self.entity(id).ok()?;
+    pub fn find_component<T: ComponentValue>(&self, id: ComponentKey) -> Option<Component<T>> {
+        let e = self.entity(id.id).ok()?;
 
         let info = e.get(is_component()).ok()?;
 
         if !info.is::<T>() {
-            panic!("Attempt to construct a component from the wrong type");
+            panic!("Attempt to construct a component from the wrong type. Found: {info:#?}");
         }
         // Safety: the type
 
@@ -1117,7 +1117,7 @@ impl World {
     ) -> Result<Entry<T>> {
         let loc = self.location(id)?;
         let arch = self.archetypes.get(loc.arch);
-        if arch.has(component.id()) {
+        if arch.has(component.key()) {
             return Ok(Entry::Occupied(OccupiedEntry {
                 borrow: self.get_mut(id, component).unwrap(),
             }));
@@ -1146,7 +1146,7 @@ impl World {
             tx.send((id, val)).is_ok()
         };
 
-        self.on_removed.register(component.id(), Box::new(func));
+        self.on_removed.register(component.key(), Box::new(func));
     }
 
     /// Merges `other` into `self`.
@@ -1168,13 +1168,12 @@ impl World {
         let new_ids: BTreeMap<_, _> = archetypes
             .inner
             .iter_mut()
-            .filter(|v| !v.1.has(is_static_component().id()))
+            .filter(|v| !v.1.has(is_static_component().key()))
             .flat_map(|(arch_id, arch)| {
                 arch.entities_mut()
                     .iter_mut()
                     .filter_map(|id| {
                         let old_id = *id;
-
                         let loc = entities
                             .init(id.kind())
                             .get(*id)
@@ -1182,11 +1181,13 @@ impl World {
 
                         assert_eq!(loc.arch, arch_id);
 
-                        if self.find_alive(id.low()).is_some() {
+                        // Migrate
+                        if self.is_alive(old_id) {
                             let new_id = self.spawn_inner(self.archetypes.root, id.kind()).0;
+                            eprintln!("Migrating {id} => {new_id}");
 
                             *id = new_id;
-                            Some((old_id.low(), new_id))
+                            Some((old_id, new_id))
                         } else {
                             self.spawn_at(old_id);
                             None
@@ -1197,44 +1198,29 @@ impl World {
             .collect();
 
         for (_, arch) in &mut archetypes.inner.iter_mut() {
-            if arch.has(is_component().id()) {
+            if arch.has(is_component().key()) {
                 for (slot, &id) in arch.slots().iter().zip(arch.entities()) {
-                    components.insert(
-                        id.low(),
-                        *arch.get(slot, is_component()).expect("Invalid slot"),
-                    );
+                    components.insert(id, *arch.get(slot, is_component()).expect("Invalid slot"));
                 }
             }
 
             // Don't migrate static components
-            if !arch.has(is_static_component().id()) {
+            if !arch.has(is_static_component().key()) {
                 let mut batch = BatchSpawn::new(arch.len());
                 for mut storage in mem::take(arch.storage_mut()).into_values() {
-                    let id = storage.info().id;
+                    let mut id = storage.info().id;
 
                     // Modify the relations to match new components
-                    if id.is_relation() {
-                        let (low, high) = id.split_pair();
+                    id.id = *new_ids.get(&id.id).unwrap_or(&id.id);
 
-                        let low = entities.init(low.kind()).reconstruct(low).unwrap().0;
+                    if let Some(ref mut object) = id.object {
+                        *object = *new_ids.get(object).unwrap_or(object);
+                    }
 
-                        let high = entities.init(high.kind()).reconstruct(high).unwrap().0;
-
-                        let new_low = *new_ids.get(&low.low()).unwrap_or(&low);
-                        let new_high = *new_ids.get(&high.low()).unwrap_or(&high);
-
-                        // Safety
-                        // The component is still of the same type
-                        unsafe {
-                            storage.set_id(Entity::pair(new_low, new_high));
-                        }
-                    } else {
-                        let new_id = *new_ids.get(&id.low()).unwrap_or(&id);
-                        // Safety
-                        // The component is still of the same type
-                        unsafe {
-                            storage.set_id(new_id);
-                        }
+                    // Safety
+                    // The component is still of the same type
+                    unsafe {
+                        storage.set_id(id);
                     }
 
                     batch.append(storage).expect("Batch is incomplete");
@@ -1255,34 +1241,39 @@ impl World {
 /// Holds the migrated components
 #[derive(Debug, Clone)]
 pub struct Migrated {
-    ids: BTreeMap<StrippedEntity, Entity>,
-    components: BTreeMap<StrippedEntity, ComponentInfo>,
+    ids: BTreeMap<Entity, Entity>,
+    components: BTreeMap<Entity, ComponentInfo>,
 }
 
 impl Migrated {
     /// Retuns the new id if it was migrated, otherwise, returns the given id
     pub fn get(&self, id: Entity) -> Entity {
-        *self.ids.get(&id.low()).unwrap_or(&id)
+        *self.ids.get(&id).unwrap_or(&id)
     }
 
     /// Returns the migrated component. All components are migrated
     /// # Panics
     /// If the types do not match
     pub fn get_component<T: ComponentValue>(&self, component: Component<T>) -> Component<T> {
-        let id = self.get(component.id());
+        let id = self.get(component.key().id);
+        eprintln!("Migrating component {} => {id}", component.id());
+        let object = component.key().object.map(|v| self.get(v));
 
-        let mut info = *self
+        let info = *self
             .components
-            .get(&id.low())
+            .get(&id)
             .expect("{component} is not a component or not present in the world");
-
-        info.id = id;
-
         if !info.is::<T>() {
             panic!("Mismatched component types {component:?} for {info:#?}");
         }
 
-        unsafe { Component::from_raw_id(info.id(), info.name(), info.meta()) }
+        unsafe {
+            Component::from_raw_id(
+                ComponentKey::new(id, object),
+                component.name(),
+                component.meta(),
+            )
+        }
     }
 
     /// Returns the migrated relation
@@ -1292,25 +1283,15 @@ impl Migrated {
         &self,
         relation: impl RelationExt<T>,
     ) -> impl Fn(Entity) -> Component<T> {
-        let id = relation.of(wildcard()).id();
-        let id = *self.ids.get(&id.low()).unwrap_or(&id);
+        let component = relation.of(dummy());
 
-        let mut info = *self
-            .components
-            .get(&id.low())
-            .expect("relation is not a component or not present in the world");
+        let component = self.get_component(component);
 
-        info.id = id;
-
-        if !info.is::<T>() {
-            panic!("Mismatched relation types");
-        }
-
-        move |object| unsafe { Component::from_pair(info.id(), info.name(), info.meta(), object) }
+        move |object| component.of(object)
     }
 
     /// Returns the migrated ids
-    pub fn ids(&self) -> &BTreeMap<StrippedEntity, Entity> {
+    pub fn ids(&self) -> &BTreeMap<Entity, Entity> {
         &self.ids
     }
 }
@@ -1337,7 +1318,10 @@ where
             let arch = batch.arch();
             meta.clear();
             meta.extend(arch.components().flat_map(|info| {
-                Some((info.id(), self.world.get(info.id(), debug_visitor()).ok()?))
+                Some((
+                    info.id(),
+                    self.world.get(info.id().id, debug_visitor()).ok()?,
+                ))
             }));
 
             for slot in batch.slots().iter() {
@@ -1375,7 +1359,10 @@ impl<'a> fmt::Debug for EntityFormatter<'a> {
                 let arch = self.world.archetypes.get(loc.arch);
 
                 meta.extend(arch.components().flat_map(|info| {
-                    Some((info.id(), self.world.get(info.id(), debug_visitor()).ok()?))
+                    Some((
+                        info.id(),
+                        self.world.get(info.id().id, debug_visitor()).ok()?,
+                    ))
                 }));
 
                 let row = RowFormatter::new(arch, loc.slot, &meta);
@@ -1422,15 +1409,15 @@ mod tests {
 
         // () -> (a) -> (ab) -> (abc)
         let (_, archetype) = world.archetypes.init([a().info(), b().info(), c().info()]);
-        assert!(!archetype.has(d().id()));
-        assert!(archetype.has(a().id()));
-        assert!(archetype.has(b().id()));
+        assert!(!archetype.has(d().key()));
+        assert!(archetype.has(a().key()));
+        assert!(archetype.has(b().key()));
 
         // () -> (a) -> (ab) -> (abc)
         //                   -> (abd)
         let (_, archetype) = world.archetypes.init([a().info(), b().info(), d().info()]);
-        assert!(archetype.has(d().id()));
-        assert!(!archetype.has(c().id()));
+        assert!(archetype.has(d().key()));
+        assert!(!archetype.has(c().key()));
     }
 
     #[test]

@@ -75,8 +75,8 @@ where
         }
     }
 
-    fn components(&self, result: &mut Vec<crate::ComponentId>) {
-        result.push(self.component.id())
+    fn components(&self, result: &mut Vec<crate::ComponentKey>) {
+        result.push(self.component.key())
     }
 }
 
@@ -84,7 +84,7 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
     type Prepared = PreparedKindFilter<'a>;
 
     fn prepare(&'a self, arch: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        let changes = arch.changes(self.component.id());
+        let changes = arch.changes(self.component.key());
 
         if let Some(ref changes) = changes {
             if self.kind.is_modified() {
@@ -98,7 +98,7 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
     }
 
     fn matches(&self, archetype: &Archetype) -> bool {
-        archetype.changes(self.component.id()).is_some()
+        archetype.changes(self.component.key()).is_some()
     }
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
@@ -106,7 +106,7 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
             vec![Access {
                 kind: crate::AccessKind::ChangeEvent {
                     id,
-                    component: self.component.id(),
+                    component: self.component.key(),
                 },
                 mutable: false,
             }]
@@ -234,7 +234,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
         }
     }
 
-    fn components(&self, _: &mut Vec<crate::ComponentId>) {}
+    fn components(&self, _: &mut Vec<crate::ComponentKey>) {}
 }
 
 impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
@@ -242,7 +242,7 @@ impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
 
     fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
         let changes = archetype
-            .changes(self.component.id())
+            .changes(self.component.key())
             .map(|v| AtomicRef::map(v, |v| v.get(ChangeKind::Removed)));
 
         PreparedKindFilter::new(changes, change_tick)
@@ -257,7 +257,7 @@ impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
             vec![Access {
                 kind: crate::AccessKind::ChangeEvent {
                     id,
-                    component: self.component.id(),
+                    component: self.component.key(),
                 },
                 mutable: false,
             }]

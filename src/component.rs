@@ -1,13 +1,24 @@
 use core::{
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     marker::PhantomData,
     sync::atomic::AtomicU32,
 };
 
+use serde::{
+    de::{Error, Visitor},
+    ser::SerializeTupleStruct,
+    Deserialize, Serialize,
+};
+
 use crate::{
-    archetype::ComponentInfo, buffer::ComponentBuffer, entity::wildcard, entity::EntityKind,
-    filter::ChangeFilter, filter::RemovedFilter, filter::With, filter::Without, ChangeKind, Entity,
-    MetaData, Mutable,
+    archetype::ComponentInfo,
+    buffer::ComponentBuffer,
+    entity::EntityKind,
+    filter::ChangeFilter,
+    filter::With,
+    filter::Without,
+    filter::{RemovedFilter, WithRelation, WithoutRelation},
+    ChangeKind, Entity, MetaData, Mutable,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
@@ -18,7 +29,89 @@ impl<T> ComponentValue for T where T: Send + Sync + 'static {}
 /// A unique component identifier
 /// Is not stable between executions, and should as such not be used for
 /// execution.
-pub type ComponentId = Entity;
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ComponentKey {
+    pub(crate) id: Entity,
+    /// The object entity if the component is a pair
+    pub(crate) object: Option<Entity>,
+}
+
+impl Serialize for ComponentKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut seq = serializer.serialize_tuple_struct("ComponentId", 2)?;
+        seq.serialize_field(&self.id)?;
+        seq.serialize_field(&self.object)?;
+
+        seq.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for ComponentKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ComponentIdVisitor;
+        impl<'de> Visitor<'de> for ComponentIdVisitor {
+            type Value = ComponentKey;
+
+            fn expecting(
+                &self,
+                formatter: &mut smallvec::alloc::fmt::Formatter,
+            ) -> smallvec::alloc::fmt::Result {
+                write!(
+                    formatter,
+                    "A tuple of a component id and optional relation object"
+                )
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let id = seq
+                    .next_element()?
+                    .ok_or_else(|| Error::invalid_length(0, &self))?;
+                let object = seq
+                    .next_element()?
+                    .ok_or_else(|| Error::invalid_length(1, &self))?;
+
+                Ok(ComponentKey::new(id, object))
+            }
+        }
+
+        deserializer.deserialize_tuple_struct("ComponentId", 2, ComponentIdVisitor)
+    }
+}
+
+impl ComponentKey {
+    /// Returns true if the component is a relation
+    pub fn is_relation(&self) -> bool {
+        self.object.is_some()
+    }
+
+    pub(crate) fn new(id: Entity, object: Option<Entity>) -> Self {
+        Self { id, object }
+    }
+}
+
+impl Display for ComponentKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+
+impl Debug for ComponentKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self.object {
+            Some(s) => write!(f, "{}({s})", self.id),
+            None => Debug::fmt(&self.id, f),
+        }
+    }
+}
 
 /// Type alias for a function which instantiates a component
 pub type ComponentFn<T> = fn() -> Component<T>;
@@ -35,9 +128,30 @@ where
     /// Instantiate the relation
     fn of(&self, object: Entity) -> Component<T>;
     /// Construct a new filter yielding entities with this kind of relation
-    fn with(self) -> With;
+    fn with_relation(self) -> WithRelation;
     /// Construct a new filter yielding entities without this kind of relation
-    fn without(self) -> Without;
+    fn without_relation(self) -> WithoutRelation;
+}
+
+impl<T: ComponentValue> RelationExt<T> for Component<T> {
+    fn of(&self, object: Entity) -> Component<T> {
+        Self {
+            key: ComponentKey::new(self.key.id, Some(object)),
+            ..*self
+        }
+    }
+
+    fn with_relation(self) -> WithRelation {
+        WithRelation {
+            relation: self.id(),
+        }
+    }
+
+    fn without_relation(self) -> WithoutRelation {
+        WithoutRelation {
+            relation: self.id(),
+        }
+    }
 }
 
 impl<T, F> RelationExt<T> for F
@@ -49,22 +163,26 @@ where
         (self)(object)
     }
 
-    fn with(self) -> With {
-        With {
-            component: self(wildcard()).id(),
+    fn with_relation(self) -> WithRelation {
+        WithRelation {
+            relation: self(dummy()).id(),
         }
     }
 
-    fn without(self) -> Without {
-        Without {
-            component: self(wildcard()).id(),
+    fn without_relation(self) -> WithoutRelation {
+        WithoutRelation {
+            relation: self(dummy()).id(),
         }
     }
 }
 
+crate::component! {
+    pub(crate) dummy,
+}
+
 /// Defines a strongly typed component
 pub struct Component<T> {
-    id: ComponentId,
+    key: ComponentKey,
     name: &'static str,
     marker: PhantomData<T>,
 
@@ -77,7 +195,7 @@ impl<T: ComponentValue> Eq for Component<T> {}
 
 impl<T: ComponentValue> PartialEq for Component<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        self.key == other.key
     }
 }
 
@@ -86,7 +204,7 @@ impl<T: ComponentValue> Copy for Component<T> {}
 impl<T: ComponentValue> Clone for Component<T> {
     fn clone(&self) -> Self {
         Self {
-            id: self.id,
+            key: self.key,
             name: self.name,
             marker: PhantomData,
             meta: self.meta,
@@ -96,13 +214,13 @@ impl<T: ComponentValue> Clone for Component<T> {
 
 impl<T: ComponentValue> fmt::Debug for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Component").field("id", &self.id).finish()
+        f.debug_struct("Component").field("id", &self.key).finish()
     }
 }
 
 impl<T: ComponentValue> Display for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", self.name, self.id)
+        write!(f, "{}({})", self.name, self.key)
     }
 }
 
@@ -113,46 +231,16 @@ impl<T: ComponentValue> Component<T> {
     /// The constructed component can not be of a different type, name or meta
     /// than any existing component of the same id
     pub(crate) unsafe fn from_raw_id(
-        id: ComponentId,
+        id: ComponentKey,
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
     ) -> Self {
         Self {
-            id,
+            key: id,
             name,
             marker: PhantomData,
             meta,
         }
-    }
-
-    /// Creates a new relation component with the specified object entity
-    /// # Safety
-    /// See: [Component::from_raw_id]
-    pub(crate) unsafe fn from_pair(
-        id: ComponentId,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
-        object: Entity,
-    ) -> Self {
-        Self {
-            id: Entity::pair(id, object),
-            name,
-            marker: PhantomData,
-            meta,
-        }
-    }
-
-    #[doc(hidden)]
-    pub fn static_init_pair(
-        id: &AtomicU32,
-        kind: EntityKind,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
-        object: Entity,
-    ) -> Self {
-        let id = Entity::static_init(id, kind);
-
-        unsafe { Self::from_pair(id, name, meta, object) }
     }
 
     #[doc(hidden)]
@@ -166,7 +254,7 @@ impl<T: ComponentValue> Component<T> {
 
         // Safety
         // The id is new
-        unsafe { Self::from_raw_id(id, name, meta) }
+        unsafe { Self::from_raw_id(ComponentKey::new(id, None), name, meta) }
     }
 
     /// Attaches a function to generate component metadata
@@ -181,8 +269,15 @@ impl<T: ComponentValue> Component<T> {
 
     /// Get the component's id.
     #[inline(always)]
-    pub fn id(&self) -> ComponentId {
-        self.id
+    pub fn key(&self) -> ComponentKey {
+        self.key
+    }
+
+    /// Get the component's base id.
+    /// This is the id without any relation object
+    #[inline(always)]
+    pub fn id(&self) -> Entity {
+        self.key.id
     }
 
     /// Returns the type erased component info
@@ -213,14 +308,14 @@ impl<T: ComponentValue> Component<T> {
     /// Construct a new filter yielding entities without this component.
     pub fn without(self) -> Without {
         Without {
-            component: self.id(),
+            component: self.key(),
         }
     }
 
     /// Construct a new filter yielding entities with this component.
     pub fn with(self) -> With {
         With {
-            component: self.id(),
+            component: self.key(),
         }
     }
 
@@ -245,7 +340,7 @@ impl<T: ComponentValue> MetaData<T> for Component<T> {
 
 impl<T: ComponentValue> From<Component<T>> for Entity {
     fn from(v: Component<T>) -> Self {
-        v.id()
+        v.key().id
     }
 }
 
@@ -263,7 +358,7 @@ mod tests {
         let c_foo = foo();
         // eprintln!("Foo: {c_foo:?}");
         // eprintln!("Bar: {:?}", bar().id());
-        assert_ne!(foo().id(), bar().id());
+        assert_ne!(foo().key(), bar().key());
         assert_eq!(foo(), foo());
     }
 }
