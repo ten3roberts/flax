@@ -2,7 +2,7 @@ use core::fmt::{self, Write};
 
 use alloc::vec::Vec;
 
-use crate::{fetch::FetchPrepareData, fetch::PreparedFetch, ComponentId, ComponentValue, Fetch};
+use crate::{fetch::FetchPrepareData, fetch::PreparedFetch, ComponentKey, ComponentValue, Fetch};
 
 use super::FetchItem;
 
@@ -45,7 +45,7 @@ where
         self.0.filter()
     }
 
-    fn components(&self, _: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentKey>) {}
 }
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
@@ -118,7 +118,7 @@ where
         self.inner.filter()
     }
 
-    fn components(&self, _: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentKey>) {}
 }
 
 impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {

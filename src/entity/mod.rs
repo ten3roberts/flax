@@ -1,43 +1,98 @@
 mod builder;
 mod store;
 
-use core::num::NonZeroU64;
 use core::sync::atomic::{AtomicU32, Ordering};
 use core::{fmt, num::NonZeroU32};
 
 pub use builder::*;
 pub(super) use store::*;
 
-use crate::{component, EntityIds};
+use crate::EntityIds;
 
-/// Represents an entity.
+/// Represents an entity identifier.
 /// An entity can either declare an identifier spawned into the world,
-/// a static entity or component, or a typed relation between two entities.
-///
-/// # Structure
-///
-/// An Entity is 64 bits in size.
-/// The low bits contain the index, namespace, and kind and is enough to
-/// uniquely identify an entity.
-///
-/// The high bits contain the generation which solves the AABA problem if the
-/// entity is a component or a normal entity.
-///
-/// # Entity
-/// | 16       | 16         | 24    | 8    |
-/// | Reserved | Generation | Index | Kind |
-///
-/// # Pair:
-/// If the entity is a relation, the high bits stores the object entity.
-/// | 32     | 32       |
-/// | Object | Relation |
-///
-/// The one downside of this is that the generation is not stored, though an
-/// entity should never hold an entity that is not alive, and is as such handled
-/// by the world to remove all pairs when either one is despawned.
+/// a static entity, or a component.
 #[derive(PartialOrd, Clone, Copy, PartialEq, Eq, Ord, Hash)]
-#[repr(transparent)]
-pub struct Entity(NonZeroU64);
+pub struct Entity {
+    pub(crate) index: EntityIndex,
+    /// Object
+    pub(crate) gen: EntityGen,
+    pub(crate) kind: EntityKind,
+}
+
+impl Entity {
+    pub(crate) fn from_parts(index: EntityIndex, gen: EntityGen, kind: EntityKind) -> Self {
+        Self { index, gen, kind }
+    }
+
+    /// Creates a new entity builder.
+    /// See [crate::EntityBuilder] for more details.
+    pub fn builder() -> EntityBuilder {
+        EntityBuilder::new()
+    }
+
+    /// Returns true if the id is a static id
+    pub fn is_static(&self) -> bool {
+        self.kind.contains(EntityKind::STATIC)
+    }
+
+    /// Returns true if the id is a component id
+    pub fn is_component(&self) -> bool {
+        self.kind.contains(EntityKind::COMPONENT)
+    }
+    ///
+    /// Generate a new static id
+    pub fn acquire_static_id(kind: EntityKind) -> Entity {
+        let index = STATIC_IDS.fetch_add(1, Ordering::Relaxed);
+        Entity::from_parts(
+            NonZeroU32::new(index).unwrap(),
+            0,
+            kind | EntityKind::STATIC,
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn static_init(id: &AtomicU32, kind: EntityKind) -> Self {
+        let index = match id.fetch_update(Ordering::Acquire, Ordering::Relaxed, |v| {
+            if v != 0 {
+                None
+            } else {
+                Some(
+                    Self::acquire_static_id(kind | EntityKind::STATIC)
+                        .index()
+                        .get(),
+                )
+            }
+        }) {
+            Ok(_) => id.load(Ordering::Acquire),
+            Err(old) => old,
+        };
+
+        Self::from_parts(
+            EntityIndex::new(index).unwrap(),
+            1,
+            kind | EntityKind::STATIC,
+        )
+    }
+
+    /// Returns the entity index
+    #[inline(always)]
+    pub fn index(&self) -> NonZeroU32 {
+        self.index
+    }
+
+    /// Returns the entity generation
+    #[inline(always)]
+    pub fn gen(&self) -> u16 {
+        self.gen
+    }
+
+    /// Returns the entity kind
+    #[inline(always)]
+    pub fn kind(&self) -> EntityKind {
+        self.kind
+    }
+}
 
 #[cfg(feature = "serde")]
 mod serde_impl {
@@ -63,7 +118,7 @@ mod serde_impl {
         where
             D: serde::Deserializer<'de>,
         {
-            deserializer.deserialize_u8(EntityKindVisitor)
+            deserializer.deserialize_u16(EntityKindVisitor)
         }
     }
 
@@ -76,7 +131,7 @@ mod serde_impl {
             write!(f, "A valid entity kind bitfield")
         }
 
-        fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
+        fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
         where
             E: de::Error,
         {
@@ -98,11 +153,10 @@ mod serde_impl {
         where
             S: serde::Serializer,
         {
-            let (index, gen, kind) = self.into_parts();
             let mut state = serializer.serialize_tuple_struct("Entity", 3)?;
-            state.serialize_field(&index)?;
-            state.serialize_field(&gen)?;
-            state.serialize_field(&kind)?;
+            state.serialize_field(&self.index)?;
+            state.serialize_field(&self.gen)?;
+            state.serialize_field(&self.kind)?;
             state.end()
         }
     }
@@ -144,26 +198,16 @@ mod serde_impl {
     }
 }
 
-/// Same as [crate::Entity] but without generation.
-#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
-#[repr(transparent)]
-pub struct StrippedEntity(NonZeroU32);
-
 static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
 bitflags::bitflags! {
     /// Declares the roles an entity id serves
-    pub struct EntityKind: u8 {
+    pub struct EntityKind: u16 {
         /// The entity is a component
         const COMPONENT = 1;
         /// The entity is created via static initialization and is never
         /// despawned
         const STATIC = 2;
-        /// The entity represents a relation kind component
-        const RELATION = 4;
-        /// The entity comes from somewhere else, like a server. Used for resolving
-        /// id clashes
-        const REMOTE = 8;
     }
 }
 
@@ -172,211 +216,18 @@ pub type EntityGen = u16;
 /// The index of the entity in the entity store
 pub type EntityIndex = NonZeroU32;
 
-component! {
-    /// The object for a pair component which will match anything.
-    pub wildcard,
-}
-
-impl Entity {
-    /// Generate a new static id
-    pub fn acquire_static_id(kind: EntityKind) -> Entity {
-        let index = STATIC_IDS.fetch_add(1, Ordering::Relaxed);
-        Entity::from_parts(
-            NonZeroU32::new(index).unwrap(),
-            0,
-            kind | EntityKind::STATIC,
-        )
-    }
-
-    #[doc(hidden)]
-    pub fn static_init(id: &AtomicU32, kind: EntityKind) -> Self {
-        let index = match id.fetch_update(Ordering::Acquire, Ordering::Relaxed, |v| {
-            if v != 0 {
-                None
-            } else {
-                Some(
-                    Self::acquire_static_id(kind | EntityKind::STATIC)
-                        .index()
-                        .get(),
-                )
-            }
-        }) {
-            Ok(_) => id.load(Ordering::Acquire),
-            Err(old) => old,
-        };
-
-        Self::from_parts(
-            EntityIndex::new(index).unwrap(),
-            1,
-            EntityKind::COMPONENT | EntityKind::STATIC | kind,
-        )
-    }
-
-    #[inline]
-    /// Returns the entity index
-    pub fn index(self) -> EntityIndex {
-        // Can only be constructed from parts
-        NonZeroU32::new(self.0.get() as u32 >> 8).unwrap()
-    }
-
-    #[inline]
-    /// Extract the generation from the entity
-    pub fn generation(self) -> EntityGen {
-        (self.0.get() >> 32) as u16
-    }
-
-    #[inline]
-    /// Extract the namespace from the entity
-    pub fn kind(self) -> EntityKind {
-        EntityKind::from_bits(self.0.get() as u8).expect("Invalid kind bits")
-    }
-
-    /// Convert the entity into its multiple parts
-    pub fn into_parts(self) -> (EntityIndex, EntityGen, EntityKind) {
-        let bits = self.0.get();
-
-        (
-            NonZeroU32::new(bits as u32 >> 8).unwrap(),
-            (bits >> 32) as EntityGen,
-            EntityKind::from_bits(bits as u8).expect("Invalid kind bits"),
-        )
-    }
-
-    /// Create an entity id from parts
-    pub fn from_parts(index: EntityIndex, gen: EntityGen, kind: EntityKind) -> Self {
-        assert!(index.get() < (u32::MAX >> 1));
-        let bits =
-            ((index.get() as u64 & 0xFFFFFF) << 8) | ((gen as u64) << 32) | (kind.bits() as u64);
-
-        Self(NonZeroU64::new(bits).unwrap())
-    }
-
-    #[inline]
-    /// Creates an entity id from raw bits
-    pub fn from_bits(bits: NonZeroU64) -> Self {
-        Self(bits)
-    }
-
-    #[inline]
-    /// Returns the raw bits of an entity id
-    pub fn to_bits(&self) -> NonZeroU64 {
-        self.0
-    }
-
-    /// Construct a new pair entity with the given relation.
-    ///
-    /// # Panics:
-    /// If the `relation` does not have the [`EntityKind::RELATION`] flag set.
-    pub fn pair(relation: Entity, subject: Entity) -> Self {
-        Self::join_pair(relation.low(), subject.low())
-    }
-
-    /// Returns the high bits of the relation. Represents the generation or
-    /// object entity if a relation
-    pub(crate) fn high(self) -> StrippedEntity {
-        let bits = self.to_bits().get();
-        StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap())
-    }
-
-    /// Returns the low bits of the entity id, which contains the index and kind
-    pub(crate) fn low(self) -> StrippedEntity {
-        let bits = self.to_bits().get();
-        StrippedEntity(NonZeroU32::new(bits as u32).unwrap())
-    }
-
-    /// Returns the relation and object
-    pub fn split_pair(self) -> (StrippedEntity, StrippedEntity) {
-        let bits = self.to_bits().get();
-        let relation = StrippedEntity(NonZeroU32::new(bits as u32).unwrap());
-        let subject = StrippedEntity(NonZeroU32::new((bits >> 32) as u32).unwrap());
-
-        (relation, subject)
-    }
-
-    pub(crate) fn join_pair(relation: StrippedEntity, object: StrippedEntity) -> Self {
-        if !relation.kind().contains(EntityKind::RELATION) {
-            panic!("Relation {relation} does not contain the relation flag")
-        }
-
-        let relation = relation.0.get() as u64;
-        let object = object.0.get() as u64;
-
-        Self(NonZeroU64::new(relation | (object << 32)).unwrap())
-    }
-
-    /// Creates a new entity builder.
-    /// See [crate::EntityBuilder] for more details.
-    pub fn builder() -> EntityBuilder {
-        EntityBuilder::new()
-    }
-
-    /// Returns true if the id is a relation id
-    pub fn is_relation(&self) -> bool {
-        self.kind().contains(EntityKind::RELATION)
-    }
-
-    /// Returns true if the id is a static id
-    pub fn is_static(&self) -> bool {
-        self.kind().contains(EntityKind::STATIC)
-    }
-
-    /// Returns true if the id is a component id
-    pub fn is_component(&self) -> bool {
-        self.kind().contains(EntityKind::COMPONENT)
-    }
-}
-
-impl StrippedEntity {
-    /// Same as [Entity::index]
-    pub fn index(self) -> EntityIndex {
-        // Can only be constructed from parts
-        NonZeroU32::new(self.0.get() as u32 >> 8).unwrap()
-    }
-
-    /// Same as [Entity::kind]
-    pub fn kind(self) -> EntityKind {
-        EntityKind::from_bits(self.0.get() as u8).unwrap()
-    }
-
-    /// Reconstruct a generationless entity with a generation
-    pub fn reconstruct(self, gen: EntityGen) -> Entity {
-        Entity(NonZeroU64::new((self.0.get() as u64) | ((gen as u64) << 32)).unwrap())
-    }
-}
-
 impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (index, generation, kind) = self.into_parts();
-        if kind.contains(EntityKind::RELATION) {
-            let (rel, sub) = self.split_pair();
-            write!(f, "{rel}({sub})")
-        } else if kind.is_empty() {
-            write!(f, "{index}v{generation}")
+        let Self { index, gen, kind } = *self;
+        if kind.is_empty() {
+            write!(f, "{index}v{gen}")
         } else {
-            write!(f, "{index}v{generation} [{kind:?}]")
+            write!(f, "{index}v{gen} [{kind:?}]")
         }
     }
 }
 
 impl fmt::Display for Entity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
-    }
-}
-
-impl fmt::Debug for StrippedEntity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let index = self.index();
-        let kind = self.kind();
-        if kind.is_empty() {
-            write!(f, "{index}")
-        } else {
-            write!(f, "{index} [{kind:?}]")
-        }
-    }
-}
-
-impl fmt::Display for StrippedEntity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
@@ -390,7 +241,7 @@ pub fn entity_ids() -> EntityIds {
 #[cfg(test)]
 mod tests {
 
-    use core::num::NonZeroU32;
+    use core::mem::{align_of, size_of};
 
     use crate::{entity::EntityKind, Entity};
 
@@ -420,14 +271,9 @@ mod tests {
     }
 
     #[test]
-    fn entity_id() {
-        let parts = (NonZeroU32::new(23298).unwrap(), 30, EntityKind::COMPONENT);
-
-        let a = Entity::from_parts(parts.0, parts.1, parts.2);
-
-        // eprintln!("a: {:b}", a.0.get());
-
-        assert_eq!(parts.0, a.index());
-        assert_eq!(parts, a.into_parts());
+    fn entity_size() {
+        assert_eq!(size_of::<Entity>(), 8);
+        assert_eq!(align_of::<Entity>(), 8);
+        assert_eq!(size_of::<Option<Entity>>(), 8);
     }
 }

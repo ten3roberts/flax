@@ -8,6 +8,7 @@ use core::fmt::{self, Debug};
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
+use crate::RelationExt;
 use crate::{
     archetype::{Archetype, ArchetypeId, Slot},
     fetch::*,
@@ -15,7 +16,7 @@ use crate::{
     is_component,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, Archetypes, Component, ComponentId, ComponentValue, FetchItem, Filter,
+    Access, AccessKind, Archetypes, Component, ComponentKey, ComponentValue, FetchItem, Filter,
     World,
 };
 
@@ -126,6 +127,22 @@ where
         self.filter(BatchSize(size))
     }
 
+    /// Shortcut for filter(with_relation)
+    pub fn with_relation<T: ComponentValue>(
+        self,
+        rel: impl RelationExt<T>,
+    ) -> Query<Q, And<F, WithRelation>> {
+        self.filter(rel.with_relation())
+    }
+
+    /// Shortcut for filter(without_relation)
+    pub fn without_relation<T: ComponentValue>(
+        self,
+        rel: impl RelationExt<T>,
+    ) -> Query<Q, And<F, WithoutRelation>> {
+        self.filter(rel.without_relation())
+    }
+
     /// Shortcut for filter(without)
     pub fn without<T: ComponentValue>(self, component: Component<T>) -> Query<Q, And<F, Without>> {
         self.filter(component.without())
@@ -217,7 +234,7 @@ where
         prepared.iter().map(|v| v.cloned()).collect_vec()
     }
 
-    fn get_archetypes<'a>(&'a self, world: &'a World) -> Vec<ArchetypeId> {
+    pub(crate) fn get_archetypes<'a>(&'a self, world: &'a World) -> Vec<ArchetypeId> {
         let mut components = Vec::new();
         self.fetch.components(&mut components);
         components.sort();
@@ -232,7 +249,7 @@ where
                 arch,
                 arch_id,
             };
-            (self.include_components || !arch.has(is_component().id()))
+            (self.include_components || !arch.has(is_component().key()))
                 && self.fetch.matches(data)
                 && self.filter.matches(arch)
                 && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
@@ -298,7 +315,7 @@ where
 fn traverse_archetypes(
     archetypes: &Archetypes,
     cur: &Archetype,
-    components: &[ComponentId],
+    components: &[ComponentKey],
     result: &mut Vec<ArchetypeId>,
     filter: &impl Fn(ArchetypeId, &Archetype) -> bool,
 ) {

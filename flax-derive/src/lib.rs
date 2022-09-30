@@ -209,7 +209,7 @@ fn derive_data_struct(
                         [ #(self.#field_names.access(data)),* ].concat()
                     }
 
-                    fn components(&self, result: &mut Vec<#crate_name::ComponentId>) {
+                    fn components(&self, result: &mut Vec<#crate_name::ComponentKey>) {
                         #(self.#field_names.components(result));*
                     }
 

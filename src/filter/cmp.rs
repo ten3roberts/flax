@@ -141,14 +141,14 @@ where
 
     fn prepare(&'w self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
         PreparedOrdCmp {
-            borrow: archetype.borrow(self.component),
+            borrow: archetype.borrow(self.component.key()),
             method: self.method,
             other: &self.other,
         }
     }
 
     fn matches(&self, archetype: &crate::Archetype) -> bool {
-        archetype.has(self.component.id())
+        archetype.has(self.component.key())
     }
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
@@ -156,7 +156,7 @@ where
             vec![Access {
                 kind: crate::AccessKind::Archetype {
                     id,
-                    component: self.component.id(),
+                    component: self.component.key(),
                 },
                 mutable: false,
             }]
@@ -253,13 +253,13 @@ where
 
     fn prepare(&'w self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
         PreparedCmp {
-            borrow: archetype.borrow(self.component),
+            borrow: archetype.borrow(self.component.key()),
             func: &self.func,
         }
     }
 
     fn matches(&self, archetype: &crate::Archetype) -> bool {
-        archetype.has(self.component.id())
+        archetype.has(self.component.key())
     }
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
@@ -267,7 +267,7 @@ where
             vec![Access {
                 kind: crate::AccessKind::Archetype {
                     id,
-                    component: self.component.id(),
+                    component: self.component.key(),
                 },
                 mutable: false,
             }]

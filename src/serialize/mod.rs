@@ -7,13 +7,13 @@ pub use ser::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    filter::And, filter::StaticFilter, filter::Without, Component, ComponentId, ComponentValue,
+    filter::And, filter::StaticFilter, filter::Without, Component, ComponentKey, ComponentValue,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct ComponentKey {
+struct ComponentSerKey {
     key: String,
-    id: ComponentId,
+    id: ComponentKey,
 }
 
 #[derive(serde::Deserialize)]

@@ -2,7 +2,7 @@ use core::mem;
 
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{Component, ComponentId, ComponentInfo, ComponentValue, Entity, Error};
+use crate::{Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Error};
 
 use super::Storage;
 
@@ -10,7 +10,7 @@ use super::Storage;
 #[derive(Debug)]
 pub struct BatchSpawn {
     len: usize,
-    storage: BTreeMap<ComponentId, Storage>,
+    storage: BTreeMap<ComponentKey, Storage>,
 }
 
 impl BatchSpawn {
@@ -69,7 +69,7 @@ impl BatchSpawn {
         }
     }
 
-    pub(crate) fn take_all(&mut self) -> impl Iterator<Item = (ComponentId, Storage)> {
+    pub(crate) fn take_all(&mut self) -> impl Iterator<Item = (ComponentKey, Storage)> {
         mem::take(&mut self.storage).into_iter()
     }
 

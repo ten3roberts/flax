@@ -4,9 +4,7 @@ use core::{alloc::Layout, any::TypeId, fmt::Debug, mem};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::{
-    buffer::ComponentBuffer, entity, Component, ComponentId, ComponentValue, Entity, Verbatim,
-};
+use crate::{buffer::ComponentBuffer, Component, ComponentKey, ComponentValue, Entity, Verbatim};
 
 /// Unique archetype id
 pub type ArchetypeId = Entity;
@@ -105,14 +103,14 @@ impl ArchetypeInfo {
 /// A collection of entities with the same components.
 /// Stored as columns of contiguous component data.
 pub struct Archetype {
-    storage: BTreeMap<Entity, Storage>,
-    changes: BTreeMap<ComponentId, AtomicRefCell<Changes>>,
+    storage: BTreeMap<ComponentKey, Storage>,
+    changes: BTreeMap<ComponentKey, AtomicRefCell<Changes>>,
     /// Slot to entity id
     pub(crate) entities: Vec<Entity>,
 
     // ComponentId => ArchetypeId
-    pub(crate) outgoing: BTreeMap<ComponentId, (bool, ArchetypeId)>,
-    pub(crate) incoming: BTreeMap<ComponentId, ArchetypeId>,
+    pub(crate) outgoing: BTreeMap<ComponentKey, (bool, ArchetypeId)>,
+    pub(crate) incoming: BTreeMap<ComponentKey, ArchetypeId>,
 }
 
 /// Since all components are Send + Sync, the archetype is as well
@@ -131,27 +129,25 @@ impl Archetype {
     }
 
     /// Returns all the relation components in the archetype
-    pub fn relations(&self) -> impl Iterator<Item = ComponentId> + '_ {
+    pub fn relations(&self) -> impl Iterator<Item = ComponentKey> + '_ {
         self.storage.keys().filter(|v| v.is_relation()).copied()
     }
 
     /// Returns the components with the specified relation type.
-    pub fn relations_like(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
-        let relation = relation.low();
-
-        self.relations().filter(move |k| k.low() == relation)
+    pub fn relations_like(&self, relation: Entity) -> impl Iterator<Item = ComponentKey> + '_ {
+        self.relations().filter(move |k| k.id == relation)
     }
 
     /// Returns all relations matching the relation type if the object is a
     /// wildcard, otherwise, returns an exact match
-    pub fn matches_relation(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
-        let (rel, obj) = relation.split_pair();
-        let is_wild = obj == crate::entity::wildcard().low();
-        self.relations().filter(move |&v| {
-            let (low, _) = v.split_pair();
-            is_wild && low == rel || !is_wild && v == relation
-        })
-    }
+    // pub fn matches_relation(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
+    //     let (rel, obj) = relation.split_pair();
+    //     let is_wild = obj == crate::entity::wildcard().low();
+    //     self.relations().filter(move |&v| {
+    //         let (low, _) = v.split_pair();
+    //         is_wild && low == rel || !is_wild && v == relation
+    //     })
+    // }
 
     /// Create a new archetype.
     /// Assumes `components` are sorted by id.
@@ -160,9 +156,6 @@ impl Archetype {
             .into_iter()
             .map(|info| {
                 let id = info.id();
-                if !id.kind().contains(entity::EntityKind::COMPONENT) {
-                    panic!("Attempt to insert non component entity");
-                }
 
                 (
                     (id, Storage::new(info)),
@@ -186,19 +179,19 @@ impl Archetype {
     }
 
     /// Returns true if the archtype has `component`
-    pub fn has(&self, component: ComponentId) -> bool {
+    pub fn has(&self, component: ComponentKey) -> bool {
         self.storage.get(&component).is_some()
     }
 
-    pub(crate) fn outgoing(&self, component: ComponentId) -> Option<(bool, ArchetypeId)> {
+    pub(crate) fn outgoing(&self, component: ComponentKey) -> Option<(bool, ArchetypeId)> {
         self.outgoing.get(&component).copied()
     }
 
-    pub(crate) fn incoming(&self, component: ComponentId) -> Option<ArchetypeId> {
+    pub(crate) fn incoming(&self, component: ComponentKey) -> Option<ArchetypeId> {
         self.incoming.get(&component).copied()
     }
 
-    pub(crate) fn add_incoming(&mut self, dst_id: ArchetypeId, component: ComponentId) {
+    pub(crate) fn add_incoming(&mut self, dst_id: ArchetypeId, component: ComponentKey) {
         self.incoming.insert(component, dst_id);
     }
 
@@ -206,7 +199,7 @@ impl Archetype {
         &mut self,
         dst_id: ArchetypeId,
         strong_link: bool,
-        component: ComponentId,
+        component: ComponentKey,
     ) {
         let link = self
             .outgoing
@@ -230,7 +223,7 @@ impl Archetype {
         &self,
         component: Component<T>,
     ) -> Option<AtomicRefMut<[T]>> {
-        Some(unsafe { self.storage.get(&component.id())?.borrow_mut() })
+        Some(unsafe { self.storage.get(&component.key())?.borrow_mut() })
     }
 
     // pub fn remove_slot_changes(&mut self, slot: Slot) {
@@ -317,29 +310,29 @@ impl Archetype {
     }
 
     /// Borrow the change list
-    pub(crate) fn changes(&self, component: ComponentId) -> Option<AtomicRef<Changes>> {
+    pub(crate) fn changes(&self, component: ComponentKey) -> Option<AtomicRef<Changes>> {
         let changes = self.changes.get(&component)?.borrow();
         Some(changes)
     }
 
     /// Borrow the change list mutably
-    pub(crate) fn changes_mut(&self, component: ComponentId) -> Option<AtomicRefMut<Changes>> {
+    pub(crate) fn changes_mut(&self, component: ComponentKey) -> Option<AtomicRefMut<Changes>> {
         let changes = self.changes.get(&component)?.borrow_mut();
         Some(changes)
     }
 
-    pub(crate) fn borrow<T: ComponentValue, I: Into<ComponentId>>(
+    pub(crate) fn borrow<T: ComponentValue>(
         &self,
-        component: I,
+        component: ComponentKey,
     ) -> Option<AtomicRef<[T]>> {
-        Some(unsafe { self.storage.get(&component.into())?.borrow() })
+        Some(unsafe { self.storage.get(&component)?.borrow() })
     }
 
     /// Borrow a storage dynamically
     ///
     /// # Panics
     /// If the storage is already borrowed mutably
-    pub(crate) fn borrow_dyn(&self, component: ComponentId) -> Option<StorageBorrowDyn> {
+    pub(crate) fn borrow_dyn(&self, component: ComponentKey) -> Option<StorageBorrowDyn> {
         Some(unsafe { self.storage.get(&component)?.borrow_dyn() })
     }
 
@@ -349,7 +342,7 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<&mut T> {
-        let storage = self.storage.get_mut(&component.id())?;
+        let storage = self.storage.get_mut(&component.key())?;
 
         unsafe {
             let ptr = storage.at_mut(slot)?;
@@ -363,13 +356,13 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRefMut<T>> {
-        let storage = self.storage.get(&component.id())?;
+        let storage = self.storage.get(&component.key())?;
 
         AtomicRefMut::filter_map(unsafe { storage.borrow_mut() }, |v| v.get_mut(slot))
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
-    pub fn get_dyn(&mut self, slot: Slot, component: ComponentId) -> Option<*mut u8> {
+    pub fn get_dyn(&mut self, slot: Slot, component: ComponentKey) -> Option<*mut u8> {
         let storage = self.storage.get_mut(&component)?;
 
         unsafe { storage.at_mut(slot) }
@@ -381,7 +374,7 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRef<T>> {
-        let storage = self.storage.get(&component.id())?;
+        let storage = self.storage.get(&component.key())?;
 
         AtomicRef::filter_map(unsafe { storage.borrow() }, |v| v.get(slot))
     }
@@ -446,10 +439,11 @@ impl Archetype {
     /// # Safety
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
     /// The component must be Send + Sync
-    pub unsafe fn push(&mut self, component: ComponentId, src: *mut u8) -> Result<(), *mut u8> {
+    pub unsafe fn push(&mut self, component: ComponentKey, src: *mut u8) -> Result<(), *mut u8> {
         let storage = self.storage.get_mut(&component).ok_or(src)?;
         storage.extend(src, 1);
 
+        // TODO remove and make internal
         assert!(
             storage.len() <= self.entities.len(),
             "Attempt to insert more values than entities {} > {}",
@@ -618,11 +612,11 @@ impl Archetype {
         self.entities.as_ref()
     }
 
-    pub(crate) fn storage(&self) -> &BTreeMap<Entity, Storage> {
+    pub(crate) fn storage(&self) -> &BTreeMap<ComponentKey, Storage> {
         &self.storage
     }
 
-    pub(crate) fn storage_mut(&mut self) -> &mut BTreeMap<Entity, Storage> {
+    pub(crate) fn storage_mut(&mut self) -> &mut BTreeMap<ComponentKey, Storage> {
         &mut self.storage
     }
 
@@ -630,8 +624,8 @@ impl Archetype {
         &mut self.entities
     }
 
-    pub(crate) fn component(&self, component: Entity) -> Option<&ComponentInfo> {
-        self.storage.get(&component).map(|v| v.info())
+    pub(crate) fn component(&self, id: ComponentKey) -> Option<&ComponentInfo> {
+        self.storage.get(&id).map(|v| v.info())
     }
 }
 
@@ -646,7 +640,7 @@ impl Drop for Archetype {
 /// Is essentially a vtable
 pub struct ComponentInfo {
     pub(crate) layout: Layout,
-    pub(crate) id: ComponentId,
+    pub(crate) id: ComponentKey,
     pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
     pub(crate) type_id: TypeId,
@@ -698,7 +692,7 @@ impl ComponentInfo {
         Self {
             drop: drop_ptr::<T>,
             layout: Layout::new::<T>(),
-            id: component.id(),
+            id: component.key(),
             name: component.name(),
             meta: component.meta(),
             type_id: TypeId::of::<T>(),
@@ -719,7 +713,7 @@ impl ComponentInfo {
     }
 
     /// Returns the component id
-    pub fn id(&self) -> Entity {
+    pub fn id(&self) -> ComponentKey {
         self.id
     }
 
