@@ -782,7 +782,7 @@ used to exclude components.</p>
     tracing::info!(&quot;Children: {children_of_parent:?}&quot;);
 
     let all_children = Query::new(entity_ids())
-        .filter(child_of.with())
+        .filter(child_of.with_relation())
         .borrow(&amp;world)
         .iter()
         .collect_vec();
@@ -790,7 +790,7 @@ used to exclude components.</p>
     tracing::info!(&quot;Children: {all_children:?}&quot;);
 
     let roots = Query::new(entity_ids())
-        .filter(child_of.without())
+        .filter(child_of.without_relation())
         .borrow(&amp;world)
         .iter()
         .collect_vec();
