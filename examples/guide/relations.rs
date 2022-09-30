@@ -64,7 +64,7 @@ fn main() -> color_eyre::Result<()> {
     tracing::info!("Children: {children_of_parent:?}");
 
     let all_children = Query::new(entity_ids())
-        .filter(child_of.with())
+        .filter(child_of.with_relation())
         .borrow(&world)
         .iter()
         .collect_vec();
@@ -72,7 +72,7 @@ fn main() -> color_eyre::Result<()> {
     tracing::info!("Children: {all_children:?}");
 
     let roots = Query::new(entity_ids())
-        .filter(child_of.without())
+        .filter(child_of.without_relation())
         .borrow(&world)
         .iter()
         .collect_vec();

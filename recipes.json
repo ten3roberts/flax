@@ -18,7 +18,7 @@
     "kind": "dap"
   },
   "check": {
-    "cmd": "cargo check --all-features --workspace"
+    "cmd": "cargo check --all-features --workspace --tests"
   },
   "test": {
     "cmd": "cargo nextest run --all-features",

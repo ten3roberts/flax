@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 use alloc::alloc::{dealloc, handle_alloc_error};
 use alloc::collections::{btree_map, BTreeMap};
 
-use crate::ComponentId;
+use crate::ComponentKey;
 use crate::{archetype::ComponentInfo, Component, ComponentValue};
 
 type Offset = usize;
@@ -190,7 +190,7 @@ impl Drop for BufferStorage {
 /// Used for gathering up an entity's components or inserting it.
 #[derive(Default)]
 pub struct ComponentBuffer {
-    components: BTreeMap<ComponentId, (Offset, ComponentInfo)>,
+    components: BTreeMap<ComponentKey, (Offset, ComponentInfo)>,
     storage: BufferStorage,
 }
 
@@ -224,14 +224,14 @@ impl ComponentBuffer {
 
     /// Mutably access a component from the buffer
     pub fn get_mut<T: ComponentValue>(&mut self, component: Component<T>) -> Option<&mut T> {
-        let &(offset, _) = self.components.get(&component.id())?;
+        let &(offset, _) = self.components.get(&component.key())?;
 
         unsafe { Some(self.storage.read_mut(offset)) }
     }
 
     /// Access a component from the buffer
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
-        let &(offset, _) = self.components.get(&component.id())?;
+        let &(offset, _) = self.components.get(&component.key())?;
 
         unsafe { Some(self.storage.read(offset)) }
     }
@@ -247,7 +247,7 @@ impl ComponentBuffer {
 
     /// Remove a component from the component buffer
     pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Option<T> {
-        let (offset, _) = self.components.remove(&component.id())?;
+        let (offset, _) = self.components.remove(&component.key())?;
 
         unsafe { Some(self.storage.take(offset)) }
     }
@@ -288,7 +288,7 @@ impl ComponentBuffer {
 
 /// Iterate all items in the component buffer
 pub struct ComponentBufferIter<'a> {
-    components: btree_map::IntoIter<ComponentId, (Offset, ComponentInfo)>,
+    components: btree_map::IntoIter<ComponentKey, (Offset, ComponentInfo)>,
     storage: &'a mut BufferStorage,
 }
 

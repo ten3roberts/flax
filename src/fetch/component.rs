@@ -6,8 +6,7 @@ use smallvec::SmallVec;
 
 use crate::{
     archetype::{Changes, Slice, Slot},
-    entity::wildcard,
-    AccessKind, Change, Component, ComponentValue,
+    dummy, AccessKind, Change, Component, ComponentValue, RelationExt,
 };
 
 use super::*;
@@ -43,20 +42,20 @@ where
     type Prepared = PreparedComponent<'w, T>;
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let borrow = data.arch.borrow(*self)?;
+        let borrow = data.arch.borrow(self.key())?;
         Some(PreparedComponent { borrow })
     }
 
     fn matches(&self, data: FetchPrepareData) -> bool {
-        data.arch.has(self.id())
+        data.arch.has(self.key())
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        if data.arch.has(self.id()) {
+        if data.arch.has(self.key()) {
             vec![Access {
                 kind: AccessKind::Archetype {
                     id: data.arch_id,
-                    component: self.id(),
+                    component: self.key(),
                 },
                 mutable: false,
             }]
@@ -73,8 +72,8 @@ where
         Nothing
     }
 
-    fn components(&self, result: &mut Vec<ComponentId>) {
-        result.push(self.id())
+    fn components(&self, result: &mut Vec<ComponentKey>) {
+        result.push(self.key())
     }
 }
 
@@ -100,29 +99,29 @@ where
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let borrow = data.arch.borrow_mut(self.0)?;
-        let changes = data.arch.changes_mut(self.0.id())?;
+        let changes = data.arch.changes_mut(self.0.key())?;
 
         Some(PreparedComponentMut { borrow, changes })
     }
 
     fn matches(&self, data: FetchPrepareData) -> bool {
-        data.arch.has(self.0.id())
+        data.arch.has(self.0.key())
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        if data.arch.has(self.0.id()) {
+        if data.arch.has(self.0.key()) {
             vec![
                 Access {
                     kind: AccessKind::Archetype {
                         id: data.arch_id,
-                        component: self.0.id(),
+                        component: self.0.key(),
                     },
                     mutable: true,
                 },
                 Access {
                     kind: AccessKind::ChangeEvent {
                         id: data.arch_id,
-                        component: self.0.id(),
+                        component: self.0.key(),
                     },
                     mutable: true,
                 },
@@ -140,8 +139,8 @@ where
         Nothing
     }
 
-    fn components(&self, result: &mut Vec<ComponentId>) {
-        result.push(self.0.id())
+    fn components(&self, result: &mut Vec<ComponentKey>) {
+        result.push(self.0.key())
     }
 }
 
@@ -169,7 +168,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
 /// Query all relations of the specified kind
 pub fn relations_like<T: ComponentValue>(relation: fn(Entity) -> Component<T>) -> Relations<T> {
     Relations {
-        component: relation(wildcard()),
+        component: relation.of(dummy()),
     }
 }
 
@@ -189,26 +188,24 @@ where
     type Prepared = PreparedRelations<'w, T>;
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let relation = self.component.id().low();
         let borrows: SmallVec<[(Entity, AtomicRef<[T]>); 4]> = {
             data.arch
                 .storage()
                 .iter()
-                .map(move |(k, v)| {
-                    let (rel, obj) = k.split_pair();
-                    (rel, obj, k, v)
-                })
-                .filter(move |(rel, _, k, _)| k.is_relation() && *rel == relation)
-                // Safety:
-                // Since the component is the same except for the object,
-                // the component type is guaranteed to be the same
-                .map(|(_, obj, _, v)| {
-                    (
-                        data.world
-                            .find_alive(obj)
-                            .expect("Relation object is not alive"),
-                        unsafe { v.borrow::<T>() },
-                    )
+                .filter_map(move |(k, v)| {
+                    if let Some(object) = k.object {
+                        if k.id == self.component.key().id {
+                            return Some((
+                                object,
+                                // Safety:
+                                // Since the component is the same except for the object,
+                                // the component type is guaranteed to be the same
+                                unsafe { v.borrow::<T>() },
+                            ));
+                        }
+                    }
+
+                    None
                 })
                 .collect()
         };
@@ -225,17 +222,24 @@ where
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        let relation = self.component.id().low();
+        let relation = self.component.key().id;
         data.arch
             .storage()
             .keys()
-            .filter(move |k| k.is_relation() && k.low() == relation)
-            .map(|&k| Access {
-                kind: AccessKind::Archetype {
-                    id: data.arch_id,
-                    component: k,
-                },
-                mutable: false,
+            .filter_map(move |k| {
+                if let Some(object) = k.object {
+                    if k.id == self.component.key().id {
+                        return Some(Access {
+                            kind: AccessKind::Archetype {
+                                id: data.arch_id,
+                                component: *k,
+                            },
+                            mutable: false,
+                        });
+                    }
+                }
+
+                None
             })
             .collect_vec()
     }
@@ -244,7 +248,7 @@ where
         Nothing
     }
 
-    fn components(&self, _: &mut Vec<ComponentId>) {}
+    fn components(&self, _: &mut Vec<ComponentKey>) {}
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {

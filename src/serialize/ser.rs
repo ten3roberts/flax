@@ -1,6 +1,7 @@
 use crate::{
     archetype::StorageBorrowDyn, components::is_component, filter::And, filter::StaticFilter,
-    filter::Without, Archetype, ArchetypeId, Component, ComponentId, ComponentValue, Entity, World,
+    filter::Without, Archetype, ArchetypeId, Component, ComponentKey, ComponentValue, Entity,
+    World,
 };
 
 use alloc::{boxed::Box, collections::BTreeMap, string::String};
@@ -24,7 +25,7 @@ struct Slot {
 #[derive(Clone)]
 /// Builder for a serialialization context
 pub struct SerializeBuilder<F> {
-    slots: BTreeMap<ComponentId, Slot>,
+    slots: BTreeMap<ComponentKey, Slot>,
     filter: F,
 }
 
@@ -77,7 +78,7 @@ where
         }
 
         self.slots.insert(
-            component.id(),
+            component.key(),
             Slot {
                 key: key.into(),
                 ser: ser_col::<T>,
@@ -107,7 +108,7 @@ where
 /// Describes how to serialize a world given a group of components to serialize
 /// and an optional filter. Empty entities will be skipped.
 pub struct SerializeContext {
-    slots: BTreeMap<ComponentId, Slot>,
+    slots: BTreeMap<ComponentKey, Slot>,
     filter: Box<dyn StaticFilter>,
 }
 

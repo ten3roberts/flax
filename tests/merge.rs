@@ -211,7 +211,7 @@ fn merge_custom() {
         )
         .set(custom_component, shared.clone())
         .attach_with(
-            &custom_relation,
+            custom_relation,
             "Mom".into(),
             Entity::builder()
                 .set(name(), "child_custom.1".into())
@@ -235,7 +235,7 @@ fn merge_custom() {
     let new_root = migrated.get(root);
 
     let new_custom_component = world
-        .find_component::<Arc<String>>(migrated.get(custom_component.id()))
+        .find_component::<Arc<String>>(migrated.get_component(custom_component).key())
         .expect("Missing component");
 
     let _ = migrated.get_component::<f32>(unused_component);

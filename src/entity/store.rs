@@ -1,10 +1,7 @@
 use itertools::Itertools;
 
 use super::{Entity, EntityIndex};
-use crate::{
-    archetype::ArchetypeId, entity::EntityGen, entity::EntityKind, entity::StrippedEntity,
-    error::Result, Error,
-};
+use crate::{archetype::ArchetypeId, entity::EntityGen, entity::EntityKind, error::Result, Error};
 use alloc::vec::Vec;
 use core::{
     iter::Enumerate,
@@ -189,11 +186,7 @@ impl<V> EntityStore<V> {
 
         unsafe {
             self.slot_mut(id.index())
-                .filter(|v| v.is_alive())
-                .filter(|v| {
-                    v.gen == to_slot_gen(id.generation())
-                        || id.kind().contains(EntityKind::RELATION)
-                })
+                .filter(|v| v.is_alive() && v.gen == to_slot_gen(id.gen()))
                 .map(|v| &mut *v.value.occupied)
         }
     }
@@ -206,9 +199,10 @@ impl<V> EntityStore<V> {
         unsafe {
             let val = self.slot(id.index());
 
-            let val = val.filter(|v| v.is_alive()).filter(|v| {
-                v.gen == to_slot_gen(id.generation()) || id.kind().contains(EntityKind::RELATION)
-            })?;
+            // let val = val.filter(|v| v.is_alive()).filter(|v| {
+            //     v.gen == to_slot_gen(id.generation()) || id.kind().contains(EntityKind::RELATION)
+            // })?;
+            let val = val.filter(|v| v.is_alive() && v.gen == to_slot_gen(id.gen()))?;
 
             let val = &val.value.occupied;
 
@@ -217,16 +211,15 @@ impl<V> EntityStore<V> {
     }
 
     #[inline]
-    pub fn reconstruct(&self, id: StrippedEntity) -> Option<(Entity, &V)> {
-        let ns = self.kind;
-
-        assert_eq!(ns, id.kind());
-
-        let slot = self.slot(id.index())?;
+    pub fn reconstruct(&self, index: EntityIndex) -> Option<(Entity, &V)> {
+        let slot = self.slot(index)?;
 
         if slot.is_alive() {
             let val = unsafe { &slot.value.occupied };
-            Some((id.reconstruct(from_slot_gen(slot.gen)), val))
+            Some((
+                Entity::from_parts(index, from_slot_gen(slot.gen), self.kind),
+                val,
+            ))
         } else {
             None
         }
@@ -238,10 +231,7 @@ impl<V> EntityStore<V> {
         assert_eq!(ns, id.kind());
 
         self.slot(id.index())
-            .filter(|v| v.is_alive())
-            .filter(|v| {
-                v.gen == to_slot_gen(id.generation()) || id.kind().contains(EntityKind::RELATION)
-            })
+            .filter(|v| v.is_alive() && v.gen == to_slot_gen(id.gen()))
             .is_some()
     }
 

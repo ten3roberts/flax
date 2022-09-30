@@ -315,7 +315,7 @@ where
                         )
                         .map(|v| {
                             self.world
-                                .get(v, is_component())
+                                .get(v.id, is_component())
                                 .unwrap()
                                 .name()
                                 .to_string()
@@ -363,7 +363,7 @@ where
                 id,
                 buf,
                 DifferenceIter::new(arch.components().map(|v| v.id()), components.into_iter())
-                    .map(|v| self.world.get(v, is_component()).unwrap().name().into())
+                    .map(|v| self.world.get(v.id, is_component()).unwrap().name().into())
                     .collect_vec(),
             )
         })?;
