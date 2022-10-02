@@ -1,6 +1,6 @@
 use crate::{
-    buffer::ComponentBuffer, dummy, CommandBuffer, Component, ComponentInfo, ComponentValue,
-    Entity, RelationExt, World,
+    buffer::ComponentBuffer, dummy, error::Result, CommandBuffer, Component, ComponentInfo,
+    ComponentValue, Entity, RelationExt, World,
 };
 use alloc::vec::Vec;
 
@@ -10,7 +10,6 @@ use alloc::vec::Vec;
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
     children: Vec<EntityBuilder>,
-    id: Option<Entity>,
 }
 
 impl EntityBuilder {
@@ -19,14 +18,7 @@ impl EntityBuilder {
         Self {
             buffer: ComponentBuffer::new(),
             children: Vec::new(),
-            id: None,
         }
-    }
-
-    /// Set the EntityBuilder's id
-    pub fn with_id(&mut self, id: Entity) -> &mut Self {
-        self.id = Some(id);
-        self
     }
 
     /// Sets the component of the entity.
@@ -101,28 +93,38 @@ impl EntityBuilder {
         self.spawn_inner(world, None)
     }
 
-    fn spawn_inner(&mut self, world: &mut World, parent: Option<Entity>) -> Entity {
+    /// See: [`Self::spawn`]
+    ///
+    /// Spawn at a specific entity.
+    ///
+    /// Fails if an entity with the same index already exists.
+    pub fn spawn_at(&mut self, id: Entity, world: &mut World) -> Result<Entity> {
+        let id = world.spawn_at_with(id, &mut self.buffer)?;
+
+        self.children.drain(..).for_each(|mut child| {
+            child.spawn_inner(world, Some(id));
+        });
+
+        Ok(id)
+    }
+
+    fn prepare(&mut self, world: &mut World, parent: Entity) {
         self.buffer.components_mut().for_each(|info| {
             let id = info.id();
             if let Some(object) = id.object {
-                if object==dummy() {
-                if let Some(parent) = parent {
-                        info.id.object=Some(parent);
+                if object == dummy() {
+                    info.id.object = Some(parent);
                 }
-                else {
-
-                    panic!("Attempt to build entity with an unknown parent, but entity requires a parent relation")
-                }
-                }
-
             }
         });
+    }
 
-        let id = if let Some(id) = self.id {
-            world.spawn_at_with(id, &mut self.buffer)
-        } else {
-            world.spawn_with(&mut self.buffer)
-        };
+    fn spawn_inner(&mut self, world: &mut World, parent: Option<Entity>) -> Entity {
+        if let Some(parent) = parent {
+            self.prepare(world, parent)
+        }
+
+        let id = world.spawn_with(&mut self.buffer);
 
         self.children.drain(..).for_each(|mut child| {
             child.spawn_inner(world, Some(id));

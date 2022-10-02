@@ -33,11 +33,11 @@ fn main() -> color_eyre::Result<()> {
     cmd.set(id, position(), vec2(32.0, 2.6));
     let id2 = world.spawn();
 
-    cmd.spawn(
+    cmd.spawn_at(
+        id,
         EntityBuilder::new()
             .set(name(), "b".into())
-            .set(position(), vec2(4.6, 8.4))
-            .with_id(id2),
+            .set(position(), vec2(4.6, 8.4)),
     );
 
     cmd.remove(id2, position());
