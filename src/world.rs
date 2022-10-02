@@ -13,7 +13,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::dummy;
-use crate::filter::{ArchetypeFilter, WithObject, WithRelation};
+use crate::filter::ArchetypeFilter;
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
     buffer::ComponentBuffer,
@@ -54,6 +54,7 @@ impl Archetypes {
     pub fn new() -> Self {
         let mut archetypes = EntityStore::new(EntityKind::empty());
         let root = archetypes.spawn(Archetype::empty());
+
         Self {
             root,
             inner: archetypes,
@@ -232,6 +233,7 @@ impl World {
     }
 
     /// Batch spawn multiple components with prespecified ids.
+    /// Fails if any of the entities already exist
     pub fn spawn_batch_at(&mut self, ids: &[Entity], batch: &mut BatchSpawn) -> Result<()> {
         assert_eq!(
             ids.len(),
@@ -239,16 +241,15 @@ impl World {
             "The length of ids must match the number of slots in `batch`"
         );
 
+        for &id in ids {
+            if let Some(v) = self.reconstruct(id.index(), id.kind()) {
+                return Err(Error::EntityOccupied(v));
+            }
+        }
+
         for &component in batch.components() {
             self.init_component(component)
                 .expect("failed to initialize component");
-        }
-
-        for &id in ids {
-            assert!(matches!(
-                self.despawn(id),
-                Err(Error::NoSuchEntity(..)) | Ok(())
-            ));
         }
 
         let change_tick = self.advance_change_tick();
@@ -269,7 +270,8 @@ impl World {
                         arch: arch_id,
                     },
                 )
-                .unwrap_or_else(|| panic!("Entity {id} already exists"));
+                // The vacancy was checked prior
+                .unwrap();
         }
 
         let slots = arch.allocate_n(ids);
@@ -303,7 +305,13 @@ impl World {
         // The id is not used by anything else
         let component = unsafe { Component::from_raw_id(ComponentKey::new(id, None), name, meta) };
 
-        self.init_component(component.info()).unwrap();
+        let info = component.info();
+
+        let mut meta = info.meta()(info);
+        meta.set(is_component(), info);
+        meta.set(crate::name(), info.name().into());
+
+        self.set_with(id, &mut meta).unwrap();
         component
     }
 
@@ -342,55 +350,49 @@ impl World {
         (id, loc, arch)
     }
 
-    /// Spawns an entitiy with a specific id.
-    /// Despawns any existing entity.
-    pub fn spawn_at(&mut self, id: Entity) {
-        self.spawn_at_inner(id, self.archetypes.root);
+    fn reserve_at(&mut self, id: Entity) -> Result<()> {
+        self.entities.init(id.kind).reserve_at(id.index())
     }
 
     /// Spawns an entitiy with a specific id.
-    /// Despawns any existing entity.
+    /// Fails if an entity with the same index already exists.
+    pub fn spawn_at(&mut self, id: Entity) -> Result<()> {
+        self.spawn_at_inner(id, self.archetypes.root)?;
+        Ok(())
+    }
+
+    /// Spawns an entitiy with a specific id.
     fn spawn_at_inner(
         &mut self,
         id: Entity,
         arch_id: ArchetypeId,
-    ) -> (EntityLocation, &mut Archetype) {
-        match self.despawn(id) {
-            Ok(()) => {}
-            Err(Error::NoSuchEntity(..)) => {}
-            Err(_) => {
-                panic!("Failed o despawn entity");
-            }
-        }
-
+    ) -> Result<(EntityLocation, &mut Archetype)> {
         let store = self.entities.init(id.kind());
         let arch = self.archetypes.get_mut(arch_id);
         dbg!(id);
 
-        let loc = store
-            .spawn_at(
-                id.index,
-                id.gen,
-                EntityLocation {
-                    slot: 0,
-                    arch: arch_id,
-                },
-            )
-            .expect("Entity not despawned");
+        let loc = store.spawn_at(
+            id.index,
+            id.gen,
+            EntityLocation {
+                slot: 0,
+                arch: arch_id,
+            },
+        )?;
 
         loc.slot = arch.allocate(id);
 
-        (*loc, arch)
+        Ok((*loc, arch))
     }
 
     /// Spawn an entity with the given components.
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
-    pub fn spawn_at_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Entity {
+    pub fn spawn_at_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Result<Entity> {
         let change_tick = self.advance_change_tick();
 
         let (arch_id, _) = self.archetypes.init(buffer.components());
-        let (loc, arch) = self.spawn_at_inner(id, arch_id);
+        let (loc, arch) = self.spawn_at_inner(id, arch_id)?;
 
         for (component, src) in buffer.take_all() {
             unsafe {
@@ -407,7 +409,7 @@ impl World {
                 .expect("Failed to initialize component");
         }
 
-        id
+        Ok(id)
     }
 
     /// Spawn an entity with the given components.
@@ -590,7 +592,7 @@ impl World {
             meta.set(is_static_component(), ());
         }
 
-        self.spawn_at(id);
+        self.spawn_at(id).unwrap();
         self.set_with(id, &mut meta).unwrap();
 
         Ok(info)
@@ -599,7 +601,7 @@ impl World {
     /// Despawn an entity.
     /// Any relations to other entities will be removed.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
-        let EntityLocation { arch, slot } = self.location(id)?;
+        let EntityLocation { arch, slot } = dbg!(self.location(id))?;
 
         if id.is_static() {
             panic!("Attempt to despawn static component");
@@ -1066,7 +1068,7 @@ impl World {
     }
 
     /// Attempt to find an alive entity given the id
-    pub fn find_alive(&self, index: EntityIndex, kind: EntityKind) -> Option<Entity> {
+    pub fn reconstruct(&self, index: EntityIndex, kind: EntityKind) -> Option<Entity> {
         let ns = self.entities.get(kind)?;
 
         ns.reconstruct(index).map(|v| v.0)
@@ -1182,14 +1184,16 @@ impl World {
                         assert_eq!(loc.arch, arch_id);
 
                         // Migrate
-                        if self.is_alive(old_id) {
+                        if self.reconstruct(old_id.index, old_id.kind).is_some() {
                             let new_id = self.spawn_inner(self.archetypes.root, id.kind()).0;
                             eprintln!("Migrating {id} => {new_id}");
 
                             *id = new_id;
                             Some((old_id, new_id))
                         } else {
-                            self.spawn_at(old_id);
+                            // Make sure nothing is spawned here in the meantime
+                            eprintln!("Reserving: {old_id}");
+                            self.spawn_at(old_id).unwrap();
                             None
                         }
                     })
@@ -1226,6 +1230,9 @@ impl World {
                     batch.append(storage).expect("Batch is incomplete");
                 }
 
+                for &id in &arch.entities {
+                    self.despawn(id).unwrap()
+                }
                 self.spawn_batch_at(arch.entities(), &mut batch)
                     .expect("Failed to spawn batch")
             }
