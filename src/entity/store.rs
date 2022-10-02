@@ -8,12 +8,11 @@ use core::{
     mem::{self, ManuallyDrop},
     num::NonZeroU32,
     slice,
+    sync::atomic::AtomicU32,
 };
 
 #[derive(Clone, Copy, Debug)]
-struct Vacant {
-    next: Option<NonZeroU32>,
-}
+struct Vacant;
 
 union SlotValue<T> {
     occupied: ManuallyDrop<T>,
@@ -29,6 +28,30 @@ struct Slot<T> {
 impl<T> Slot<T> {
     pub fn is_alive(&self) -> bool {
         self.gen & 1 == 1
+    }
+
+    pub fn make_alive(&mut self, value: T) -> (EntityGen, &mut T) {
+        debug_assert!(!self.is_alive());
+
+        // Make the slot generation odd again which means this slot is
+        // alive.
+        self.gen |= 1;
+        self.value = SlotValue {
+            occupied: ManuallyDrop::new(value),
+        };
+
+        (from_slot_gen(self.gen), unsafe { &mut self.value.occupied })
+    }
+
+    fn make_dead(&mut self) -> T {
+        debug_assert!(self.is_alive());
+
+        let val = mem::replace(&mut self.value, SlotValue { vacant: Vacant });
+        let val = unsafe { ManuallyDrop::<T>::into_inner(val.occupied) };
+
+        // Since the slot is alive, the gen is odd, adding one makes it even
+        self.gen = self.gen.wrapping_add(1);
+        val
     }
 }
 
@@ -49,8 +72,10 @@ pub(crate) struct EntityLocation {
 
 pub(crate) struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
-    free_head: Option<NonZeroU32>,
+    free: Vec<EntityIndex>,
     pub(crate) kind: EntityKind,
+    /// A positive value indicates the number of entities which are reserved from the free list
+    cursor: AtomicU32,
     len: usize,
 }
 
@@ -69,7 +94,6 @@ where
                     .map(|v| unsafe { &*v.value.occupied })
                     .collect_vec(),
             )
-            .field("free_head", &self.free_head)
             .field("kind", &self.kind)
             .field("len", &self.len)
             .finish()
@@ -102,111 +126,72 @@ impl<V> EntityStore<V> {
         Self::with_capacity(kind, 0)
     }
 
-    /// Reserves a non occupied entity id.
-    ///
-    /// The entity will be considered dead, but will never be returned by spawn, and must be
-    /// spawned explicitly.
-    pub fn reserve_at(&mut self, index: EntityIndex) -> Result<()> {
-        let diff = (index.get() as usize).saturating_sub(self.slots.len());
-
-        // Fill the slots between the last and the new with free slots
-        // The wanted id may already be inside the valid range, or it may be
-        // outside.
-        //
-        // Regardless, it will now be in the free list
-        self.slots.extend(
-            (self.slots.len()..)
-                .map(|i| {
-                    // This slot is not filled so mark it as free
-                    let current = NonZeroU32::new(i as u32 + 1).unwrap();
-                    // Mark current slot as free
-                    let next = self.free_head.replace(current);
-
-                    Slot {
-                        value: SlotValue {
-                            vacant: Vacant { next },
-                        },
-                        gen: 0,
-                    }
-                })
-                .take(diff),
-        );
-
-        let slot = self.unlink_free(index)?;
-        slot.value = SlotValue {
-            vacant: Vacant { next: None },
-        };
-        Ok(())
+    /// Reserves `count` slots and returns ids which can be safely spawned at
+    pub fn reserve(&self, count: u32) {
+        todo!()
     }
 
-    /// Removes a slot from the free list
-    fn unlink_free(&mut self, index: EntityIndex) -> Result<&mut Slot<V>> {
-        if let Some((prev, index, slot)) = self.free_mut().find(|v| v.1 == index) {
-            let next_free = unsafe { slot.value.vacant.next };
-            self.len += 1;
+    // /// Removes a slot from the free list
+    // fn unlink_free(&mut self, index: EntityIndex) -> Result<&mut Slot<V>> {
+    //     if let Some((prev, index, slot)) = self.free_mut().find(|v| v.1 == index) {
+    //         let next_free = unsafe { slot.value.vacant.next };
+    //         self.len += 1;
 
-            if let Some(prev) = prev {
-                self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
-            } else {
-                self.free_head = next_free;
-            }
+    //         if let Some(prev) = prev {
+    //             self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
+    //         } else {
+    //             self.free_head = next_free;
+    //         }
 
-            Ok(self.slot_mut(index).unwrap())
-        } else {
-            let kind = self.kind;
-            let slot = self.slot_mut(index).unwrap();
+    //         Ok(self.slot_mut(index).unwrap())
+    //     } else {
+    //         let kind = self.kind;
+    //         let slot = self.slot_mut(index).unwrap();
 
-            // Slot exists, is dead, and not in free list.
-            // This means it is reserved
-            if !slot.is_alive() {
-                assert!(unsafe { slot.value.vacant.next.is_none() });
-                return Ok(slot);
-            }
+    //         Err(Error::EntityOccupied(Entity::from_parts(
+    //             index,
+    //             from_slot_gen(slot.gen),
+    //             kind,
+    //         )))
+    //     }
+    // }
 
-            Err(Error::EntityOccupied(Entity::from_parts(
-                index,
-                from_slot_gen(slot.gen),
-                kind,
-            )))
-        }
-    }
+    // fn free_mut(&mut self) -> FreeIterMut<V> {
+    //     let cur = self.free_head;
+    //     FreeIterMut {
+    //         store: self,
+    //         cur,
+    //         prev: None,
+    //     }
+    // }
 
-    fn free_mut(&mut self) -> FreeIter<V> {
-        let cur = self.free_head;
-        FreeIter {
-            store: self,
-            cur,
-            prev: None,
-        }
-    }
+    // fn free(&mut self) -> FreeIter<V> {
+    //     let cur = self.free_head;
+    //     FreeIter {
+    //         store: self,
+    //         cur,
+    //         prev: None,
+    //     }
+    // }
 
     pub fn with_capacity(kind: EntityKind, cap: usize) -> Self {
         Self {
             slots: Vec::with_capacity(cap),
-            free_head: None,
+            free: Vec::new(),
             kind,
             len: 0,
+            cursor: AtomicU32::new(0),
         }
     }
 
     pub fn spawn(&mut self, value: V) -> Entity {
-        if let Some(index) = self.free_head.take() {
+        if let Some(index) = self.free.pop() {
             let slot = { self.slots.get_mut(index.get() as usize - 1) }.unwrap();
             debug_assert!(slot.gen & 1 == 0);
 
-            // Update free head
-            unsafe {
-                self.free_head = slot.value.vacant.next;
-            }
-
             // Make the slot generation odd again which means this slot is
             // alive.
-            slot.gen |= 1;
-            slot.value = SlotValue {
-                occupied: ManuallyDrop::new(value),
-            };
-
-            let gen = from_slot_gen(slot.gen);
+            let (gen, _) = slot.make_alive(value);
 
             let id = Entity::from_parts(index, gen, self.kind);
             self.len += 1;
@@ -224,7 +209,7 @@ impl<V> EntityStore<V> {
             });
 
             self.len += 1;
-            Entity::from_parts(NonZeroU32::new(index + 1).unwrap(), gen as u16, self.kind)
+            Entity::from_parts(NonZeroU32::new(index + 1).unwrap(), gen, self.kind)
         }
     }
 
@@ -320,29 +305,18 @@ impl<V> EntityStore<V> {
 
         let index = id.index();
 
-        let next = self.free_head.take();
         let kind = self.kind;
         let slot = self.slot_mut(index).unwrap();
 
         // Make sure static ids never get a generation
         if kind.contains(EntityKind::STATIC) {
-            slot.gen = 0b10
-        } else {
-            slot.gen = slot.gen.wrapping_add(1);
+            panic!("Attempt to despawn static entity");
         }
 
-        let inner = mem::replace(
-            &mut slot.value,
-            SlotValue {
-                vacant: Vacant { next },
-            },
-        );
-        let val = unsafe { ManuallyDrop::<V>::into_inner(inner.occupied) };
+        let val = slot.make_dead();
+        self.free.push(index);
 
-        slot.value.vacant = Vacant { next };
-
-        self.free_head = Some(index);
-        self.len += 1;
+        self.len -= 1;
 
         Ok(val)
     }
@@ -370,88 +344,35 @@ impl<V> EntityStore<V> {
         gen: EntityGen,
         value: V,
     ) -> crate::error::Result<&mut V> {
-        let free_head = &mut self.free_head;
+        if index.get() as usize > self.slots.len() {
+            // The current slot does not exist
+            self.free.extend(
+                (self.slots.len() as u32 + 1..index.get() as u32)
+                    .map(|v| NonZeroU32::new(v).unwrap()),
+            );
 
-        let diff = (index.get() as usize).saturating_sub(self.slots.len());
-
-        // Fill the slots between the last and the new with free slots
-        // The wanted id may already be inside the valid range, or it may be
-        // outside.
-        //
-        // Regardless, it will now be in the free list
-        self.slots.extend(
-            (self.slots.len()..)
-                .map(|i| {
-                    // This slot is not filled so mark it as free
-                    let current = NonZeroU32::new(i as u32 + 1).unwrap();
-                    // Mark current slot as free
-                    let next = free_head.replace(current);
-
-                    Slot {
-                        value: SlotValue {
-                            vacant: Vacant { next },
-                        },
-                        gen: 0,
-                    }
-                })
-                .take(diff),
-        );
-
-        let slot = self.unlink_free(index)?;
-
-        *slot = Slot {
-            gen: to_slot_gen(gen),
-            value: SlotValue {
-                occupied: ManuallyDrop::new(value),
-            },
+            self.slots.resize_with(index.get() as usize, || Slot {
+                value: SlotValue { vacant: Vacant },
+                gen: 0,
+            });
+        } else if let Some(pos) = self.free.iter().position(|&v| v == index) {
+            self.free.swap_remove(pos);
+        } else {
+            let id = self.reconstruct(index).unwrap().0;
+            return Err(Error::EntityOccupied(id));
         };
 
-        unsafe { Ok(&mut *slot.value.occupied) }
-
-        // // Find it in the free list
-        // if let Some((prev, index, slot)) = self.free_mut().find(|v| v.1 == index) {
-        //     let next_free = unsafe { slot.value.vacant.next };
-        //     self.len += 1;
-
-        //     if let Some(prev) = prev {
-        //         self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
-        //     } else {
-        //         self.free_head = next_free;
-        //     }
-
-        //     let slot = self.slot_mut(index).unwrap();
-        // } else {
-        //     // It was not free, that means it already exists
-        //     let slot = self.slot(index).unwrap();
-        //     Err(Error::EntityOccupied(Entity::from_parts(
-        //         index,
-        //         from_slot_gen(slot.gen),
-        //         self.kind,
-        //     )))
-        // }
-    }
-}
-
-struct FreeIter<'a, V> {
-    cur: Option<EntityIndex>,
-    prev: Option<EntityIndex>,
-    store: &'a mut EntityStore<V>,
-}
-
-impl<'a, V> Iterator for FreeIter<'a, V> {
-    type Item = (Option<EntityIndex>, EntityIndex, &'a mut Slot<V>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let cur = self.cur?;
-        let prev = self.prev;
-        let slot = &mut self.store.slots[cur.get() as usize - 1];
+        self.len += 1;
+        let slot = self.slot_mut(index).unwrap();
 
         debug_assert!(!slot.is_alive());
-        self.prev = Some(cur);
-        self.cur = unsafe { slot.value.vacant.next };
 
-        // All free slots are disjoint
-        Some((prev, cur, unsafe { &mut *(slot as *mut _) }))
+        slot.gen = to_slot_gen(gen);
+        slot.value = SlotValue {
+            occupied: ManuallyDrop::new(value),
+        };
+
+        Ok(unsafe { &mut slot.value.occupied })
     }
 }
 
@@ -541,8 +462,6 @@ mod test {
         assert_eq!(b.gen(), 1);
         assert!(!store.is_alive(a));
         assert_eq!(c.gen(), 2);
-
-        store.reserve_at(EntityIndex::new(5).unwrap()).unwrap();
 
         let long_dead = store.spawn("long_dead");
         store.despawn(long_dead).unwrap();
