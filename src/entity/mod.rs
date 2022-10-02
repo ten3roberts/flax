@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn entity_size() {
         assert_eq!(size_of::<Entity>(), 8);
-        assert_eq!(align_of::<Entity>(), 8);
+        assert_eq!(align_of::<Entity>(), 4);
         assert_eq!(size_of::<Option<Entity>>(), 8);
     }
 }

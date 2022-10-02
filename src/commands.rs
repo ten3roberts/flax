@@ -14,6 +14,7 @@ type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
 enum Command {
     /// Spawn a new entity
     Spawn(EntityBuilder),
+    SpawnAt(Entity, EntityBuilder),
     /// Spawn a batch of entities with the same components
     SpawnBatch(BatchSpawn),
     /// Set a component for an entity
@@ -25,7 +26,10 @@ enum Command {
     /// Despawn an entity
     Despawn(Entity),
     /// Remove a component from an entity
-    Remove { id: Entity, info: ComponentInfo },
+    Remove {
+        id: Entity,
+        info: ComponentInfo,
+    },
 
     /// Execute an arbitrary function with a mutable reference to the world.
     Defer(DeferFn),
@@ -34,7 +38,8 @@ enum Command {
 impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Spawn(arg0) => f.debug_tuple("Spawn").field(arg0).finish(),
+            Self::Spawn(v) => f.debug_tuple("Spawn").field(v).finish(),
+            Command::SpawnAt(id, v) => f.debug_tuple("SpawnAt").field(&id).field(&v).finish(),
             Self::SpawnBatch(arg0) => f.debug_tuple("SpawnBatch").field(arg0).finish(),
             Self::Set { id, info, offset } => f
                 .debug_struct("Set")
@@ -121,6 +126,13 @@ impl CommandBuffer {
         self
     }
 
+    /// Spawn a new entity with the given components of the builder
+    pub fn spawn_at(&mut self, id: Entity, entity: impl Into<EntityBuilder>) -> &mut Self {
+        self.commands.push(Command::SpawnAt(id, entity.into()));
+
+        self
+    }
+
     /// Spawn a new batch with the given components of the builder
     pub fn spawn_batch(&mut self, batch: BatchSpawn) -> &mut Self {
         self.commands.push(Command::SpawnBatch(batch));
@@ -151,6 +163,12 @@ impl CommandBuffer {
             match cmd {
                 Command::Spawn(mut entity) => {
                     entity.spawn(world);
+                }
+                Command::SpawnAt(id, mut entity) => {
+                    entity
+                        .spawn_at(id, world)
+                        .map_err(|v| v.into_eyre())
+                        .wrap_err("Failed to spawn entity")?;
                 }
                 Command::SpawnBatch(mut batch) => {
                     batch.spawn(world);

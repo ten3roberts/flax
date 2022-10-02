@@ -102,6 +102,84 @@ impl<V> EntityStore<V> {
         Self::with_capacity(kind, 0)
     }
 
+    /// Reserves a non occupied entity id.
+    ///
+    /// The entity will be considered dead, but will never be returned by spawn, and must be
+    /// spawned explicitly.
+    pub fn reserve_at(&mut self, index: EntityIndex) -> Result<()> {
+        let diff = (index.get() as usize).saturating_sub(self.slots.len());
+
+        // Fill the slots between the last and the new with free slots
+        // The wanted id may already be inside the valid range, or it may be
+        // outside.
+        //
+        // Regardless, it will now be in the free list
+        self.slots.extend(
+            (self.slots.len()..)
+                .map(|i| {
+                    // This slot is not filled so mark it as free
+                    let current = NonZeroU32::new(i as u32 + 1).unwrap();
+                    // Mark current slot as free
+                    let next = self.free_head.replace(current);
+
+                    Slot {
+                        value: SlotValue {
+                            vacant: Vacant { next },
+                        },
+                        gen: 0,
+                    }
+                })
+                .take(diff),
+        );
+
+        let slot = self.unlink_free(index)?;
+        slot.value = SlotValue {
+            vacant: Vacant { next: None },
+        };
+        Ok(())
+    }
+
+    /// Removes a slot from the free list
+    fn unlink_free(&mut self, index: EntityIndex) -> Result<&mut Slot<V>> {
+        if let Some((prev, index, slot)) = self.free_mut().find(|v| v.1 == index) {
+            let next_free = unsafe { slot.value.vacant.next };
+            self.len += 1;
+
+            if let Some(prev) = prev {
+                self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
+            } else {
+                self.free_head = next_free;
+            }
+
+            Ok(self.slot_mut(index).unwrap())
+        } else {
+            let kind = self.kind;
+            let slot = self.slot_mut(index).unwrap();
+
+            // Slot exists, is dead, and not in free list.
+            // This means it is reserved
+            if !slot.is_alive() {
+                assert!(unsafe { slot.value.vacant.next.is_none() });
+                return Ok(slot);
+            }
+
+            Err(Error::EntityOccupied(Entity::from_parts(
+                index,
+                from_slot_gen(slot.gen),
+                kind,
+            )))
+        }
+    }
+
+    fn free_mut(&mut self) -> FreeIter<V> {
+        let cur = self.free_head;
+        FreeIter {
+            store: self,
+            cur,
+            prev: None,
+        }
+    }
+
     pub fn with_capacity(kind: EntityKind, cap: usize) -> Self {
         Self {
             slots: Vec::with_capacity(cap),
@@ -289,10 +367,9 @@ impl<V> EntityStore<V> {
     pub(crate) fn spawn_at(
         &mut self,
         index: EntityIndex,
-        generation: EntityGen,
+        gen: EntityGen,
         value: V,
-    ) -> Option<&mut V> {
-        // Init slot
+    ) -> crate::error::Result<&mut V> {
         let free_head = &mut self.free_head;
 
         let diff = (index.get() as usize).saturating_sub(self.slots.len());
@@ -320,40 +397,61 @@ impl<V> EntityStore<V> {
                 .take(diff),
         );
 
-        // Find it in the free list
-        let mut prev = None;
-        let mut cur = self.free_head;
-        while let Some(current) = cur {
-            let slot = self.slot(current).expect("Invalid free list node");
+        let slot = self.unlink_free(index)?;
 
-            let next_free = unsafe { slot.value.vacant.next };
-            assert!(!slot.is_alive());
-            if current == index {
-                self.len += 1;
+        *slot = Slot {
+            gen: to_slot_gen(gen),
+            value: SlotValue {
+                occupied: ManuallyDrop::new(value),
+            },
+        };
 
-                if let Some(prev) = prev {
-                    self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
-                } else {
-                    self.free_head = next_free;
-                }
+        unsafe { Ok(&mut *slot.value.occupied) }
 
-                let slot = self.slot_mut(current).unwrap();
-                *slot = Slot {
-                    gen: to_slot_gen(generation),
-                    value: SlotValue {
-                        occupied: ManuallyDrop::new(value),
-                    },
-                };
+        // // Find it in the free list
+        // if let Some((prev, index, slot)) = self.free_mut().find(|v| v.1 == index) {
+        //     let next_free = unsafe { slot.value.vacant.next };
+        //     self.len += 1;
 
-                return unsafe { Some(&mut *slot.value.occupied) };
-            }
+        //     if let Some(prev) = prev {
+        //         self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
+        //     } else {
+        //         self.free_head = next_free;
+        //     }
 
-            prev = Some(current);
-            cur = next_free
-        }
+        //     let slot = self.slot_mut(index).unwrap();
+        // } else {
+        //     // It was not free, that means it already exists
+        //     let slot = self.slot(index).unwrap();
+        //     Err(Error::EntityOccupied(Entity::from_parts(
+        //         index,
+        //         from_slot_gen(slot.gen),
+        //         self.kind,
+        //     )))
+        // }
+    }
+}
 
-        // It was not free, that means it already exists
-        None
+struct FreeIter<'a, V> {
+    cur: Option<EntityIndex>,
+    prev: Option<EntityIndex>,
+    store: &'a mut EntityStore<V>,
+}
+
+impl<'a, V> Iterator for FreeIter<'a, V> {
+    type Item = (Option<EntityIndex>, EntityIndex, &'a mut Slot<V>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let cur = self.cur?;
+        let prev = self.prev;
+        let slot = &mut self.store.slots[cur.get() as usize - 1];
+
+        debug_assert!(!slot.is_alive());
+        self.prev = Some(cur);
+        self.cur = unsafe { slot.value.vacant.next };
+
+        // All free slots are disjoint
+        Some((prev, cur, unsafe { &mut *(slot as *mut _) }))
     }
 }
 
@@ -424,5 +522,81 @@ impl<'a, V> Iterator for EntityStoreIterMut<'a, V> {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn spawn_at() {
+        let mut store = EntityStore::new(EntityKind::empty());
+        let a = store.spawn("a");
+        let b = store.spawn("b");
+        store.despawn(a).unwrap();
+        let c = store.spawn("c");
+        assert_eq!(a.index(), c.index());
+        assert_eq!(b.gen(), 1);
+        assert!(!store.is_alive(a));
+        assert_eq!(c.gen(), 2);
+
+        store.reserve_at(EntityIndex::new(5).unwrap()).unwrap();
+
+        let long_dead = store.spawn("long_dead");
+        store.despawn(long_dead).unwrap();
+
+        assert_eq!(store.get(c), Some(&"c"));
+        store.despawn(c).unwrap();
+
+        let a_val = store.spawn_at(a.index(), a.gen(), "a").unwrap();
+        assert_eq!(*a_val, "a");
+
+        assert_eq!(
+            store.spawn_at(a.index(), a.gen(), "_"),
+            Err(Error::EntityOccupied(a))
+        );
+
+        let d_val = store
+            .spawn_at(EntityIndex::new(9).unwrap(), 1, "d")
+            .unwrap();
+        assert_eq!(*d_val, "d");
+
+        let slot = store.slot(EntityIndex::new(3).unwrap()).unwrap();
+        assert!(!slot.is_alive());
+
+        let slot = store.slot(EntityIndex::new(5).unwrap()).unwrap();
+        assert!(!slot.is_alive());
+
+        let slot = store.slot(EntityIndex::new(8).unwrap()).unwrap();
+        assert!(!slot.is_alive());
+
+        let slot = store.slot(EntityIndex::new(2).unwrap()).unwrap();
+        assert!(slot.is_alive());
+
+        unsafe {
+            assert_eq!(*slot.value.occupied, "b");
+        }
+
+        let slot = store.slot(EntityIndex::new(9).unwrap()).unwrap();
+        assert!(slot.is_alive());
+
+        unsafe {
+            assert_eq!(*slot.value.occupied, "d");
+        }
+
+        let e = store.spawn("e");
+        assert_eq!(e.index(), NonZeroU32::new(8).unwrap());
+        assert!(!store.is_alive(long_dead));
+
+        dbg!(long_dead);
+        store
+            .spawn_at(long_dead.index(), long_dead.gen(), "long_dead")
+            .unwrap();
+
+        store
+            .spawn_at(EntityIndex::new(5).unwrap(), 1, "reserved")
+            .unwrap();
     }
 }

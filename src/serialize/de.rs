@@ -209,11 +209,14 @@ impl<'de, 'a> Visitor<'de> for DeserializeEntities<'a> {
         A: SeqAccess<'de>,
     {
         let mut builder = EntityBuilder::new();
-        while let Some(()) = seq.next_element_seed(DeserializeEntity {
+        while let Some(id) = seq.next_element_seed(DeserializeEntity {
             context: self.context,
             builder: &mut builder,
         })? {
-            builder.spawn(self.world);
+            // The world that is serialized into is empty
+            builder.spawn_at(id, self.world).map_err(|e| {
+                de::Error::custom(format!("Duplicate entities in deserialized world: {e}"))
+            })?;
         }
 
         Ok(())
@@ -227,7 +230,7 @@ struct DeserializeEntity<'a> {
 }
 
 impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntity<'a> {
-    type Value = ();
+    type Value = Entity;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -238,7 +241,7 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntity<'a> {
 }
 
 impl<'de, 'a> Visitor<'de> for DeserializeEntity<'a> {
-    type Value = ();
+    type Value = Entity;
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "an entity id followed by a map of components")
@@ -258,8 +261,7 @@ impl<'de, 'a> Visitor<'de> for DeserializeEntity<'a> {
         })?
         .ok_or_else(|| de::Error::invalid_length(0, &self))?;
 
-        self.builder.with_id(id);
-        Ok(())
+        Ok(id)
     }
 }
 

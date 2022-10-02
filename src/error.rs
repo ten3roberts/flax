@@ -6,7 +6,7 @@ use crate::Entity;
 
 #[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
-/// The different kind of errors which can occur
+/// The different kinds of errors which can occur
 pub enum Error {
     /// The requested entity did not exist
     NoSuchEntity(Entity),
@@ -18,6 +18,8 @@ pub enum Error {
     Disjoint(Vec<Entity>),
     /// The batch is not complete
     IncompleteBatch,
+    /// Attempt to spawn entity with occupied entity id
+    EntityOccupied(Entity),
 }
 
 impl Error {
@@ -54,27 +56,9 @@ impl Display for Error {
                 f,
                 "Attempt to spawn batch with insufficient number of components"
             ),
+            Error::EntityOccupied(current) => {
+                write!(f, "Attempt to spawn new entity occupied id {current}")
+            }
         }
     }
 }
-
-// #[derive(Debug)]
-// /// Commandbuffer failed to apply.
-// /// Each fallible variant of [`crate::commands::Command`] has a corresponding error variant
-// enum ApplyError {
-//     Set { inner: Error, name: &'static str },
-//     Despawn(Error),
-//     Remove { inner: Error, name: &'static str },
-//     Defer(eyre::Result<()>),
-// }
-
-// impl Display for ApplyError {
-//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-//         match self {
-//             ApplyError::Set { name, .. } => write!(f, "Failed to set component {:?}", name),
-//             ApplyError::Despawn(_) => write!(f, "Failed to despawn entity"),
-//             ApplyError::Remove { name, .. } => write!(f, "Failed to remove component {name}"),
-//             ApplyError::Defer(_) => todo!(),
-//         }
-//     }
-// }
