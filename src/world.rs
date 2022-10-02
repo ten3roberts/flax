@@ -135,7 +135,6 @@ impl Archetypes {
 
         // Remove outgoing edges
         for (component, dst_id) in &arch.incoming {
-            eprintln!("Outgoing: {dst_id}");
             assert!(self.get_mut(*dst_id).outgoing.remove(component).is_some());
         }
         self.gen = self.gen.wrapping_add(1);
@@ -348,10 +347,6 @@ impl World {
         arch.allocate(id);
 
         (id, loc, arch)
-    }
-
-    fn reserve_at(&mut self, id: Entity) -> Result<()> {
-        self.entities.init(id.kind).reserve_at(id.index())
     }
 
     /// Spawns an entitiy with a specific id.
