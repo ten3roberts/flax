@@ -231,7 +231,10 @@ where
         for<'q> <Q as FetchItem<'q>>::Item: TupleCloned<Cloned = C>,
     {
         let mut prepared = self.borrow(world);
-        prepared.iter().map(|v| v.cloned()).collect_vec()
+        prepared
+            .iter()
+            .map(|v| v.clone_tuple_contents())
+            .collect_vec()
     }
 
     pub(crate) fn get_archetypes<'a>(&'a self, world: &'a World) -> Vec<ArchetypeId> {
