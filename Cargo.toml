@@ -6,6 +6,8 @@ authors = ["Tei Leelo Roberts <ten3roberts@gmail.com>"]
 description = "An ergonomic archetypical ECS"
 documentation = "https://docs.rs/flax"
 repository = "https://github.com/ten3roberts/flax"
+keywords = ["ecs", "hierarchy", "entity"]
+categories = ["data-structures", "game-engines", "no-std"]
 license = "MIT"
 
 [workspace]
