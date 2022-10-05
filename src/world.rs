@@ -234,7 +234,6 @@ impl World {
         for store in self.entities.inner.values_mut() {
             store.flush_reserved(|id| {
                 let slot = arch.allocate(id);
-                eprintln!("Flush {id}");
 
                 EntityLocation {
                     slot,
@@ -683,7 +682,7 @@ impl World {
     /// Any relations to other entities will be removed.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
         self.flush_reserved();
-        let EntityLocation { arch, slot } = dbg!(self.location(id))?;
+        let EntityLocation { arch, slot } = self.location(id)?;
 
         if id.is_static() {
             panic!("Attempt to despawn static component");
@@ -708,7 +707,6 @@ impl World {
         }
 
         self.entities.init(id.kind()).despawn(id)?;
-        eprintln!("Despawned {id}");
         self.detach(id);
         Ok(())
     }
@@ -762,7 +760,6 @@ impl World {
             }))
             .get_archetypes(self);
 
-        eprintln!("Detaching: {id}");
         // The archetypes to remove
         // let archetypes = self
         //     .archetypes()
@@ -775,7 +772,6 @@ impl World {
         //     .collect_vec();
 
         for src in archetypes.into_iter().rev() {
-            eprintln!("Removing archetype: {src}");
             let mut src = self.archetypes.despawn(src);
 
             let components = src.components().filter(|v| {
@@ -1269,13 +1265,11 @@ impl World {
                         // Migrate
                         if self.reconstruct(old_id.index, old_id.kind).is_some() {
                             let new_id = self.spawn_inner(self.archetypes.root, id.kind()).0;
-                            eprintln!("Migrating {id} => {new_id}");
 
                             *id = new_id;
                             Some((old_id, new_id))
                         } else {
                             // Make sure nothing is spawned here in the meantime
-                            eprintln!("Reserving: {old_id}");
                             self.spawn_at(old_id).unwrap();
                             None
                         }
@@ -1347,7 +1341,6 @@ impl Migrated {
     /// If the types do not match
     pub fn get_component<T: ComponentValue>(&self, component: Component<T>) -> Component<T> {
         let id = self.get(component.key().id);
-        eprintln!("Migrating component {} => {id}", component.id());
         let object = component.key().object.map(|v| self.get(v));
 
         let info = *self
@@ -1680,10 +1673,10 @@ mod tests {
 
         cmd.apply(&mut world).unwrap();
 
-        let items = Query::new((entity_ids(), name()))
+        let items: Vec<(Entity, String)> = Query::new((entity_ids(), name()))
             .borrow(&world)
             .iter()
-            .map(|(id, name)| (id, name.to_owned()))
+            .map(|(id, name)| (id, name.into()))
             .sorted()
             .collect_vec();
 
