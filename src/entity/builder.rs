@@ -108,7 +108,7 @@ impl EntityBuilder {
         Ok(id)
     }
 
-    fn prepare(&mut self, world: &mut World, parent: Entity) {
+    fn prepare(&mut self, parent: Entity) {
         self.buffer.components_mut().for_each(|info| {
             let id = info.id();
             if let Some(object) = id.object {
@@ -121,7 +121,7 @@ impl EntityBuilder {
 
     fn spawn_inner(&mut self, world: &mut World, parent: Option<Entity>) -> Entity {
         if let Some(parent) = parent {
-            self.prepare(world, parent)
+            self.prepare(parent)
         }
 
         let id = world.spawn_with(&mut self.buffer);

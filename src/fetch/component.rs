@@ -227,16 +227,14 @@ where
             .storage()
             .keys()
             .filter_map(move |k| {
-                if let Some(object) = k.object {
-                    if k.id == self.component.key().id {
-                        return Some(Access {
-                            kind: AccessKind::Archetype {
-                                id: data.arch_id,
-                                component: *k,
-                            },
-                            mutable: false,
-                        });
-                    }
+                if k.object.is_some() && k.id == relation {
+                    return Some(Access {
+                        kind: AccessKind::Archetype {
+                            id: data.arch_id,
+                            component: *k,
+                        },
+                        mutable: false,
+                    });
                 }
 
                 None

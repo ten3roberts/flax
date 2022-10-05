@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn component_ids() {
-        let c_foo = foo();
+        let _c_foo = foo();
         // eprintln!("Foo: {c_foo:?}");
         // eprintln!("Bar: {:?}", bar().id());
         assert_ne!(foo().key(), bar().key());

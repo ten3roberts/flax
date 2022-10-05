@@ -560,7 +560,7 @@ impl<F: Fn(&Archetype) -> bool> StaticFilter for ArchetypeFilter<F> {
 impl<'w, F: Fn(&Archetype) -> bool> Filter<'w> for ArchetypeFilter<F> {
     type Prepared = BooleanFilter;
 
-    fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'w self, arch: &'w Archetype, _: u32) -> Self::Prepared {
         BooleanFilter(self.matches(arch))
     }
 
@@ -568,7 +568,7 @@ impl<'w, F: Fn(&Archetype) -> bool> Filter<'w> for ArchetypeFilter<F> {
         self.static_matches(arch)
     }
 
-    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
     }
 }

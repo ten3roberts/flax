@@ -16,16 +16,16 @@ Systems operate and iterate upon entities and their attached components and
 provide the application logic.
 
 ## Features
-- Queries
+- Queries [`Query`]
 - Change detection
 - Query filtering
-- System execution
-- Multithreaded system execution through `Schedule`
+- System execution [`System`]
+- Multithreaded system execution through [`Schedule`]
 - Builtin many to many entity relation and graphs
 - Reflection through component metadata
-- Ergonomic entity builder
+- Ergonomic entity builder [`EntityBuilder`]
 - Tracing
-- Serialization and deserialization
+- Serialization and deserialization [`crate::serialize`]
 - Runtime components
 
 ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
@@ -141,20 +141,8 @@ A limitation of existing implementations such as [specs](https://github.com/amet
 This leads to having to forward all trait implementations trough e.g
 `derive-more` or dereferencing the newtypes during usage.
 
-This can lead to situations such as this:
-
-```rust,ignore
-struct Position(Vec3);
-struct Velocity(Vec3);
-
-let vel = world.get::<Velocity>(entity);
-let mut pos = world.get_mut::<Position>(entity);
-let dt = 0.1;
-
-*pos = Position(**pos + **vel * dt);
-```
-
-Which in Flax is:
+By making components separate from the type the components can work together without deref or
+newtype construction.
 
 ```rust
 component! {
@@ -166,7 +154,7 @@ let vel = world.get(entity, velocity())?;
 let mut pos = world.get_mut(entity, position())?;
 let dt = 0.1;
 
-*pos = *pos + *vel * dt;
+*pos += *vel * dt;
 ```
 
 On a further note, since the components have to be declared beforehand (not
@@ -181,8 +169,8 @@ these cases and catches these bugs earlier.
 ## Motivation
 
 During development of a game in school I used the `hecs` ECS. It is an awesome
-library, and the author [Ralith](https://github.com/Ralith) has been awesome in bringing some pull
-requests in.
+library, and the author [Ralith](https://github.com/Ralith) has been wonderful in accepting
+contributions and inquiries.
 
 Despite this, I often made subtle bugs with *similar* types. The game engine was
 cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
