@@ -532,8 +532,6 @@ impl<'a, V> Iterator for ReservedIter<'a, V> {
 #[cfg(test)]
 mod test {
 
-    use std::process::id;
-
     use super::*;
 
     #[test]
@@ -622,6 +620,7 @@ mod test {
         });
 
         assert_eq!(store.get(a), Some(&"a"));
+        assert_eq!(store.get(b), Some(&"b"));
         assert_eq!(store.get(c), Some(&"c"));
     }
 
