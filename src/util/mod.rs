@@ -2,8 +2,7 @@
 #![allow(unused_parens)]
 
 mod cloned;
-mod fn_args;
-pub use cloned::*;
+pub(crate) use cloned::*;
 
 /// Allows pushing onto a tuple
 pub trait TupleCombine<T> {
@@ -24,9 +23,9 @@ macro_rules! tuple_impl {
             where $($ty: TupleCloned,)*
         {
             type Cloned = ($($ty::Cloned,)*);
-            fn cloned(self) -> Self::Cloned {
+            fn clone_tuple_contents(self) -> Self::Cloned {
                 ($(
-                    ( self.$idx ).cloned(),
+                    ( self.$idx ).clone_tuple_contents(),
                 )*)
             }
         }
@@ -52,7 +51,7 @@ macro_rules! tuple_impl {
 impl TupleCloned for () {
     type Cloned = ();
 
-    fn cloned(self) -> Self::Cloned {}
+    fn clone_tuple_contents(self) -> Self::Cloned {}
 }
 
 impl<T> TupleCombine<T> for () {
@@ -92,7 +91,7 @@ mod test {
 
         let tuple = (&a, &b);
 
-        let cloned: (i32, String, i32) = tuple.push_right(&a).cloned();
+        let cloned: (i32, String, i32) = tuple.push_right(&a).clone_tuple_contents();
         assert_eq!(cloned, (a, b, a));
         let t = ().push_right(5);
         assert_eq!(t, (5,));

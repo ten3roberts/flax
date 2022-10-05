@@ -14,9 +14,10 @@ type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
 enum Command {
     /// Spawn a new entity
     Spawn(EntityBuilder),
-    SpawnAt(Entity, EntityBuilder),
+    SpawnAt(EntityBuilder, Entity),
     /// Spawn a batch of entities with the same components
     SpawnBatch(BatchSpawn),
+    SpawnBatchAt(BatchSpawn, Vec<Entity>),
     /// Set a component for an entity
     Set {
         id: Entity,
@@ -39,8 +40,13 @@ impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Spawn(v) => f.debug_tuple("Spawn").field(v).finish(),
-            Command::SpawnAt(id, v) => f.debug_tuple("SpawnAt").field(&id).field(&v).finish(),
-            Self::SpawnBatch(arg0) => f.debug_tuple("SpawnBatch").field(arg0).finish(),
+            Command::SpawnAt(id, v) => f.debug_tuple("SpawnAt").field(&v).field(&id).finish(),
+            Self::SpawnBatch(batch) => f.debug_tuple("SpawnBatch").field(batch).finish(),
+            Self::SpawnBatchAt(batch, ids) => f
+                .debug_tuple("SpawnBatchAt")
+                .field(&batch)
+                .field(&ids.len())
+                .finish(),
             Self::Set { id, info, offset } => f
                 .debug_struct("Set")
                 .field("id", id)
@@ -128,17 +134,25 @@ impl CommandBuffer {
 
     /// Spawn a new entity with the given components of the builder
     pub fn spawn_at(&mut self, id: Entity, entity: impl Into<EntityBuilder>) -> &mut Self {
-        self.commands.push(Command::SpawnAt(id, entity.into()));
+        self.commands.push(Command::SpawnAt(entity.into(), id));
 
         self
     }
 
     /// Spawn a new batch with the given components of the builder
-    pub fn spawn_batch(&mut self, batch: BatchSpawn) -> &mut Self {
-        self.commands.push(Command::SpawnBatch(batch));
+    pub fn spawn_batch(&mut self, batch: impl Into<BatchSpawn>) -> &mut Self {
+        self.commands.push(Command::SpawnBatch(batch.into()));
 
         self
     }
+
+    /// Spawn a new batch with the given components of the builder
+    pub fn spawn_batch_at(&mut self, ids: Vec<Entity>, batch: impl Into<BatchSpawn>) -> &mut Self {
+        self.commands.push(Command::SpawnBatchAt(batch.into(), ids));
+
+        self
+    }
+
     /// Despawn an entity by id
     pub fn despawn(&mut self, id: Entity) -> &mut Self {
         self.commands.push(Command::Despawn(id));
@@ -164,14 +178,20 @@ impl CommandBuffer {
                 Command::Spawn(mut entity) => {
                     entity.spawn(world);
                 }
-                Command::SpawnAt(id, mut entity) => {
+                Command::SpawnAt(mut entity, id) => {
                     entity
-                        .spawn_at(id, world)
+                        .spawn_at(world, id)
                         .map_err(|v| v.into_eyre())
                         .wrap_err("Failed to spawn entity")?;
                 }
                 Command::SpawnBatch(mut batch) => {
                     batch.spawn(world);
+                }
+                Command::SpawnBatchAt(mut batch, ids) => {
+                    batch
+                        .spawn_at(world, &ids)
+                        .map_err(|v| v.into_eyre())
+                        .wrap_err("Failed to spawn entity")?;
                 }
                 Command::Set { id, info, offset } => unsafe {
                     let value = self.inserts.take_dyn(offset);

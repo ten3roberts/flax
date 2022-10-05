@@ -7,8 +7,9 @@ use core::{
     iter::Enumerate,
     mem::{self, ManuallyDrop},
     num::NonZeroU32,
+    ops::Range,
     slice,
-    sync::atomic::AtomicU32,
+    sync::atomic::{AtomicI64, Ordering::Relaxed},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -74,8 +75,12 @@ pub(crate) struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
     free: Vec<EntityIndex>,
     pub(crate) kind: EntityKind,
-    /// A positive value indicates the number of entities which are reserved from the free list
-    cursor: AtomicU32,
+    /// Increases for each freed item
+    /// Decreases for each reserved id
+    ///
+    /// If there are more reserved ids than free, the value is negative and indicates that ids are
+    /// taken from not yet allocated slots.
+    cursor: AtomicI64,
     len: usize,
 }
 
@@ -126,53 +131,78 @@ impl<V> EntityStore<V> {
         Self::with_capacity(kind, 0)
     }
 
-    /// Reserves `count` slots and returns ids which can be safely spawned at
-    pub fn reserve(&self, count: u32) {
-        todo!()
+    pub fn reserve_one(&self) -> Entity {
+        let cursor = self.cursor.fetch_sub(1, Relaxed);
+
+        if cursor > 0 {
+            let index = self.free[cursor as usize - 1];
+            let gen = from_slot_gen(self.slot(index).unwrap().gen);
+            Entity::from_parts(index, gen, self.kind)
+        } else {
+            dbg!(cursor);
+            let next_slot = (self.slots.len() + 1 + (-cursor).max(0) as usize) as u32;
+            dbg!(next_slot);
+            Entity::from_parts(NonZeroU32::new(next_slot).unwrap(), 1, self.kind)
+        }
+    }
+    /// Reserves `count` new entity ids
+    pub fn reserve(&self, count: usize) -> ReservedIter<V> {
+        // Use as many free as possible
+        let cursor = self.cursor.fetch_sub(count as _, Relaxed);
+
+        // ----------------------------------
+        // | free list             | cursor |
+        // ----------------------------------
+        dbg!(cursor);
+        let free = &self.free[(cursor - count as i64).max(0) as usize..cursor.max(0) as usize];
+        let next_slot = (self.slots.len() + 1 + (-cursor).max(0) as usize) as u32;
+        let new = next_slot..next_slot + (count as i64 - cursor.max(0)) as u32;
+        dbg!(free, &new);
+        ReservedIter {
+            slots: &self.slots,
+            free: free.iter(),
+            new,
+            kind: self.kind,
+        }
     }
 
-    // /// Removes a slot from the free list
-    // fn unlink_free(&mut self, index: EntityIndex) -> Result<&mut Slot<V>> {
-    //     if let Some((prev, index, slot)) = self.free_mut().find(|v| v.1 == index) {
-    //         let next_free = unsafe { slot.value.vacant.next };
-    //         self.len += 1;
+    /// Converts all reserved ids into actual entities using the provided values
+    pub fn flush_reserved(&mut self, mut acquire: impl FnMut(Entity) -> V) {
+        let cursor = self.cursor.load(Relaxed);
+        let free = &self.free[(cursor.max(0) as usize)..self.free.len()];
 
-    //         if let Some(prev) = prev {
-    //             self.slot_mut(prev).unwrap().value.vacant = Vacant { next: next_free }
-    //         } else {
-    //             self.free_head = next_free;
-    //         }
+        for &index in free {
+            let slot = &mut self.slots[index.get() as usize - 1];
+            let gen = from_slot_gen(slot.gen);
+            let id = Entity::from_parts(index, gen, self.kind);
 
-    //         Ok(self.slot_mut(index).unwrap())
-    //     } else {
-    //         let kind = self.kind;
-    //         let slot = self.slot_mut(index).unwrap();
+            slot.make_alive(acquire(id));
+        }
 
-    //         Err(Error::EntityOccupied(Entity::from_parts(
-    //             index,
-    //             from_slot_gen(slot.gen),
-    //             kind,
-    //         )))
-    //     }
-    // }
+        self.len += (self.free.len() as i64 - cursor) as usize;
+        self.free.truncate(cursor.max(0) as usize);
 
-    // fn free_mut(&mut self) -> FreeIterMut<V> {
-    //     let cur = self.free_head;
-    //     FreeIterMut {
-    //         store: self,
-    //         cur,
-    //         prev: None,
-    //     }
-    // }
+        let next_slot = (self.slots.len() + 1) as u32;
+        let new_count = (-cursor).max(0) as usize;
+        let new = next_slot..next_slot + new_count as u32;
 
-    // fn free(&mut self) -> FreeIter<V> {
-    //     let cur = self.free_head;
-    //     FreeIter {
-    //         store: self,
-    //         cur,
-    //         prev: None,
-    //     }
-    // }
+        self.slots.reserve(new_count);
+
+        for index in new {
+            let index = NonZeroU32::new(index).unwrap();
+            let gen = 1;
+            let id = Entity::from_parts(index, gen, self.kind);
+
+            self.slots.push(Slot {
+                value: SlotValue {
+                    occupied: ManuallyDrop::new(acquire(id)),
+                },
+                gen: to_slot_gen(1),
+            });
+        }
+
+        self.cursor.store(self.free.len() as _, Relaxed);
+    }
 
     pub fn with_capacity(kind: EntityKind, cap: usize) -> Self {
         Self {
@@ -180,12 +210,24 @@ impl<V> EntityStore<V> {
             free: Vec::new(),
             kind,
             len: 0,
-            cursor: AtomicU32::new(0),
+            cursor: AtomicI64::new(0),
+        }
+    }
+
+    #[inline]
+    fn assert_reserved(&self) {
+        #[cfg(debug_assertions)]
+        if self.cursor.load(Relaxed) != self.free.len() as i64 {
+            panic!("Attempt to spawn while there are allocated ids");
         }
     }
 
     pub fn spawn(&mut self, value: V) -> Entity {
+        self.assert_reserved();
+
         if let Some(index) = self.free.pop() {
+            self.cursor.fetch_sub(1, Relaxed);
+
             let slot = { self.slots.get_mut(index.get() as usize - 1) }.unwrap();
             debug_assert!(slot.gen & 1 == 0);
 
@@ -211,6 +253,31 @@ impl<V> EntityStore<V> {
             self.len += 1;
             Entity::from_parts(NonZeroU32::new(index + 1).unwrap(), gen, self.kind)
         }
+    }
+
+    pub fn despawn(&mut self, id: Entity) -> Result<V> {
+        self.assert_reserved();
+        if !self.is_alive(id) {
+            return Err(Error::NoSuchEntity(id));
+        }
+
+        let index = id.index();
+
+        let kind = self.kind;
+        let slot = self.slot_mut(index).unwrap();
+
+        // Make sure static ids never get a generation
+        if kind.contains(EntityKind::STATIC) {
+            panic!("Attempt to despawn static entity");
+        }
+
+        let val = slot.make_dead();
+        self.free.push(index);
+        self.cursor.fetch_add(1, Relaxed);
+
+        self.len -= 1;
+
+        Ok(val)
     }
 
     #[inline]
@@ -298,29 +365,6 @@ impl<V> EntityStore<V> {
             .is_some()
     }
 
-    pub fn despawn(&mut self, id: Entity) -> Result<V> {
-        if !self.is_alive(id) {
-            return Err(Error::NoSuchEntity(id));
-        }
-
-        let index = id.index();
-
-        let kind = self.kind;
-        let slot = self.slot_mut(index).unwrap();
-
-        // Make sure static ids never get a generation
-        if kind.contains(EntityKind::STATIC) {
-            panic!("Attempt to despawn static entity");
-        }
-
-        let val = slot.make_dead();
-        self.free.push(index);
-
-        self.len -= 1;
-
-        Ok(val)
-    }
-
     pub fn iter(&self) -> EntityStoreIter<V> {
         EntityStoreIter {
             iter: self.slots.iter().enumerate(),
@@ -344,18 +388,21 @@ impl<V> EntityStore<V> {
         gen: EntityGen,
         value: V,
     ) -> crate::error::Result<&mut V> {
+        self.assert_reserved();
         if index.get() as usize > self.slots.len() {
             // The current slot does not exist
-            self.free.extend(
-                (self.slots.len() as u32 + 1..index.get() as u32)
-                    .map(|v| NonZeroU32::new(v).unwrap()),
-            );
+            let new_free = self.slots.len() as u32 + 1..index.get() as u32;
+            self.cursor.fetch_add(new_free.len() as _, Relaxed);
+
+            self.free
+                .extend(new_free.map(|v| NonZeroU32::new(v).unwrap()));
 
             self.slots.resize_with(index.get() as usize, || Slot {
                 value: SlotValue { vacant: Vacant },
                 gen: 0,
             });
         } else if let Some(pos) = self.free.iter().position(|&v| v == index) {
+            self.cursor.fetch_sub(1, Relaxed);
             self.free.swap_remove(pos);
         } else {
             let id = self.reconstruct(index).unwrap().0;
@@ -446,8 +493,46 @@ impl<'a, V> Iterator for EntityStoreIterMut<'a, V> {
     }
 }
 
+/// Iterates upon newly reserved entity ids
+pub(crate) struct ReservedIter<'a, V = EntityLocation> {
+    slots: &'a [Slot<V>],
+    free: slice::Iter<'a, NonZeroU32>,
+    new: Range<u32>,
+    kind: EntityKind,
+}
+
+impl<'a, V> ExactSizeIterator for ReservedIter<'a, V> {
+    fn len(&self) -> usize {
+        self.free.len() + self.new.len()
+    }
+}
+
+impl<'a, V> Iterator for ReservedIter<'a, V> {
+    type Item = Entity;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(&index) = self.free.next() {
+            // The gen as if alive
+            let gen = from_slot_gen(self.slots[index.get() as usize - 1].gen);
+            Some(Entity::from_parts(index, gen, self.kind))
+        } else if let Some(index) = self.new.next() {
+            let gen = 1;
+            let index = EntityIndex::new(index).unwrap();
+            Some(Entity::from_parts(index, gen, self.kind))
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len(), Some(self.len()))
+    }
+}
+
 #[cfg(test)]
 mod test {
+
+    use std::process::id;
 
     use super::*;
 
@@ -517,5 +602,81 @@ mod test {
         store
             .spawn_at(EntityIndex::new(5).unwrap(), 1, "reserved")
             .unwrap();
+    }
+
+    #[test]
+    fn reserve_one() {
+        let mut store = EntityStore::new(EntityKind::empty());
+        let a = store.spawn("a");
+        let b = store.spawn("b");
+
+        let c = store.reserve_one();
+        assert_eq!(
+            c,
+            Entity::from_parts(NonZeroU32::new(3).unwrap(), 1, EntityKind::empty())
+        );
+
+        store.flush_reserved(|id| {
+            assert_eq!(id, c);
+            "c"
+        });
+
+        assert_eq!(store.get(a), Some(&"a"));
+        assert_eq!(store.get(c), Some(&"c"));
+    }
+
+    #[test]
+    fn reserve_many() {
+        let mut store = EntityStore::new(EntityKind::empty());
+        let a = store.spawn("a");
+        let b = store.spawn("b");
+        let _ = store.spawn("_");
+        store.despawn(b).unwrap();
+
+        let mut ids = store.reserve(2).collect_vec();
+
+        ids.extend(store.reserve(3));
+        ids.push(store.reserve_one());
+
+        let expected = [
+            (
+                Entity::from_parts(EntityIndex::new(2).unwrap(), 2, EntityKind::empty()),
+                "c",
+            ),
+            (
+                Entity::from_parts(EntityIndex::new(4).unwrap(), 1, EntityKind::empty()),
+                "d",
+            ),
+            (
+                Entity::from_parts(EntityIndex::new(5).unwrap(), 1, EntityKind::empty()),
+                "e",
+            ),
+            (
+                Entity::from_parts(EntityIndex::new(6).unwrap(), 1, EntityKind::empty()),
+                "f",
+            ),
+            (
+                Entity::from_parts(EntityIndex::new(7).unwrap(), 1, EntityKind::empty()),
+                "g",
+            ),
+            (
+                Entity::from_parts(EntityIndex::new(8).unwrap(), 1, EntityKind::empty()),
+                "h",
+            ),
+        ];
+
+        assert_eq!(ids, expected.iter().map(|v| v.0).collect_vec());
+
+        let mut e = expected.iter();
+        store.flush_reserved(|id| {
+            let (new_id, v) = e.next().unwrap();
+            assert_eq!(id, *new_id);
+            *v
+        });
+
+        assert_eq!(store.get(a), Some(&"a"));
+        for expected in expected {
+            assert_eq!(store.get(expected.0), Some(&expected.1));
+        }
     }
 }

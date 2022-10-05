@@ -1,6 +1,8 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use alloc::{boxed::Box, collections::BTreeMap};
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering::Relaxed;
 use core::{
     fmt,
     fmt::Formatter,
@@ -33,6 +35,12 @@ struct EntityStores {
 }
 
 impl EntityStores {
+    fn new() -> Self {
+        Self {
+            inner: BTreeMap::from([(EntityKind::empty(), EntityStore::new(EntityKind::empty()))]),
+        }
+    }
+
     fn init(&mut self, kind: EntityKind) -> &mut EntityStore {
         self.inner
             .entry(kind)
@@ -46,6 +54,7 @@ impl EntityStores {
 
 pub(crate) struct Archetypes {
     root: ArchetypeId,
+    reserved: ArchetypeId,
     gen: u32,
     inner: EntityStore<Archetype>,
 }
@@ -54,11 +63,13 @@ impl Archetypes {
     pub fn new() -> Self {
         let mut archetypes = EntityStore::new(EntityKind::empty());
         let root = archetypes.spawn(Archetype::empty());
+        let reserved = archetypes.spawn(Archetype::empty());
 
         Self {
             root,
             inner: archetypes,
             gen: 0,
+            reserved,
         }
     }
 
@@ -169,16 +180,61 @@ pub struct World {
     change_tick: AtomicU32,
 
     on_removed: EventRegistry,
+    has_reserved: AtomicBool,
 }
 
 impl World {
     /// Creates a new empty world
     pub fn new() -> Self {
         Self {
-            entities: EntityStores::default(),
+            entities: EntityStores::new(),
             archetypes: Archetypes::new(),
             change_tick: AtomicU32::new(0b11),
             on_removed: EventRegistry::default(),
+            has_reserved: AtomicBool::new(false),
+        }
+    }
+
+    /// Reserve a single entity id concurrently
+    pub fn reserve_one(&self) -> Entity {
+        self.has_reserved.store(true, Relaxed);
+        self.entities
+            .get(EntityKind::empty())
+            .unwrap()
+            .reserve_one()
+    }
+
+    /// Reserve entities id concurrently
+    pub fn reserve(&self, count: usize) -> ReservedEntityIter {
+        self.has_reserved.store(true, Relaxed);
+        let iter = self
+            .entities
+            .get(EntityKind::empty())
+            .unwrap()
+            .reserve(count);
+        ReservedEntityIter(iter)
+    }
+
+    /// Converts all reserved entity ids into actual empty entities placed in a special archetype.
+    #[inline]
+    fn flush_reserved(&mut self) {
+        if !self.has_reserved.swap(false, Relaxed) {
+            return;
+        }
+
+        let reserved = self.archetypes.reserved;
+        let arch = self.archetypes.get_mut(reserved);
+
+        for store in self.entities.inner.values_mut() {
+            store.flush_reserved(|id| {
+                let slot = arch.allocate(id);
+                eprintln!("Flush {id}");
+
+                EntityLocation {
+                    slot,
+                    arch: reserved,
+                }
+            })
         }
     }
 
@@ -195,6 +251,8 @@ impl World {
 
     /// Efficiently spawn many entities with the same components at once.
     pub fn spawn_batch(&mut self, batch: &mut BatchSpawn) -> Vec<Entity> {
+        self.flush_reserved();
+
         for &component in batch.components() {
             self.init_component(component)
                 .expect("Failed to initialize component");
@@ -231,9 +289,23 @@ impl World {
         ids
     }
 
+    // Check if the entity is reserved after flush
+    fn is_reserved(&self, id: Entity) -> bool {
+        self.location(id)
+            .map(|v| v.arch == self.archetypes.reserved)
+            .unwrap_or_default()
+    }
+
     /// Batch spawn multiple components with prespecified ids.
-    /// Fails if any of the entities already exist
-    pub fn spawn_batch_at(&mut self, ids: &[Entity], batch: &mut BatchSpawn) -> Result<()> {
+    /// Fails if any of the entities already exist.
+    ///
+    /// Returns the passed ids, to allow chaining with result.
+    pub fn spawn_batch_at<'a>(
+        &mut self,
+        ids: &'a [Entity],
+        batch: &mut BatchSpawn,
+    ) -> Result<&'a [Entity]> {
+        self.flush_reserved();
         assert_eq!(
             ids.len(),
             batch.len(),
@@ -241,7 +313,9 @@ impl World {
         );
 
         for &id in ids {
-            if let Some(v) = self.reconstruct(id.index(), id.kind()) {
+            if self.is_reserved(id) {
+                self.despawn(id).unwrap();
+            } else if let Some(v) = self.reconstruct(id.index(), id.kind()) {
                 return Err(Error::EntityOccupied(v));
             }
         }
@@ -287,7 +361,7 @@ impl World {
                 .set_inserted(Change::new(slots, change_tick));
         }
 
-        Ok(())
+        Ok(ids)
     }
 
     /// Spawn a new component of type `T` which can be attached to an entity.
@@ -330,6 +404,7 @@ impl World {
         arch_id: ArchetypeId,
         kind: EntityKind,
     ) -> (Entity, EntityLocation, &mut Archetype) {
+        self.flush_reserved();
         // Place at root
         let ns = self.entities.init(kind);
 
@@ -351,9 +426,9 @@ impl World {
 
     /// Spawns an entitiy with a specific id.
     /// Fails if an entity with the same index already exists.
-    pub fn spawn_at(&mut self, id: Entity) -> Result<()> {
+    pub fn spawn_at(&mut self, id: Entity) -> Result<Entity> {
         self.spawn_at_inner(id, self.archetypes.root)?;
-        Ok(())
+        Ok(id)
     }
 
     /// Spawns an entitiy with a specific id.
@@ -362,9 +437,14 @@ impl World {
         id: Entity,
         arch_id: ArchetypeId,
     ) -> Result<(EntityLocation, &mut Archetype)> {
+        self.flush_reserved();
+
+        if self.is_reserved(id) {
+            self.despawn(id).unwrap();
+        }
+
         let store = self.entities.init(id.kind());
         let arch = self.archetypes.get_mut(arch_id);
-        dbg!(id);
 
         let loc = store.spawn_at(
             id.index,
@@ -596,6 +676,7 @@ impl World {
     /// Despawn an entity.
     /// Any relations to other entities will be removed.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
+        self.flush_reserved();
         let EntityLocation { arch, slot } = dbg!(self.location(id))?;
 
         if id.is_static() {
@@ -631,6 +712,7 @@ impl World {
     where
         F: for<'x> Filter<'x>,
     {
+        self.flush_reserved();
         let mut query = Query::new(entity_ids()).filter(filter);
         let ids = query.borrow(self).iter().collect_vec();
 
@@ -1228,8 +1310,9 @@ impl World {
                 for &id in &arch.entities {
                     self.despawn(id).unwrap()
                 }
+
                 self.spawn_batch_at(arch.entities(), &mut batch)
-                    .expect("Failed to spawn batch")
+                    .expect("Failed to spawn batch");
             }
         }
 
@@ -1388,12 +1471,33 @@ impl fmt::Debug for World {
     }
 }
 
+/// Iterates reserved entity ids.
+///
+/// See: [`World::reserve`]
+pub struct ReservedEntityIter<'a>(crate::entity::ReservedIter<'a>);
+
+impl<'a> ExactSizeIterator for ReservedEntityIter<'a> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<'a> Iterator for ReservedEntityIter<'a> {
+    type Item = Entity;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
+    use core::iter::repeat;
+
     use alloc::{string::String, sync::Arc};
 
-    use crate::{component, EntityBuilder, Query};
+    use crate::{component, CommandBuffer, EntityBuilder, Query};
 
     use super::*;
 
@@ -1540,5 +1644,53 @@ mod tests {
         let items = query.as_vec(&world);
 
         assert_eq!(items, [(6, "Bar".into())]);
+    }
+
+    #[test]
+    fn reserve() {
+        let mut world = World::new();
+
+        let a = world.spawn();
+
+        let b = world.reserve_one();
+
+        let c = world.spawn();
+        let short_lived = world.spawn();
+        world.despawn(short_lived).unwrap();
+
+        world.set(b, name(), "b".into()).unwrap();
+        world.set(a, name(), "a".into()).unwrap();
+        world.set(c, name(), "c".into()).unwrap();
+
+        let reserved = world.reserve(4).collect_vec();
+
+        let mut cmd = CommandBuffer::new();
+        cmd.spawn_batch_at(
+            reserved.clone(),
+            BatchSpawn::new(4)
+                .set(name(), repeat("I am one and the same".into()))
+                .unwrap(),
+        );
+
+        cmd.apply(&mut world).unwrap();
+
+        let items = Query::new((entity_ids(), name()))
+            .borrow(&world)
+            .iter()
+            .map(|(id, name)| (id, name.to_owned()))
+            .sorted()
+            .collect_vec();
+
+        assert_eq!(
+            items,
+            [(a, "a".into()), (b, "b".into()), (c, "c".into())]
+                .into_iter()
+                .chain(
+                    reserved
+                        .into_iter()
+                        .zip(repeat("I am one and the same".into()))
+                )
+                .collect_vec()
+        );
     }
 }

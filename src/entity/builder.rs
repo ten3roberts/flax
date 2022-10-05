@@ -98,7 +98,7 @@ impl EntityBuilder {
     /// Spawn at a specific entity.
     ///
     /// Fails if an entity with the same index already exists.
-    pub fn spawn_at(&mut self, id: Entity, world: &mut World) -> Result<Entity> {
+    pub fn spawn_at(&mut self, world: &mut World, id: Entity) -> Result<Entity> {
         let id = world.spawn_at_with(id, &mut self.buffer)?;
 
         self.children.drain(..).for_each(|mut child| {

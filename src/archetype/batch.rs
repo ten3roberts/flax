@@ -2,7 +2,7 @@ use core::mem;
 
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Error};
+use crate::{error::Result, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Error};
 
 use super::Storage;
 
@@ -44,7 +44,7 @@ impl BatchSpawn {
         &mut self,
         component: Component<T>,
         iter: impl IntoIterator<Item = T>,
-    ) -> crate::error::Result<&mut Self> {
+    ) -> Result<&mut Self> {
         let info = component.info();
         let mut storage = Storage::with_capacity(info, self.len);
 
@@ -59,7 +59,7 @@ impl BatchSpawn {
     }
 
     /// Inserts a storage directly
-    pub(crate) fn append(&mut self, storage: Storage) -> crate::error::Result<()> {
+    pub(crate) fn append(&mut self, storage: Storage) -> Result<()> {
         let info = storage.info();
         if storage.len() != self.len {
             Err(Error::IncompleteBatch)
@@ -76,6 +76,22 @@ impl BatchSpawn {
     /// Spawns the batch into the world
     pub fn spawn(&mut self, world: &mut crate::World) -> Vec<Entity> {
         world.spawn_batch(self)
+    }
+
+    /// Spawns the batch into the world at the specified ids.
+    pub fn spawn_at<'a>(
+        &mut self,
+        world: &mut crate::World,
+        ids: &'a [Entity],
+    ) -> Result<&'a [Entity]> {
+        world.spawn_batch_at(ids, self)
+    }
+}
+
+impl From<&mut BatchSpawn> for BatchSpawn {
+    fn from(v: &mut BatchSpawn) -> Self {
+        let len = v.len();
+        mem::replace(v, BatchSpawn::new(len))
     }
 }
 
