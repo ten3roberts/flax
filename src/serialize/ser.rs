@@ -136,7 +136,7 @@ impl SerializeContext {
         &'a self,
         world: &'a World,
     ) -> impl Iterator<Item = (ArchetypeId, &'a Archetype)> {
-        world.archetypes().filter(|(_, arch)| {
+        world.archetypes.iter().filter(|(_, arch)| {
             !arch.is_empty()
                 && arch.storage().keys().any(|id| self.slots.contains_key(id))
                 && self.filter.static_matches(arch)

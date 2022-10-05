@@ -10,8 +10,8 @@ use core::{
 };
 
 use crate::{
-    archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, Batch,
-    BatchedIter, CommandBuffer, ComponentKey, Fetch, FetchItem, Filter, Query, QueryData, World,
+    archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer,
+    ComponentKey, Fetch, FetchItem, Filter, Query, QueryData, World,
 };
 
 use alloc::boxed::Box;
@@ -100,8 +100,8 @@ impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ParForEach<Func>
 where
     for<'x> Q: Fetch<'x> + core::fmt::Debug,
     for<'x> F: Filter<'x> + core::fmt::Debug,
-    for<'x, 'y> BatchedIter<'x, 'y, Q, F>: Send,
-    for<'x, 'y> Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
+    for<'x, 'y> crate::BatchedIter<'x, 'y, Q, F>: Send,
+    for<'x, 'y> crate::Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
 {
     fn execute(&mut self, mut data: QueryData<Q, F>) {
@@ -156,8 +156,8 @@ impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
     for<'x> Q: Fetch<'x> + core::fmt::Debug + 'static + Send,
     for<'x> F: Filter<'x> + core::fmt::Debug + 'static + Send,
-    for<'x, 'y> BatchedIter<'x, 'y, Q, F>: Send,
-    for<'x, 'y> Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
+    for<'x, 'y> crate::BatchedIter<'x, 'y, Q, F>: Send,
+    for<'x, 'y> crate::Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
 {
     /// Execute a function for each item in the query in parallel batches
     pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, Query<Q, F>, ()>

@@ -4,7 +4,7 @@ use core::{
     sync::{self, atomic::AtomicBool},
 };
 
-use alloc::{format, vec::Vec};
+use alloc::vec::Vec;
 
 use itertools::Itertools;
 use smallvec::SmallVec;
@@ -89,7 +89,9 @@ impl ChangeList {
         }
 
         #[cfg(feature = "internal_assert")]
-        self.assert_normal(&format!("Not sorted after `set` inserting: {change:?}"));
+        self.assert_normal(&alloc::format!(
+            "Not sorted after `set` inserting: {change:?}"
+        ));
 
         self
     }
@@ -275,7 +277,9 @@ impl ChangeList {
 
         self.inner = result;
         #[cfg(feature = "internal_assert")]
-        self.assert_normal(&format!("Not sorted after `remove` while removing: {slot}"));
+        self.assert_normal(&alloc::format!(
+            "Not sorted after `remove` while removing: {slot}"
+        ));
     }
 
     /// Returns the changes in the change list at a particular index.
