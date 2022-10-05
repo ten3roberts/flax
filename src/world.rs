@@ -1072,10 +1072,6 @@ impl World {
             .unwrap_or(false)
     }
 
-    pub(crate) fn archetypes(&self) -> impl Iterator<Item = (ArchetypeId, &Archetype)> {
-        self.archetypes.iter()
-    }
-
     /// Returns the location inside an archetype for a given entity
     pub(crate) fn location(&self, id: Entity) -> Result<EntityLocation> {
         self.entities
