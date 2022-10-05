@@ -1,10 +1,11 @@
 /// Transform (&T, &U) -> (T, U)
+#[doc(hidden)]
 pub trait TupleCloned {
     /// The cloned version of a tuple
     type Cloned: 'static;
 
     /// Clone the items in the tuple
-    fn cloned(self) -> Self::Cloned;
+    fn clone_tuple_contents(self) -> Self::Cloned;
 }
 
 impl<T> TupleCloned for &T
@@ -13,7 +14,7 @@ where
 {
     type Cloned = T;
 
-    fn cloned(self) -> Self::Cloned {
+    fn clone_tuple_contents(self) -> Self::Cloned {
         (self).clone()
     }
 }
@@ -24,7 +25,7 @@ where
 {
     type Cloned = T;
 
-    fn cloned(self) -> Self::Cloned {
+    fn clone_tuple_contents(self) -> Self::Cloned {
         (self).clone()
     }
 }

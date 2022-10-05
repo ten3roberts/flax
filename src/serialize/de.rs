@@ -214,7 +214,7 @@ impl<'de, 'a> Visitor<'de> for DeserializeEntities<'a> {
             builder: &mut builder,
         })? {
             // The world that is serialized into is empty
-            builder.spawn_at(id, self.world).map_err(|e| {
+            builder.spawn_at(self.world, id).map_err(|e| {
                 de::Error::custom(format!("Duplicate entities in deserialized world: {e}"))
             })?;
         }
