@@ -4,6 +4,7 @@ use core::{
     sync::atomic::AtomicU32,
 };
 
+#[cfg(feature = "serde")]
 use serde::{
     de::{Error, Visitor},
     ser::SerializeTupleStruct,
@@ -36,6 +37,7 @@ pub struct ComponentKey {
     pub(crate) object: Option<Entity>,
 }
 
+#[cfg(feature = "serde")]
 impl Serialize for ComponentKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -49,6 +51,7 @@ impl Serialize for ComponentKey {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for ComponentKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

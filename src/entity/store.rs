@@ -139,9 +139,7 @@ impl<V> EntityStore<V> {
             let gen = from_slot_gen(self.slot(index).unwrap().gen);
             Entity::from_parts(index, gen, self.kind)
         } else {
-            dbg!(cursor);
             let next_slot = (self.slots.len() + 1 + (-cursor).max(0) as usize) as u32;
-            dbg!(next_slot);
             Entity::from_parts(NonZeroU32::new(next_slot).unwrap(), 1, self.kind)
         }
     }
@@ -153,11 +151,9 @@ impl<V> EntityStore<V> {
         // ----------------------------------
         // | free list             | cursor |
         // ----------------------------------
-        dbg!(cursor);
         let free = &self.free[(cursor - count as i64).max(0) as usize..cursor.max(0) as usize];
         let next_slot = (self.slots.len() + 1 + (-cursor).max(0) as usize) as u32;
         let new = next_slot..next_slot + (count as i64 - cursor.max(0)) as u32;
-        dbg!(free, &new);
         ReservedIter {
             slots: &self.slots,
             free: free.iter(),
@@ -592,7 +588,6 @@ mod test {
         assert_eq!(e.index(), NonZeroU32::new(8).unwrap());
         assert!(!store.is_alive(long_dead));
 
-        dbg!(long_dead);
         store
             .spawn_at(long_dead.index(), long_dead.gen(), "long_dead")
             .unwrap();
