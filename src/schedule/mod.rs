@@ -439,20 +439,19 @@ mod test {
             .set(b(), 5)
             .spawn(&mut world);
 
-        let mut prev_count: i32 = 0;
         let system_a = System::builder().with(Query::new(a())).build(
             move |mut a: QueryBorrow<_>| -> eyre::Result<()> {
-                let count = a.iter().count() as i32;
+                let _count = a.iter().count() as i32;
 
                 // eprintln!("Change: {prev_count} -> {count}");
-                prev_count = count;
+                // prev_count = count;
                 Ok(())
             },
         );
 
         let system_b = System::builder().with(Query::new(b())).build(
             move |mut query: QueryBorrow<_>| -> eyre::Result<()> {
-                let item: &i32 = query.get(id).map_err(|v| v.into_eyre())?;
+                let _item: &i32 = query.get(id).map_err(|v| v.into_eyre())?;
                 // eprintln!("Item: {item}");
 
                 Ok(())

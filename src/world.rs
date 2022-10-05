@@ -195,7 +195,9 @@ impl World {
         }
     }
 
-    /// Reserve a single entity id concurrently
+    /// Reserve a single entity id concurrently.
+    ///
+    /// See: [`World::reserve`]
     pub fn reserve_one(&self) -> Entity {
         self.has_reserved.store(true, Relaxed);
         self.entities
@@ -204,7 +206,11 @@ impl World {
             .reserve_one()
     }
 
-    /// Reserve entities id concurrently
+    /// Reserve entities id concurrently.
+    ///
+    /// The returned entity ids can be used directly by functions such as [ `set` ]( World::set ) and
+    /// [ `spawn_at` ]( World::spawn_at ), but will not be yielded by queries until properly spawned by
+    /// by adding a component or using spawn_at.
     pub fn reserve(&self, count: usize) -> ReservedEntityIter {
         self.has_reserved.store(true, Relaxed);
         let iter = self
