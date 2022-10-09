@@ -1,7 +1,6 @@
-use std::sync::Arc;
-
-use flax::{component, entity_ids, EntityBuilder, Query, World};
+use flax::*;
 use itertools::Itertools;
+use std::sync::Arc;
 
 component! {
     a: f32,
@@ -163,4 +162,50 @@ fn combinations() {
     let items = query.borrow(&world).iter().sorted().collect_vec();
 
     assert_eq!(items, ids[20..89]);
+}
+
+#[test]
+fn bitops() {
+    let mut world = World::new();
+
+    let id1 = Entity::builder()
+        .set(a(), 4.5)
+        .set(b(), "foo".into())
+        .spawn(&mut world);
+
+    let id2 = Entity::builder()
+        .set(a(), 8.1)
+        .set(d(), "bar")
+        .spawn(&mut world);
+    let id3 = Entity::builder()
+        .set(a(), -5.1)
+        .set(c(), Arc::new(5))
+        .spawn(&mut world);
+
+    assert_eq!(
+        Query::new(entity_ids())
+            .filter(a().gt(1.1) & a().lt(5.0))
+            .borrow(&world)
+            .iter()
+            .collect_vec(),
+        vec![id1]
+    );
+
+    assert_eq!(
+        Query::new(entity_ids())
+            .filter((a().gt(1.1) & a().lt(5.0)) | (d().without() & b().without()))
+            .borrow(&world)
+            .iter()
+            .collect_vec(),
+        vec![id1, id3]
+    );
+
+    assert_eq!(
+        Query::new(entity_ids())
+            .filter((a().cmp(|&v| v > 5.1 && v < 9.0)) | (d().without() & b().without()))
+            .borrow(&world)
+            .iter()
+            .collect_vec(),
+        vec![id2, id3]
+    );
 }
