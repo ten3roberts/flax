@@ -137,6 +137,16 @@ pub struct Schedule {
 /// Holds information regarding a schedules batches
 #[derive(Debug, Clone)]
 pub struct BatchInfos(Vec<BatchInfo>);
+
+impl BatchInfos {
+    /// Converts the batches into just a list of system names
+    pub fn to_names(&self) -> Vec<Vec<String>> {
+        self.iter()
+            .map(|v| v.iter().map(|v| v.name().into()).collect_vec())
+            .collect_vec()
+    }
+}
+
 impl Deref for BatchInfos {
     type Target = [BatchInfo];
 
