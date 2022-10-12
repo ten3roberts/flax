@@ -52,7 +52,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: guide
-          path: dist/guide/latest
+          path: dist/guide
 
       - name: Download asteroids
         uses: actions/download-artifact@v2
