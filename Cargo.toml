@@ -28,7 +28,7 @@ smallvec = { version = "1.8.0", default_features = false }
 tracing = { version = "0.1.35", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 erased-serde = { version = "0.3", features = [], optional = true }
-flume = "0.10.14"
+flume = { version = "0.10.14", default_features = false, features = [] }
 
 [dev-dependencies]
 itertools = { version = "0.10.3", default_features = false }

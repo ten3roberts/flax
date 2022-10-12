@@ -68,7 +68,7 @@ impl Archetypes {
         Self {
             root,
             inner: archetypes,
-            gen: 0,
+            gen: 2,
             reserved,
         }
     }
@@ -528,7 +528,7 @@ impl World {
 
     /// Removes all components from an entity without despawning the entity
     pub fn clear(&mut self, id: Entity) -> Result<()> {
-        let EntityLocation { arch, slot } = self.location(id)?;
+        let EntityLocation { arch, slot } = self.init_location(id)?;
 
         let src = self.archetypes.get_mut(arch);
 
@@ -562,7 +562,7 @@ impl World {
         let id: Entity = id;
         let change_tick = self.advance_change_tick();
 
-        let EntityLocation { arch, slot } = self.location(id)?;
+        let EntityLocation { arch, slot } = self.init_location(id)?;
 
         let mut new_data = Vec::new();
         let mut new_components = Vec::new();
@@ -682,7 +682,7 @@ impl World {
     /// Any relations to other entities will be removed.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
         self.flush_reserved();
-        let EntityLocation { arch, slot } = self.location(id)?;
+        let EntityLocation { arch, slot } = self.init_location(id)?;
 
         if id.is_static() {
             panic!("Attempt to despawn static component");
@@ -809,7 +809,7 @@ impl World {
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
-        let EntityLocation { arch: src_id, slot } = self.location(id)?;
+        let EntityLocation { arch: src_id, slot } = self.init_location(id)?;
 
         let src = self.archetypes.get_mut(src_id);
 
@@ -919,8 +919,7 @@ impl World {
         component: ComponentInfo,
         on_drop: impl FnOnce(*mut u8),
     ) -> Result<EntityLocation> {
-        let ns = self.entities.init(id.kind());
-        let &EntityLocation { arch: src_id, slot } = ns.get(id).unwrap();
+        let EntityLocation { arch: src_id, slot } = self.init_location(id).unwrap();
 
         let src = self.archetypes.get(src_id);
 
@@ -1065,7 +1064,13 @@ impl World {
     }
 
     /// Returns true if the entity is still alive
+    ///
+    /// A static entity is always alive, even if it is not yet spawned into the world
     pub fn is_alive(&self, id: Entity) -> bool {
+        if id.is_static() {
+            return true;
+        }
+
         self.entities
             .get(id.kind())
             .map(|v| v.is_alive(id))
@@ -1073,12 +1078,14 @@ impl World {
     }
 
     /// Returns the location inside an archetype for a given entity
+    ///
+    /// *Note*: Fails for static entities which are not yet spawned into the world, which happens
+    /// when a component is first added.
     pub(crate) fn location(&self, id: Entity) -> Result<EntityLocation> {
-        self.entities
-            .get(id.kind())
-            .and_then(|v| v.get(id))
-            .ok_or(Error::NoSuchEntity(id))
-            .copied()
+        match self.entities.get(id.kind()).and_then(|v| v.get(id)) {
+            Some(&loc) => Ok(loc),
+            None => Err(Error::NoSuchEntity(id)),
+        }
     }
 
     fn location_mut(&mut self, id: Entity) -> Result<&mut EntityLocation> {
@@ -1086,6 +1093,18 @@ impl World {
             .init(id.kind())
             .get_mut(id)
             .ok_or(Error::NoSuchEntity(id))
+    }
+
+    /// Returns the entity location. If the entity is static it will first be spawned
+    fn init_location(&mut self, id: Entity) -> Result<EntityLocation> {
+        match self.entities.get(id.kind()).and_then(|v| v.get(id)) {
+            Some(&loc) => Ok(loc),
+            None if id.is_static() => {
+                let (loc, _) = self.spawn_at_inner(id, self.archetypes.root).unwrap();
+                Ok(loc)
+            }
+            None => Err(Error::NoSuchEntity(id)),
+        }
     }
 
     /// Get a reference to the world's archetype generation
@@ -1165,7 +1184,7 @@ impl World {
 
     /// Access, insert, and remove all components of an entity
     pub fn entity_mut(&mut self, id: Entity) -> Result<EntityRefMut> {
-        let loc = self.location(id)?;
+        let loc = self.init_location(id)?;
         Ok(EntityRefMut {
             world: self,
             loc,
@@ -1174,8 +1193,11 @@ impl World {
     }
 
     /// Access all components of an entity
+    ///
+    /// **Note**: Fails for static entities if they have not yet been spawned into the world
     pub fn entity(&self, id: Entity) -> Result<EntityRef> {
         let loc = self.location(id)?;
+
         Ok(EntityRef {
             world: self,
             loc,
@@ -1186,13 +1208,13 @@ impl World {
     /// Returns an entry for a given component of an entity allowing for
     /// in-place manipulation, insertion or removal.
     ///
-    /// Fails if the entity is not valid.
+    /// Fails if the entity is not alive.
     pub fn entry<T: ComponentValue>(
         &mut self,
         id: Entity,
         component: Component<T>,
     ) -> Result<Entry<T>> {
-        let loc = self.location(id)?;
+        let loc = self.init_location(id)?;
         let arch = self.archetypes.get(loc.arch);
         if arch.has(component.key()) {
             return Ok(Entry::Occupied(OccupiedEntry {

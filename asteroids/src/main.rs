@@ -16,7 +16,7 @@ use macroquad::{
     time::get_frame_time,
     window::{clear_background, next_frame, screen_height, screen_width},
 };
-use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_tree::HierarchicalLayer;
 
 component! {
@@ -47,6 +47,9 @@ component! {
     on_collision: Box<dyn Fn(&World, Collision) + Send + Sync>,
 
     lifetime: f32 => [ Debug ],
+
+    resources,
+    rng: StdRng,
 
 }
 
@@ -91,65 +94,68 @@ impl Shape {
 
 #[macroquad::main("Asteroids")]
 async fn main() -> Result<()> {
-    color_eyre::install()?;
-    registry().with(HierarchicalLayer::default()).init();
+    // color_eyre::install()?;
+    // registry().with(HierarchicalLayer::default()).init();
 
     let mut world = World::new();
 
+    let mut rng = StdRng::seed_from_u64(42);
+    let a: f32 = rng.gen();
+    world.set(resources(), self::rng(), rng).unwrap();
+
     let dt = 0.02;
 
-    let (player_dead_tx, player_dead_rx) = flume::unbounded();
-
-    world.on_removed(player(), player_dead_tx);
+    let (player_dead_tx, player_dead_rx) = flume::unbounded::<Entity>();
+    // world.on_removed(player(), player_dead_tx);
 
     // Setup everthing required for the game logic and physics
-    let mut physics_schedule = Schedule::builder()
-        .with_system(player_system(dt))
-        .with_system(camera_system(dt))
-        .with_system(lifetime_system(dt))
-        .with_system(spawn_asteroids(64))
-        .with_system(particle_system())
-        .with_system(collision_system())
-        .with_system(integrate_velocity(dt))
-        .with_system(integrate_ang_velocity(dt))
-        .with_system(despawn_out_of_bounds())
-        .with_system(despawn_dead())
-        .build();
+    // let mut physics_schedule = Schedule::builder()
+    //     .with_system(player_system(dt))
+    //     .with_system(camera_system(dt))
+    //     .with_system(lifetime_system(dt))
+    //     .with_system(spawn_asteroids(64))
+    //     .with_system(particle_system())
+    //     .with_system(collision_system())
+    //     .with_system(integrate_velocity(dt))
+    //     .with_system(integrate_ang_velocity(dt))
+    //     .with_system(despawn_out_of_bounds())
+    //     .with_system(despawn_dead())
+    //     .build();
 
-    let mut frame_schedule = Schedule::builder()
-        .with_system(draw_shapes())
-        .with_system(draw_ui())
-        .build();
+    // let mut frame_schedule = Schedule::builder()
+    //     .with_system(draw_shapes())
+    //     .with_system(draw_ui())
+    //     .build();
 
-    let mut acc = 0.0;
+    // let mut acc = 0.0;
 
-    create_player().spawn(&mut world);
-    create_camera().spawn(&mut world);
+    // create_player().spawn(&mut world);
+    // create_camera().spawn(&mut world);
 
     loop {
-        if player_dead_rx.try_recv().is_ok() {
-            world.despawn_many(asteroid().with());
-            create_player().spawn(&mut world);
-        }
+        // if player_dead_rx.try_recv().is_ok() {
+        //     world.despawn_many(asteroid().with());
+        //     create_player().spawn(&mut world);
+        // }
 
-        acc += get_frame_time();
+        // acc += get_frame_time();
 
-        while acc > 0.0 {
-            acc -= dt;
-            let batches = physics_schedule.batch_info(&mut world);
-            tracing::info!(
-                "Batches: {:#?}",
-                batches
-                    .iter()
-                    .map(|v| v.iter().map(|v| v.name()).collect_vec())
-                    .collect_vec()
-            );
-            physics_schedule.execute_par(&mut world)?;
-        }
+        // while acc > 0.0 {
+        //     acc -= dt;
+        //     let batches = physics_schedule.batch_info(&mut world);
+        //     tracing::info!(
+        //         "Batches: {:#?}",
+        //         batches
+        //             .iter()
+        //             .map(|v| v.iter().map(|v| v.name()).collect_vec())
+        //             .collect_vec()
+        //     );
+        //     physics_schedule.execute_seq(&mut world)?;
+        // }
 
         clear_background(BLACK);
 
-        frame_schedule.execute_par(&mut world)?;
+        // frame_schedule.execute_seq(&mut world)?;
 
         next_frame().await
     }
@@ -249,14 +255,14 @@ fn create_particle(size: f32, lifetime: f32, color: Color) -> EntityBuilder {
 }
 
 fn create_explosion(
+    rng: &mut StdRng,
     count: usize,
     pos: Vec2,
     speed: f32,
     size: f32,
     lifetime: f32,
     color: Color,
-) -> impl Iterator<Item = EntityBuilder> {
-    let mut rng = thread_rng();
+) -> impl Iterator<Item = EntityBuilder> + '_ {
     (0..count).map(move |_| {
         let dir = rng.gen_range(0.0..TAU);
         let speed = rng.gen_range(speed * 0.5..speed);
@@ -425,10 +431,19 @@ fn collision_system() -> BoxedSystem {
                             collision.dir * collision.depth * (1.0 - mass / collision.system_mass);
                     }
 
-                    create_explosion(8, collision.point, collision.impact, 4.0, 1.0, GRAY)
-                        .for_each(|v| {
-                            cmd.spawn(v);
-                        });
+                    let mut rng = world.get_mut(resources(), rng()).unwrap();
+                    create_explosion(
+                        &mut rng,
+                        8,
+                        collision.point,
+                        collision.impact,
+                        4.0,
+                        1.0,
+                        GRAY,
+                    )
+                    .for_each(|v| {
+                        cmd.spawn(v);
+                    });
 
                     if let Ok(on_collision) = entity.get(on_collision()) {
                         (on_collision)(world, collision)
@@ -543,18 +558,21 @@ fn despawn_out_of_bounds() -> BoxedSystem {
 fn despawn_dead() -> BoxedSystem {
     System::builder()
         .with_name("despawn_dead")
+        .with(Query::new(self::rng().as_mut()))
         .with(
             Query::new((entity_ids(), position(), velocity(), material().opt()))
                 .filter(health().modified() & health().le(0.0)),
         )
         .write::<CommandBuffer>()
         .build(
-            |mut q: QueryBorrow<(EntityIds, Component<Vec2>, Component<_>, Opt<_>), _>,
+            |mut rng: QueryBorrow<Mutable<StdRng>>,
+             mut q: QueryBorrow<(EntityIds, Component<Vec2>, Component<_>, Opt<_>), _>,
              cmd: &mut CommandBuffer| {
+                let rng = rng.get(resources()).unwrap();
                 for (id, pos, vel, mat) in &mut q {
                     cmd.despawn(id);
                     if let Some(mat) = mat {
-                        create_explosion((mat / 50.0) as _, *pos, 50.0, 8.0, 4.0, DARKPURPLE)
+                        create_explosion(rng, (mat / 50.0) as _, *pos, 50.0, 8.0, 4.0, DARKPURPLE)
                             .for_each(|mut v| {
                                 *v.get_mut(velocity()).unwrap() += *vel;
                                 cmd.spawn(v);
@@ -567,17 +585,19 @@ fn despawn_dead() -> BoxedSystem {
 }
 
 fn spawn_asteroids(max_count: usize) -> BoxedSystem {
-    let mut rng = StdRng::from_entropy();
-
     System::builder()
         .with_name("spawn_asteroids")
+        .with(Query::new(self::rng().as_mut()))
         .with(Query::new((position(), difficulty())).with(player()))
         .with(Query::new(asteroid()))
         .write::<CommandBuffer>()
         .build(
-            move |mut players: QueryBorrow<(Component<Vec2>, Component<f32>), _>,
+            move |mut rng: QueryBorrow<Mutable<StdRng>>,
+                  mut players: QueryBorrow<(Component<Vec2>, Component<f32>), _>,
                   mut existing: QueryBorrow<Component<()>>,
                   cmd: &mut CommandBuffer| {
+                let rng = rng.get(resources()).unwrap();
+
                 let (player_pos, difficulty) = match players.first() {
                     Some(v) => v,
                     None => return,
