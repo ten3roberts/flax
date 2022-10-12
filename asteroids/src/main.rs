@@ -94,68 +94,67 @@ impl Shape {
 
 #[macroquad::main("Asteroids")]
 async fn main() -> Result<()> {
-    // color_eyre::install()?;
-    // registry().with(HierarchicalLayer::default()).init();
+    color_eyre::install()?;
+    registry().with(HierarchicalLayer::default()).init();
 
     let mut world = World::new();
 
-    let mut rng = StdRng::seed_from_u64(42);
-    let a: f32 = rng.gen();
+    let rng = StdRng::seed_from_u64(42);
     world.set(resources(), self::rng(), rng).unwrap();
 
     let dt = 0.02;
 
-    let (player_dead_tx, player_dead_rx) = flume::unbounded::<Entity>();
-    // world.on_removed(player(), player_dead_tx);
+    let (player_dead_tx, player_dead_rx) = flume::unbounded();
+    world.on_removed(player(), player_dead_tx);
 
-    // Setup everthing required for the game logic and physics
-    // let mut physics_schedule = Schedule::builder()
-    //     .with_system(player_system(dt))
-    //     .with_system(camera_system(dt))
-    //     .with_system(lifetime_system(dt))
-    //     .with_system(spawn_asteroids(64))
-    //     .with_system(particle_system())
-    //     .with_system(collision_system())
-    //     .with_system(integrate_velocity(dt))
-    //     .with_system(integrate_ang_velocity(dt))
-    //     .with_system(despawn_out_of_bounds())
-    //     .with_system(despawn_dead())
-    //     .build();
+    // Setup everything required for the game logic and physics
+    let mut physics_schedule = Schedule::builder()
+        .with_system(player_system(dt))
+        .with_system(camera_system(dt))
+        .with_system(lifetime_system(dt))
+        .with_system(spawn_asteroids(64))
+        .with_system(particle_system())
+        .with_system(collision_system())
+        .with_system(integrate_velocity(dt))
+        .with_system(integrate_ang_velocity(dt))
+        .with_system(despawn_out_of_bounds())
+        .with_system(despawn_dead())
+        .build();
 
-    // let mut frame_schedule = Schedule::builder()
-    //     .with_system(draw_shapes())
-    //     .with_system(draw_ui())
-    //     .build();
+    let mut frame_schedule = Schedule::builder()
+        .with_system(draw_shapes())
+        .with_system(draw_ui())
+        .build();
 
-    // let mut acc = 0.0;
+    let mut acc = 0.0;
 
-    // create_player().spawn(&mut world);
-    // create_camera().spawn(&mut world);
+    create_player().spawn(&mut world);
+    create_camera().spawn(&mut world);
 
     loop {
-        // if player_dead_rx.try_recv().is_ok() {
-        //     world.despawn_many(asteroid().with());
-        //     create_player().spawn(&mut world);
-        // }
+        if player_dead_rx.try_recv().is_ok() {
+            world.despawn_many(asteroid().with());
+            create_player().spawn(&mut world);
+        }
 
-        // acc += get_frame_time();
+        acc += get_frame_time();
 
-        // while acc > 0.0 {
-        //     acc -= dt;
-        //     let batches = physics_schedule.batch_info(&mut world);
-        //     tracing::info!(
-        //         "Batches: {:#?}",
-        //         batches
-        //             .iter()
-        //             .map(|v| v.iter().map(|v| v.name()).collect_vec())
-        //             .collect_vec()
-        //     );
-        //     physics_schedule.execute_seq(&mut world)?;
-        // }
+        while acc > 0.0 {
+            acc -= dt;
+            let batches = physics_schedule.batch_info(&mut world);
+            tracing::info!(
+                "Batches: {:#?}",
+                batches
+                    .iter()
+                    .map(|v| v.iter().map(|v| v.name()).collect_vec())
+                    .collect_vec()
+            );
+            physics_schedule.execute_seq(&mut world)?;
+        }
 
         clear_background(BLACK);
 
-        // frame_schedule.execute_seq(&mut world)?;
+        frame_schedule.execute_seq(&mut world)?;
 
         next_frame().await
     }
@@ -604,6 +603,11 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                 };
 
                 let existing = existing.count();
+                tracing::info!(
+                    ?existing,
+                    max_count,
+                    "Spawning asteroids around {player_pos}"
+                );
 
                 let mut builder = Entity::builder();
 
@@ -743,9 +747,10 @@ fn draw_ui() -> BoxedSystem {
 
                     draw_text(
                         &format!(
-                            "Archetype Gen: {}, Change Tick: {}",
+                            "Archetype Gen: {}, Change Tick: {}, Frametime: {}",
                             world.archetype_gen(),
-                            world.change_tick()
+                            world.change_tick(),
+                            get_frame_time(),
                         ),
                         10.0,
                         128.0,
