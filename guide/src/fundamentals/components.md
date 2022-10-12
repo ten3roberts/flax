@@ -4,7 +4,7 @@ A component represents data which is attached to an entity.
 
 **Note**: Compared to other Rust ECS implementations, a component is not the
 same as the underlying type. This allows different components of the same
-*datatype* to coexist without having to use newtypes and forward all traits, and
+_datatype_ to coexist without having to use newtypes and forward all traits, and
 implement `Into` and `From` implementations.
 
 ```rust
@@ -26,7 +26,7 @@ The component can be added, accessed and removed from entities using
 Accessing a component mutably does not require a mutable access to the world, as
 it uses an AtomicRefCell.
 
-Multiple *different* components can be accessed simultaneously, even on the same
+Multiple _different_ components can be accessed simultaneously, even on the same
 entity.
 
 ## Default components
@@ -35,4 +35,4 @@ Flax provides some opinionated default components to ease the communication
 between different libraries and users.
 
 - [name](https://docs.rs/flax/latest/flax/components/fn.name.html): Provides a name for entities and components.
-- [child_of](https://docs.rs/flax/latest/flax/components/fn.child_of.html): Default dataless hierarchy relation. See: [Hierarchy](https://ten3roberts.github.io/flax/fundamentals/hierarchy.html)
+- [child_of](https://docs.rs/flax/latest/flax/components/fn.child_of.html): Default dataless hierarchy relation. See: [Hierarchy](https://ten3roberts.github.io/flax/guide/fundamentals/hierarchy.html)

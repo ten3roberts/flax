@@ -108,7 +108,7 @@
 //! addition, relations are cleaned up on despawns and are stable during serialization, even if the
 //! entity ids migrate due to collisions.
 //!     
-//! See [the guide](https://ten3roberts.github.io/flax/fundamentals/relations.html) for more
+//! See [the guide](https://ten3roberts.github.io/flax/guide/fundamentals/relations.html) for more
 //! details.
 //!
 //! ```rust

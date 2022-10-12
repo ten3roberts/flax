@@ -25,7 +25,7 @@
 ///
 /// A component can a relation, which allows a *normal* entity to be associated
 /// inside the component id. Two relations with different *objects* are distinct
-/// components. This is useful for hierarchies, see: [guide:hierarchy]( https://ten3roberts.github.io/flax/fundamentals/hierarchy.html )
+/// components. This is useful for hierarchies, see: [guide:hierarchy]( https://ten3roberts.github.io/flax/guide/fundamentals/hierarchy.html )
 ///
 /// ```rust
 /// use flax::component;
