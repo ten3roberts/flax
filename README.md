@@ -28,10 +28,9 @@ provide the application logic.
 - Serialization and deserialization [`crate::serialize`]
 - Runtime components
 
-## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/)**
+## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/guide)**
 
-For those of you who prefer a more complete example, consider checking out an asteroid game
-made by flax and macroquad [here](./asteroids/src/main.rs)
+See a live demo using wasm [here](https://ten3roberts.github.io/flax/asteroids).
 
 ## Example Usage
 
