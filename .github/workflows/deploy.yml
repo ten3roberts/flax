@@ -1,0 +1,66 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  asteroids:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+      - run: cargo build --release --package asteroids --target wasm32-unknown-unknown --manifest-path=asteroids/Cargo.toml
+      - run: mv ./target/wasm32-unknown-unknown/release/asteroids.wasm ./asteroids/public
+      - name: Upload Artefact
+        uses: actions/upload-artifact@v2
+        with:
+          name: asteroids
+          path: asteroids/public
+  guide:
+    runs-on: ubuntu-20.04
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: "latest"
+
+      - run: mdbook build guide
+
+      - name: Upload Artefact
+        uses: actions/upload-artifact@v2
+        with:
+          name: guide
+          path: guide/public
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [asteroids, guide]
+    if: github.event_name == 'push' && ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - name: Download guide
+        uses: actions/download-artifact@v2
+        with:
+          name: guide
+          path: dist/guide/latest
+
+      - name: Download asteroids
+        uses: actions/download-artifact@v2
+        with:
+          name: asteroids
+          path: dist/asteroids
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
