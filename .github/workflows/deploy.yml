@@ -41,7 +41,8 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: guide
-          path: guide/public
+          path: guide/book
+
   deploy:
     runs-on: ubuntu-latest
     needs: [asteroids, guide]
