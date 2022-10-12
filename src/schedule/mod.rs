@@ -233,8 +233,7 @@ impl Schedule {
     /// Execute all systems in the schedule sequentially on the world.
     /// Returns the first error and aborts if the execution fails.
     pub fn execute_seq(&mut self, world: &mut World) -> eyre::Result<()> {
-        let mut cmd = CommandBuffer::new();
-        let ctx = SystemContext::new(world, &mut cmd);
+        let ctx = SystemContext::new(world, &mut self.cmd);
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("execute_seq").entered();
