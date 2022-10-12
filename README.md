@@ -2,7 +2,7 @@
 [![Crates](https://img.shields.io/crates/v/flax?style=flat)](https://crates.io/crates/flax)
 [![Docs](https://img.shields.io/docsrs/flax?style=flat)](https://docs.rs/flax)
 [![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=flat)](https://app.codecov.io/gh/ten3roberts/flax)
-[![Guide](https://img.shields.io/badge/guide-Read%20the%20guide-blue)](https://ten3roberts.github.io/flax)
+[![Guide](https://img.shields.io/badge/guide-Read%20the%20guide-blue)](https://ten3roberts.github.io/flax/guide)
 
 # Flax
 
@@ -106,7 +106,7 @@ Relations are cache friendly and querying children of does not require random ac
 addition, relations are cleaned up on despawns and are stable during serialization, even if the
 entity ids migrate due to collisions.
     
-See [the guide](https://ten3roberts.github.io/flax/fundamentals/relations.html) for more
+See [the guide](https://ten3roberts.github.io/flax/guide/fundamentals/relations.html) for more
 details.
 
 ```rust
