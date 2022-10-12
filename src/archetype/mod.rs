@@ -376,6 +376,8 @@ impl Archetype {
     ) -> Option<AtomicRef<T>> {
         let storage = self.storage.get(&component.key())?;
 
+        // If a dummy slot is used, the archetype must have no components, so `storage.get` fails,
+        // which is safe
         AtomicRef::filter_map(unsafe { storage.borrow() }, |v| v.get(slot))
     }
 

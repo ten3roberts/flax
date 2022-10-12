@@ -10,6 +10,7 @@ use itertools::Itertools;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use smallvec::SmallVec;
 
+use crate::name;
 use crate::{
     entity::EntityLocation,
     error::Result,
@@ -363,7 +364,13 @@ where
                 id,
                 buf,
                 DifferenceIter::new(arch.components().map(|v| v.id()), components.into_iter())
-                    .map(|v| self.world.get(v.id, is_component()).unwrap().name().into())
+                    .map(|v| {
+                        self.world
+                            .get(v.id, name())
+                            .as_deref()
+                            .cloned()
+                            .unwrap_or_else(|_| "unknown".into())
+                    })
                     .collect_vec(),
             )
         })?;

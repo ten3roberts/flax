@@ -268,23 +268,6 @@ where
         traverse_archetypes(archetypes, root_arch, &components, &mut result, &filter);
 
         result
-        // world.archetypes().filter_map(|(arch_id, arch)| {
-        //     let data = FetchPrepareData {
-        //         world,
-        //         arch,
-        //         arch_id,
-        //     };
-
-        //     if (self.include_components || !arch.has(is_component().id()))
-        //         && self.fetch.matches(data)
-        //         && self.filter.matches(arch)
-        //         && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
-        //     {
-        //         Some(arch_id)
-        //     } else {
-        //         None
-        //     }
-        // })
     }
 }
 

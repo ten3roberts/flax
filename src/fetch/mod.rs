@@ -190,53 +190,59 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<'q, $($ty, )*> FetchItem<'q> for ($($ty,)*)
-            where $($ty: FetchItem<'q>,)*
-        {
-            type Item = ($($ty::Item,)*);
+    impl<'q, $($ty, )*> FetchItem<'q> for ($($ty,)*)
+    where $($ty: FetchItem<'q>,)*
+    {
+        type Item = ($($ty::Item,)*);
 
+    }
+    impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
+    where $($ty: Fetch<'w>,)*
+    {
+        const MUTABLE: bool =  $($ty::MUTABLE )|*;
+        type Prepared       = ($($ty::Prepared,)*);
+        type Filter         = ($($ty::Filter,)*);
+        const HAS_FILTER: bool =  $($ty::HAS_FILTER )|*;
+
+        #[inline(always)]
+        fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+            Some(($(
+                (self.$idx).prepare(data)?,
+            )*))
         }
-        impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
-            where $($ty: Fetch<'w>,)*
-        {
-            const MUTABLE: bool =  $($ty::MUTABLE )|*;
-            type Prepared       = ($($ty::Prepared,)*);
-            type Filter         = ($($ty::Filter,)*);
-            const HAS_FILTER: bool =  $($ty::HAS_FILTER )|*;
 
-            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-                Some(($(
-                    (self.$idx).prepare(data)?,
-                )*))
-            }
+        #[inline(always)]
+        fn matches(&self, data: FetchPrepareData) -> bool {
+            $((self.$idx).matches(data)) && *
+        }
 
-            fn matches(&self, data: FetchPrepareData) -> bool {
-                $((self.$idx).matches(data)) && *
-            }
-
+            #[inline(always)]
             fn describe(&self, f: &mut dyn Write) -> fmt::Result {
                 f.write_str("(")?;
                 $( (self.$idx).describe(f)?; f.write_str(", ")?;)*
                 f.write_str(")")
             }
 
+            #[inline(always)]
             fn access(&self, data: FetchPrepareData) -> Vec<Access> {
                 [ $(
                     (self.$idx).access(data),
                 )* ].concat()
             }
 
+            #[inline(always)]
             fn components(&self, result: &mut Vec<ComponentKey>) {
                 $((self.$idx).components(result));*
             }
 
+            #[inline(always)]
             fn filter(&self) -> Self::Filter {
                 ( $(self.$idx.filter(),)* )
             }
         }
 
         impl<'q, $($ty, )*> PreparedFetch<'q> for ($($ty,)*)
-            where $($ty: PreparedFetch<'q>,)*
+        where $($ty: PreparedFetch<'q>,)*
         {
             type Item = ($(<$ty as PreparedFetch<'q>>::Item,)*);
 
