@@ -68,7 +68,7 @@ fn from_slot_gen(gen: u32) -> u16 {
 /// An entity's location within an archetype
 pub(crate) struct EntityLocation {
     pub(crate) slot: usize,
-    pub(crate) arch: ArchetypeId,
+    pub(crate) arch_id: ArchetypeId,
 }
 
 pub(crate) struct EntityStore<V = EntityLocation> {

@@ -1,4 +1,4 @@
-use core::fmt::{self, Write};
+use core::fmt::{self, Formatter};
 
 use alloc::vec::Vec;
 
@@ -36,7 +36,7 @@ where
         self.0.access(data)
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+    fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("opt")?;
         self.0.describe(f)
     }
@@ -46,6 +46,8 @@ where
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
+
+    fn missing(&self, data: FetchPrepareData, result: &mut Vec<crate::ComponentInfo>) {}
 }
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
@@ -108,7 +110,7 @@ where
         self.inner.access(data)
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+    fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("opt_or(")?;
         self.inner.describe(f)?;
         f.write_str(")")
@@ -119,6 +121,8 @@ where
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
+
+    fn missing(&self, data: FetchPrepareData, result: &mut Vec<crate::ComponentInfo>) {}
 }
 
 impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {

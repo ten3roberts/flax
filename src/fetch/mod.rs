@@ -2,8 +2,8 @@ mod component;
 mod ext;
 mod opt;
 
-use core::fmt;
-use core::fmt::Write;
+use core::fmt::{self, Formatter};
+use core::fmt::{Debug, Write};
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -12,12 +12,25 @@ pub use component::*;
 pub use ext::*;
 pub use opt::*;
 
+use crate::ComponentInfo;
 use crate::{
     archetype::{Archetype, Slice, Slot},
     filter::Nothing,
     system::Access,
     ArchetypeId, ComponentKey, Entity, Filter, World,
 };
+
+#[doc(hidden)]
+pub struct FmtQuery<'r, Q>(pub &'r Q);
+
+impl<'r, 'w, Q> Debug for FmtQuery<'r, Q>
+where
+    Q: Fetch<'w>,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.describe(f)
+    }
+}
 
 /// Represents the world data necessary for preparing a fetch
 #[derive(Copy, Clone)]
@@ -54,17 +67,23 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 
     /// Returns true if the fetch matches the archetype
     fn matches(&self, data: FetchPrepareData) -> bool;
+
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, data: FetchPrepareData) -> Vec<Access>;
 
     /// Describes the fetch in a human-readable fashion
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result;
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 
-    /// Returns the filter if any
+    /// Returns the filter if applicable
     fn filter(&self) -> Self::Filter;
 
-    /// Returns the required component for the fetch
+    /// Returns the required component for the fetch.
+    ///
+    /// This is used for the query to determine which archetypes to visit
     fn components(&self, result: &mut Vec<ComponentKey>);
+
+    /// Returns the missing components given a specific archetype
+    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>);
 }
 
 impl<'w> Fetch<'w> for () {
@@ -86,7 +105,7 @@ impl<'w> Fetch<'w> for () {
         vec![]
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+    fn describe(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "()")
     }
 
@@ -95,6 +114,8 @@ impl<'w> Fetch<'w> for () {
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
+
+    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -148,6 +169,8 @@ impl<'q> FetchItem<'q> for EntityIds {
 
 impl<'w> Fetch<'w> for EntityIds {
     const MUTABLE: bool = false;
+    const HAS_FILTER: bool = false;
+
     type Filter = Nothing;
 
     type Prepared = PreparedEntities<'w>;
@@ -162,21 +185,21 @@ impl<'w> Fetch<'w> for EntityIds {
         true
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
-        f.write_str("entities")
-    }
-
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         vec![]
+    }
+
+    fn describe(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("entity_ids")
     }
 
     fn filter(&self) -> Self::Filter {
         Nothing
     }
 
-    const HAS_FILTER: bool = false;
-
     fn components(&self, _: &mut Vec<ComponentKey>) {}
+
+    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
@@ -190,44 +213,44 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-    impl<'q, $($ty, )*> FetchItem<'q> for ($($ty,)*)
-    where $($ty: FetchItem<'q>,)*
-    {
-        type Item = ($($ty::Item,)*);
+        impl<'q, $($ty, )*> FetchItem<'q> for ($($ty,)*)
+        where $($ty: FetchItem<'q>,)*
+        {
+            type Item = ($($ty::Item,)*);
 
-    }
-    impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
-    where $($ty: Fetch<'w>,)*
-    {
-        const MUTABLE: bool =  $($ty::MUTABLE )|*;
-        type Prepared       = ($($ty::Prepared,)*);
-        type Filter         = ($($ty::Filter,)*);
-        const HAS_FILTER: bool =  $($ty::HAS_FILTER )|*;
-
-        #[inline(always)]
-        fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-            Some(($(
-                (self.$idx).prepare(data)?,
-            )*))
         }
-
-        #[inline(always)]
-        fn matches(&self, data: FetchPrepareData) -> bool {
-            $((self.$idx).matches(data)) && *
-        }
+        impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
+        where $($ty: Fetch<'w>,)*
+        {
+            const MUTABLE: bool =  $($ty::MUTABLE )|*;
+            type Prepared       = ($($ty::Prepared,)*);
+            type Filter         = ($($ty::Filter,)*);
+            const HAS_FILTER: bool =  $($ty::HAS_FILTER )|*;
 
             #[inline(always)]
-            fn describe(&self, f: &mut dyn Write) -> fmt::Result {
-                f.write_str("(")?;
-                $( (self.$idx).describe(f)?; f.write_str(", ")?;)*
-                f.write_str(")")
+            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+                Some(($(
+                    (self.$idx).prepare(data)?,
+                )*))
+            }
+
+            #[inline(always)]
+            fn matches(&self, data: FetchPrepareData) -> bool {
+                ( $((self.$idx).matches(data)) && * )
+            }
+
+            #[inline(always)]
+            fn describe(&self, f: &mut Formatter) -> fmt::Result {
+                Debug::fmt(&($(FmtQuery(&self.$idx),)*), f)
             }
 
             #[inline(always)]
             fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-                [ $(
-                    (self.$idx).access(data),
-                )* ].concat()
+                [
+                    $(
+                        (self.$idx).access(data),
+                    )*
+                ].concat()
             }
 
             #[inline(always)]
@@ -238,6 +261,11 @@ macro_rules! tuple_impl {
             #[inline(always)]
             fn filter(&self) -> Self::Filter {
                 ( $(self.$idx.filter(),)* )
+            }
+
+            #[inline(always)]
+            fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {
+                $((self.$idx).missing(data, result));*
             }
         }
 

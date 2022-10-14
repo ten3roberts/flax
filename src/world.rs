@@ -237,7 +237,7 @@ impl World {
 
                 EntityLocation {
                     slot,
-                    arch: reserved,
+                    arch_id: reserved,
                 }
             })
         }
@@ -274,7 +274,7 @@ impl World {
             .map(|idx| {
                 store.spawn(EntityLocation {
                     slot: base + idx,
-                    arch: arch_id,
+                    arch_id,
                 })
             })
             .collect_vec();
@@ -297,7 +297,7 @@ impl World {
     // Check if the entity is reserved after flush
     fn is_reserved(&self, id: Entity) -> bool {
         self.location(id)
-            .map(|v| v.arch == self.archetypes.reserved)
+            .map(|v| v.arch_id == self.archetypes.reserved)
             .unwrap_or_default()
     }
 
@@ -345,7 +345,7 @@ impl World {
                     id.gen(),
                     EntityLocation {
                         slot: base + idx,
-                        arch: arch_id,
+                        arch_id,
                     },
                 )
                 // The vacancy was checked prior
@@ -417,10 +417,7 @@ impl World {
 
         let slot = arch.len();
 
-        let loc = EntityLocation {
-            arch: arch_id,
-            slot,
-        };
+        let loc = EntityLocation { arch_id, slot };
 
         let id = ns.spawn(loc);
 
@@ -451,14 +448,7 @@ impl World {
         let store = self.entities.init(id.kind());
         let arch = self.archetypes.get_mut(arch_id);
 
-        let loc = store.spawn_at(
-            id.index,
-            id.gen,
-            EntityLocation {
-                slot: 0,
-                arch: arch_id,
-            },
-        )?;
+        let loc = store.spawn_at(id.index, id.gen, EntityLocation { slot: 0, arch_id })?;
 
         loc.slot = arch.allocate(id);
 
@@ -528,7 +518,10 @@ impl World {
 
     /// Removes all components from an entity without despawning the entity
     pub fn clear(&mut self, id: Entity) -> Result<()> {
-        let EntityLocation { arch, slot } = self.init_location(id)?;
+        let EntityLocation {
+            arch_id: arch,
+            slot,
+        } = self.init_location(id)?;
 
         let src = self.archetypes.get_mut(arch);
 
@@ -550,7 +543,7 @@ impl World {
 
         *self.location_mut(id).unwrap() = EntityLocation {
             slot: self.archetypes.get_root().allocate(id),
-            arch: self.archetypes.root,
+            arch_id: self.archetypes.root,
         };
 
         self.detach(id);
@@ -562,7 +555,10 @@ impl World {
         let id: Entity = id;
         let change_tick = self.advance_change_tick();
 
-        let EntityLocation { arch, slot } = self.init_location(id)?;
+        let EntityLocation {
+            arch_id: arch,
+            slot,
+        } = self.init_location(id)?;
 
         let mut new_data = Vec::new();
         let mut new_components = Vec::new();
@@ -637,7 +633,7 @@ impl World {
 
                 *self.location_mut(id).expect("Entity is not valid") = EntityLocation {
                     slot: dst_slot,
-                    arch: dst_id,
+                    arch_id: dst_id,
                 };
             }
         }
@@ -682,7 +678,10 @@ impl World {
     /// Any relations to other entities will be removed.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
         self.flush_reserved();
-        let EntityLocation { arch, slot } = self.init_location(id)?;
+        let EntityLocation {
+            arch_id: arch,
+            slot,
+        } = self.init_location(id)?;
 
         if id.is_static() {
             panic!("Attempt to despawn static component");
@@ -782,8 +781,10 @@ impl World {
             let (dst_id, dst) = self.archetypes.init(components);
 
             for (id, slot) in src.move_all(dst) {
-                *self.location_mut(id).expect("Entity id was not valid") =
-                    EntityLocation { slot, arch: dst_id }
+                *self.location_mut(id).expect("Entity id was not valid") = EntityLocation {
+                    slot,
+                    arch_id: dst_id,
+                }
             }
         }
     }
@@ -809,7 +810,10 @@ impl World {
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
-        let EntityLocation { arch: src_id, slot } = self.init_location(id)?;
+        let EntityLocation {
+            arch_id: src_id,
+            slot,
+        } = self.init_location(id)?;
 
         let src = self.archetypes.get_mut(src_id);
 
@@ -825,7 +829,10 @@ impl World {
                 ptr::copy_nonoverlapping(value, old, info.size());
             }
 
-            return Ok(EntityLocation { arch: src_id, slot });
+            return Ok(EntityLocation {
+                arch_id: src_id,
+                slot,
+            });
         }
 
         // Pick up the entity and move it to the destination archetype
@@ -877,7 +884,7 @@ impl World {
             let ns = self.entities.init(id.kind());
             let loc = EntityLocation {
                 slot: dst_slot,
-                arch: dst_id,
+                arch_id: dst_id,
             };
             *ns.get_mut(id).expect("Entity is not valid") = loc;
 
@@ -919,12 +926,15 @@ impl World {
         component: ComponentInfo,
         on_drop: impl FnOnce(*mut u8),
     ) -> Result<EntityLocation> {
-        let EntityLocation { arch: src_id, slot } = self.init_location(id).unwrap();
+        let EntityLocation {
+            arch_id: src_id,
+            slot,
+        } = self.init_location(id).unwrap();
 
         let src = self.archetypes.get(src_id);
 
         if !src.has(component.id()) {
-            return Err(Error::MissingComponent(id, component.name));
+            return Err(Error::MissingComponent(id, component));
         }
 
         let dst_id = match src.incoming(component.id()) {
@@ -976,7 +986,7 @@ impl World {
 
         let loc = EntityLocation {
             slot: dst_slot,
-            arch: dst_id,
+            arch_id: dst_id,
         };
 
         *self.location_mut(id).expect("Entity is not valid") = loc;
@@ -1006,14 +1016,17 @@ impl World {
         let loc = self.location(id)?;
 
         self.archetypes
-            .get(loc.arch)
+            .get(loc.arch_id)
             .get(loc.slot, component)
-            .ok_or_else(|| Error::MissingComponent(id, component.name()))
+            .ok_or_else(|| Error::MissingComponent(id, component.info()))
     }
 
     pub(crate) fn get_at<T: ComponentValue>(
         &self,
-        EntityLocation { arch, slot }: EntityLocation,
+        EntityLocation {
+            arch_id: arch,
+            slot,
+        }: EntityLocation,
         component: Component<T>,
     ) -> Option<AtomicRef<T>> {
         self.archetypes.get(arch).get(slot, component)
@@ -1028,12 +1041,15 @@ impl World {
         let loc = self.location(id)?;
 
         self.get_mut_at(loc, component)
-            .ok_or_else(|| Error::MissingComponent(id, component.name()))
+            .ok_or_else(|| Error::MissingComponent(id, component.info()))
     }
     /// Randomly access an entity's component.
     pub(crate) fn get_mut_at<T: ComponentValue>(
         &self,
-        EntityLocation { arch, slot }: EntityLocation,
+        EntityLocation {
+            arch_id: arch,
+            slot,
+        }: EntityLocation,
         component: Component<T>,
     ) -> Option<AtomicRefMut<T>> {
         let archetype = self.archetypes.get(arch);
@@ -1057,7 +1073,7 @@ impl World {
     /// specified component
     pub fn has<T: ComponentValue>(&self, id: Entity, component: Component<T>) -> bool {
         if let Ok(loc) = self.location(id) {
-            self.archetypes.get(loc.arch).has(component.key())
+            self.archetypes.get(loc.arch_id).has(component.key())
         } else {
             false
         }
@@ -1215,7 +1231,7 @@ impl World {
         component: Component<T>,
     ) -> Result<Entry<T>> {
         let loc = self.init_location(id)?;
-        let arch = self.archetypes.get(loc.arch);
+        let arch = self.archetypes.get(loc.arch_id);
         if arch.has(component.key()) {
             return Ok(Entry::Occupied(OccupiedEntry {
                 borrow: self.get_mut(id, component).unwrap(),
@@ -1278,7 +1294,7 @@ impl World {
                             .get(*id)
                             .expect("Invalid component");
 
-                        assert_eq!(loc.arch, arch_id);
+                        assert_eq!(loc.arch_id, arch_id);
 
                         // Migrate
                         if self.reconstruct(old_id.index, old_id.kind).is_some() {
@@ -1458,7 +1474,7 @@ impl<'a> fmt::Debug for EntityFormatter<'a> {
         for &id in self.ids {
             let loc = self.world.location(id);
             if let Ok(loc) = loc {
-                let arch = self.world.archetypes.get(loc.arch);
+                let arch = self.world.archetypes.get(loc.arch_id);
 
                 meta.extend(arch.components().flat_map(|info| {
                     Some((
@@ -1554,7 +1570,7 @@ mod tests {
         assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
         assert_eq!(
             world.get(id, b()).as_deref(),
-            Err(&Error::MissingComponent(id, "b"))
+            Err(&Error::MissingComponent(id, b().info()))
         );
         assert!(!world.has(id, c()));
 
@@ -1568,7 +1584,7 @@ mod tests {
         assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
         assert_eq!(
             world.get(id, b()).as_deref(),
-            Err(&Error::MissingComponent(id, "b"))
+            Err(&Error::MissingComponent(id, b().info()))
         );
 
         assert!(!world.has(id, c()));
@@ -1639,7 +1655,7 @@ mod tests {
         assert_eq!(world.get(id, c()).as_deref(), Ok(&"Foo".into()));
         assert_eq!(
             world.get(id, e()).as_deref(),
-            Err(&Error::MissingComponent(id, "e"))
+            Err(&Error::MissingComponent(id, e().info()))
         );
 
         world.despawn(id).unwrap();
