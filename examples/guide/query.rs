@@ -1,8 +1,6 @@
-use std::borrow::BorrowMut;
-
 use flax::{
-    component, entity_ids, CmpExt, CommandBuffer, Component, Debug, Entity, EntityBorrow,
-    EntityQuery, Mutable, Query, QueryBorrow, Schedule, System, SystemBuilder, World,
+    component, entity_ids, CmpExt, CommandBuffer, Component, Debug, Entity, EntityBorrow, Mutable,
+    Query, QueryBorrow, Schedule, System, World,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::{
@@ -156,7 +154,7 @@ fn main() -> color_eyre::Result<()> {
         .with_name("debug_world")
         .read::<World>()
         .build(|world: &_| {
-            tracing::debug!("World: {world:#?}");
+            tracing::debug!("World: {world:?}");
         });
 
     // ANCHOR_END: system_cmd
@@ -230,7 +228,7 @@ fn main() -> color_eyre::Result<()> {
 
     tracing::info!("{schedule:#?}");
 
-    for i in 0..200 {
+    for i in 0..20 {
         tracing::info!("Frame: {i}");
         tracing::info!("Batches: {:#?}", schedule.batch_info(&mut world));
         schedule.execute_par(&mut world)?;
@@ -257,12 +255,27 @@ fn main() -> color_eyre::Result<()> {
         .append_to(&mut world, resources())
         .unwrap();
 
-    let mut query =
-        Query::new((window_width(), window_height(), allow_vsync())).entity(resources());
+    let query = Query::new((
+        window_width().modified(),
+        window_height().modified(),
+        allow_vsync().modified(),
+    ))
+    .entity(resources());
 
-    let window_system = System::builder()
+    let mut window_system = System::builder()
         .with(query)
-        .build(|mut q: EntityBorrow<_, _>| {});
+        .build(|mut q: EntityBorrow<_>| {
+            if let Ok((width, height, allow_vsync)) = q.get() {
+                tracing::info!(width, height, allow_vsync, "Config changed");
+            } else {
+                tracing::info!("No config change");
+            }
+        });
+
+    window_system.run_on(&mut world);
+    window_system.run_on(&mut world);
+    world.set(resources(), window_height(), 720.0)?;
+    window_system.run_on(&mut world);
 
     // ANCHOR_END: entity_query
     Ok(())

@@ -677,7 +677,7 @@ impl PreparedFilter for BooleanFilter {
         }
     }
 
-    fn matches_slot(&mut self, slot: usize) -> bool {
+    fn matches_slot(&mut self, _: usize) -> bool {
         self.0
     }
 }
@@ -761,7 +761,7 @@ impl PreparedFilter for BatchSize {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))
     }
 
-    fn matches_slot(&mut self, slot: usize) -> bool {
+    fn matches_slot(&mut self, _: usize) -> bool {
         true
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentValue, Entity, Error, Fetch, World,
+    Component, ComponentValue, Entity, Error, World,
 };
 
 /// Borrow all the components of an entity at once.

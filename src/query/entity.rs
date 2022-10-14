@@ -126,19 +126,18 @@ where
     ///
     /// **Note**: This operation never fails if the entity does not exist or does not match the
     /// fetch. Instead, the error is returned by [`EntityBorrow::get`].
-    pub fn borrow<'w>(&'w mut self, world: &'w World) -> EntityBorrow<'w, Q, F> {
+    pub fn borrow<'w>(&'w mut self, world: &'w World) -> EntityBorrow<'w, Q> {
         let (old_tick, new_tick) = self.prepare_tick(world);
 
         // The entity may not exist, of it may not match the fetch (yet)
 
-        let (state, fetch, filter) = self.state(world, old_tick);
+        let (state, fetch, _) = self.state(world, old_tick);
 
         EntityBorrow {
             prepared: state,
             fetch,
             world,
             new_tick,
-            filter,
         }
     }
 }
@@ -168,21 +167,19 @@ enum State<Q> {
 ///
 /// A prepared query for a single entity. Holds the locks for the affected archetype and
 /// components.
-pub struct EntityBorrow<'w, Q, F>
+pub struct EntityBorrow<'w, Q>
 where
     Q: Fetch<'w>,
 {
     world: &'w World,
     prepared: State<Q::Prepared>,
     fetch: &'w Q,
-    filter: &'w F,
     new_tick: u32,
 }
 
-impl<'w, Q, F> EntityBorrow<'w, Q, F>
+impl<'w, Q> EntityBorrow<'w, Q>
 where
     Q: Fetch<'w>,
-    F: Filter<'w>,
 {
     /// Returns the results of the fetch.
     ///
@@ -233,7 +230,7 @@ where
     ///
     /// The same query can be prepared multiple times, though not
     /// simultaneously.
-    pub fn borrow(&mut self) -> EntityBorrow<Q, F> {
+    pub fn borrow(&mut self) -> EntityBorrow<Q> {
         self.query.borrow(&self.world)
     }
 }
@@ -243,7 +240,7 @@ where
     Q: for<'x> Fetch<'x> + 'static,
     F: for<'x> Filter<'x> + 'static,
 {
-    type Borrowed = EntityBorrow<'a, Q, F>;
+    type Borrowed = EntityBorrow<'a, Q>;
 
     fn as_borrow(&'a mut self) -> Self::Borrowed {
         self.borrow()
@@ -347,7 +344,7 @@ mod test {
         assert_eq!(world.get(id, position()).as_deref(), Ok(&Vec3::X));
 
         let mut system = System::builder().with(Query::new(name()).entity(id)).build(
-            |mut q: EntityBorrow<_, _>| {
+            |mut q: EntityBorrow<_>| {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             },
         );

@@ -1,6 +1,6 @@
 use core::fmt::Display;
 
-use alloc::{string::String, vec::Vec};
+use alloc::vec::Vec;
 
 use crate::{ComponentInfo, Entity};
 

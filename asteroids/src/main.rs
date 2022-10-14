@@ -373,15 +373,18 @@ fn lifetime_system(dt: f32) -> BoxedSystem {
 fn collision_system() -> BoxedSystem {
     System::builder()
         .with_name("collision_system")
+        .with(Query::new(rng().as_mut()).entity(resources()))
         .with(Query::new((entity_ids(), CollisionQuery::new())))
         .with(Query::new((entity_ids(), CollisionQuery::new())))
         .read::<World>()
         .write::<CommandBuffer>()
         .build(
-            |mut a: QueryBorrow<(EntityIds, CollisionQuery)>,
+            |mut resources: EntityBorrow<_>,
+             mut a: QueryBorrow<(EntityIds, CollisionQuery)>,
              mut b: QueryBorrow<(EntityIds, CollisionQuery)>,
              world: &World,
-             cmd: &mut CommandBuffer| {
+             cmd: &mut CommandBuffer|
+             -> color_eyre::Result<()> {
                 let mut collisions = Vec::new();
 
                 for (id_a, a) in &mut a {
@@ -430,24 +433,18 @@ fn collision_system() -> BoxedSystem {
                             collision.dir * collision.depth * (1.0 - mass / collision.system_mass);
                     }
 
-                    let mut rng = world.get_mut(resources(), rng()).unwrap();
-                    create_explosion(
-                        &mut rng,
-                        8,
-                        collision.point,
-                        collision.impact,
-                        4.0,
-                        1.0,
-                        GRAY,
-                    )
-                    .for_each(|v| {
-                        cmd.spawn(v);
-                    });
+                    let rng = resources.get()?;
+                    create_explosion(rng, 8, collision.point, collision.impact, 4.0, 1.0, GRAY)
+                        .for_each(|v| {
+                            cmd.spawn(v);
+                        });
 
                     if let Ok(on_collision) = entity.get(on_collision()) {
                         (on_collision)(world, collision)
                     };
                 }
+
+                Ok(())
             },
         )
         .boxed()
@@ -557,25 +554,33 @@ fn despawn_out_of_bounds() -> BoxedSystem {
 fn despawn_dead() -> BoxedSystem {
     System::builder()
         .with_name("despawn_dead")
-        .with(Query::new(self::rng().as_mut()))
+        .with(Query::new(self::rng().as_mut()).entity(resources()))
         .with(
             Query::new((entity_ids(), position(), velocity(), material().opt()))
                 .filter(health().modified() & health().le(0.0)),
         )
         .write::<CommandBuffer>()
         .build(
-            |mut rng: QueryBorrow<Mutable<StdRng>>,
+            |mut resources: EntityBorrow<Mutable<StdRng>>,
              mut q: QueryBorrow<(EntityIds, Component<Vec2>, Component<_>, Opt<_>), _>,
              cmd: &mut CommandBuffer| {
-                let rng = rng.get(resources()).unwrap();
+                let rng = resources.get().unwrap();
                 for (id, pos, vel, mat) in &mut q {
                     cmd.despawn(id);
                     if let Some(mat) = mat {
-                        create_explosion(rng, (mat / 50.0) as _, *pos, 50.0, 8.0, 4.0, DARKPURPLE)
-                            .for_each(|mut v| {
-                                *v.get_mut(velocity()).unwrap() += *vel;
-                                cmd.spawn(v);
-                            });
+                        create_explosion(
+                            &mut *rng,
+                            (mat / 50.0) as _,
+                            *pos,
+                            50.0,
+                            8.0,
+                            4.0,
+                            DARKPURPLE,
+                        )
+                        .for_each(|mut v| {
+                            *v.get_mut(velocity()).unwrap() += *vel;
+                            cmd.spawn(v);
+                        });
                     }
                 }
             },
@@ -586,16 +591,16 @@ fn despawn_dead() -> BoxedSystem {
 fn spawn_asteroids(max_count: usize) -> BoxedSystem {
     System::builder()
         .with_name("spawn_asteroids")
-        .with(Query::new(self::rng().as_mut()))
+        .with(Query::new(self::rng().as_mut()).entity(resources()))
         .with(Query::new((position(), difficulty())).with(player()))
         .with(Query::new(asteroid()))
         .write::<CommandBuffer>()
         .build(
-            move |mut rng: QueryBorrow<Mutable<StdRng>>,
+            move |mut resources: EntityBorrow<Mutable<StdRng>>,
                   mut players: QueryBorrow<(Component<Vec2>, Component<f32>), _>,
                   mut existing: QueryBorrow<Component<()>>,
                   cmd: &mut CommandBuffer| {
-                let rng = rng.get(resources()).unwrap();
+                let rng = resources.get().unwrap();
 
                 let (player_pos, difficulty) = match players.first() {
                     Some(v) => v,
