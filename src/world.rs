@@ -154,15 +154,37 @@ impl Archetypes {
     }
 }
 
-type EventSender = Box<dyn Fn(Entity, *const u8) -> bool + Send + Sync>;
+/// Defines a type which can handle a world event, such as a component removal
+pub trait EventSender<T> {
+    /// Returns true if the sender is to be retained
+    fn on_event(&self, event: T) -> bool;
+}
+
+impl<T, F> EventSender<(Entity, T)> for F
+where
+    F: Fn(Entity, T) -> bool,
+{
+    fn on_event(&self, (id, data): (Entity, T)) -> bool {
+        (self)(id, data)
+    }
+}
+
+#[cfg(feature = "flume")]
+impl<T> EventSender<T> for flume::Sender<T> {
+    fn on_event(&self, event: T) -> bool {
+        self.send(event).is_ok()
+    }
+}
+
+type EventSenderDyn = Box<dyn Fn(Entity, *const u8) -> bool + Send + Sync>;
 
 #[derive(Default)]
 struct EventRegistry {
-    inner: BTreeMap<ComponentKey, Vec<EventSender>>,
+    inner: BTreeMap<ComponentKey, Vec<EventSenderDyn>>,
 }
 
 impl EventRegistry {
-    fn register(&mut self, component: ComponentKey, sender: EventSender) {
+    fn register(&mut self, component: ComponentKey, sender: EventSenderDyn) {
         self.inner.entry(component).or_default().push(sender)
     }
 
@@ -1254,11 +1276,11 @@ impl World {
     pub fn on_removed<T: ComponentValue + Clone>(
         &mut self,
         component: Component<T>,
-        tx: flume::Sender<(Entity, T)>,
+        handler: impl EventSender<(Entity, T)> + 'static + Send + Sync,
     ) {
         let func = move |id: Entity, ptr: *const u8| unsafe {
             let val = ptr.cast::<T>().as_ref().expect("not null").clone();
-            tx.send((id, val)).is_ok()
+            handler.on_event((id, val))
         };
 
         self.on_removed.register(component.key(), Box::new(func));
