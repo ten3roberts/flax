@@ -1,6 +1,5 @@
 mod borrow;
 mod entity;
-use alloc::string::String;
 use alloc::vec::Vec;
 mod iter;
 use core::cmp;
@@ -19,7 +18,7 @@ use crate::{
     Access, AccessKind, Archetypes, Component, ComponentKey, ComponentValue, FetchItem, Filter,
     World,
 };
-use crate::{AsBorrow, RelationExt};
+use crate::{AsBorrow, Entity, Error, RelationExt};
 
 pub use borrow::*;
 pub use entity::*;
@@ -55,17 +54,14 @@ where
     F: core::fmt::Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
-        let mut buf = String::new();
-        self.fetch.describe(&mut buf).unwrap();
-
         f.debug_struct("Query")
-            .field("fetch", &buf)
+            .field("fetch", &FmtQuery(&self.fetch))
             .field("filter", &self.filter)
             .finish()
     }
 }
 
-impl<Q> Query<Q>
+impl<Q> Query<Q, All>
 where
     Q: for<'x> Fetch<'x>,
 {
@@ -89,12 +85,7 @@ where
             include_components: false,
         }
     }
-}
 
-impl<Q> Query<Q, All>
-where
-    Q: for<'x> Fetch<'x>,
-{
     /// Include component entities for the query.
     /// The default is to hide components as they are usually not desired during
     /// iteration.
@@ -111,6 +102,16 @@ where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
 {
+    /// Transform the query into a query for a single entity
+    pub fn entity(self, id: Entity) -> EntityQuery<Q, F> {
+        EntityQuery {
+            fetch: self.fetch,
+            filter: self.filter,
+            id,
+            change_tick: self.change_tick,
+        }
+    }
+
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
     pub fn filter<G: for<'x> Filter<'x>>(self, filter: G) -> Query<Q, And<F, G>> {
@@ -405,5 +406,153 @@ where
 
     fn as_borrow(&'a mut self) -> Self::Borrowed {
         self.borrow()
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use glam::{vec3, Vec3};
+    use pretty_assertions::assert_eq;
+
+    use crate::{component, name, Query, System};
+
+    use super::*;
+
+    component! {
+        position: Vec3,
+    }
+
+    #[test]
+    fn entity_query() {
+        let mut world = World::new();
+
+        let id = Entity::builder()
+            .set(name(), "Foo".into())
+            .set(position(), vec3(1.4, 6.4, 1.7))
+            .spawn(&mut world);
+
+        let id2 = Entity::builder()
+            .set(name(), "Bar".into())
+            .spawn(&mut world);
+
+        Entity::builder()
+            .set(name(), "Baz".into())
+            .spawn(&mut world);
+
+        let mut query = Query::new((name(), position().as_mut()));
+        assert!(query.borrow(&world).get(id2).is_err());
+        assert_eq!(
+            query.borrow(&world).get(id),
+            Ok((&"Foo".into(), &mut vec3(1.4, 6.4, 1.7)))
+        );
+
+        world.set(id2, position(), vec3(4.8, 4.2, 9.1)).unwrap();
+
+        {
+            let mut borrow = query.borrow(&world);
+            assert_eq!(
+                borrow.get(id2),
+                Ok((&"Bar".into(), &mut vec3(4.8, 4.2, 9.1)))
+            );
+
+            *borrow.get(id2).unwrap().1 = Vec3::X;
+        }
+
+        assert_eq!(world.get(id2, position()).as_deref(), Ok(&Vec3::X));
+
+        let mut system = System::builder()
+            .with(Query::new(name()).entity(id2))
+            .build(|mut q: EntityBorrow<_, _>| {
+                assert_eq!(q.get(), Ok(&"Bar".into()));
+            });
+
+        system.run_on(&mut world);
+    }
+
+    #[test]
+    fn changes() {
+        component! {
+            window_width: f32,
+            window_height: f32,
+            allow_vsync: bool,
+
+            resources,
+        }
+
+        let mut world = World::new();
+
+        Entity::builder()
+            .set(window_width(), 800.0)
+            .set(window_height(), 600.0)
+            .set(allow_vsync(), false)
+            // Since `resources` is static, it is not required to spawn it
+            .append_to(&mut world, resources())
+            .unwrap();
+
+        let mut query = Query::new((
+            window_width().modified(),
+            window_height().modified(),
+            allow_vsync().modified(),
+        ));
+
+        assert_eq!(
+            query.borrow(&world).get(resources()),
+            Ok((&800.0, &600.0, &false))
+        );
+        world.set(resources(), allow_vsync(), true).unwrap();
+
+        assert_eq!(
+            query.borrow(&world).get(resources()),
+            Ok((&800.0, &600.0, &true))
+        );
+        assert!(query.borrow(&world).get(resources()).is_err());
+    }
+
+    #[test]
+    fn get_disjoint() {
+        component! {
+            a: i32,
+            b: i32,
+            c: i32,
+        }
+
+        let mut world = World::new();
+
+        let id = Entity::builder().set(a(), 5).set(b(), 5).spawn(&mut world);
+
+        let id2 = Entity::builder()
+            .set(a(), 3)
+            .set(b(), 3)
+            .set(c(), 1)
+            .spawn(&mut world);
+
+        let id3 = Entity::builder().set(a(), 7).set(b(), 5).spawn(&mut world);
+        let id4 = Entity::builder().set(a(), 7).spawn(&mut world);
+
+        let mut query = Query::new((a().modified(), b(), c().opt()));
+
+        let mut borrow = query.borrow(&world);
+
+        let ids = [id, id2, id3];
+        assert_eq!(
+            borrow.get_disjoint(ids),
+            Ok([(&5, &5, None), (&3, &3, Some(&1)), (&7, &5, None)])
+        );
+
+        // Again
+        assert_eq!(
+            borrow.get_disjoint(ids),
+            Ok([(&5, &5, None), (&3, &3, Some(&1)), (&7, &5, None)])
+        );
+
+        drop(borrow);
+        let mut borrow = query.borrow(&world);
+        assert_eq!(borrow.get_disjoint(ids), Err(Error::MismatchedFilter(id)));
+
+        assert_eq!(
+            borrow.get(id4),
+            Err(Error::MissingComponent(id4, b().info()))
+        );
     }
 }

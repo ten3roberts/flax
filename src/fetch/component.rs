@@ -64,7 +64,7 @@ where
         }
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+    fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str(self.name())
     }
 
@@ -74,6 +74,14 @@ where
 
     fn components(&self, result: &mut Vec<ComponentKey>) {
         result.push(self.key())
+    }
+
+    const HAS_FILTER: bool = false;
+
+    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {
+        if !data.arch.has(self.key()) {
+            result.push(self.info())
+        }
     }
 }
 
@@ -131,16 +139,23 @@ where
         }
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
+    fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("mut ")?;
         f.write_str(self.0.name())
     }
+
     fn filter(&self) -> Self::Filter {
         Nothing
     }
 
     fn components(&self, result: &mut Vec<ComponentKey>) {
         result.push(self.0.key())
+    }
+
+    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {
+        if !data.arch.has(self.0.key()) {
+            result.push(self.0.info())
+        }
     }
 }
 
@@ -172,7 +187,7 @@ pub fn relations_like<T: ComponentValue>(relation: fn(Entity) -> Component<T>) -
     }
 }
 
-/// Returns a list of relations with the specified kind
+/// Returns a list of relations of a specified type
 #[derive(Debug, Clone)]
 pub struct Relations<T: ComponentValue> {
     component: Component<T>,
@@ -217,10 +232,6 @@ where
         true
     }
 
-    fn describe(&self, f: &mut dyn Write) -> fmt::Result {
-        write!(f, "relations({})", self.component.name())
-    }
-
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
         let relation = self.component.key().id;
         data.arch
@@ -242,11 +253,17 @@ where
             .collect_vec()
     }
 
+    fn describe(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "relations({})", self.component.name())
+    }
+
     fn filter(&self) -> Self::Filter {
         Nothing
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
+
+    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {

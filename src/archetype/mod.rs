@@ -1,10 +1,17 @@
 use alloc::{collections::BTreeMap, format, vec::Vec};
-use core::{alloc::Layout, any::TypeId, fmt::Debug, mem};
+use core::{
+    alloc::Layout,
+    any::{type_name, TypeId},
+    fmt::Debug,
+    mem,
+};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::{buffer::ComponentBuffer, Component, ComponentKey, ComponentValue, Entity, Verbatim};
+use crate::{
+    buffer::ComponentBuffer, component, Component, ComponentKey, ComponentValue, Entity, Verbatim,
+};
 
 /// Unique archetype id
 pub type ArchetypeId = Entity;
@@ -637,26 +644,27 @@ impl Drop for Archetype {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 /// Represents a type erased component along with its memory layout and drop fn.
 /// Is essentially a vtable
 pub struct ComponentInfo {
-    pub(crate) layout: Layout,
     pub(crate) id: ComponentKey,
+    pub(crate) layout: Layout,
     pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
     pub(crate) type_id: TypeId,
+    pub(crate) type_name: &'static str,
     meta: fn(Self) -> ComponentBuffer,
 }
 
-impl Debug for ComponentInfo {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ComponentInfo")
-            .field("id", &self.id)
-            .field("name", &self.name)
-            .finish()
-    }
-}
+// impl Debug for ComponentInfo {
+//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//         f.debug_struct("ComponentInfo")
+//             .field("id", &self.id)
+//             .field("name", &self.name)
+//             .finish()
+//     }
+// }
 
 // impl core::fmt::Debug for ComponentInfo {
 //     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -698,6 +706,7 @@ impl ComponentInfo {
             name: component.name(),
             meta: component.meta(),
             type_id: TypeId::of::<T>(),
+            type_name: type_name::<T>(),
         }
     }
 
@@ -723,6 +732,10 @@ impl ComponentInfo {
     pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
         self.meta
     }
+}
+
+component! {
+    pub(crate) unknown_component: (),
 }
 
 #[cfg(test)]

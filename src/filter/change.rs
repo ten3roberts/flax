@@ -1,3 +1,5 @@
+use core::fmt::Formatter;
+
 use alloc::vec::Vec;
 use alloc::{string::ToString, vec};
 use atomic_refcell::AtomicRef;
@@ -62,9 +64,12 @@ where
         self.component.access(data)
     }
 
-    fn describe(&self, f: &mut dyn core::fmt::Write) -> core::fmt::Result {
+    fn describe(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.write_str(&self.kind.to_string())?;
-        f.write_str(" ")?;
+        match f.write_str(" ") {
+            Ok(it) => it,
+            Err(err) => return Err(err),
+        };
         self.component.describe(f)
     }
 
@@ -77,6 +82,16 @@ where
 
     fn components(&self, result: &mut Vec<crate::ComponentKey>) {
         result.push(self.component.key())
+    }
+
+    fn missing(
+        &self,
+        data: crate::fetch::FetchPrepareData,
+        result: &mut Vec<crate::ComponentInfo>,
+    ) {
+        if !data.arch.has(self.component.key()) {
+            result.push(self.component.info())
+        }
     }
 }
 
@@ -232,7 +247,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
         Default::default()
     }
 
-    fn describe(&self, f: &mut dyn core::fmt::Write) -> core::fmt::Result {
+    fn describe(&self, f: &mut Formatter) -> core::fmt::Result {
         f.write_str(&ChangeKind::Removed.to_string())?;
         f.write_str(" ")?;
         self.component.describe(f)
@@ -245,6 +260,16 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
     }
 
     fn components(&self, _: &mut Vec<crate::ComponentKey>) {}
+
+    fn missing(
+        &self,
+        data: crate::fetch::FetchPrepareData,
+        result: &mut Vec<crate::ComponentInfo>,
+    ) {
+        if !data.arch.has(self.component.key()) {
+            result.push(self.component.info())
+        }
+    }
 }
 
 impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {

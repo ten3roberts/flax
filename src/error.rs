@@ -2,7 +2,49 @@ use core::fmt::Display;
 
 use alloc::{string::String, vec::Vec};
 
-use crate::Entity;
+use crate::{ComponentInfo, Entity};
+
+// /// Additional (optional) context as to why a query failed
+// #[derive(Debug, PartialEq, Eq)]
+// pub struct MismatchedQuery {
+//     id: Entity,
+//     query: String,
+//     reason: MismatchedQueryReason,
+// }
+
+// #[derive(PartialEq, Eq, Debug, Clone)]
+// /// Describes what caused a query to fail
+// #[non_exhaustive]
+// pub enum MismatchedQueryReason {
+//     /// The filter did not match
+//     Filter,
+//     /// The fetch did not match
+//     Fetch {
+//         /// The missing components
+//         missing: Vec<ComponentInfo>,
+//     },
+// }
+
+// impl Display for MismatchedQuery {
+//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//         let Self { id, query, reason } = self;
+//         write!(f, "Entity {id} did not match the query {query:?}. {reason}")
+//     }
+// }
+
+// impl Display for MismatchedQueryReason {
+//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//         match self {
+//             MismatchedQueryReason::Filter => write!(f, "The entity did not match the filter"),
+//             MismatchedQueryReason::Fetch { missing } => {
+//                 write!(
+//                     f,
+//                     "The entity did not match the fetch. Missing: {missing:?}"
+//                 )
+//             }
+//         }
+//     }
+// }
 
 #[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -11,9 +53,9 @@ pub enum Error {
     /// The requested entity did not exist
     NoSuchEntity(Entity),
     /// The entity did not have the specified component
-    MissingComponent(Entity, &'static str),
-    /// The fetch_one failed due to missing components
-    UnmatchedFetch(Entity, String, Vec<String>),
+    MissingComponent(Entity, ComponentInfo),
+    /// A query for a specific entity failed due to an unsatisfied filter
+    MismatchedFilter(Entity),
     /// Attempt to access the same entity mutably
     Disjoint(Vec<Entity>),
     /// The batch is not complete
@@ -47,10 +89,9 @@ impl Display for Error {
             Error::MissingComponent(id, name) => {
                 write!(f, "Entity {id} does not have the component {name:?}")
             }
-            Error::UnmatchedFetch(id, fetch, missing) => write!(
-                f,
-                "Entity {id} did not match the fetch {fetch:?}.\nMissing: {missing:?}"
-            ),
+            Error::MismatchedFilter(id) => {
+                write!(f, "Entity {id} did not match the query filter")
+            }
             Error::Disjoint(ids) => write!(f, "Entities {ids:?} were not disjoint"),
             Error::IncompleteBatch => write!(
                 f,

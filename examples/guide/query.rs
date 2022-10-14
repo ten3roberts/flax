@@ -257,10 +257,8 @@ fn main() -> color_eyre::Result<()> {
         .append_to(&mut world, resources())
         .unwrap();
 
-    let mut query = EntityQuery::new(
-        (window_width(), window_height(), allow_vsync()),
-        resources(),
-    );
+    let mut query =
+        Query::new((window_width(), window_height(), allow_vsync())).entity(resources());
 
     let window_system = System::builder()
         .with(query)

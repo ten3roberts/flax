@@ -1,20 +1,16 @@
 use core::fmt::{self, Debug};
-use std::process::id;
 
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::Slice,
+    archetype::{unknown_component, Slice},
     entity::EntityLocation,
     error::Result,
-    fetch::{FetchPrepareData, PreparedFetch},
-    filter::{PreparedFilter, WithRelation, WithoutRelation},
-    find_missing_components, Access, AccessKind, All, And, AsBorrow, Component, ComponentValue,
-    Entity, Error, Fetch, Filter, Query, RelationExt, SystemAccess, SystemContext, SystemData,
-    With, Without, World,
+    fetch::{FetchPrepareData, FmtQuery, PreparedFetch},
+    filter::PreparedFilter,
+    find_missing_components, Access, AccessKind, All, AsBorrow, Entity, Error, Fetch, Filter,
+    SystemAccess, SystemContext, SystemData, World,
 };
-
-use super::FilterWithFetch;
 
 #[derive(Clone)]
 /// Similar to [`Query`](crate::Query), except optimized to only fetch a single entity.
@@ -27,30 +23,17 @@ use super::FilterWithFetch;
 /// The difference between this and [`EntityRef`](crate::EntityRef) is that the entity ref allows access to any
 /// component, wheras the query predeclares a group of components to retrieve. This increases
 /// ergonomics in situations such as borrowing resources from a static resource entity.
+///
+/// Create an entity query using [`Query::entity`](crate::Query::entity).
 pub struct EntityQuery<Q, F = All>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
 {
-    fetch: Q,
-    filter: F,
-    id: Entity,
-    change_tick: u32,
-}
-
-impl<Q> EntityQuery<Q>
-where
-    Q: for<'x> Fetch<'x>,
-{
-    /// Construct a new query for a single entity
-    pub fn new(fetch: Q, id: Entity) -> Self {
-        Self {
-            fetch,
-            id,
-            filter: All,
-            change_tick: 0,
-        }
-    }
+    pub(super) fetch: Q,
+    pub(super) filter: F,
+    pub(super) id: Entity,
+    pub(super) change_tick: u32,
 }
 
 impl<Q, F> EntityQuery<Q, F>
@@ -58,46 +41,6 @@ where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
 {
-    /// Adds a new filter to the query.
-    /// This filter is and:ed with the existing filters.
-    pub fn filter<G: for<'x> Filter<'x>>(self, filter: G) -> EntityQuery<Q, And<F, G>> {
-        EntityQuery {
-            filter: And::new(self.filter, filter),
-            change_tick: self.change_tick,
-            fetch: self.fetch,
-            id: self.id,
-        }
-    }
-
-    /// Shortcut for filter(with_relation)
-    pub fn with_relation<T: ComponentValue>(
-        self,
-        rel: impl RelationExt<T>,
-    ) -> EntityQuery<Q, And<F, WithRelation>> {
-        self.filter(rel.with_relation())
-    }
-
-    /// Shortcut for filter(without_relation)
-    pub fn without_relation<T: ComponentValue>(
-        self,
-        rel: impl RelationExt<T>,
-    ) -> EntityQuery<Q, And<F, WithoutRelation>> {
-        self.filter(rel.without_relation())
-    }
-
-    /// Shortcut for filter(without)
-    pub fn without<T: ComponentValue>(
-        self,
-        component: Component<T>,
-    ) -> EntityQuery<Q, And<F, Without>> {
-        self.filter(component.without())
-    }
-
-    /// Shortcut for filter(with)
-    pub fn with<T: ComponentValue>(self, component: Component<T>) -> EntityQuery<Q, And<F, With>> {
-        self.filter(component.with())
-    }
-
     /// Prepare the next change tick and return the old one for the last time
     /// the query ran
     fn prepare_tick(&mut self, world: &World) -> (u32, u32) {
@@ -135,7 +78,7 @@ where
             Err(_) => return (State::NoSuchEntity(self.id), &self.fetch, &self.filter),
         };
 
-        let arch = world.archetypes.get(loc.arch);
+        let arch = world.archetypes.get(loc.arch_id);
         let fetch_filter = self.fetch.filter();
         // Check static filtering
         if !self.filter.matches(arch) || (Q::HAS_FILTER && !fetch_filter.matches(arch)) {
@@ -155,7 +98,7 @@ where
             match self.fetch.prepare(FetchPrepareData {
                 world,
                 arch,
-                arch_id: loc.arch,
+                arch_id: loc.arch_id,
             }) {
                 Some(v) => (
                     State::Complete { loc, prepared: v },
@@ -206,11 +149,8 @@ where
     F: for<'x> Filter<'x> + Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
-        let mut buf = alloc::string::String::new();
-        self.fetch.describe(&mut buf).unwrap();
-
         f.debug_struct("Query")
-            .field("fetch", &buf)
+            .field("fetch", &FmtQuery(&self.fetch))
             .field("filter", &self.filter)
             .finish()
     }
@@ -260,16 +200,13 @@ where
                 unsafe { Ok(prepared.fetch(loc.slot)) }
             }
             State::NoSuchEntity(id) => Err(Error::NoSuchEntity(*id)),
-            State::MismatchedFilter(id, _) => Err(Error::UnmatchedFetch(
+            State::MismatchedFilter(id, _) => Err(Error::MismatchedFilter(*id)),
+            State::MismatchedFetch(id, loc) => Err(Error::MissingComponent(
                 *id,
-                Default::default(),
-                Default::default(),
+                find_missing_components(self.fetch, loc.arch_id, self.world)
+                    .next()
+                    .unwrap_or_else(|| unknown_component().info()),
             )),
-            State::MismatchedFetch(id, loc) => {
-                let (desc, missing) = find_missing_components(self.fetch, loc.arch, self.world);
-
-                Err(Error::UnmatchedFetch(*id, desc, missing))
-            }
         }
     }
 }
@@ -322,15 +259,15 @@ where
         let loc = world.location(self.id);
         match loc {
             Ok(loc) => {
-                let arch = world.archetypes.get(loc.arch);
+                let arch = world.archetypes.get(loc.arch_id);
                 if self.filter.matches(arch) {
                     let data = FetchPrepareData {
                         world,
                         arch,
-                        arch_id: loc.arch,
+                        arch_id: loc.arch_id,
                     };
                     let mut res = self.fetch.access(data);
-                    res.append(&mut self.filter.access(loc.arch, arch));
+                    res.append(&mut self.filter.access(loc.arch_id, arch));
 
                     res.push(Access {
                         kind: AccessKind::World,
@@ -370,7 +307,7 @@ mod test {
 
     use glam::{vec3, Vec3};
 
-    use crate::{component, name, System};
+    use crate::{component, name, Query, System};
 
     use super::*;
 
@@ -395,7 +332,7 @@ mod test {
             .set(name(), "Baz".into())
             .spawn(&mut world);
 
-        let mut query = EntityQuery::new((name(), position().as_mut()), id);
+        let mut query = Query::new((name(), position().as_mut())).entity(id);
         assert!(query.borrow(&world).get().is_err());
 
         world.set(id, position(), vec3(4.8, 4.2, 9.1)).unwrap();
@@ -409,7 +346,7 @@ mod test {
 
         assert_eq!(world.get(id, position()).as_deref(), Ok(&Vec3::X));
 
-        let mut system = System::builder().with(EntityQuery::new(name(), id)).build(
+        let mut system = System::builder().with(Query::new(name()).entity(id)).build(
             |mut q: EntityBorrow<_, _>| {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             },
@@ -438,14 +375,12 @@ mod test {
             .append_to(&mut world, resources())
             .unwrap();
 
-        let mut query = EntityQuery::new(
-            (
-                window_width().modified(),
-                window_height().modified(),
-                allow_vsync().modified(),
-            ),
-            resources(),
-        );
+        let mut query = Query::new((
+            window_width().modified(),
+            window_height().modified(),
+            allow_vsync().modified(),
+        ))
+        .entity(resources());
 
         assert_eq!(query.borrow(&world).get(), Ok((&800.0, &600.0, &false)));
         world.set(resources(), allow_vsync(), true).unwrap();

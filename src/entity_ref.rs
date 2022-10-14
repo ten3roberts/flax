@@ -6,7 +6,6 @@ use crate::{
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    fetch::FetchPrepareData,
     Component, ComponentValue, Entity, Error, Fetch, World,
 };
 
@@ -25,14 +24,14 @@ impl<'a> EntityRefMut<'a> {
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
         self.world
             .get_at(self.loc, component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.name()))
+            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
     /// Access a component mutably
     pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRefMut<T>> {
         self.world
             .get_mut_at(self.loc, component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.name()))
+            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
     /// Check if the entity currently has the specified component without
@@ -40,7 +39,7 @@ impl<'a> EntityRefMut<'a> {
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
         self.world
             .archetypes
-            .get(self.loc.arch)
+            .get(self.loc.arch_id)
             .has(component.key())
     }
 
@@ -106,14 +105,14 @@ impl<'a> EntityRef<'a> {
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
         self.world
             .get_at(self.loc, component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.name()))
+            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
     /// Access a component mutably
     pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRefMut<T>> {
         self.world
             .get_mut_at(self.loc, component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.name()))
+            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
     /// Check if the entity currently has the specified component without
@@ -121,7 +120,7 @@ impl<'a> EntityRef<'a> {
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
         self.world
             .archetypes
-            .get(self.loc.arch)
+            .get(self.loc.arch_id)
             .has(component.key())
     }
 }

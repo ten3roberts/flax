@@ -191,18 +191,14 @@ fn derive_data_struct(
                         ( #(self.#field_names.matches(data))&&* )
                     }
 
-                    fn describe(&self, f: &mut dyn ::std::fmt::Write) -> ::std::fmt::Result {
-                        use ::std::fmt::Write;
-                        f.write_str(stringify!(#name))?;
-                        f.write_str("{")?;
+                    fn describe(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                        let mut s = f.debug_struct(stringify!(#name));
 
                         #(
-                            f.write_str(stringify!(#field_names))?;
-                            f.write_str(": ")?;
-                            f.write_str(stringify!(self.#field_names.describe()))?;
+                            s.field(stringify!(#field_names), &#crate_name::fetch::FmtQuery(&self.#field_names));
                         )*
 
-                        f.write_str("}")
+                        s.finish()
                     }
 
                     fn access(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<#crate_name::Access> {
@@ -215,6 +211,10 @@ fn derive_data_struct(
 
                     fn filter(&self) -> Self::Filter {
                         (#(self.#field_names.filter()),*)
+                    }
+
+                    fn missing(&self, data: #crate_name::fetch::FetchPrepareData, result: &mut Vec<#crate_name::ComponentInfo>) {
+                        #(self.#field_names.missing(data, result));*
                     }
                 }
             })

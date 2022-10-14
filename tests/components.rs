@@ -21,11 +21,8 @@ fn custom_component() {
     // This ensured that dead components never exist
     world.despawn(position.id()).unwrap();
 
-    assert!(
-        matches!(
-            world.get(id, position).as_deref(),
-            Err(Error::MissingComponent(_, "position"))
-        ),
-        "component was not removed"
+    assert_eq!(
+        world.get(id, position).as_deref(),
+        Err(&Error::MissingComponent(id, position.info())),
     );
 }
