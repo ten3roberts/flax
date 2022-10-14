@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Dynamic Components - Flax Guide</title>
+        <title>EntityQuery - Flax Guide</title>
         <!-- Custom HTML head -->
         <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
         <meta name="description" content="">
@@ -75,7 +75,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="../fundamentals/entity_query.html"><strong aria-hidden="true">1.5.</strong> EntityQuery</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.6.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.7.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.8.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.9.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.10.</strong> CommandBuffer</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">2.1.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html" class="active"><strong aria-hidden="true">2.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">2.3.</strong> Serialization</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="../fundamentals/entity_query.html" class="active"><strong aria-hidden="true">1.5.</strong> EntityQuery</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.6.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.7.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.8.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.9.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.10.</strong> CommandBuffer</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">2.1.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">2.3.</strong> Serialization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -134,101 +134,65 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="dynamic-components"><a class="header" href="#dynamic-components">Dynamic components</a></h1>
-<p>A component is nothing more than a type safe entity id.</p>
-<p>The <a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> uses a
-lazily acquired entity. It does not require the world since the entity is
-spawned in the <code>STATIC</code> global namespace which is shared across all worlds.</p>
-<p>It is entirely possible to create a component at runtime for e.g; a local system.</p>
+                        <h1 id="entityquery"><a class="header" href="#entityquery">EntityQuery</a></h1>
+<p>Similar to a normal query, an
+<a href="https://docs.rs/flax/latest/flax/struct.EntityQuery.html">EntityQuery</a> allows
+simultanous access to multiple components using a fetch, but for a single,
+already known entity.</p>
+<p>This is useful when dealing with static resource entities and allowing systems
+to efficiently access the resources it needs.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    registry().with(HierarchicalLayer::default()).init();
+</span><span class="boring">fn main() {
+</span>    component! {
 
-    let mut world = World::new();
+        window_width: f32,
+        window_height: f32,
+        allow_vsync: bool,
 
-    let position: Component&lt;Vec2&gt; = world.spawn_component(&quot;position&quot;, |info| {
-        let mut buf = ComponentBuffer::new();
-        &lt;Debug as MetaData&lt;Vec2&gt;&gt;::attach(info, &amp;mut buf);
-        buf
-    });
-
-    let id = Entity::builder()
-        .set(position, vec2(1.0, 6.4))
-        .spawn(&amp;mut world);
-
-    tracing::info!(&quot;world: {world:#?}&quot;);
-
-    // When `position` is despawned, it is removed from all entities.
-    // This ensured that dead components never exist
-    world.despawn(position.id())?;
-
-    tracing::info!(&quot;world: {world:#?}&quot;);
-
-    world.despawn(id)?;
-<span class="boring">}
-</span></code></pre></pre>
-<p>The <code>meta</code> allows the user to provide a function to attach extra components to
-the entity. This is used by the <code>=&gt; [ty, ty]</code> syntax for the <code>component</code> macro.</p>
-<p>The world will automatically manage the lifetime of the component to ensure that
-no entity has invalid components attached to it.</p>
-<h2 id="relations"><a class="header" href="#relations">Relations</a></h2>
-<p>As a component is just a normal entity you can add an entity to another entity.
-Such as adding a parent entity to the children entities.</p>
-<p>However, while this method allows quick and easy entity hierarchies, there is no
-notion of what the entity represents, and no way to distinguish it from another
-component.</p>
-<p>This is where component parameterization comes to play.</p>
-<p>An entity is <code>64</code> bits in size, sufficient for holding the <code>kind</code>, <code>index</code>, and
-<code>generation</code>.</p>
-<p>However, since the world manages the lifetime of the component, the generation
-of <code>32</code> bits is freed up, which allows other data to be stored, such as another
-entity id.</p>
-<p>This allows the upper bits of a component(<em>entity</em>) id to contain another
-entity as the generation is not needed.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    #[derive(Debug, Clone)]
-    struct RelationData {
-        // This allows you to add extra data to the child in the relation
-        distance: f32,
+        resources,
     }
 
-    let child_of = world.spawn_relation::&lt;RelationData&gt;(&quot;child_of&quot;, |info| {
-        let mut buf = ComponentBuffer::new();
-        &lt;Debug as MetaData&lt;RelationData&gt;&gt;::attach(info, &amp;mut buf);
-        buf
-    });
+    Entity::builder()
+        .set(window_width(), 800.0)
+        .set(window_height(), 600.0)
+        .set(allow_vsync(), false)
+        // Since `resources` is static, it is not required to spawn it
+        .append_to(&amp;mut world, resources())
+        .unwrap();
 
-    let parent = world.spawn();
+    let query = Query::new((
+        window_width().modified(),
+        window_height().modified(),
+        allow_vsync().modified(),
+    ))
+    .entity(resources());
 
-    let child = Entity::builder()
-        .set(child_of(parent), RelationData { distance: 1.0 })
-        .spawn(&amp;mut world);
+    let mut window_system = System::builder()
+        .with(query)
+        .build(|mut q: EntityBorrow&lt;_&gt;| {
+            if let Ok((width, height, allow_vsync)) = q.get() {
+                tracing::info!(width, height, allow_vsync, &quot;Config changed&quot;);
+            } else {
+                tracing::info!(&quot;No config change&quot;);
+            }
+        });
 
-    let data = world.get(child, child_of(parent))?;
-
-    tracing::info!(&quot;Relation distance: {:?}&quot;, data.distance);
-
-    drop(data);
-
-    world.despawn(parent)?;
-    assert!(world.get(child, child_of(parent)).is_err());
+    window_system.run_on(&amp;mut world);
+    window_system.run_on(&amp;mut world);
+    world.set(resources(), window_height(), 720.0)?;
+    window_system.run_on(&amp;mut world);
 
 <span class="boring">}
 </span></code></pre></pre>
-<p>When despawning either the relation component or object entity, the &quot;parent&quot;,
-the component is removed from all entities.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../diving_deeper/query.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../fundamentals/query.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
-                            <a rel="next" href="../diving_deeper/serde.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="../fundamentals/systems.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
                         <div style="clear: both"></div>
@@ -237,10 +201,10 @@ the component is removed from all entities.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../diving_deeper/query.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../fundamentals/query.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
-                    <a rel="next" href="../diving_deeper/serde.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="../fundamentals/systems.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
