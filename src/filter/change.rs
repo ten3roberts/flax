@@ -144,6 +144,7 @@ impl<'a> PreparedKindFilter<'a> {
                 let v = changes.get(self.index);
                 if let Some(change) = v {
                     self.index += 1;
+                    // Found a valid change slice
                     if change.tick > self.tick {
                         break Some(*self.cur.get_or_insert(change.slice));
                     }
@@ -173,6 +174,15 @@ impl<'a> PreparedFilter for PreparedKindFilter<'a> {
             } else {
                 return intersect;
             }
+        }
+    }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        match self.changes {
+            Some(ref changes) => changes
+                .iter()
+                .any(|change| change.tick > self.tick && change.slice.contains(slot)),
+            None => false,
         }
     }
 }
@@ -210,7 +220,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
 
     type Prepared = ();
 
-    fn prepare(&'w self, _: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&self, _: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(())
     }
 

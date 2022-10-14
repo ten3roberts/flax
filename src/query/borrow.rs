@@ -10,7 +10,6 @@ use itertools::Itertools;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use smallvec::SmallVec;
 
-use crate::name;
 use crate::{
     entity::EntityLocation,
     error::Result,
@@ -25,6 +24,28 @@ use super::{
     iter::{BatchedIter, QueryIter},
     FilterWithFetch,
 };
+
+pub(crate) fn find_missing_components<'q, 'a, Q>(
+    fetch: &Q,
+    arch_id: ArchetypeId,
+    world: &'a World,
+) -> (String, Vec<String>)
+where
+    Q: Fetch<'a>,
+{
+    let arch = world.archetypes.get(arch_id);
+    let mut buf = String::new();
+    fetch.describe(&mut buf).unwrap();
+
+    let mut components = Vec::new();
+    fetch.components(&mut components);
+    (
+        buf,
+        DifferenceIter::new(arch.components().map(|v| v.id()), components.into_iter())
+            .map(|v| world.get(v.id, is_component()).unwrap().name().to_string())
+            .collect_vec(),
+    )
+}
 
 pub(crate) struct PreparedArchetype<'w, Q> {
     pub(crate) arch_id: ArchetypeId,
@@ -301,28 +322,31 @@ where
             } = self.world.location(id)?;
             idxs[i] = (
                 self.prepare_archetype(arch_id).ok_or_else(|| {
-                    let arch = self.world.archetypes.get(arch_id);
-                    let mut buf = String::new();
-                    self.fetch.describe(&mut buf).unwrap();
+                    let (desc, missing) = find_missing_components(self.fetch, arch_id, self.world);
 
-                    let mut components = Vec::new();
-                    self.fetch.components(&mut components);
-                    Error::UnmatchedFetch(
-                        id,
-                        buf,
-                        DifferenceIter::new(
-                            arch.components().map(|v| v.id()),
-                            components.into_iter(),
-                        )
-                        .map(|v| {
-                            self.world
-                                .get(v.id, is_component())
-                                .unwrap()
-                                .name()
-                                .to_string()
-                        })
-                        .collect_vec(),
-                    )
+                    Error::UnmatchedFetch(id, desc, missing)
+                    // let arch = self.world.archetypes.get(arch_id);
+                    // let mut buf = String::new();
+                    // self.fetch.describe(&mut buf).unwrap();
+
+                    // let mut components = Vec::new();
+                    // self.fetch.components(&mut components);
+                    // Error::UnmatchedFetch(
+                    //     id,
+                    //     buf,
+                    //     DifferenceIter::new(
+                    //         arch.components().map(|v| v.id()),
+                    //         components.into_iter(),
+                    //     )
+                    //     .map(|v| {
+                    //         self.world
+                    //             .get(v.id, is_component())
+                    //             .unwrap()
+                    //             .name()
+                    //             .to_string()
+                    //     })
+                    //     .collect_vec(),
+                    // )
                 })?,
                 slot,
             );
@@ -354,25 +378,14 @@ where
         } = self.world.location(id)?;
 
         let idx = self.prepare_archetype(arch_id).ok_or_else(|| {
-            let arch = self.world.archetypes.get(arch_id);
             let mut buf = String::new();
             self.fetch.describe(&mut buf).unwrap();
 
             let mut components = Vec::new();
             self.fetch.components(&mut components);
-            Error::UnmatchedFetch(
-                id,
-                buf,
-                DifferenceIter::new(arch.components().map(|v| v.id()), components.into_iter())
-                    .map(|v| {
-                        self.world
-                            .get(v.id, name())
-                            .as_deref()
-                            .cloned()
-                            .unwrap_or_else(|_| "unknown".into())
-                    })
-                    .collect_vec(),
-            )
+            let (desc, missing) = find_missing_components(self.fetch, arch_id, self.world);
+
+            Error::UnmatchedFetch(id, desc, missing)
         })?;
 
         // Since `self` is a mutable references the borrow checker

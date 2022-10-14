@@ -101,6 +101,10 @@ where
 pub trait PreparedFilter {
     /// Filters a slice of entity slots and returns a subset of the slice
     fn filter(&mut self, slots: Slice) -> Slice;
+    /// Returns true if the filter would yield the specified slot.
+    ///
+    /// Assumes slot is valid.
+    fn matches_slot(&mut self, slot: usize) -> bool;
 }
 
 #[derive(Debug, Clone)]
@@ -228,6 +232,10 @@ where
             }
         }
     }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        self.left.matches_slot(slot) || self.right.matches_slot(slot)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -309,6 +317,10 @@ where
 
         slots.difference(a).unwrap()
     }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        !self.0.matches_slot(slot)
+    }
 }
 
 /// And filter combinator
@@ -349,6 +361,10 @@ where
         } else {
             i
         }
+    }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        self.left.matches_slot(slot) && self.right.matches_slot(slot)
     }
 }
 
@@ -660,6 +676,10 @@ impl PreparedFilter for BooleanFilter {
             Slice::empty()
         }
     }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        self.0
+    }
 }
 
 impl<'w, F> Filter<'w> for &F
@@ -703,6 +723,14 @@ impl<F: PreparedFilter> PreparedFilter for GatedFilter<F> {
             slots
         }
     }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        if self.active {
+            self.filter.matches_slot(slot)
+        } else {
+            true
+        }
+    }
 }
 
 impl<'w, F: Filter<'w>> Filter<'w> for GatedFilter<F> {
@@ -731,6 +759,10 @@ pub struct BatchSize(pub(crate) Slot);
 impl PreparedFilter for BatchSize {
     fn filter(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))
+    }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        true
     }
 }
 
@@ -777,6 +809,12 @@ macro_rules! tuple_impl {
                 )*
 
                 u
+            }
+
+            fn matches_slot(&mut self, slot: usize) -> bool {
+                $(
+                    self.$idx.matches_slot(slot)
+                )||*
             }
         }
 

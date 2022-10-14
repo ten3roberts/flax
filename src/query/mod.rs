@@ -1,4 +1,5 @@
 mod borrow;
+mod entity;
 use alloc::string::String;
 use alloc::vec::Vec;
 mod iter;
@@ -8,7 +9,6 @@ use core::fmt::{self, Debug};
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
-use crate::RelationExt;
 use crate::{
     archetype::{Archetype, ArchetypeId, Slot},
     fetch::*,
@@ -19,8 +19,10 @@ use crate::{
     Access, AccessKind, Archetypes, Component, ComponentKey, ComponentValue, FetchItem, Filter,
     World,
 };
+use crate::{AsBorrow, RelationExt};
 
 pub use borrow::*;
+pub use entity::*;
 pub use iter::*;
 
 type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
@@ -391,5 +393,17 @@ where
     /// simultaneously.
     pub fn borrow(&mut self) -> QueryBorrow<Q, F> {
         self.query.borrow(&self.world)
+    }
+}
+
+impl<'a, 'w, Q, F> AsBorrow<'a> for QueryData<'w, Q, F>
+where
+    Q: for<'x> Fetch<'x> + 'static,
+    F: for<'x> Filter<'x> + 'static,
+{
+    type Borrowed = QueryBorrow<'a, Q, F>;
+
+    fn as_borrow(&'a mut self) -> Self::Borrowed {
+        self.borrow()
     }
 }

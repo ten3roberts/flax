@@ -221,6 +221,31 @@ where
             end: start + count,
         }
     }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        let borrow = match self.borrow {
+            Some(ref v) => v,
+            None => return false,
+        };
+
+        let method = &self.method;
+        let other = &self.other;
+
+        let val = &borrow[slot];
+
+        let ord = val.partial_cmp(other);
+        if let Some(ord) = ord {
+            match method {
+                CmpMethod::Less => ord == Ordering::Less,
+                CmpMethod::LessEq => ord == Ordering::Less || ord == Ordering::Equal,
+                CmpMethod::Eq => ord == Ordering::Equal,
+                CmpMethod::GreaterEq => ord == Ordering::Greater || ord == Ordering::Equal,
+                CmpMethod::Greater => ord == Ordering::Greater,
+            }
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -317,6 +342,15 @@ where
             start,
             end: start + count,
         }
+    }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        let borrow = match self.borrow {
+            Some(ref v) => v,
+            None => return false,
+        };
+
+        (self.func)(&borrow[slot])
     }
 }
 

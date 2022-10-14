@@ -26,6 +26,22 @@ jobs:
         with:
           command: test
           args: --all-features
+  lint_doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --all-features
   test_nostd:
     runs-on: ubuntu-latest
     steps:

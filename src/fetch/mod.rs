@@ -74,7 +74,7 @@ impl<'w> Fetch<'w> for () {
 
     type Prepared = ();
 
-    fn prepare(&'w self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(())
     }
 
@@ -152,7 +152,7 @@ impl<'w> Fetch<'w> for EntityIds {
 
     type Prepared = PreparedEntities<'w>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(PreparedEntities {
             entities: data.arch.entities(),
         })

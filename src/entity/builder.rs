@@ -108,6 +108,19 @@ impl EntityBuilder {
         Ok(id)
     }
 
+    /// Appends the components in the builder to an existing entity.
+    ///
+    /// New components will overwrite existing components.
+    pub fn append_to(&mut self, world: &mut World, id: Entity) -> Result<Entity> {
+        world.set_with(id, &mut self.buffer)?;
+
+        self.children.drain(..).for_each(|mut child| {
+            child.spawn_inner(world, Some(id));
+        });
+
+        Ok(id)
+    }
+
     fn prepare(&mut self, parent: Entity) {
         self.buffer.components_mut().for_each(|info| {
             let id = info.id();

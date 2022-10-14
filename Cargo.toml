@@ -54,7 +54,7 @@ debug = true
 
 [features]
 std = ["itertools/use_std", "itertools/use_alloc"]
-default = ["parallel"]
+default = ["std", "parallel"]
 serde = ["dep:serde", "erased-serde"]
 internal_assert = []
 parallel = ["rayon"]
