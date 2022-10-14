@@ -18,7 +18,7 @@ use crate::{
     Access, AccessKind, Archetypes, Component, ComponentKey, ComponentValue, FetchItem, Filter,
     World,
 };
-use crate::{AsBorrow, Entity, Error, RelationExt};
+use crate::{AsBorrow, Entity, RelationExt};
 
 pub use borrow::*;
 pub use entity::*;
@@ -415,7 +415,7 @@ mod test {
     use glam::{vec3, Vec3};
     use pretty_assertions::assert_eq;
 
-    use crate::{component, name, Query, System};
+    use crate::{component, name, Error, Query, System};
 
     use super::*;
 
@@ -463,7 +463,7 @@ mod test {
 
         let mut system = System::builder()
             .with(Query::new(name()).entity(id2))
-            .build(|mut q: EntityBorrow<_, _>| {
+            .build(|mut q: EntityBorrow<_>| {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             });
 

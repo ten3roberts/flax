@@ -2,8 +2,8 @@ mod component;
 mod ext;
 mod opt;
 
+use core::fmt::Debug;
 use core::fmt::{self, Formatter};
-use core::fmt::{Debug, Write};
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -115,7 +115,7 @@ impl<'w> Fetch<'w> for () {
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
 
-    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {}
+    fn missing(&self, _: FetchPrepareData, _: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -199,7 +199,7 @@ impl<'w> Fetch<'w> for EntityIds {
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
 
-    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {}
+    fn missing(&self, _: FetchPrepareData, _: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {

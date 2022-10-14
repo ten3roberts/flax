@@ -263,7 +263,7 @@ where
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
 
-    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {}
+    fn missing(&self, _: FetchPrepareData, _: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {
