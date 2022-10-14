@@ -35,18 +35,6 @@ impl<'a, 'b, T: 'a> AsBorrow<'a> for AtomicRefMut<'b, T> {
     }
 }
 
-impl<'a, 'w, Q, F> AsBorrow<'a> for QueryData<'w, Q, F>
-where
-    Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + 'static,
-{
-    type Borrowed = QueryBorrow<'a, Q, F>;
-
-    fn as_borrow(&'a mut self) -> Self::Borrowed {
-        self.borrow()
-    }
-}
-
 /// Describes a type which can fetch assocated Data from the system context and
 /// provide it to the system.
 pub trait SystemData<'a>: SystemAccess {

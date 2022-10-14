@@ -7,6 +7,7 @@
   - [Components](fundamentals/components.md)
   - [Component metadata](fundamentals/metadata.md)
   - [Query](fundamentals/query.md)
+  - [EntityQuery](fundamentals/entity_query.md)
   - [Systems](fundamentals/systems.md)
   - [Schedule](fundamentals/schedule.md)
   - [Relations](fundamentals/relations.md)

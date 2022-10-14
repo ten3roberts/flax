@@ -14,6 +14,7 @@ type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
 enum Command {
     /// Spawn a new entity
     Spawn(EntityBuilder),
+    AppendTo(EntityBuilder, Entity),
     SpawnAt(EntityBuilder, Entity),
     /// Spawn a batch of entities with the same components
     SpawnBatch(BatchSpawn),
@@ -40,7 +41,8 @@ impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Spawn(v) => f.debug_tuple("Spawn").field(v).finish(),
-            Command::SpawnAt(id, v) => f.debug_tuple("SpawnAt").field(&v).field(&id).finish(),
+            Self::SpawnAt(id, v) => f.debug_tuple("SpawnAt").field(&v).field(&id).finish(),
+            Self::AppendTo(id, v) => f.debug_tuple("AppendTo").field(&v).field(&id).finish(),
             Self::SpawnBatch(batch) => f.debug_tuple("SpawnBatch").field(batch).finish(),
             Self::SpawnBatchAt(batch, ids) => f
                 .debug_tuple("SpawnBatchAt")
@@ -139,6 +141,13 @@ impl CommandBuffer {
         self
     }
 
+    /// Append components to an existing entity
+    pub fn append_to(&mut self, id: Entity, entity: impl Into<EntityBuilder>) -> &mut Self {
+        self.commands.push(Command::AppendTo(entity.into(), id));
+
+        self
+    }
+
     /// Spawn a new batch with the given components of the builder
     pub fn spawn_batch(&mut self, batch: impl Into<BatchSpawn>) -> &mut Self {
         self.commands.push(Command::SpawnBatch(batch.into()));
@@ -183,6 +192,12 @@ impl CommandBuffer {
                         .spawn_at(world, id)
                         .map_err(|v| v.into_eyre())
                         .wrap_err("Failed to spawn entity")?;
+                }
+                Command::AppendTo(mut entity, id) => {
+                    entity
+                        .append_to(world, id)
+                        .map_err(|v| v.into_eyre())
+                        .wrap_err("Failed to append to entity")?;
                 }
                 Command::SpawnBatch(mut batch) => {
                     batch.spawn(world);

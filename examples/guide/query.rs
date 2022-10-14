@@ -1,6 +1,8 @@
+use std::borrow::BorrowMut;
+
 use flax::{
-    component, entity_ids, CmpExt, CommandBuffer, Component, Debug, Entity, Mutable, Query,
-    QueryBorrow, Schedule, System, World,
+    component, entity_ids, CmpExt, CommandBuffer, Component, Debug, Entity, EntityBorrow,
+    EntityQuery, Mutable, Query, QueryBorrow, Schedule, System, SystemBuilder, World,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::{
@@ -237,5 +239,33 @@ fn main() -> color_eyre::Result<()> {
 
     // ANCHOR_END: schedule_basic
 
+    // ANCHOR: entity_query
+    component! {
+
+        window_width: f32,
+        window_height: f32,
+        allow_vsync: bool,
+
+        resources,
+    }
+
+    Entity::builder()
+        .set(window_width(), 800.0)
+        .set(window_height(), 600.0)
+        .set(allow_vsync(), false)
+        // Since `resources` is static, it is not required to spawn it
+        .append_to(&mut world, resources())
+        .unwrap();
+
+    let mut query = EntityQuery::new(
+        (window_width(), window_height(), allow_vsync()),
+        resources(),
+    );
+
+    let window_system = System::builder()
+        .with(query)
+        .build(|mut q: EntityBorrow<_, _>| {});
+
+    // ANCHOR_END: entity_query
     Ok(())
 }
