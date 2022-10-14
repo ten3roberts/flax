@@ -65,14 +65,13 @@ pub enum Error {
 }
 
 impl Error {
-    #[cfg(feature = "std")]
-    pub(crate) fn into_eyre(self) -> eyre::Report {
-        eyre::Report::new(self)
-    }
+    /// Convert the error into an eyre report, regardlees of [std::error::Error] or not.
+    pub fn into_eyre(self) -> eyre::Report {
+        #[cfg(not(feature = "std"))]
+        return eyre::Report::msg(self);
 
-    #[cfg(not(feature = "std"))]
-    pub(crate) fn into_eyre(self) -> eyre::Report {
-        eyre::Report::msg(self)
+        #[cfg(feature = "std")]
+        return eyre::Report::new(self);
     }
 }
 

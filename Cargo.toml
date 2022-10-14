@@ -18,6 +18,8 @@ members = ["flax-derive", "asteroids"]
 [dependencies]
 flax-derive = { path = "./flax-derive", version = "0.1.0" }
 
+flume = { version = "0.10.14", default_features = false, optional = true }
+
 atomic_refcell = "0.1.8"
 bitflags = "1.3.2"
 eyre = "0.6.8"
@@ -28,8 +30,6 @@ smallvec = { version = "1.8.0", default_features = false }
 tracing = { version = "0.1.35", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 erased-serde = { version = "0.3", features = [], optional = true }
-flume = { version = "0.10.14", default_features = false, features = [] }
-
 [dev-dependencies]
 itertools = { version = "0.10.3", default_features = false }
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
@@ -55,7 +55,7 @@ debug = true
 
 [features]
 std = ["itertools/use_std", "itertools/use_alloc"]
-default = ["std", "parallel"]
+default = ["std", "parallel", "flume"]
 serde = ["dep:serde", "erased-serde"]
 internal_assert = []
 parallel = ["rayon"]

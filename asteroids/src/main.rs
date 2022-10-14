@@ -433,7 +433,7 @@ fn collision_system() -> BoxedSystem {
                             collision.dir * collision.depth * (1.0 - mass / collision.system_mass);
                     }
 
-                    let rng = resources.get()?;
+                    let rng = resources.get().map_err(|e| e.into_eyre())?;
                     create_explosion(rng, 8, collision.point, collision.impact, 4.0, 1.0, GRAY)
                         .for_each(|v| {
                             cmd.spawn(v);

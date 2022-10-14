@@ -4,6 +4,7 @@ use itertools::Itertools;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 #[test]
+#[cfg(feature = "flume")]
 fn change_detection() {
     let (removed_tx, removed_rx) = flume::unbounded();
 
