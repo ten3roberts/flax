@@ -239,7 +239,6 @@ fn main() -> color_eyre::Result<()> {
 
     // ANCHOR: entity_query
     component! {
-
         window_width: f32,
         window_height: f32,
         allow_vsync: bool,
