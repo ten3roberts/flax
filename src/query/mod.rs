@@ -51,12 +51,11 @@ impl<Q, F> Debug for Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Filter<'x>,
-    F: core::fmt::Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Query")
             .field("fetch", &FmtQuery(&self.fetch))
-            .field("filter", &self.filter)
+            .field("filter", &FmtFilter(&self.filter))
             .finish()
     }
 }
@@ -364,7 +363,7 @@ where
 impl<'a, Q, F> SystemData<'a> for Query<Q, F>
 where
     Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + Debug + 'static,
+    F: for<'x> Filter<'x> + 'static,
 {
     type Value = QueryData<'a, Q, F>;
 

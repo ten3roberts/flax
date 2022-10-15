@@ -9,7 +9,7 @@
 use core::{
     any::type_name,
     cmp::Ordering,
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display},
     ops,
 };
 
@@ -98,6 +98,18 @@ enum CmpMethod {
     Greater,
 }
 
+impl Display for CmpMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CmpMethod::Less => write!(f, "<"),
+            CmpMethod::LessEq => write!(f, "<="),
+            CmpMethod::Eq => write!(f, "=="),
+            CmpMethod::GreaterEq => write!(f, ">="),
+            CmpMethod::Greater => write!(f, ">"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct OrdCmp<T>
 where
@@ -135,7 +147,7 @@ where
 
 impl<'w, T> Filter<'w> for OrdCmp<T>
 where
-    T: ComponentValue + PartialOrd,
+    T: ComponentValue + PartialOrd + Debug,
 {
     type Prepared = PreparedOrdCmp<'w, T>;
 
@@ -163,6 +175,16 @@ where
         } else {
             vec![]
         }
+    }
+
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {} {:?}",
+            self.component.name(),
+            self.method,
+            self.other
+        )
     }
 }
 
@@ -299,6 +321,10 @@ where
         } else {
             vec![]
         }
+    }
+
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} <=> {}", self.component.name(), &type_name::<F>())
     }
 }
 

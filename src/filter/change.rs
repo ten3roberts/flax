@@ -129,6 +129,10 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
             vec![]
         }
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{} {}", self.kind, self.component.name())
+    }
 }
 
 #[derive(Debug)]
@@ -299,5 +303,9 @@ impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
         } else {
             vec![]
         }
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "removed {}", self.component.name())
     }
 }

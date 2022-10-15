@@ -26,6 +26,9 @@ component! {
     asteroid: () => [ Debug ],
     player: () => [ Debug ],
 
+    /// Invincibility time in seconds
+    invincibility: f32,
+
     /// The amount of material collected from asteroids
     material: f32 => [ Debug ],
 
@@ -142,7 +145,7 @@ async fn main() -> Result<()> {
         while acc > 0.0 {
             acc -= dt;
             let batches = physics_schedule.batch_info(&mut world);
-            tracing::info!(
+            tracing::debug!(
                 "Batches: {:#?}",
                 batches
                     .iter()
@@ -168,6 +171,7 @@ fn create_player() -> EntityBuilder {
         .set_default(rotation())
         .set_default(velocity())
         .set_default(angular_velocity())
+        .set_default(invincibility())
         .set_default(player())
         .set(mass(), 100.0)
         .set(health(), 100.0)
@@ -182,7 +186,11 @@ fn create_player() -> EntityBuilder {
             on_collision(),
             Box::new(|world, collision| {
                 let mut h = world.get_mut(collision.a, health()).unwrap();
-                if collision.impact > 10.0 {
+
+                let mut invincibility = world.get_mut(collision.a, invincibility()).unwrap();
+
+                if collision.impact > 10.0 && *invincibility <= 0.0 {
+                    *invincibility = 1.0;
                     *h -= 20.0;
                 }
             }),
@@ -469,6 +477,7 @@ fn player_system(dt: f32) -> BoxedSystem {
                 velocity().as_mut(),
                 rotation().as_mut(),
                 difficulty().as_mut(),
+                invincibility().as_mut(),
             ))
             .with(player()),
         )
@@ -482,14 +491,17 @@ fn player_system(dt: f32) -> BoxedSystem {
                     Mutable<Vec2>,
                     Mutable<f32>,
                     Mutable<f32>,
+                    Mutable<f32>,
                 ),
-                _,
+                And<All, With>,
             >,
                   cmd: &mut CommandBuffer| {
                 current_weapon_cooldown -= dt;
                 current_plume_cooldown -= dt;
 
-                for (player, pos, material, vel, rot, current_difficulty) in &mut q {
+                for (player, pos, material, vel, rot, current_difficulty, invincibility) in &mut q {
+                    *invincibility = (*invincibility - 0.02).max(0.0);
+
                     *current_difficulty = (*material * 0.001).max(1.0);
 
                     let forward = vec2(rot.sin(), -rot.cos());
@@ -620,7 +632,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                     // Spawn around player
                     let dir = rng.gen_range(0f32..TAU);
                     let pos =
-                        *player_pos + vec2(dir.cos(), dir.sin()) * rng.gen_range(128.0..2048.0);
+                        *player_pos + vec2(dir.cos(), dir.sin()) * rng.gen_range(512.0..2048.0);
 
                     let size = rng.gen_range(0.2..1.0);
                     let radius = size * ASTEROID_SIZE;

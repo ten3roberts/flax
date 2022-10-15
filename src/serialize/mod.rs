@@ -7,7 +7,8 @@ pub use ser::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    filter::And, filter::StaticFilter, filter::Without, Component, ComponentKey, ComponentValue,
+    filter::And, filter::StaticFilter, filter::Without, All, Component, ComponentInfo,
+    ComponentKey, ComponentValue,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -45,12 +46,12 @@ pub enum SerializeFormat {
 
 /// Allows constructing a serialize and deserialize context with the same
 /// supported types allowing for easier roundtrips.
-pub struct SerdeBuilder<F> {
+pub struct SerdeBuilder<F = All> {
     ser: SerializeBuilder<F>,
     de: DeserializeBuilder,
 }
 
-impl SerdeBuilder<Without> {
+impl SerdeBuilder {
     /// Creates a new builder which simultaneously constructs a serialialization
     /// and deserialization context
     pub fn new() -> Self {
@@ -61,7 +62,7 @@ impl SerdeBuilder<Without> {
     }
 }
 
-impl Default for SerdeBuilder<Without> {
+impl Default for SerdeBuilder {
     fn default() -> Self {
         Self::new()
     }

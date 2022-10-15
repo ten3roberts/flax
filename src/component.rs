@@ -147,12 +147,14 @@ impl<T: ComponentValue> RelationExt<T> for Component<T> {
     fn with_relation(self) -> WithRelation {
         WithRelation {
             relation: self.id(),
+            name: self.name(),
         }
     }
 
     fn without_relation(self) -> WithoutRelation {
         WithoutRelation {
             relation: self.id(),
+            name: self.name(),
         }
     }
 }
@@ -167,14 +169,18 @@ where
     }
 
     fn with_relation(self) -> WithRelation {
+        let c = self(dummy());
         WithRelation {
-            relation: self(dummy()).id(),
+            relation: c.id(),
+            name: c.name(),
         }
     }
 
     fn without_relation(self) -> WithoutRelation {
+        let c = self(dummy());
         WithoutRelation {
-            relation: self(dummy()).id(),
+            relation: c.id(),
+            name: c.name(),
         }
     }
 }
@@ -312,6 +318,7 @@ impl<T: ComponentValue> Component<T> {
     pub fn without(self) -> Without {
         Without {
             component: self.key(),
+            name: self.name(),
         }
     }
 
@@ -319,6 +326,7 @@ impl<T: ComponentValue> Component<T> {
     pub fn with(self) -> With {
         With {
             component: self.key(),
+            name: self.name(),
         }
     }
 

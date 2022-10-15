@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use core::{
     any::type_name,
+    fmt::{self, Formatter},
     iter::FusedIterator,
     ops::{self, Neg},
 };
@@ -15,6 +16,18 @@ use crate::{
 
 pub use change::*;
 pub use cmp::CmpExt;
+
+#[doc(hidden)]
+pub struct FmtFilter<'r, Q>(pub &'r Q);
+
+impl<'r, 'w, Q> core::fmt::Debug for FmtFilter<'r, Q>
+where
+    Q: Filter<'w>,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.describe(f)
+    }
+}
 
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
@@ -77,7 +90,7 @@ pub trait StaticFilter {
 /// A filter requires Debug for error messages for user conveniance
 pub trait Filter<'w>
 where
-    Self: Sized + core::fmt::Debug,
+    Self: Sized,
 {
     /// The filter holding possible borrows
     type Prepared: PreparedFilter + 'w;
@@ -95,6 +108,8 @@ where
     fn matches(&self, arch: &Archetype) -> bool;
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access>;
+    /// Describes the filter in a human-readable fashion
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 }
 
 /// The prepared version of a filter, which can hold borrows from the world
@@ -144,6 +159,15 @@ where
         res.append(&mut self.right.access(id, archetype));
         res
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:?} & {:?}",
+            FmtFilter(&self.left),
+            FmtFilter(&self.right)
+        )
+    }
 }
 
 impl<L, R> StaticFilter for And<L, R>
@@ -192,6 +216,15 @@ where
         let mut accesses = self.left.access(id, archetype);
         accesses.append(&mut self.right.access(id, archetype));
         accesses
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:?} | {:?}",
+            FmtFilter(&self.left),
+            FmtFilter(&self.right)
+        )
     }
 }
 
@@ -258,6 +291,10 @@ where
 
     fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
         self.0.access(id, archetype)
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "!{:?}", FmtFilter(&self.0))
     }
 }
 
@@ -389,6 +426,10 @@ impl<'a> Filter<'a> for Nothing {
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "false")
+    }
 }
 
 impl StaticFilter for Nothing {
@@ -417,6 +458,10 @@ impl<'a> Filter<'a> for All {
     #[inline(always)]
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "true")
     }
 }
 
@@ -470,6 +515,7 @@ impl<F: PreparedFilter> FusedIterator for FilterIter<F> {}
 /// Filter which only yields true if the entity has the specified component
 pub struct With {
     pub(crate) component: ComponentKey,
+    pub(crate) name: &'static str,
 }
 
 impl StaticFilter for With {
@@ -492,12 +538,17 @@ impl<'a> Filter<'a> for With {
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "with {}", self.name)
+    }
 }
 
 #[derive(Debug, Clone)]
 /// Opposite of [crate::Without]
 pub struct Without {
     pub(crate) component: ComponentKey,
+    pub(crate) name: &'static str,
 }
 
 impl<'a> Filter<'a> for Without {
@@ -513,6 +564,10 @@ impl<'a> Filter<'a> for Without {
 
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "without {}", self.name)
     }
 }
 
@@ -555,6 +610,10 @@ impl<'a> Filter<'a> for WithObject {
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "with (*)({})", self.object)
+    }
 }
 
 pub(crate) struct ArchetypeFilter<F>(pub(crate) F);
@@ -587,12 +646,17 @@ impl<'w, F: Fn(&Archetype) -> bool> Filter<'w> for ArchetypeFilter<F> {
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "archetype_filter {}", &type_name::<F>())
+    }
 }
 
 #[derive(Debug, Clone)]
 /// Yields all entitiens with the relation of the specified kind
 pub struct WithRelation {
     pub(crate) relation: Entity,
+    pub(crate) name: &'static str,
 }
 
 impl StaticFilter for WithRelation {
@@ -615,12 +679,17 @@ impl<'a> Filter<'a> for WithRelation {
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "with {}(*)", self.name)
+    }
 }
 
 #[derive(Debug, Clone)]
 /// Opposite of [crate::Without]
 pub struct WithoutRelation {
     pub(crate) relation: Entity,
+    pub(crate) name: &'static str,
 }
 
 impl<'a> Filter<'a> for WithoutRelation {
@@ -636,6 +705,10 @@ impl<'a> Filter<'a> for WithoutRelation {
 
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "without {}(*)", self.name)
     }
 }
 
@@ -664,6 +737,10 @@ impl<'w> Filter<'w> for BooleanFilter {
     #[inline(always)]
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -698,6 +775,10 @@ where
 
     fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
         (*self).access(id, arch)
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        (*self).describe(f)
     }
 }
 
@@ -750,6 +831,14 @@ impl<'w, F: Filter<'w>> Filter<'w> for GatedFilter<F> {
     fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
         self.filter.access(id, arch)
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.active {
+            self.filter.describe(f)
+        } else {
+            write!(f, "true")
+        }
+    }
 }
 
 #[derive(Copy, Debug, Clone)]
@@ -783,58 +872,66 @@ impl<'w> Filter<'w> for BatchSize {
     fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
         Default::default()
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "batch {}", self.0)
+    }
 }
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<$($ty, )*> StaticFilter for ($($ty,)*)
-            where $($ty: StaticFilter,)*
-        {
-            fn static_matches(&self, arch: &Archetype) -> bool {
-                $(self.$idx.static_matches(arch))||*
+    impl<$($ty, )*> StaticFilter for ($($ty,)*)
+    where $($ty: StaticFilter,)*
+    {
+        fn static_matches(&self, arch: &Archetype) -> bool {
+            $(self.$idx.static_matches(arch))||*
+        }
+    }
+
+    impl<$($ty, )*> PreparedFilter for ($($ty,)*)
+    where $($ty: PreparedFilter,)*
+    {
+        fn filter(&mut self, slots: Slice) -> Slice {
+            let mut u = Slice::new(0, 0);
+
+            $(
+            match u.union(&self.$idx.filter(slots)) {
+                Some(v) => { u = v }
+                None => { return u }
             }
+        )*
+
+            u
         }
 
-        impl<$($ty, )*> PreparedFilter for ($($ty,)*)
-            where $($ty: PreparedFilter,)*
-        {
-            fn filter(&mut self, slots: Slice) -> Slice {
-                let mut u = Slice::new(0, 0);
+        fn matches_slot(&mut self, slot: usize) -> bool {
+            $(
+            self.$idx.matches_slot(slot)
+        )||*
+        }
+    }
 
-                $(
-                    match u.union(&self.$idx.filter(slots)) {
-                        Some(v) => { u = v }
-                        None => { return u }
-                    }
-                )*
+    impl<'w, $($ty, )*> Filter<'w> for ($($ty,)*)
+    where $($ty: Filter<'w>,)*
+    {
+        type Prepared       = ($($ty::Prepared,)*);
 
-                u
-            }
-
-            fn matches_slot(&mut self, slot: usize) -> bool {
-                $(
-                    self.$idx.matches_slot(slot)
-                )||*
-            }
+        fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared {
+            ($(self.$idx.prepare(arch, change_tick),)*)
         }
 
-        impl<'w, $($ty, )*> Filter<'w> for ($($ty,)*)
-            where $($ty: Filter<'w>,)*
-        {
-            type Prepared       = ($($ty::Prepared,)*);
-
-            fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared {
-                ($(self.$idx.prepare(arch, change_tick),)*)
-            }
-
-            fn matches(&self, arch: &Archetype) -> bool {
-                $(self.$idx.matches(arch))||*
-            }
+        fn matches(&self, arch: &Archetype) -> bool {
+            $(self.$idx.matches(arch))||*
+        }
 
             fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
                 [ $(self.$idx.access(id, arch),)* ].concat()
             }
 
+            fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                let s = ([$(format!("{:?}", FmtFilter(&self.$idx))),*]).join("|");
+                f.write_str(&s)
+            }
         }
     };
 }

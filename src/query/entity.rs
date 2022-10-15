@@ -7,7 +7,7 @@ use crate::{
     entity::EntityLocation,
     error::Result,
     fetch::{FetchPrepareData, FmtQuery, PreparedFetch},
-    filter::PreparedFilter,
+    filter::{FmtFilter, PreparedFilter},
     find_missing_components, Access, AccessKind, All, AsBorrow, Entity, Error, Fetch, Filter,
     SystemAccess, SystemContext, SystemData, World,
 };
@@ -145,12 +145,12 @@ where
 impl<Q, F> core::fmt::Debug for EntityQuery<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x> + Debug,
+    F: for<'x> Filter<'x>,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Query")
             .field("fetch", &FmtQuery(&self.fetch))
-            .field("filter", &self.filter)
+            .field("filter", &FmtFilter(&self.filter))
             .finish()
     }
 }
@@ -283,7 +283,7 @@ where
 impl<'a, Q, F> SystemData<'a> for EntityQuery<Q, F>
 where
     Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + 'static + Debug,
+    F: for<'x> Filter<'x> + 'static,
 {
     type Value = EntityQueryData<'a, Q, F>;
 

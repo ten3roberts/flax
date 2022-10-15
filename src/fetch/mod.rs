@@ -2,8 +2,8 @@ mod component;
 mod ext;
 mod opt;
 
-use core::fmt::Debug;
 use core::fmt::{self, Formatter};
+use core::fmt::{Debug, Display};
 
 use alloc::vec;
 use alloc::vec::Vec;
