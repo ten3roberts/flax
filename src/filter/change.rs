@@ -13,7 +13,7 @@ use crate::{
 
 #[derive(Clone)]
 /// Filter which only yields modified or inserted components
-pub struct ChangeFilter<T: ComponentValue> {
+pub struct ChangeFilter<T> {
     component: Component<T>,
     kind: ChangeKind,
 }
@@ -208,7 +208,7 @@ impl<'a> PreparedFilter for PreparedKindFilter<'a> {
 
 #[derive(Clone)]
 /// Filter which only yields removed `components
-pub struct RemovedFilter<T: ComponentValue> {
+pub struct RemovedFilter<T> {
     component: Component<T>,
 }
 

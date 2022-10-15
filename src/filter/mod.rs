@@ -11,7 +11,7 @@ use core::{
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    Access, ArchetypeId, ComponentKey, ComponentValue, Entity,
+    Access, ArchetypeId, ComponentKey, Entity,
 };
 
 pub use change::*;
@@ -31,7 +31,7 @@ where
 
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
-        impl<R, $($p: ComponentValue),*> ops::BitOr<R> for $ty<$($p),*>
+        impl<R, $($p),*> ops::BitOr<R> for $ty<$($p),*>
         {
             type Output = Or<Self, R>;
 
@@ -40,7 +40,7 @@ macro_rules! gen_bitops {
             }
         }
 
-        impl<R, $($p: ComponentValue),*> ops::BitAnd<R> for $ty<$($p),*>
+        impl<R, $($p),*> ops::BitAnd<R> for $ty<$($p),*>
         {
             type Output = And<Self, R>;
 
@@ -49,7 +49,7 @@ macro_rules! gen_bitops {
             }
         }
 
-        impl<$($p: ComponentValue),*> ops::Neg for $ty<$($p),*>
+        impl<$($p),*> ops::Neg for $ty<$($p),*>
         {
             type Output = Not<Self>;
 
@@ -62,19 +62,26 @@ macro_rules! gen_bitops {
 
     ($($ty:ident[$($p: tt),*];)*) => {
         $(
-            gen_bitops!{ $ty[$($p),*] }
-        )*
+        gen_bitops!{ $ty[$($p),*] }
+    )*
     }
 }
 
 gen_bitops! {
-    ChangeFilter[T];
-    RemovedFilter[T];
-    And[A,B];
-    Or[A,B];
     All[];
+    And[A,B];
+    ArchetypeFilter[F];
+    BatchSize[];
+    BooleanFilter[];
+    ChangeFilter[T];
+    GatedFilter[T];
     Nothing[];
+    Or[A,B];
+    RemovedFilter[T];
+    WithObject[];
+    WithRelation[];
     With[];
+    WithoutRelation[];
     Without[];
 }
 
@@ -90,7 +97,7 @@ pub trait StaticFilter {
 /// A filter requires Debug for error messages for user conveniance
 pub trait Filter<'w>
 where
-    Self: Sized,
+    Self: Sized + ops::BitAnd + ops::BitOr + ops::Neg,
 {
     /// The filter holding possible borrows
     type Prepared: PreparedFilter + 'w;
@@ -110,6 +117,11 @@ where
     fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access>;
     /// Describes the filter in a human-readable fashion
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
+
+    /// Allows the filter to be used by reference
+    fn ref_filter(&self) -> RefFilter<Self> {
+        RefFilter(self)
+    }
 }
 
 /// The prepared version of a filter, which can hold borrows from the world
@@ -307,11 +319,7 @@ where
     }
 }
 
-impl<R, T> ops::BitOr<R> for Not<T>
-where
-    Self: for<'x> Filter<'x>,
-    R: for<'x> Filter<'x>,
-{
+impl<R, T> ops::BitOr<R> for Not<T> {
     type Output = Or<Self, R>;
 
     fn bitor(self, rhs: R) -> Self::Output {
@@ -319,11 +327,7 @@ where
     }
 }
 
-impl<R, T> ops::BitAnd<R> for Not<T>
-where
-    Self: for<'x> Filter<'x>,
-    R: for<'x> Filter<'x>,
-{
+impl<R, T> ops::BitAnd<R> for Not<T> {
     type Output = And<Self, R>;
 
     fn bitand(self, rhs: R) -> Self::Output {
@@ -331,10 +335,7 @@ where
     }
 }
 
-impl<T> Neg for Not<T>
-where
-    T: for<'x> Filter<'x>,
-{
+impl<T> Neg for Not<T> {
     type Output = T;
 
     fn neg(self) -> Self::Output {
@@ -759,26 +760,60 @@ impl PreparedFilter for BooleanFilter {
     }
 }
 
-impl<'w, F> Filter<'w> for &F
+/// Allows a filter to be used by reference.
+pub struct RefFilter<'a, F>(pub(crate) &'a F);
+
+impl<'a, F> Copy for RefFilter<'a, F> {}
+impl<'a, F> Clone for RefFilter<'a, F> {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl<'a, 'w, F> Filter<'w> for RefFilter<'a, F>
 where
     F: Filter<'w>,
 {
     type Prepared = F::Prepared;
 
     fn prepare(&'w self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared {
-        (*self).prepare(archetype, change_tick)
+        (*self.0).prepare(archetype, change_tick)
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
-        (*self).matches(arch)
+        (*self.0).matches(arch)
     }
 
     fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
-        (*self).access(id, arch)
+        (*self.0).access(id, arch)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        (*self).describe(f)
+        (*self.0).describe(f)
+    }
+}
+
+impl<'a, R, F> ops::BitAnd<R> for RefFilter<'a, F> {
+    type Output = And<Self, R>;
+
+    fn bitand(self, rhs: R) -> Self::Output {
+        And::new(self, rhs)
+    }
+}
+
+impl<'a, R, F> ops::BitOr<R> for RefFilter<'a, F> {
+    type Output = Or<Self, R>;
+
+    fn bitor(self, rhs: R) -> Self::Output {
+        Or::new(self, rhs)
+    }
+}
+
+impl<'a, F> ops::Neg for RefFilter<'a, F> {
+    type Output = Not<Self>;
+
+    fn neg(self) -> Self::Output {
+        Not(self)
     }
 }
 
@@ -878,59 +913,97 @@ impl<'w> Filter<'w> for BatchSize {
     }
 }
 
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct TupleOr<T>(pub T);
+
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-    impl<$($ty, )*> StaticFilter for ($($ty,)*)
-    where $($ty: StaticFilter,)*
-    {
-        fn static_matches(&self, arch: &Archetype) -> bool {
-            $(self.$idx.static_matches(arch))||*
-        }
-    }
-
-    impl<$($ty, )*> PreparedFilter for ($($ty,)*)
-    where $($ty: PreparedFilter,)*
-    {
-        fn filter(&mut self, slots: Slice) -> Slice {
-            let mut u = Slice::new(0, 0);
-
-            $(
-            match u.union(&self.$idx.filter(slots)) {
-                Some(v) => { u = v }
-                None => { return u }
+        impl<$($ty, )*> StaticFilter for TupleOr<($($ty,)*)>
+        where $($ty: StaticFilter,)*
+        {
+            fn static_matches(&self, arch: &Archetype) -> bool {
+                let inner = &self.0;
+                $(inner.$idx.static_matches(arch))||*
             }
-        )*
-
-            u
         }
 
-        fn matches_slot(&mut self, slot: usize) -> bool {
-            $(
-            self.$idx.matches_slot(slot)
-        )||*
-        }
-    }
+        impl<$($ty, )*> PreparedFilter for TupleOr<($($ty,)*)>
+        where $($ty: PreparedFilter,)*
+        {
+            fn filter(&mut self, slots: Slice) -> Slice {
+                let mut u = Slice::new(0, 0);
+            let inner = &mut self.0;
 
-    impl<'w, $($ty, )*> Filter<'w> for ($($ty,)*)
-    where $($ty: Filter<'w>,)*
-    {
-        type Prepared       = ($($ty::Prepared,)*);
+                $(
+                    match u.union(&inner.$idx.filter(slots)) {
+                        Some(v) => { u = v }
+                        None => { return u }
+                    }
+                )*
 
-        fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared {
-            ($(self.$idx.prepare(arch, change_tick),)*)
+                u
+            }
+
+            fn matches_slot(&mut self, slot: usize) -> bool {
+            let inner = &mut self.0;
+                $(
+                inner.$idx.matches_slot(slot)
+            )||*
+            }
         }
 
-        fn matches(&self, arch: &Archetype) -> bool {
-            $(self.$idx.matches(arch))||*
-        }
+        impl<'w, $($ty, )*> Filter<'w> for TupleOr<($($ty,)*)>
+        where $($ty: Filter<'w>,)*
+        {
+            type Prepared       = TupleOr<($($ty::Prepared,)*)>;
+
+            fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared {
+                let inner = &self.0;
+                let p = ($(inner.$idx.prepare(arch, change_tick),)*);
+                TupleOr(p)
+            }
+
+            fn matches(&self, arch: &Archetype) -> bool {
+                let inner = &self.0;
+                $(inner.$idx.matches(arch))||*
+            }
 
             fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
-                [ $(self.$idx.access(id, arch),)* ].concat()
+                [ $(self.0.$idx.access(id, arch),)* ].concat()
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                let s = ([$(format!("{:?}", FmtFilter(&self.$idx))),*]).join("|");
-                f.write_str(&s)
+                let mut s = f.debug_tuple("TupleOr");
+                    let inner = &self.0;
+                $(
+                    s.field(&FmtFilter(&inner.$idx));
+                )*
+                s.finish()
+            }
+        }
+
+        impl<R, $($ty, )*> ops::BitAnd<R> for TupleOr<($($ty,)*)> {
+            type Output = And<Self, R>;
+
+            fn bitand(self, rhs: R) -> Self::Output {
+                And::new(self, rhs)
+            }
+        }
+
+        impl<R, $($ty, )*> ops::BitOr<R> for TupleOr<($($ty,)*)> {
+            type Output = Or<Self, R>;
+
+            fn bitor(self, rhs: R) -> Self::Output {
+                Or::new(self, rhs)
+            }
+        }
+
+        impl<$($ty, )*> ops::Neg for TupleOr<($($ty,)*)> {
+            type Output = Not<Self>;
+
+            fn neg(self) -> Self::Output {
+                Not(self)
             }
         }
     };

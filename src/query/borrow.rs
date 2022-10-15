@@ -8,7 +8,10 @@ use core::{
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use smallvec::SmallVec;
 
-use crate::{archetype::unknown_component, filter::PreparedFilter};
+use crate::{
+    archetype::unknown_component,
+    filter::{PreparedFilter, RefFilter},
+};
 use crate::{dummy, ComponentInfo};
 use crate::{
     entity::EntityLocation,
@@ -57,7 +60,7 @@ where
     pub(crate) world: &'w World,
     pub(crate) archetypes: &'w [ArchetypeId],
     pub(crate) fetch: &'w Q,
-    pub(crate) filter: FilterWithFetch<&'w F, Q::Filter>,
+    pub(crate) filter: FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
 }
@@ -65,7 +68,7 @@ where
 impl<'w, 'q, Q, F> IntoIterator for &'q mut QueryBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
     'w: 'q,
 {
     type Item = <Q as FetchItem<'q>>::Item;
@@ -150,7 +153,10 @@ where
         Self {
             prepared: SmallVec::new(),
             fetch,
-            filter: And::new(filter, GatedFilter::new(Q::HAS_FILTER, fetch.filter())),
+            filter: And::new(
+                RefFilter(filter),
+                GatedFilter::new(Q::HAS_FILTER, fetch.filter()),
+            ),
             old_tick,
             new_tick,
             world,
@@ -162,7 +168,7 @@ where
     pub fn iter<'q>(&'q mut self) -> QueryIter<'q, 'w, Q, F>
     where
         'w: 'q,
-        &'w F: Filter<'q>,
+        F: Filter<'q>,
     {
         QueryIter::new(self.iter_batched())
     }
@@ -171,7 +177,7 @@ where
     pub fn first<'q>(&'q mut self) -> Option<<Q as FetchItem<'q>>::Item>
     where
         'w: 'q,
-        &'w F: Filter<'q>,
+        F: Filter<'q>,
     {
         self.iter().next()
     }
@@ -180,7 +186,7 @@ where
     pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'q, 'w, Q, F>
     where
         'w: 'q,
-        &'w F: Filter<'q>,
+        F: Filter<'q>,
     {
         // Prepare all archetypes only if it is not already done
         // Clear previous borrows
@@ -226,7 +232,7 @@ where
         'w: 'q,
         Q::Prepared: Send,
         BatchedIter<'q, 'w, Q, F>: Send,
-        &'w F: Filter<'q>,
+        F: Filter<'q>,
     {
         self.iter().for_each(&func)
     }
@@ -243,7 +249,7 @@ where
         'w: 'q,
         Q::Prepared: Send,
         BatchedIter<'q, 'w, Q, F>: Send,
-        &'w F: Filter<'q>,
+        F: Filter<'q>,
     {
         self.iter_batched()
             .par_bridge()
@@ -255,7 +261,7 @@ where
     pub fn count<'q>(&'q mut self) -> usize
     where
         'w: 'q,
-        &'w F: Filter<'q>,
+        F: Filter<'q>,
     {
         self.iter_batched().map(|v| v.slots().len()).sum()
     }
@@ -296,7 +302,7 @@ where
     ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]>
     where
         'w: 'q,
-        &'w F: Filter<'q>,
+        F: Filter<'q>,
     {
         let mut sorted = ids;
         sorted.sort();
@@ -377,7 +383,7 @@ where
     /// Get the fetch items for an entity.
     pub fn get<'q>(&'q mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item>
     where
-        &'w F: Filter<'q>,
+        F: Filter<'q>,
     {
         let EntityLocation { arch_id, slot } = self.world.location(id)?;
 

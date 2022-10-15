@@ -1,4 +1,4 @@
-use core::fmt::{self, Debug};
+use core::fmt::{self};
 
 use atomic_refcell::AtomicRef;
 
