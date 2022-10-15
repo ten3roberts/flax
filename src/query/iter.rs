@@ -3,7 +3,7 @@ use core::slice::IterMut;
 use crate::{
     archetype::{Slice, Slot},
     fetch::PreparedFetch,
-    filter::FilterIter,
+    filter::{FilterIter, RefFilter},
     Archetype, Fetch, Filter,
 };
 
@@ -84,19 +84,19 @@ where
 pub struct Chunks<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
     'w: 'q,
 {
     arch: &'q Archetype,
     fetch: &'q mut Q::Prepared,
-    filter: FilterIter<<FilterWithFetch<&'w F, Q::Filter> as Filter<'q>>::Prepared>,
+    filter: FilterIter<<FilterWithFetch<RefFilter<'w, F>, Q::Filter> as Filter<'q>>::Prepared>,
     new_tick: u32,
 }
 
 impl<'q, 'w, Q, F> Iterator for Chunks<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
     'w: 'q,
 {
     type Item = Batch<'q, Q::Prepared>;
@@ -121,7 +121,7 @@ where
 pub struct QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
 {
     iter: BatchedIter<'q, 'w, Q, F>,
     current: Option<<BatchedIter<'q, 'w, Q, F> as Iterator>::Item>,
@@ -130,7 +130,7 @@ where
 impl<'q, 'w, Q, F> QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
 {
     pub(crate) fn new(iter: BatchedIter<'q, 'w, Q, F>) -> Self {
         Self {
@@ -143,7 +143,7 @@ where
 impl<'w, 'q, Q, F> Iterator for QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -166,12 +166,12 @@ where
 pub struct BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
     'w: 'q,
 {
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
-    pub(crate) filter: &'q FilterWithFetch<&'w F, Q::Filter>,
+    pub(crate) filter: &'q FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
     pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
     pub(crate) current: Option<Chunks<'q, 'w, Q, F>>,
 }
@@ -179,12 +179,12 @@ where
 impl<'q, 'w, Q, F> BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
 {
     pub(super) fn new(
         old_tick: u32,
         new_tick: u32,
-        filter: &'q FilterWithFetch<&'w F, Q::Filter>,
+        filter: &'q FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
         archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
     ) -> Self {
         Self {
@@ -200,7 +200,7 @@ where
 impl<'w, 'q, Q, F> Iterator for BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    &'w F: Filter<'q>,
+    F: Filter<'q>,
     'w: 'q,
 {
     type Item = Batch<'q, Q::Prepared>;

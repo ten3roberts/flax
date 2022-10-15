@@ -2,8 +2,8 @@ mod component;
 mod ext;
 mod opt;
 
+use core::fmt::Debug;
 use core::fmt::{self, Formatter};
-use core::fmt::{Debug, Display};
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -12,6 +12,7 @@ pub use component::*;
 pub use ext::*;
 pub use opt::*;
 
+use crate::filter::TupleOr;
 use crate::ComponentInfo;
 use crate::{
     archetype::{Archetype, Slice, Slot},
@@ -224,7 +225,7 @@ macro_rules! tuple_impl {
         {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
             type Prepared       = ($($ty::Prepared,)*);
-            type Filter         = ($($ty::Filter,)*);
+            type Filter         = TupleOr<($($ty::Filter,)*)>;
             const HAS_FILTER: bool =  $($ty::HAS_FILTER )|*;
 
             #[inline(always)]
@@ -260,7 +261,7 @@ macro_rules! tuple_impl {
 
             #[inline(always)]
             fn filter(&self) -> Self::Filter {
-                ( $(self.$idx.filter(),)* )
+                TupleOr(( $(self.$idx.filter(),)* ))
             }
 
             #[inline(always)]

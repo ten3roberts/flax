@@ -111,10 +111,7 @@ impl Display for CmpMethod {
 }
 
 #[derive(Clone)]
-pub struct OrdCmp<T>
-where
-    T: ComponentValue,
-{
+pub struct OrdCmp<T> {
     component: Component<T>,
     method: CmpMethod,
     other: T,
@@ -271,10 +268,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct Cmp<T, F>
-where
-    T: ComponentValue,
-{
+pub struct Cmp<T, F> {
     component: Component<T>,
     func: F,
 }
@@ -406,11 +400,7 @@ where
     }
 }
 
-impl<T> ops::Neg for OrdCmp<T>
-where
-    Self: for<'x> Filter<'x>,
-    T: ComponentValue + PartialOrd,
-{
+impl<T> ops::Neg for OrdCmp<T> {
     type Output = Not<Self>;
 
     fn neg(self) -> Self::Output {
@@ -418,13 +408,7 @@ where
     }
 }
 
-impl<R, T, F> ops::BitOr<R> for Cmp<T, F>
-where
-    Self: for<'x> Filter<'x>,
-    F: Fn(&T) -> bool + Send + Sync + 'static,
-    T: ComponentValue + PartialOrd,
-    R: for<'x> Filter<'x>,
-{
+impl<R, T, F> ops::BitOr<R> for Cmp<T, F> {
     type Output = Or<Self, R>;
 
     fn bitor(self, rhs: R) -> Self::Output {
@@ -432,13 +416,7 @@ where
     }
 }
 
-impl<R, T, F> ops::BitAnd<R> for Cmp<T, F>
-where
-    Self: for<'x> Filter<'x>,
-    F: Fn(&T) -> bool + Send + Sync + 'static,
-    T: ComponentValue + PartialOrd,
-    R: for<'x> Filter<'x>,
-{
+impl<R, T, F> ops::BitAnd<R> for Cmp<T, F> {
     type Output = And<Self, R>;
 
     fn bitand(self, rhs: R) -> Self::Output {
@@ -446,12 +424,7 @@ where
     }
 }
 
-impl<T, F> ops::Neg for Cmp<T, F>
-where
-    Self: for<'x> Filter<'x>,
-    F: Fn(&T) -> bool + Send + Sync + 'static,
-    T: ComponentValue + PartialOrd,
-{
+impl<T, F> ops::Neg for Cmp<T, F> {
     type Output = Not<Self>;
 
     fn neg(self) -> Self::Output {

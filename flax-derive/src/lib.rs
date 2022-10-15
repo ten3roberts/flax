@@ -173,7 +173,7 @@ fn derive_data_struct(
                 where #(#types: Fetch<'w>),*
                 {
                     const MUTABLE: bool = #(<#types as Fetch<'w>>::MUTABLE)|*;
-                    type Filter = (#(<#types as Fetch<'w>>::Filter),*);
+                    type Filter = #crate_name::filter::TupleOr<(#(<#types as Fetch<'w>>::Filter),*)>;
                     const HAS_FILTER: bool = #(<#types as Fetch<'w>>::HAS_FILTER)|*;
 
                     type Prepared = #prepared_name<'w>;
@@ -210,7 +210,7 @@ fn derive_data_struct(
                     }
 
                     fn filter(&self) -> Self::Filter {
-                        (#(self.#field_names.filter()),*)
+                        #crate_name::filter::TupleOr( (#(self.#field_names.filter()),*) )
                     }
 
                     fn missing(&self, data: #crate_name::fetch::FetchPrepareData, result: &mut Vec<#crate_name::ComponentInfo>) {
