@@ -1,7 +1,6 @@
 use crate::{
-    archetype::StorageBorrowDyn, components::is_component, filter::And, filter::StaticFilter,
-    filter::Without, Archetype, ArchetypeId, Component, ComponentKey, ComponentValue, Entity,
-    World,
+    archetype::StorageBorrowDyn, filter::And, filter::StaticFilter, is_component, All, Archetype,
+    ArchetypeId, Component, ComponentKey, ComponentValue, Entity, World,
 };
 
 use alloc::{boxed::Box, collections::BTreeMap, string::String};
@@ -24,22 +23,22 @@ struct Slot {
 
 #[derive(Clone)]
 /// Builder for a serialialization context
-pub struct SerializeBuilder<F> {
+pub struct SerializeBuilder<F = All> {
     slots: BTreeMap<ComponentKey, Slot>,
     filter: F,
 }
 
-impl SerializeBuilder<Without> {
+impl SerializeBuilder<All> {
     /// Creates a new SerializeBuilder
     pub fn new() -> Self {
         Self {
             slots: Default::default(),
-            filter: is_component().without(),
+            filter: All,
         }
     }
 }
 
-impl Default for SerializeBuilder<Without> {
+impl Default for SerializeBuilder {
     fn default() -> Self {
         Self::new()
     }
@@ -114,7 +113,7 @@ pub struct SerializeContext {
 
 impl SerializeContext {
     /// Construct a a new serializer context
-    pub fn builder() -> SerializeBuilder<Without> {
+    pub fn builder() -> SerializeBuilder {
         SerializeBuilder::new()
     }
 
@@ -139,6 +138,7 @@ impl SerializeContext {
         world.archetypes.iter().filter(|(_, arch)| {
             !arch.is_empty()
                 && arch.storage().keys().any(|id| self.slots.contains_key(id))
+                && !arch.has(is_component().key())
                 && self.filter.static_matches(arch)
         })
     }
