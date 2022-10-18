@@ -8,7 +8,7 @@
 /// }
 /// ```
 ///
-/// ```rust
+/// ```rust,ignore
 /// flax::component! {
 ///     // component
 ///     name: type, // component
