@@ -279,16 +279,6 @@ impl<T: ComponentValue> Component<T> {
         unsafe { Self::from_raw_id(ComponentKey::new(id, None), name, meta) }
     }
 
-    /// Attaches a function to generate component metadata
-    pub fn set_meta(&mut self, meta: fn(ComponentInfo) -> ComponentBuffer) {
-        self.meta = meta
-    }
-
-    /// Returns all metadata components
-    pub fn get_meta(&self) -> ComponentBuffer {
-        (self.meta)(self.info())
-    }
-
     /// Get the component's id.
     #[inline(always)]
     pub fn key(&self) -> ComponentKey {
@@ -348,6 +338,11 @@ impl<T: ComponentValue> Component<T> {
     #[inline(always)]
     pub fn name(&self) -> &'static str {
         self.name
+    }
+
+    /// Returns all metadata components
+    pub fn get_meta(&self) -> ComponentBuffer {
+        (self.meta)(self.info())
     }
 
     /// Returns the component metadata fn

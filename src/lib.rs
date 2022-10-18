@@ -1,26 +1,29 @@
 //! Flax is a performant and easy to use Entity Component System.
 //!
-//! The world is organized by simple identifiers known as an `Entity`, which can have any number of components attached to them.
+//! The world is organized by simple identifiers known as an [Entity](crate::Entity), which can have any number of components attached to them.
 //!
 //! Systems operate and iterate upon entities and their attached components and
 //! provide the application logic.
 //!
 //! ## Features
-//! - Queries [`Query`]
-//! - Change detection
-//! - Query filtering
-//! - System execution [`System`]
-//! - Multithreaded system execution through [`Schedule`]
-//! - Builtin many to many entity relation and graphs
-//! - Reflection through component metadata
-//! - Ergonomic entity builder [`EntityBuilder`]
+//! - [Declarative component macro](crate::component!)
+//! - [Queries](crate::Query)
+//! - [Change detection](crate::Component::modified)
+//! - [Query filtering](crate::filter)
+//! - [System execution](crate::System)
+//! - [Multithreaded system execution through](crate::Schedule)
+//! - Many to many entity relation and graphs
+//! - [Reflection through component metadata](crate::component!)
+//! - [Ergonomic entity builder](crate::EntityBuilder)
 //! - Tracing
-//! - Serialization and deserialization [`crate::serialize`]
+//! - [Serialization and deserialization](crate::serialize)
 //! - Runtime components
 //!
 //! ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/guide)**
 //!
-//! See a live demo using wasm [here](https://ten3roberts.github.io/flax/asteroids).
+//!
+//! ## Live Demo
+//! See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/flax/asteroids).
 //!
 //! ## Example Usage
 //!
