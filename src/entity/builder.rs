@@ -9,15 +9,13 @@ use alloc::vec::Vec;
 /// insertion into the world.
 ///
 /// ```rust
-/// # use crate::*;
+/// # use flax::*;
 /// # use glam::*;
-
 /// # component! {
 /// #     health: f32,
 /// #     position: Vec3,
 /// #     is_player: (),
 /// # }
-
 /// # let mut world = World::new();
 /// let id = Entity::builder()
 ///     .set(name(), "Player".into())
