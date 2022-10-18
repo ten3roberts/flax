@@ -134,8 +134,8 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="hierarchy"><a class="header" href="#hierarchy">Hierarchy</a></h1>
-<p>Hierarchies are a common way to structure entities in an application or game,
+                        <h1 id="relations"><a class="header" href="#relations">Relations</a></h1>
+<p>Relations such as hierarchies or entity-entity connections are a common way to structure entities in an application or game,
 such as nested UI elements or entities in a game world which move along with
 their parents.</p>
 <p>Flax has first class support for hierarchies, called <code>Relations</code>.</p>
@@ -144,7 +144,7 @@ their parents.</p>
 <p>Think of it as the component accepting an argument entity prior to adding it to
 another entity.</p>
 <p>Relations are declared using the
-<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro</p>
+<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    component! {

@@ -751,8 +751,8 @@ sequence.</p>
 
 <span class="boring">}
 </span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="hierarchy"><a class="header" href="#hierarchy">Hierarchy</a></h1>
-<p>Hierarchies are a common way to structure entities in an application or game,
+<div style="break-before: page; page-break-before: always;"></div><h1 id="relations"><a class="header" href="#relations">Relations</a></h1>
+<p>Relations such as hierarchies or entity-entity connections are a common way to structure entities in an application or game,
 such as nested UI elements or entities in a game world which move along with
 their parents.</p>
 <p>Flax has first class support for hierarchies, called <code>Relations</code>.</p>
@@ -761,7 +761,7 @@ their parents.</p>
 <p>Think of it as the component accepting an argument entity prior to adding it to
 another entity.</p>
 <p>Relations are declared using the
-<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro</p>
+<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    component! {
@@ -987,7 +987,7 @@ format of the archetype storage and is thus maximally efficient.</p>
 
 <span class="boring">}
 </span></code></pre></pre>
-<h2 id="hierarchy-1"><a class="header" href="#hierarchy-1">Hierarchy</a></h2>
+<h2 id="hierarchy"><a class="header" href="#hierarchy">Hierarchy</a></h2>
 <p>In the previous chapter, hierarchies were constructed by adding a relation to an
 entity to the child entity.</p>
 <p>The entity builder allows construction of hierarchies before being spawned into
@@ -1328,7 +1328,7 @@ spawned in the <code>STATIC</code> global namespace which is shared across all w
 the entity. This is used by the <code>=&gt; [ty, ty]</code> syntax for the <code>component</code> macro.</p>
 <p>The world will automatically manage the lifetime of the component to ensure that
 no entity has invalid components attached to it.</p>
-<h2 id="relations"><a class="header" href="#relations">Relations</a></h2>
+<h2 id="relations-1"><a class="header" href="#relations-1">Relations</a></h2>
 <p>As a component is just a normal entity you can add an entity to another entity.
 Such as adding a parent entity to the children entities.</p>
 <p>However, while this method allows quick and easy entity hierarchies, there is no
