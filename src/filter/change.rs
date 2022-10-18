@@ -83,16 +83,6 @@ where
     fn components(&self, result: &mut Vec<crate::ComponentKey>) {
         result.push(self.component.key())
     }
-
-    fn missing(
-        &self,
-        data: crate::fetch::FetchPrepareData,
-        result: &mut Vec<crate::ComponentInfo>,
-    ) {
-        if !data.arch.has(self.component.key()) {
-            result.push(self.component.info())
-        }
-    }
 }
 
 impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
@@ -264,16 +254,6 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
     }
 
     fn components(&self, _: &mut Vec<crate::ComponentKey>) {}
-
-    fn missing(
-        &self,
-        data: crate::fetch::FetchPrepareData,
-        result: &mut Vec<crate::ComponentInfo>,
-    ) {
-        if !data.arch.has(self.component.key()) {
-            result.push(self.component.info())
-        }
-    }
 }
 
 impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {

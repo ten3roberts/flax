@@ -655,9 +655,7 @@ mod test {
         store.reserve_at(r.index()).unwrap();
 
         let mut ids = store.reserve(2).collect_vec();
-        dbg!(&store.free);
 
-        dbg!(&ids);
         ids.extend(store.reserve(3));
         ids.push(store.reserve_one());
 

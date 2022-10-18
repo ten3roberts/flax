@@ -46,8 +46,6 @@ where
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
-
-    fn missing(&self, _: FetchPrepareData, _: &mut Vec<crate::ComponentInfo>) {}
 }
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
@@ -121,8 +119,6 @@ where
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
-
-    fn missing(&self, _: FetchPrepareData, _: &mut Vec<crate::ComponentInfo>) {}
 }
 
 impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {
