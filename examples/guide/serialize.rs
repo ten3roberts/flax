@@ -12,8 +12,10 @@ fn main() -> color_eyre::Result<()> {
         position: Vec3 => [Debug],
         velocity: Vec3 => [Debug],
     }
+    tracing_subscriber::fmt().init();
 
     use flax::serialize::{SerdeBuilder, SerializeFormat};
+    tracing::info!("It works");
 
     let mut world = World::new();
 
@@ -51,7 +53,7 @@ fn main() -> color_eyre::Result<()> {
     let json =
         serde_json::to_string_pretty(&serializer.serialize(&world, SerializeFormat::RowMajor))?;
 
-    eprintln!("World: {json}");
+    // eprintln!("World: {json}");
     // ANCHOR_END: serialize
 
     // ANCHOR: deserialize
@@ -73,7 +75,7 @@ fn main() -> color_eyre::Result<()> {
     // Merge `result` into `world`
     world.merge_with(&mut result);
 
-    eprintln!("World: {world:#?}");
+    // eprintln!("World: {world:#?}");
 
     // ANCHOR_END: deserialize
 

@@ -77,5 +77,10 @@ fn schedule_granularity() {
     eprintln!("Batches: {batches:#?}");
     assert_eq!(batches.len(), 1);
 
-    schedule.execute_par(&mut world).unwrap();
+    rayon::ThreadPoolBuilder::new()
+        .build()
+        .unwrap()
+        .install(|| {
+            schedule.execute_par(&mut world).unwrap();
+        })
 }
