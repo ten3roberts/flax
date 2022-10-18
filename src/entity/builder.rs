@@ -7,13 +7,34 @@ use alloc::vec::Vec;
 #[derive(Debug)]
 /// Incrementally build a single entity which allows for more efficient
 /// insertion into the world.
+///
+/// ```rust
+/// # use crate::*;
+/// # use glam::*;
+
+/// # component! {
+/// #     health: f32,
+/// #     position: Vec3,
+/// #     is_player: (),
+/// # }
+
+/// # let mut world = World::new();
+/// let id = Entity::builder()
+///     .set(name(), "Player".into())
+///     .set(position(), vec3(0.0, 4.0, 2.0))
+///     .set(health(), 100.0)
+///     .tag(is_player())
+///     .spawn(&mut world);
+/// ```
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
     children: Vec<EntityBuilder>,
 }
 
 impl EntityBuilder {
-    /// Creates a new entity builder
+    /// Creates a new entity builder.
+    ///
+    /// Prefer [`Entity::builder`](crate::Entity::builder)
     pub fn new() -> Self {
         Self {
             buffer: ComponentBuffer::new(),
@@ -154,5 +175,34 @@ impl Default for EntityBuilder {
 impl From<&mut EntityBuilder> for EntityBuilder {
     fn from(builder: &mut EntityBuilder) -> Self {
         core::mem::take(builder)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::*;
+
+    #[test]
+    fn builder() {
+        use glam::*;
+
+        component! {
+            health: f32,
+            position: Vec3,
+            is_player: (),
+        }
+
+        let mut world = World::new();
+        let mut builder = Entity::builder();
+
+        builder
+            .set(name(), "Player".into())
+            .set(position(), vec3(0.0, 4.0, 2.0))
+            .set(health(), 100.0)
+            .tag(is_player());
+
+        assert_eq!(builder.get(name()), Some(&"Player".into()));
+        assert_eq!(builder.get(health()), Some(&100.0));
+        builder.spawn(&mut world);
     }
 }

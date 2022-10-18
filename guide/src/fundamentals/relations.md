@@ -1,6 +1,6 @@
-# Hierarchy
+# Relations
 
-Hierarchies are a common way to structure entities in an application or game,
+Relations such as hierarchies or entity-entity connections are a common way to structure entities in an application or game,
 such as nested UI elements or entities in a game world which move along with
 their parents.
 
@@ -13,7 +13,7 @@ Think of it as the component accepting an argument entity prior to adding it to
 another entity.
 
 Relations are declared using the
-[component](https://docs.rs/flax/latest/flax/macro.component.html) macro
+[component](https://docs.rs/flax/latest/flax/macro.component.html) macro
 
 ```rust
 {{ #include ../../../examples/guide/relations.rs:relation_basic }}

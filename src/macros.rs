@@ -1,13 +1,33 @@
 #[macro_export]
-/// Generate a new component
+/// Declarative component generation
 ///
 /// # Usage
 /// ```rust
-/// use flax::component;
-/// component! {
+/// flax::component! {
 ///     health: f32,
 /// }
 /// ```
+///
+/// ```rust
+/// flax::component! {
+///     // component
+///     name: type, // component
+///
+///     // component with metadata/reflection
+///     name: type => [ MetaData, ... ],
+///
+///     // relational component
+///     name(object): type
+///
+///     // relation component with metadata/reflection
+///     name(object): type => [ MetaData, ... ]
+///
+///     // static entity
+///     name,
+/// }
+/// ```
+///
+/// # Metadata
 ///
 /// Metadata can be attached to any component, which allows reflection and
 /// additional info for components. Any type which implements [`crate::MetaData`] can be used.
@@ -23,9 +43,14 @@
 /// }
 /// ```
 ///
-/// A component can a relation, which allows a *normal* entity to be associated
-/// inside the component id. Two relations with different *objects* are distinct
-/// components. This is useful for hierarchies, see: [guide:hierarchy]( https://ten3roberts.github.io/flax/guide/fundamentals/hierarchy.html )
+/// # Relations
+/// A component can be associated to another entity, which declares a relation of the component
+/// type between the subject (entity which has the component), and the object (the associated
+/// entity).
+///
+/// Relation components with different associated entities are distinct.
+///
+/// This is allows non random access hierachies, see: [guide:relations]( https://ten3roberts.github.io/flax/guide/fundamentals/relations.html )
 ///
 /// ```rust
 /// use flax::component;
@@ -40,12 +65,13 @@
 ///     connection(id): Joint => [flax::Debug],
 /// }
 /// ```
+/// # Static Entity
 ///
+/// Contrary to what the name may suggest, the macro can be used for static entity ids.
+///
+/// This may allow for crate-specific/non-global *resource* entities
 /// Since a component is also an entity id, a raw static entity can also be
 /// generated. This may allow for some *resource* entity or alike.
-///
-/// This is done by not giving a type to the component.
-///
 ///
 /// ```rust
 /// use flax::component;

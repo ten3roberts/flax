@@ -218,6 +218,8 @@ impl Drop for BufferStorage {
 /// Can hold up to one if each component.
 ///
 /// Used for gathering up an entity's components or inserting it.
+///
+/// This is a low level building block. Prefer [EntityBuilder](crate::EntityBuilder) or [CommandBuffer](crate::CommandBuffer) instead.
 #[derive(Default)]
 pub struct ComponentBuffer {
     components: BTreeMap<ComponentKey, (Offset, ComponentInfo)>,
@@ -266,7 +268,7 @@ impl ComponentBuffer {
         unsafe { Some(self.storage.read(offset)) }
     }
 
-    /// Returns the component in the buffer
+    /// Returns the components in the buffer
     pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
         self.components.values().map(|v| &v.1)
     }
