@@ -212,10 +212,6 @@ fn derive_data_struct(
                     fn filter(&self) -> Self::Filter {
                         #crate_name::filter::TupleOr( (#(self.#field_names.filter()),*) )
                     }
-
-                    fn missing(&self, data: #crate_name::fetch::FetchPrepareData, result: &mut Vec<#crate_name::ComponentInfo>) {
-                        #(self.#field_names.missing(data, result));*
-                    }
                 }
             })
         }

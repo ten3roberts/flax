@@ -77,12 +77,6 @@ where
     }
 
     const HAS_FILTER: bool = false;
-
-    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {
-        if !data.arch.has(self.key()) {
-            result.push(self.info())
-        }
-    }
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Component<T> {
@@ -150,12 +144,6 @@ where
 
     fn components(&self, result: &mut Vec<ComponentKey>) {
         result.push(self.0.key())
-    }
-
-    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {
-        if !data.arch.has(self.0.key()) {
-            result.push(self.0.info())
-        }
     }
 }
 
@@ -262,8 +250,6 @@ where
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
-
-    fn missing(&self, _: FetchPrepareData, _: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {

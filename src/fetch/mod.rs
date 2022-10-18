@@ -13,7 +13,6 @@ pub use ext::*;
 pub use opt::*;
 
 use crate::filter::TupleOr;
-use crate::ComponentInfo;
 use crate::{
     archetype::{Archetype, Slice, Slot},
     filter::Nothing,
@@ -82,9 +81,6 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     ///
     /// This is used for the query to determine which archetypes to visit
     fn components(&self, result: &mut Vec<ComponentKey>);
-
-    /// Returns the missing components given a specific archetype
-    fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>);
 }
 
 impl<'w> Fetch<'w> for () {
@@ -115,8 +111,6 @@ impl<'w> Fetch<'w> for () {
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
-
-    fn missing(&self, _: FetchPrepareData, _: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -199,8 +193,6 @@ impl<'w> Fetch<'w> for EntityIds {
     }
 
     fn components(&self, _: &mut Vec<ComponentKey>) {}
-
-    fn missing(&self, _: FetchPrepareData, _: &mut Vec<ComponentInfo>) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
@@ -262,11 +254,6 @@ macro_rules! tuple_impl {
             #[inline(always)]
             fn filter(&self) -> Self::Filter {
                 TupleOr(( $(self.$idx.filter(),)* ))
-            }
-
-            #[inline(always)]
-            fn missing(&self, data: FetchPrepareData, result: &mut Vec<ComponentInfo>) {
-                $((self.$idx).missing(data, result));*
             }
         }
 
