@@ -13,10 +13,13 @@ component! {
     pub name: String => [ Debug ],
     /// The default parent relationship
     pub child_of(parent): () => [ Debug ],
-    /// Tag for anything which is a component.
+
+    /// Contains type erased metadata.
+    ///
     /// Added automatically to all components.
     /// This is the basis of the reflection provided by flax
-    pub is_component: ComponentInfo,
+    pub component_info: ComponentInfo => [ Debug ],
+
     /// Added automatically to all STATIC entities
-    pub is_static: (),
+    pub is_static: () => [ Debug ],
 }

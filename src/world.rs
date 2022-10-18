@@ -18,7 +18,7 @@ use crate::filter::ArchetypeFilter;
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
     buffer::ComponentBuffer,
-    components::{is_component, name},
+    components::{component_info, name},
     debug_visitor,
     entity::*,
     entity_ref::{EntityRef, EntityRefMut},
@@ -424,7 +424,7 @@ impl World {
         let info = component.info();
 
         let mut meta = info.meta()(info);
-        meta.set(is_component(), info);
+        meta.set(component_info(), info);
         meta.set(crate::name(), info.name().into());
 
         self.set_with(id, &mut meta).unwrap();
@@ -706,13 +706,13 @@ impl World {
             "Component is not a component kind id"
         );
 
-        if self.has(info.key().id, is_component()) {
+        if self.has(info.key().id, component_info()) {
             return Ok(info);
         }
 
         let id = info.key().id;
         let mut meta = info.meta()(info);
-        meta.set(is_component(), info);
+        meta.set(component_info(), info);
         meta.set(name(), info.name().into());
 
         if id.is_static() {
@@ -723,7 +723,7 @@ impl World {
             self.spawn_at(id).unwrap();
         }
 
-        if self.has(info.key().id, is_component()) {
+        if self.has(info.key().id, component_info()) {
             return Ok(info);
         }
 
@@ -1243,7 +1243,7 @@ impl World {
     pub fn find_component<T: ComponentValue>(&self, id: ComponentKey) -> Option<Component<T>> {
         let e = self.entity(id.id).ok()?;
 
-        let info = e.get(is_component()).ok()?;
+        let info = e.get(component_info()).ok()?;
 
         if !info.is::<T>() {
             panic!("Attempt to construct a component from the wrong type. Found: {info:#?}");
@@ -1367,11 +1367,11 @@ impl World {
                     }
                 }
 
-                if arch.has(is_component().key()) {
+                if arch.has(component_info().key()) {
                     // Make sure to reinsert any non-static components
                     for (slot, &id) in arch.slots().iter().zip(arch.entities()) {
                         components
-                            .insert(id, *arch.get(slot, is_component()).expect("Invalid slot"));
+                            .insert(id, *arch.get(slot, component_info()).expect("Invalid slot"));
                     }
                 }
             }
@@ -1400,6 +1400,9 @@ impl World {
                     batch.append(storage).expect("Batch is incomplete");
                 }
 
+                // Skip initializing components as component entities will be added by further
+                // iterations of the loop, and can thus not be spawned as they need to be
+                // unoccupied.
                 self.spawn_batch_at_inner(arch.entities(), &mut batch)
                     .expect("Failed to spawn batch");
             }
@@ -1581,7 +1584,7 @@ impl Default for World {
 
 impl fmt::Debug for World {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.format_debug(is_component().without()).fmt(f)
+        self.format_debug(component_info().without()).fmt(f)
     }
 }
 
