@@ -153,7 +153,9 @@ impl<V> EntityStore<V> {
         // ----------------------------------
         let free = &self.free[(cursor - count as i64).max(0) as usize..cursor.max(0) as usize];
         let next_slot = (self.slots.len() + 1 + (-cursor).max(0) as usize) as u32;
-        let new = next_slot..next_slot + (count as i64 - cursor.max(0)) as u32;
+
+        let new = next_slot..next_slot + (count as i64 - cursor.max(0)).max(0) as u32;
+
         ReservedIter {
             slots: &self.slots,
             free: free.iter(),
@@ -375,6 +377,19 @@ impl<V> EntityStore<V> {
         }
     }
 
+    /// Ensures an entity will not spawn at this id
+    pub(crate) fn reserve_at(&mut self, index: EntityIndex) -> crate::error::Result<()> {
+        self.assert_reserved();
+        self.take_slot(index)?;
+
+        self.len += 1;
+        let slot = self.slot_mut(index).unwrap();
+
+        debug_assert!(!slot.is_alive());
+
+        Ok(())
+    }
+
     /// Spawns an entity at the provided id.
     ///
     /// Fails if the index is occupied.
@@ -384,27 +399,7 @@ impl<V> EntityStore<V> {
         gen: EntityGen,
         value: V,
     ) -> crate::error::Result<&mut V> {
-        self.assert_reserved();
-        if index.get() as usize > self.slots.len() {
-            // The current slot does not exist
-            let new_free = self.slots.len() as u32 + 1..index.get() as u32;
-            self.cursor.fetch_add(new_free.len() as _, Relaxed);
-
-            self.free
-                .extend(new_free.map(|v| NonZeroU32::new(v).unwrap()));
-
-            self.slots.resize_with(index.get() as usize, || Slot {
-                value: SlotValue { vacant: Vacant },
-                gen: 0,
-            });
-        } else if let Some(pos) = self.free.iter().position(|&v| v == index) {
-            self.cursor.fetch_sub(1, Relaxed);
-            self.free.swap_remove(pos);
-        } else {
-            let id = self.reconstruct(index).unwrap().0;
-            return Err(Error::EntityOccupied(id));
-        };
-
+        self.take_slot(index)?;
         self.len += 1;
         let slot = self.slot_mut(index).unwrap();
 
@@ -416,6 +411,32 @@ impl<V> EntityStore<V> {
         };
 
         Ok(unsafe { &mut slot.value.occupied })
+    }
+
+    fn take_slot(&mut self, index: EntityIndex) -> Result<()> {
+        self.assert_reserved();
+        if index.get() as usize > self.slots.len() {
+            // The current slot does not exist
+            let new_free = self.slots.len() as u32 + 1..index.get() as u32;
+            self.cursor.fetch_add(new_free.len() as _, Relaxed);
+
+            self.free
+                .extend(new_free.map(|v| NonZeroU32::new(v).unwrap()));
+
+            self.slots.resize_with(index.get() as usize, || Slot {
+                value: SlotValue { vacant: Vacant },
+                gen: 2,
+            });
+        } else if let Some(pos) = self.free.iter().position(|&v| v == index) {
+            self.cursor.fetch_sub(1, Relaxed);
+            self.free.swap_remove(pos);
+        } else if let Some((id, _)) = self.reconstruct(index) {
+            return Err(Error::EntityOccupied(id));
+        } else {
+            // reserve_at
+        };
+
+        Ok(())
     }
 }
 
@@ -509,7 +530,8 @@ impl<'a, V> Iterator for ReservedIter<'a, V> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(&index) = self.free.next() {
             // The gen as if alive
-            let gen = from_slot_gen(self.slots[index.get() as usize - 1].gen);
+            let slot = &self.slots[index.get() as usize - 1];
+            let gen = from_slot_gen(slot.gen);
             Some(Entity::from_parts(index, gen, self.kind))
         } else if let Some(index) = self.new.next() {
             let gen = 1;
@@ -527,6 +549,8 @@ impl<'a, V> Iterator for ReservedIter<'a, V> {
 
 #[cfg(test)]
 mod test {
+
+    use alloc::collections::BTreeMap;
 
     use super::*;
 
@@ -627,46 +651,39 @@ mod test {
         let _ = store.spawn("_");
         store.despawn(b).unwrap();
 
-        let mut ids = store.reserve(2).collect_vec();
+        let r = Entity::from_parts(EntityIndex::new(9).unwrap(), 2, EntityKind::empty());
+        store.reserve_at(r.index()).unwrap();
 
+        let mut ids = store.reserve(2).collect_vec();
+        dbg!(&store.free);
+
+        dbg!(&ids);
         ids.extend(store.reserve(3));
         ids.push(store.reserve_one());
 
+        let create_id =
+            |i, g| Entity::from_parts(EntityIndex::new(i).unwrap(), g, EntityKind::empty());
+
         let expected = [
-            (
-                Entity::from_parts(EntityIndex::new(2).unwrap(), 2, EntityKind::empty()),
-                "c",
-            ),
-            (
-                Entity::from_parts(EntityIndex::new(4).unwrap(), 1, EntityKind::empty()),
-                "d",
-            ),
-            (
-                Entity::from_parts(EntityIndex::new(5).unwrap(), 1, EntityKind::empty()),
-                "e",
-            ),
-            (
-                Entity::from_parts(EntityIndex::new(6).unwrap(), 1, EntityKind::empty()),
-                "f",
-            ),
-            (
-                Entity::from_parts(EntityIndex::new(7).unwrap(), 1, EntityKind::empty()),
-                "g",
-            ),
-            (
-                Entity::from_parts(EntityIndex::new(8).unwrap(), 1, EntityKind::empty()),
-                "h",
-            ),
+            (create_id(7, 1), "g"),
+            (create_id(8, 1), "h"),
+            (create_id(4, 1), "d"),
+            (create_id(5, 1), "e"),
+            (create_id(6, 1), "f"),
+            (create_id(2, 2), "c"),
         ];
 
         assert_eq!(ids, expected.iter().map(|v| v.0).collect_vec());
 
-        let mut e = expected.iter();
-        store.flush_reserved(|id| {
-            let (new_id, v) = e.next().unwrap();
-            assert_eq!(id, *new_id);
-            *v
-        });
+        let mut e: BTreeMap<_, _> = expected.into_iter().collect();
+        store.flush_reserved(|id| e.remove(&id).unwrap());
+
+        assert!(!store.is_alive(r));
+        store
+            .spawn_at(EntityIndex::new(9).unwrap(), 2, "r")
+            .unwrap();
+
+        assert!(store.is_alive(r));
 
         assert_eq!(store.get(a), Some(&"a"));
         for expected in expected {

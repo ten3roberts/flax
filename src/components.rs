@@ -17,5 +17,6 @@ component! {
     /// Added automatically to all components.
     /// This is the basis of the reflection provided by flax
     pub is_component: ComponentInfo,
-    pub(crate) is_static_component: (),
+    /// Added automatically to all STATIC entities
+    pub is_static: (),
 }

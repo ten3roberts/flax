@@ -586,7 +586,7 @@ pub(crate) struct WithObject {
 impl StaticFilter for WithObject {
     fn static_matches(&self, arch: &Archetype) -> bool {
         arch.components().any(|v| {
-            if let Some(v) = v.id().object {
+            if let Some(v) = v.key().object {
                 if v == self.object {
                     return true;
                 }

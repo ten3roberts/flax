@@ -14,7 +14,6 @@ use core::{
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::dummy;
 use crate::filter::ArchetypeFilter;
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
@@ -25,9 +24,10 @@ use crate::{
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    is_static_component, Component, ComponentKey, ComponentValue, Entity, Error, Filter, Query,
-    RelationExt, RowFormatter, StaticFilter,
+    Component, ComponentKey, ComponentValue, Entity, Error, Filter, Query, RelationExt,
+    RowFormatter, StaticFilter,
 };
+use crate::{dummy, is_static};
 
 #[derive(Debug, Default)]
 struct EntityStores {
@@ -95,7 +95,7 @@ impl Archetypes {
             let head = head.borrow();
             let cur = &mut self.inner.get(cursor).expect("Invalid archetype id");
 
-            cursor = match cur.outgoing(head.id) {
+            cursor = match cur.outgoing(head.key) {
                 Some((_, id)) => id,
                 None => {
                     let new = Archetype::new(cur.components().copied().chain([*head]));
@@ -105,8 +105,8 @@ impl Archetypes {
                     let new_id = self.inner.spawn(new);
 
                     let (cur, new) = self.inner.get_disjoint(cursor, new_id).unwrap();
-                    cur.add_outgoing(new_id, true, head.id);
-                    new.add_incoming(cursor, head.id);
+                    cur.add_outgoing(new_id, true, head.key);
+                    new.add_incoming(cursor, head.key);
 
                     new_id
                 }
@@ -220,12 +220,9 @@ impl World {
     /// Reserve a single entity id concurrently.
     ///
     /// See: [`World::reserve`]
-    pub fn reserve_one(&self) -> Entity {
+    pub fn reserve_one(&self, kind: EntityKind) -> Entity {
         self.has_reserved.store(true, Relaxed);
-        self.entities
-            .get(EntityKind::empty())
-            .unwrap()
-            .reserve_one()
+        self.entities.get(kind).unwrap().reserve_one()
     }
 
     /// Reserve entities id concurrently.
@@ -233,13 +230,9 @@ impl World {
     /// The returned entity ids can be used directly by functions such as [ `set` ]( World::set ) and
     /// [ `spawn_at` ]( World::spawn_at ), but will not be yielded by queries until properly spawned by
     /// by adding a component or using spawn_at.
-    pub fn reserve(&self, count: usize) -> ReservedEntityIter {
+    pub fn reserve(&self, kind: EntityKind, count: usize) -> ReservedEntityIter {
         self.has_reserved.store(true, Relaxed);
-        let iter = self
-            .entities
-            .get(EntityKind::empty())
-            .unwrap()
-            .reserve(count);
+        let iter = self.entities.get(kind).unwrap().reserve(count);
         ReservedEntityIter(iter)
     }
 
@@ -263,6 +256,20 @@ impl World {
                 }
             })
         }
+    }
+
+    fn reserve_at(&mut self, id: Entity) -> Result<()> {
+        self.flush_reserved();
+        self.entities.init(id.kind).reserve_at(id.index())
+    }
+
+    /// Ensure a static entity id exists
+    fn ensure_static(&mut self, id: Entity) -> Result<EntityLocation> {
+        assert!(id.is_static());
+        let mut buffer = ComponentBuffer::new();
+        buffer.set(is_static(), ());
+        let (_, loc) = self.spawn_at_with_inner(id, &mut buffer)?;
+        Ok(loc)
     }
 
     /// Create an iterator to spawn several entities
@@ -332,6 +339,20 @@ impl World {
         ids: &'a [Entity],
         batch: &mut BatchSpawn,
     ) -> Result<&'a [Entity]> {
+        for &component in batch.components() {
+            self.init_component(component)
+                .expect("failed to initialize component");
+        }
+
+        self.spawn_batch_at_inner(ids, batch)
+    }
+
+    /// Does not initialize components
+    fn spawn_batch_at_inner<'a>(
+        &mut self,
+        ids: &'a [Entity],
+        batch: &mut BatchSpawn,
+    ) -> Result<&'a [Entity]> {
         self.flush_reserved();
         assert_eq!(
             ids.len(),
@@ -345,11 +366,6 @@ impl World {
             } else if let Some(v) = self.reconstruct(id.index(), id.kind()) {
                 return Err(Error::EntityOccupied(v));
             }
-        }
-
-        for &component in batch.components() {
-            self.init_component(component)
-                .expect("failed to initialize component");
         }
 
         let change_tick = self.advance_change_tick();
@@ -481,6 +497,15 @@ impl World {
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
     pub fn spawn_at_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Result<Entity> {
+        let (val, _) = self.spawn_at_with_inner(id, buffer)?;
+        Ok(val)
+    }
+
+    fn spawn_at_with_inner(
+        &mut self,
+        id: Entity,
+        buffer: &mut ComponentBuffer,
+    ) -> Result<(Entity, EntityLocation)> {
         let change_tick = self.advance_change_tick();
 
         let (arch_id, _) = self.archetypes.init(buffer.components());
@@ -488,7 +513,7 @@ impl World {
 
         for (component, src) in buffer.take_all() {
             unsafe {
-                arch.push(component.id, src)
+                arch.push(component.key, src)
                     .expect("Component not in archetype")
             }
 
@@ -501,7 +526,7 @@ impl World {
                 .expect("Failed to initialize component");
         }
 
-        Ok(id)
+        Ok((id, loc))
     }
 
     /// Spawn an entity with the given components.
@@ -527,7 +552,7 @@ impl World {
 
         for (component, src) in buffer.take_all() {
             unsafe {
-                arch.push(component.id, src)
+                arch.push(component.key, src)
                     .expect("Component not in archetype")
             }
 
@@ -549,7 +574,7 @@ impl World {
 
         let swapped = unsafe {
             src.take(slot, |c, p| {
-                self.on_removed.send(c.id(), id, p);
+                self.on_removed.send(c.key(), id, p);
                 (c.drop)(p)
             })
         };
@@ -590,14 +615,14 @@ impl World {
         for (component, data) in components.take_all() {
             let src = self.archetypes.get_mut(arch);
 
-            if let Some(old) = src.get_dyn(slot, component.id) {
+            if let Some(old) = src.get_dyn(slot, component.key) {
                 // Drop old and copy the new value in
                 unsafe {
                     (component.drop)(old);
                     ptr::copy_nonoverlapping(data, old, component.size());
                 }
 
-                src.changes_mut(component.id())
+                src.changes_mut(component.key())
                     .unwrap()
                     .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
             } else {
@@ -613,12 +638,16 @@ impl World {
             debug_assert_eq!(new_data.len(), new_components.len());
             let src = self.archetypes.get_mut(arch);
             new_components.extend(src.components().copied());
+            new_components.sort_unstable();
 
             // Make sure everything is in its order
             #[cfg(feature = "internal_assert")]
             {
                 let v = new_components.iter().sorted().cloned().collect_vec();
-                assert_eq!(new_components, v, "set_with not in order");
+                assert_eq!(
+                    new_components, v,
+                    "set_with not in order new={new_components:#?} sorted={v:#?}"
+                );
             }
 
             let components = new_components;
@@ -635,7 +664,7 @@ impl World {
 
                 // Insert the missing components
                 for &(component, data) in &new_data {
-                    dst.push(component.id, data)
+                    dst.push(component.key, data)
                         .expect("Insert should not fail");
 
                     dst.init_changes(component)
@@ -661,7 +690,7 @@ impl World {
         }
 
         for (component, _) in new_data {
-            if component.id.id != id {
+            if component.key.id != id {
                 self.init_component(component)
                     .expect("Failed to initialize component");
             }
@@ -673,24 +702,31 @@ impl World {
     /// Set metadata for a given component if they do not already exist
     fn init_component(&mut self, info: ComponentInfo) -> Result<ComponentInfo> {
         assert!(
-            info.id().id.kind().contains(EntityKind::COMPONENT),
+            info.key().id.kind().contains(EntityKind::COMPONENT),
             "Component is not a component kind id"
         );
 
-        let id = info.id().id;
-        if self.has(info.id().id, is_component()) {
+        if self.has(info.key().id, is_component()) {
             return Ok(info);
         }
 
+        let id = info.key().id;
         let mut meta = info.meta()(info);
         meta.set(is_component(), info);
         meta.set(name(), info.name().into());
 
         if id.is_static() {
-            meta.set(is_static_component(), ());
+            meta.set(is_static(), ());
         }
 
-        self.spawn_at(id).unwrap();
+        if !self.is_alive(id) {
+            self.spawn_at(id).unwrap();
+        }
+
+        if self.has(info.key().id, is_component()) {
+            return Ok(info);
+        }
+
         self.set_with(id, &mut meta).unwrap();
 
         Ok(info)
@@ -713,7 +749,7 @@ impl World {
 
         let swapped = unsafe {
             src.take(slot, |c, p| {
-                self.on_removed.send(c.id(), id, p);
+                self.on_removed.send(c.key(), id, p);
                 (c.drop)(p);
             })
         };
@@ -777,7 +813,7 @@ impl World {
         let archetypes = Query::new(())
             .filter(ArchetypeFilter(|arch: &Archetype| {
                 arch.components()
-                    .any(|v| v.id().id == id || v.id().object == Some(id))
+                    .any(|v| v.key().id == id || v.key().object == Some(id))
             }))
             .get_archetypes(self);
 
@@ -796,7 +832,7 @@ impl World {
             let mut src = self.archetypes.despawn(src);
 
             let components = src.components().filter(|v| {
-                let cid = v.id();
+                let cid = v.key();
                 !(cid.id == id || cid.object == Some(id))
             });
 
@@ -839,8 +875,8 @@ impl World {
 
         let src = self.archetypes.get_mut(src_id);
 
-        if let Some(old) = src.get_dyn(slot, info.id()) {
-            src.changes_mut(info.id())
+        if let Some(old) = src.get_dyn(slot, info.key()) {
+            src.changes_mut(info.key())
                 .expect("Missing change list")
                 .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
 
@@ -858,10 +894,10 @@ impl World {
         }
 
         // Pick up the entity and move it to the destination archetype
-        let dst_id = match src.outgoing(info.id()) {
+        let dst_id = match src.outgoing(info.key()) {
             Some((_, dst)) => dst,
             None => {
-                let pivot = src.components().take_while(|v| v.id < info.id()).count();
+                let pivot = src.components().take_while(|v| v.key < info.key()).count();
 
                 // Split the components
                 // A B C [new] D E F
@@ -886,11 +922,11 @@ impl World {
                 src.move_to(dst, slot, |c, _| panic!("Component {c:#?} was removed"));
 
             // Add a quick edge to refer to later
-            src.add_outgoing(dst_id, false, info.id());
-            dst.add_incoming(src_id, info.id());
+            src.add_outgoing(dst_id, false, info.key());
+            dst.add_incoming(src_id, info.key());
 
             // Insert the missing component
-            dst.push(info.id, value).expect("Insert should not fail");
+            dst.push(info.key, value).expect("Insert should not fail");
 
             debug_assert_eq!(dst.entity(dst_slot), Some(id));
 
@@ -955,16 +991,16 @@ impl World {
 
         let src = self.archetypes.get(src_id);
 
-        if !src.has(component.id()) {
+        if !src.has(component.key()) {
             return Err(Error::MissingComponent(id, component));
         }
 
-        let dst_id = match src.incoming(component.id()) {
+        let dst_id = match src.incoming(component.key()) {
             Some(dst) => dst,
             None => {
                 let components: Vec<_> = src
                     .components()
-                    .filter(|v| v.id != component.id())
+                    .filter(|v| v.key != component.key())
                     .copied()
                     .collect_vec();
 
@@ -979,8 +1015,8 @@ impl World {
         assert_ne!(src_id, dst_id);
         // Borrow disjoint
         let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
-        src.add_incoming(dst_id, component.id());
-        dst.add_outgoing(src_id, false, component.id());
+        src.add_incoming(dst_id, component.key());
+        dst.add_outgoing(src_id, false, component.key());
 
         // Take the value
         // This moves the differing value out of the archetype before it is
@@ -990,7 +1026,7 @@ impl World {
         let mut on_drop = Some(on_drop);
         let (dst_slot, swapped) = src.move_to(dst, slot, |_, p| {
             let drop = on_drop.take().expect("On drop called more than once");
-            self.on_removed.send(component.id(), id, p);
+            self.on_removed.send(component.key(), id, p);
             (drop)(p);
         });
 
@@ -1101,14 +1137,14 @@ impl World {
         }
     }
 
-    /// Returns true if the entity is still alive
+    /// Returns true if the entity is still alive.
     ///
-    /// A static entity is always alive, even if it is not yet spawned into the world
+    /// **Note**: false is returned static entities which are not yet present in the world, for example, before
+    /// inserting a first component.
+    ///
+    /// This is because static entities and components are lazily initialized on first insertion or
+    /// other modification.
     pub fn is_alive(&self, id: Entity) -> bool {
-        if id.is_static() {
-            return true;
-        }
-
         self.entities
             .get(id.kind())
             .map(|v| v.is_alive(id))
@@ -1137,10 +1173,7 @@ impl World {
     fn init_location(&mut self, id: Entity) -> Result<EntityLocation> {
         match self.entities.get(id.kind()).and_then(|v| v.get(id)) {
             Some(&loc) => Ok(loc),
-            None if id.is_static() => {
-                let (loc, _) = self.spawn_at_inner(id, self.archetypes.root).unwrap();
-                Ok(loc)
-            }
+            None if id.is_static() => self.ensure_static(id),
             None => Err(Error::NoSuchEntity(id)),
         }
     }
@@ -1288,7 +1321,9 @@ impl World {
 
     /// Merges `other` into `self`.
     ///
-    /// Colliding entities will be migrated to a new entity id.
+    /// Colliding entities will be migrated to a new entity id. Static entities will not be
+    /// migrated but rather appended to existing ones. This is so that e.g; a resource entity gets
+    /// the union of the worlds.
     ///
     /// Returns a map of all the entities which were remapped.
     ///
@@ -1302,50 +1337,52 @@ impl World {
 
         let mut components = BTreeMap::new();
 
-        let new_ids: BTreeMap<_, _> = archetypes
-            .inner
-            .iter_mut()
-            .filter(|v| !v.1.has(is_static_component().key()))
-            .flat_map(|(arch_id, arch)| {
-                arch.entities_mut()
-                    .iter_mut()
-                    .filter_map(|id| {
-                        let old_id = *id;
-                        let loc = entities
-                            .init(id.kind())
-                            .get(*id)
-                            .expect("Invalid component");
+        self.flush_reserved();
 
-                        assert_eq!(loc.arch_id, arch_id);
+        let mut new_ids = BTreeMap::new();
 
-                        // Migrate
-                        if self.reconstruct(old_id.index, old_id.kind).is_some() {
-                            let new_id = self.spawn_inner(self.archetypes.root, id.kind()).0;
+        let mut buffer = Entity::builder();
 
-                            *id = new_id;
-                            Some((old_id, new_id))
-                        } else {
-                            // Make sure nothing is spawned here in the meantime
-                            self.spawn_at(old_id).unwrap();
-                            None
-                        }
-                    })
-                    .collect_vec()
-            })
-            .collect();
+        for (arch_id, arch) in &mut archetypes.inner {
+            if !arch.has(is_static().key()) {
+                for id in arch.entities_mut() {
+                    let old_id = *id;
+                    let loc = entities
+                        .init(id.kind())
+                        .get(*id)
+                        .expect("Invalid component");
 
-        for (_, arch) in &mut archetypes.inner.iter_mut() {
-            if arch.has(is_component().key()) {
-                for (slot, &id) in arch.slots().iter().zip(arch.entities()) {
-                    components.insert(id, *arch.get(slot, is_component()).expect("Invalid slot"));
+                    debug_assert_eq!(loc.arch_id, arch_id);
+                    // Migrate
+                    if self.reconstruct(old_id.index, old_id.kind).is_some() {
+                        let new_id = self.reserve_one(old_id.kind);
+                        self.flush_reserved();
+
+                        // Change the id inside of the archetype
+                        *id = new_id;
+                        new_ids.insert(old_id, new_id);
+                    } else {
+                        // Make sure nothing is spawned here in the meantime
+                        self.reserve_at(old_id).unwrap();
+                    }
+                }
+
+                if arch.has(is_component().key()) {
+                    // Make sure to reinsert any non-static components
+                    for (slot, &id) in arch.slots().iter().zip(arch.entities()) {
+                        components
+                            .insert(id, *arch.get(slot, is_component()).expect("Invalid slot"));
+                    }
                 }
             }
+        }
 
+        for (_, arch) in &mut archetypes.inner {
             // Don't migrate static components
-            if !arch.has(is_static_component().key()) {
+            if !arch.has(is_static().key()) {
                 let mut batch = BatchSpawn::new(arch.len());
                 for mut storage in mem::take(arch.storage_mut()).into_values() {
-                    let mut id = storage.info().id;
+                    let mut id = storage.info().key;
 
                     // Modify the relations to match new components
                     id.id = *new_ids.get(&id.id).unwrap_or(&id.id);
@@ -1363,15 +1400,35 @@ impl World {
                     batch.append(storage).expect("Batch is incomplete");
                 }
 
-                for &id in &arch.entities {
-                    self.despawn(id).unwrap()
-                }
-
-                self.spawn_batch_at(arch.entities(), &mut batch)
+                self.spawn_batch_at_inner(arch.entities(), &mut batch)
                     .expect("Failed to spawn batch");
             }
         }
 
+        // Append all static ids
+        // This happens after non-static components have been initialized
+        for (_, arch) in &mut archetypes.inner {
+            // Take each entity one by one and append them to the world
+            if arch.has(is_static().key()) {
+                while let Some(id) = unsafe {
+                    arch.pop_last(|mut info, ptr| {
+                        let mut key = &mut info.key;
+
+                        // Modify the relations to match new components
+                        key.id = *new_ids.get(&key.id).unwrap_or(&key.id);
+
+                        if let Some(ref mut object) = key.object {
+                            *object = *new_ids.get(object).unwrap_or(object);
+                        }
+
+                        // Migrate custom components
+                        buffer.set_dyn(info, ptr);
+                    })
+                } {
+                    buffer.append_to(self, id).unwrap();
+                }
+            }
+        }
         Migrated {
             ids: new_ids,
             components,
@@ -1461,8 +1518,8 @@ where
             meta.clear();
             meta.extend(arch.components().flat_map(|info| {
                 Some((
-                    info.id(),
-                    self.world.get(info.id().id, debug_visitor()).ok()?,
+                    info.key(),
+                    self.world.get(info.key().id, debug_visitor()).ok()?,
                 ))
             }));
 
@@ -1502,8 +1559,8 @@ impl<'a> fmt::Debug for EntityFormatter<'a> {
 
                 meta.extend(arch.components().flat_map(|info| {
                     Some((
-                        info.id(),
-                        self.world.get(info.id().id, debug_visitor()).ok()?,
+                        info.key(),
+                        self.world.get(info.key().id, debug_visitor()).ok()?,
                     ))
                 }));
 
@@ -1709,7 +1766,7 @@ mod tests {
 
         let a = world.spawn();
 
-        let b = world.reserve_one();
+        let b = world.reserve_one(Default::default());
 
         let c = world.spawn();
         let short_lived = world.spawn();
@@ -1719,7 +1776,7 @@ mod tests {
         world.set(a, name(), "a".into()).unwrap();
         world.set(c, name(), "c".into()).unwrap();
 
-        let reserved = world.reserve(4).collect_vec();
+        let reserved = world.reserve(Default::default(), 4).collect_vec();
 
         let mut cmd = CommandBuffer::new();
         cmd.spawn_batch_at(

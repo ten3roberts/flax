@@ -1,3 +1,4 @@
+use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
 use bincode::{DefaultOptions, Options};
@@ -186,7 +187,14 @@ fn merge_hierarchy() -> color_eyre::Result<()> {
 
 #[test]
 fn merge_custom() {
+    component! {
+        resources,
+    }
+
     let mut src_world = World::new();
+    src_world
+        .set(resources(), name(), "resources".into())
+        .unwrap();
 
     let custom_component =
         src_world.spawn_component::<Arc<String>>("custom", |_| Default::default());
@@ -219,9 +227,21 @@ fn merge_custom() {
         )
         .spawn(&mut src_world);
 
+    src_world
+        .set(
+            resources(),
+            custom_component,
+            Arc::new("static resource".into()),
+        )
+        .unwrap();
+
     let mut world = World::new();
 
-    let _ = world.spawn_component::<Arc<String>>("custom2", |_| Default::default());
+    let custom2 = world.spawn_component::<Arc<String>>("custom2", |_| Default::default());
+
+    world
+        .set(resources(), custom2, Arc::new("String".into()))
+        .unwrap();
 
     random_entities(&mut rng)
         .take(1000)
@@ -257,5 +277,15 @@ fn merge_custom() {
         .cloned()
         .collect_vec();
 
-    assert_eq!(custom_children, ["child_custom.1"]);
+    pretty_assertions::assert_eq!(
+        world.get(resources(), custom2).as_deref(),
+        Ok(&Arc::new("String".into()))
+    );
+
+    pretty_assertions::assert_eq!(
+        world.get(resources(), new_custom_component).as_deref(),
+        Ok(&Arc::new("static resource".into()))
+    );
+
+    pretty_assertions::assert_eq!(custom_children, ["child_custom.1"]);
 }

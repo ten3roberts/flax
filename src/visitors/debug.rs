@@ -91,9 +91,9 @@ impl<'a> fmt::Debug for RowFormatter<'a> {
         for storage in self.arch.borrow_all() {
             let name = ComponentName {
                 base_name: storage.info().name(),
-                id: storage.info().id(),
+                id: storage.info().key(),
             };
-            if let Some(visitor) = self.meta.get(&storage.info().id()) {
+            if let Some(visitor) = self.meta.get(&storage.info().key()) {
                 unsafe {
                     map.entry(&name, (visitor.visit)(&storage, self.slot));
                 }

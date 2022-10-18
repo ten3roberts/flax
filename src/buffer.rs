@@ -1,8 +1,9 @@
 use core::alloc::Layout;
-use core::ptr::NonNull;
+use core::ptr::{self, NonNull};
 
 use alloc::alloc::{dealloc, handle_alloc_error};
 use alloc::collections::{btree_map, BTreeMap};
+use itertools::Itertools;
 
 use crate::ComponentKey;
 use crate::{archetype::ComponentInfo, Component, ComponentValue};
@@ -114,6 +115,10 @@ impl BufferStorage {
         &*self.data.as_ptr().add(offset).cast::<T>()
     }
 
+    pub(crate) unsafe fn at(&mut self, offset: Offset) -> *mut u8 {
+        self.data.as_ptr().add(offset)
+    }
+
     /// Returns the value at offset as a reference to T
     /// # Safety
     /// The data at `offset` must be of type T and acquired from [`Self::allocate`]
@@ -141,6 +146,31 @@ impl BufferStorage {
         // Add a function to drop this stored value
         self.drops
             .insert(offset, |ptr| core::ptr::drop_in_place(ptr.cast::<T>()));
+    }
+
+    /// Overwrites data at offset without reading or dropping the old value
+    /// # Safety
+    /// The existing data at offset is overwritten without calling drop on the contained value.
+    /// The offset is must be allocated from [`Self::allocate`] with the layout of `T`
+    pub(crate) unsafe fn write_dyn(
+        &mut self,
+        offset: Offset,
+        layout: Layout,
+        data: *mut u8,
+        on_drop: unsafe fn(*mut u8),
+    ) {
+        let dst = self.data.as_ptr().add(offset);
+
+        assert_eq!(
+            self.data.as_ptr() as usize % layout.align(),
+            0,
+            "Improper alignment"
+        );
+
+        core::ptr::copy_nonoverlapping(data, dst, layout.size());
+
+        // Add a function to drop this stored value
+        self.drops.insert(offset, on_drop);
     }
 
     /// Drops all values stored inside while keeping the allocation
@@ -207,7 +237,7 @@ impl<'a> IntoIterator for &'a mut ComponentBuffer {
 impl core::fmt::Debug for ComponentBuffer {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list()
-            .entries(self.components().map(|v| v.name()))
+            .entries(self.components().collect_vec())
             .finish()
     }
 }
@@ -254,19 +284,34 @@ impl ComponentBuffer {
 
     /// Set a component in the component buffer
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
-        self.set_dyn(component.info(), value)
-    }
-
-    /// Set from a type erased component
-    pub fn set_dyn<T: ComponentValue>(&mut self, component: ComponentInfo, value: T) -> Option<T> {
-        if let Some(&(offset, _)) = self.components.get(&component.id()) {
+        if let Some(&(offset, _)) = self.components.get(&component.key()) {
             unsafe { Some(self.storage.swap(offset, value)) }
         } else {
             let offset = self.storage.insert(value);
 
-            self.components.insert(component.id(), (offset, component));
+            self.components
+                .insert(component.key(), (offset, component.info()));
 
             None
+        }
+    }
+
+    /// Set from a type erased component
+    pub(crate) unsafe fn set_dyn(&mut self, info: ComponentInfo, value: *mut u8) {
+        if let Some(&(offset, old_info)) = self.components.get(&info.key()) {
+            assert_eq!(old_info, info);
+            let old_ptr = self.storage.at(offset);
+
+            (info.drop)(old_ptr);
+
+            ptr::copy_nonoverlapping(value, old_ptr, info.size());
+        } else {
+            let offset = self.storage.allocate(info.layout);
+
+            self.storage
+                .write_dyn(offset, info.layout, value, info.drop);
+
+            self.components.insert(info.key(), (offset, info));
         }
     }
 
@@ -313,6 +358,8 @@ impl<'a> Drop for ComponentBufferIter<'a> {
 #[cfg(test)]
 mod tests {
 
+    use core::mem;
+
     use alloc::{string::String, sync::Arc};
 
     use crate::component;
@@ -357,6 +404,28 @@ mod tests {
         let shared_2: Arc<String> = Arc::new("abc".into());
         buffer.set(f(), shared.clone());
         buffer.set(f(), shared_2.clone());
+
+        assert_eq!(Arc::strong_count(&shared), 1);
+        assert_eq!(Arc::strong_count(&shared_2), 2);
+    }
+
+    #[test]
+    pub fn component_buffer_reinsert_dyn() {
+        let mut buffer = ComponentBuffer::new();
+
+        let shared: Arc<String> = Arc::new("abc".into());
+        let shared_2: Arc<String> = Arc::new("abc".into());
+        unsafe {
+            let mut shared = shared.clone();
+            buffer.set_dyn(f().info(), &mut shared as *mut _ as *mut u8);
+            mem::forget(shared)
+        }
+
+        unsafe {
+            let mut shared = shared_2.clone();
+            buffer.set_dyn(f().info(), &mut shared as *mut _ as *mut u8);
+            mem::forget(shared)
+        }
 
         assert_eq!(Arc::strong_count(&shared), 1);
         assert_eq!(Arc::strong_count(&shared_2), 2);

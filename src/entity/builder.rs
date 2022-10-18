@@ -27,15 +27,8 @@ impl EntityBuilder {
         self
     }
 
-    /// Sets the component value from a type erased component info.
-    /// # Safety
-    /// The underlying type of `component` must match `T`
-    pub unsafe fn set_dyn<T: ComponentValue>(
-        &mut self,
-        component: ComponentInfo,
-        value: T,
-    ) -> &mut Self {
-        self.buffer.set_dyn(component, value);
+    pub(crate) unsafe fn set_dyn(&mut self, info: ComponentInfo, value: *mut u8) -> &mut Self {
+        self.buffer.set_dyn(info, value);
         self
     }
 
@@ -123,10 +116,10 @@ impl EntityBuilder {
 
     fn prepare(&mut self, parent: Entity) {
         self.buffer.components_mut().for_each(|info| {
-            let id = info.id();
+            let id = info.key();
             if let Some(object) = id.object {
                 if object == dummy() {
-                    info.id.object = Some(parent);
+                    info.key.object = Some(parent);
                 }
             }
         });

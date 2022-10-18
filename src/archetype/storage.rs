@@ -255,7 +255,7 @@ impl Storage {
     /// This is safe as the underlying vtable is not changed, as long as the id
     /// points to a component of the same kind.
     pub(crate) unsafe fn set_id(&mut self, id: ComponentKey) {
-        self.info.id = id
+        self.info.key = id
     }
 
     pub(crate) fn capacity(&self) -> usize {

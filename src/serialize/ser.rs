@@ -260,7 +260,7 @@ impl<'a> Serialize for SerializeEntityData<'a> {
 
         let mut state = serializer.serialize_map(Some(len))?;
         for storage in self.arch.borrow_all() {
-            if let Some(slot) = self.context.slots.get(&storage.info().id()) {
+            if let Some(slot) = self.context.slots.get(&storage.info().key()) {
                 state.serialize_entry(&slot.key, (slot.ser)(&storage, self.slot))?;
             }
         }
@@ -337,7 +337,7 @@ impl<'a> serde::Serialize for SerializeStorages<'a> {
         let mut state = serializer.serialize_map(Some(len))?;
 
         for storage in self.arch.borrow_all() {
-            let id = storage.info().id;
+            let id = storage.info().key;
             if let Some(slot) = self.context.slots.get(&id) {
                 state.serialize_entry(
                     &slot.key,
