@@ -234,6 +234,19 @@ impl<T: ComponentValue> Display for Component<T> {
 }
 
 impl<T: ComponentValue> Component<T> {
+    pub(crate) fn from_raw_parts(
+        key: ComponentKey,
+        name: &'static str,
+        meta: fn(ComponentInfo) -> ComponentBuffer,
+    ) -> Self {
+        Self {
+            key,
+            name,
+            marker: PhantomData,
+            meta,
+        }
+    }
+
     /// Create a new component given a unique id and name.
     ///
     /// # Safety

@@ -162,7 +162,7 @@ impl Archetype {
         let (storage, changes) = components
             .into_iter()
             .map(|info| {
-                let id = info.id();
+                let id = info.key();
 
                 (
                     (id, Storage::new(info)),
@@ -218,7 +218,7 @@ impl Archetype {
 
     pub(crate) fn init_changes(&mut self, info: ComponentInfo) -> &mut Changes {
         self.changes
-            .entry(info.id())
+            .entry(info.key())
             .or_insert_with(|| AtomicRefCell::new(Changes::new(info)))
             .get_mut()
     }
@@ -241,6 +241,7 @@ impl Archetype {
     // }
 
     /// Removes a slot and swaps in the last slot
+    #[inline(always)]
     unsafe fn remove_slot(
         &mut self,
         slot: Slot,
@@ -397,7 +398,7 @@ impl Archetype {
         let slot = self.allocate(id);
         unsafe {
             for (component, src) in components.take_all() {
-                let storage = self.storage.get_mut(&component.id).unwrap();
+                let storage = self.storage.get_mut(&component.key).unwrap();
                 storage.extend(src, 1);
             }
         }
@@ -469,7 +470,7 @@ impl Archetype {
     /// The length of the passed data must be equal to the slice and the slice
     /// must point to a currently uninitialized region in the archetype.
     pub(crate) unsafe fn extend(&mut self, src: &mut Storage) -> Option<usize> {
-        let storage = self.storage.get_mut(&src.info().id())?;
+        let storage = self.storage.get_mut(&src.info().key())?;
 
         let additional = src.len();
         storage.append(src);
@@ -530,6 +531,31 @@ impl Archetype {
         }
 
         self.remove_slot(slot, None)
+    }
+
+    /// Removes the last entity
+    /// Returns the popped entity id
+    ///
+    /// # Safety
+    /// The callee is responsible to store or drop the returned components using
+    /// the `on_take` function.
+    pub(crate) unsafe fn pop_last(
+        &mut self,
+        mut on_take: impl FnMut(ComponentInfo, *mut u8),
+    ) -> Option<Entity> {
+        let id = *self.entities.last()?;
+        let slot = self.len() - 1;
+
+        for storage in self.storage.values_mut() {
+            let info = *storage.info();
+            storage.swap_remove(slot, |p| {
+                (on_take)(info, p);
+            })
+        }
+
+        self.remove_slot(slot, None);
+
+        Some(id)
     }
 
     /// Move all entities from one archetype to another.
@@ -612,7 +638,7 @@ impl Archetype {
 
     /// Returns a iterator which borrows each storage in the archetype
     pub(crate) fn borrow_all(&self) -> impl Iterator<Item = StorageBorrowDyn> {
-        self.components().map(|v| self.borrow_dyn(v.id()).unwrap())
+        self.components().map(|v| self.borrow_dyn(v.key()).unwrap())
     }
 
     /// Access the entities in the archetype for each slot. Entity is None if
@@ -644,11 +670,11 @@ impl Drop for Archetype {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Clone, PartialEq, Eq, Copy)]
 /// Represents a type erased component along with its memory layout and drop fn.
 /// Is essentially a vtable
 pub struct ComponentInfo {
-    pub(crate) id: ComponentKey,
+    pub(crate) key: ComponentKey,
     pub(crate) layout: Layout,
     pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
@@ -657,23 +683,14 @@ pub struct ComponentInfo {
     meta: fn(Self) -> ComponentBuffer,
 }
 
-// impl Debug for ComponentInfo {
-//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-//         f.debug_struct("ComponentInfo")
-//             .field("id", &self.id)
-//             .field("name", &self.name)
-//             .finish()
-//     }
-// }
-
-// impl core::fmt::Debug for ComponentInfo {
-//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-//         f.debug_struct("ComponentInfo")
-//             .field("id", &self.id)
-//             .field("name", &self.name)
-//             .finish()
-//     }
-// }
+impl core::fmt::Debug for ComponentInfo {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ComponentInfo")
+            .field("key", &self.key)
+            .field("name", &self.name)
+            .finish()
+    }
+}
 
 impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
     fn from(v: Component<T>) -> Self {
@@ -683,17 +700,29 @@ impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
 
 impl PartialOrd for ComponentInfo {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
+        self.key.partial_cmp(&other.key)
     }
 }
 
 impl Ord for ComponentInfo {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.id.cmp(&other.id)
+        self.key.cmp(&other.key)
     }
 }
 
 impl ComponentInfo {
+    /// Convert back to a typed form
+    ///
+    /// # Panics
+    /// If the types do not match
+    pub fn downcast<T: ComponentValue>(self) -> Component<T> {
+        if self.type_id != TypeId::of::<T>() {
+            panic!("Mismatched type");
+        }
+
+        Component::from_raw_parts(self.key, self.name, self.meta)
+    }
+
     /// Returns the component info of a types component
     pub fn of<T: ComponentValue>(component: Component<T>) -> Self {
         unsafe fn drop_ptr<T>(x: *mut u8) {
@@ -702,7 +731,7 @@ impl ComponentInfo {
         Self {
             drop: drop_ptr::<T>,
             layout: Layout::new::<T>(),
-            id: component.key(),
+            key: component.key(),
             name: component.name(),
             meta: component.meta(),
             type_id: TypeId::of::<T>(),
@@ -724,8 +753,8 @@ impl ComponentInfo {
     }
 
     /// Returns the component id
-    pub fn id(&self) -> ComponentKey {
-        self.id
+    pub fn key(&self) -> ComponentKey {
+        self.key
     }
 
     /// Returns the component metadata fn

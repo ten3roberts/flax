@@ -211,6 +211,12 @@ bitflags::bitflags! {
     }
 }
 
+impl Default for EntityKind {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 /// The entity id version
 pub type EntityGen = u16;
 /// The index of the entity in the entity store

@@ -64,7 +64,7 @@ impl BatchSpawn {
         if storage.len() != self.len {
             Err(Error::IncompleteBatch)
         } else {
-            self.storage.insert(info.id(), storage);
+            self.storage.insert(info.key(), storage);
             Ok(())
         }
     }

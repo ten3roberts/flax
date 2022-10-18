@@ -40,7 +40,7 @@ where
 
     let mut components = Vec::new();
     fetch.components(&mut components);
-    DifferenceIter::new(arch.components().map(|v| v.id()), components.into_iter())
+    DifferenceIter::new(arch.components().map(|v| v.key()), components.into_iter())
         .map(|v| *world.get(v.id, is_component()).unwrap())
 }
 
