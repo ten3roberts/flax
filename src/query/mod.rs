@@ -10,9 +10,9 @@ use itertools::Itertools;
 
 use crate::{
     archetype::{Archetype, ArchetypeId, Slot},
+    component_info,
     fetch::*,
     filter::*,
-    is_component,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
     Access, AccessKind, Archetypes, Component, ComponentKey, ComponentValue, FetchItem, Filter,
@@ -254,7 +254,7 @@ where
                 arch,
                 arch_id,
             };
-            (self.include_components || !arch.has(is_component().key()))
+            (self.include_components || !arch.has(component_info().key()))
                 && self.fetch.matches(data)
                 && self.filter.matches(arch)
                 && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))

@@ -12,16 +12,17 @@ use crate::{
     archetype::unknown_component,
     filter::{PreparedFilter, RefFilter},
 };
-use crate::{dummy, ComponentInfo};
 use crate::{
+    component_info,
     entity::EntityLocation,
     error::Result,
     fetch::FetchPrepareData,
     fetch::PreparedFetch,
     filter::All,
     filter::{And, GatedFilter},
-    is_component, Archetype, ArchetypeId, Entity, Error, Fetch, FetchItem, Filter, World,
+    Archetype, ArchetypeId, Entity, Error, Fetch, FetchItem, Filter, World,
 };
+use crate::{dummy, ComponentInfo};
 
 use super::{
     iter::{BatchedIter, QueryIter},
@@ -41,7 +42,7 @@ where
     let mut components = Vec::new();
     fetch.components(&mut components);
     DifferenceIter::new(arch.components().map(|v| v.key()), components.into_iter())
-        .map(|v| *world.get(v.id, is_component()).unwrap())
+        .map(|v| *world.get(v.id, component_info()).unwrap())
 }
 
 pub(crate) struct PreparedArchetype<'w, Q> {

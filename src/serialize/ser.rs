@@ -1,5 +1,5 @@
 use crate::{
-    archetype::StorageBorrowDyn, filter::And, filter::StaticFilter, is_component, All, Archetype,
+    archetype::StorageBorrowDyn, component_info, filter::And, filter::StaticFilter, All, Archetype,
     ArchetypeId, Component, ComponentKey, ComponentValue, Entity, World,
 };
 
@@ -138,7 +138,7 @@ impl SerializeContext {
         world.archetypes.iter().filter(|(_, arch)| {
             !arch.is_empty()
                 && arch.storage().keys().any(|id| self.slots.contains_key(id))
-                && !arch.has(is_component().key())
+                && !arch.has(component_info().key())
                 && self.filter.static_matches(arch)
         })
     }
