@@ -1396,8 +1396,10 @@ components.</p>
         position: Vec3 =&gt; [Debug],
         velocity: Vec3 =&gt; [Debug],
     }
+    tracing_subscriber::fmt().init();
 
     use flax::serialize::{SerdeBuilder, SerializeFormat};
+    tracing::info!(&quot;It works&quot;);
 
     let mut world = World::new();
 
@@ -1438,7 +1440,7 @@ it implements <code>Serialize</code>.</p>
     let json =
         serde_json::to_string_pretty(&amp;serializer.serialize(&amp;world, SerializeFormat::RowMajor))?;
 
-    eprintln!(&quot;World: {json}&quot;);
+    // eprintln!(&quot;World: {json}&quot;);
 <span class="boring">}
 </span></code></pre></pre>
 <p>When deserializing a world it is often of interest in merging it or
@@ -1467,7 +1469,7 @@ deserialization failed.</p>
     // Merge `result` into `world`
     world.merge_with(&amp;mut result);
 
-    eprintln!(&quot;World: {world:#?}&quot;);
+    // eprintln!(&quot;World: {world:#?}&quot;);
 
 <span class="boring">}
 </span></code></pre></pre>
