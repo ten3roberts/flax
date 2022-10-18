@@ -597,10 +597,15 @@ mod test {
             .with_system(battle)
             .with_system(remaining);
 
-        for _ in 0..32 {
-            eprintln!("--------");
-            schedule.execute_par(&mut world).unwrap();
-        }
+        rayon::ThreadPoolBuilder::new()
+            .build()
+            .unwrap()
+            .install(|| {
+                for _ in 0..32 {
+                    eprintln!("--------");
+                    schedule.execute_par(&mut world).unwrap();
+                }
+            });
     }
 
     #[test]
