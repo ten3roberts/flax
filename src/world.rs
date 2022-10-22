@@ -1171,10 +1171,32 @@ impl World {
 
     /// Returns the entity location. If the entity is static it will first be spawned
     fn init_location(&mut self, id: Entity) -> Result<EntityLocation> {
-        match self.entities.get(id.kind()).and_then(|v| v.get(id)) {
+        let store = self.entities.init(id.kind());
+
+        match store.get(id) {
             Some(&loc) => Ok(loc),
             None if id.is_static() => self.ensure_static(id),
-            None => Err(Error::NoSuchEntity(id)),
+            None => {
+                let mut found = Err(Error::NoSuchEntity(id));
+
+                let reserved = self.archetypes.reserved;
+                let arch = self.archetypes.get_mut(reserved);
+                store.flush_reserved(|new_id| {
+                    let slot = arch.allocate(new_id);
+
+                    let loc = EntityLocation {
+                        slot,
+                        arch_id: reserved,
+                    };
+
+                    if new_id == id {
+                        found = Ok(loc)
+                    }
+                    loc
+                });
+
+                found
+            }
         }
     }
 
@@ -1801,6 +1823,49 @@ mod tests {
         assert_eq!(
             items,
             [(a, "a".into()), (b, "b".into()), (c, "c".into())]
+                .into_iter()
+                .chain(
+                    reserved
+                        .into_iter()
+                        .zip(repeat("I am one and the same".into()))
+                )
+                .collect_vec()
+        );
+    }
+
+    #[test]
+    fn reserve_set() {
+        let mut world = World::new();
+
+        let a = world.spawn();
+
+        let b = world.reserve_one(Default::default());
+
+        world.set(b, name(), "b".into()).unwrap();
+        world.set(a, name(), "a".into()).unwrap();
+
+        let reserved = world.reserve(Default::default(), 4).collect_vec();
+
+        let mut cmd = CommandBuffer::new();
+        cmd.spawn_batch_at(
+            reserved.clone(),
+            BatchSpawn::new(4)
+                .set(name(), repeat("I am one and the same".into()))
+                .unwrap(),
+        );
+
+        cmd.apply(&mut world).unwrap();
+
+        let items: Vec<(Entity, String)> = Query::new((entity_ids(), name()))
+            .borrow(&world)
+            .iter()
+            .map(|(id, name)| (id, name.into()))
+            .sorted()
+            .collect_vec();
+
+        assert_eq!(
+            items,
+            [(a, "a".into()), (b, "b".into())]
                 .into_iter()
                 .chain(
                     reserved
