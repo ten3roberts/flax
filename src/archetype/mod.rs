@@ -1,4 +1,4 @@
-use alloc::{collections::BTreeMap, format, vec::Vec};
+use alloc::{collections::BTreeMap, format, sync::Arc, vec::Vec};
 use core::{
     alloc::Layout,
     any::{type_name, TypeId},
@@ -10,7 +10,8 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    buffer::ComponentBuffer, component, Component, ComponentKey, ComponentValue, Entity, Verbatim,
+    buffer::ComponentBuffer, component, events::Subscriber, Component, ComponentKey,
+    ComponentValue, Entity, Verbatim,
 };
 
 /// Unique archetype id
@@ -105,7 +106,7 @@ impl ArchetypeInfo {
     }
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 #[doc(hidden)]
 /// A collection of entities with the same components.
 /// Stored as columns of contiguous component data.
@@ -118,6 +119,8 @@ pub struct Archetype {
     // ComponentId => ArchetypeId
     pub(crate) outgoing: BTreeMap<ComponentKey, (bool, ArchetypeId)>,
     pub(crate) incoming: BTreeMap<ComponentKey, ArchetypeId>,
+
+    pub(crate) subscribers: Vec<Arc<dyn Subscriber>>,
 }
 
 /// Since all components are Send + Sync, the archetype is as well
@@ -132,6 +135,7 @@ impl Archetype {
             outgoing: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
+            subscribers: Vec::new(),
         }
     }
 
@@ -144,17 +148,6 @@ impl Archetype {
     pub fn relations_like(&self, relation: Entity) -> impl Iterator<Item = ComponentKey> + '_ {
         self.relations().filter(move |k| k.id == relation)
     }
-
-    /// Returns all relations matching the relation type if the object is a
-    /// wildcard, otherwise, returns an exact match
-    // pub fn matches_relation(&self, relation: Entity) -> impl Iterator<Item = Entity> + '_ {
-    //     let (rel, obj) = relation.split_pair();
-    //     let is_wild = obj == crate::entity::wildcard().low();
-    //     self.relations().filter(move |&v| {
-    //         let (low, _) = v.split_pair();
-    //         is_wild && low == rel || !is_wild && v == relation
-    //     })
-    // }
 
     /// Create a new archetype.
     /// Assumes `components` are sorted by id.
@@ -177,6 +170,7 @@ impl Archetype {
             incoming: BTreeMap::new(),
             outgoing: BTreeMap::new(),
             entities: Vec::new(),
+            subscribers: Vec::new(),
         }
     }
 
@@ -241,6 +235,7 @@ impl Archetype {
     // }
 
     /// Removes a slot and swaps in the last slot
+    /// Handles subscriber invocations
     #[inline(always)]
     unsafe fn remove_slot(
         &mut self,
@@ -394,7 +389,8 @@ impl Archetype {
     ///
     /// Returns the index of the entity
     /// Entity must not exist in archetype
-    pub fn insert(&mut self, id: Entity, components: &mut ComponentBuffer) -> Slot {
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, id: Entity, components: &mut ComponentBuffer) -> Slot {
         let slot = self.allocate(id);
         unsafe {
             for (component, src) in components.take_all() {
@@ -412,6 +408,14 @@ impl Archetype {
     /// All components of slot are uninitialized. Must be followed by `push`
     /// all components in archetype.
     pub(crate) fn allocate(&mut self, id: Entity) -> Slot {
+        for subscriber in &self.subscribers {
+            subscriber.on_spawned(id, self);
+        }
+
+        self.allocate_moved(id)
+    }
+
+    fn allocate_moved(&mut self, id: Entity) -> Slot {
         self.reserve(1);
 
         #[cfg(debug_assertions)]
@@ -434,11 +438,20 @@ impl Archetype {
     /// All components of the new slots are left uninitialized.
     /// Must be followed by `extend`
     pub(crate) fn allocate_n(&mut self, ids: &[Entity]) -> Slice {
+        for subscriber in &self.subscribers {
+            for &id in ids {
+                subscriber.on_spawned(id, self);
+            }
+        }
+
+        self.allocate_n_moved(ids)
+    }
+    pub(crate) fn allocate_n_moved(&mut self, ids: &[Entity]) -> Slice {
         self.reserve(ids.len());
 
         let last = self.len();
 
-        self.entities.extend(ids);
+        self.entities.extend_from_slice(ids);
 
         Slice::new(last, self.len())
     }
@@ -492,8 +505,8 @@ impl Archetype {
         slot: Slot,
         mut on_drop: impl FnMut(&ComponentInfo, *mut u8),
     ) -> (Slot, Option<(Entity, Slot)>) {
-        let entity = self.entity(slot).expect("Invalid entity");
-        let dst_slot = dst.allocate(entity);
+        let id = self.entity(slot).expect("Invalid entity");
+        let dst_slot = dst.allocate_moved(id);
 
         for (&id, storage) in &mut self.storage {
             let info = *storage.info();
@@ -502,6 +515,14 @@ impl Archetype {
                     (on_drop)(&info, p)
                 }
             });
+        }
+
+        for subscriber in &self.subscribers {
+            subscriber.on_moved_from(id, self, dst);
+        }
+
+        for subscriber in &dst.subscribers {
+            subscriber.on_moved_to(id, self, dst);
         }
 
         let swapped = self.remove_slot(slot, Some((dst, dst_slot)));
@@ -521,13 +542,17 @@ impl Archetype {
         slot: Slot,
         mut on_take: impl FnMut(&ComponentInfo, *mut u8),
     ) -> Option<(Entity, Slot)> {
-        let _ = self.entity(slot).expect("Invalid entity");
+        let id = self.entity(slot).expect("Invalid entity");
 
         for storage in self.storage.values_mut() {
             let info = *storage.info();
             storage.swap_remove(slot, |p| {
                 (on_take)(&info, p);
             })
+        }
+
+        for subscriber in &self.subscribers {
+            subscriber.on_despawned(id, self);
         }
 
         self.remove_slot(slot, None)
@@ -571,7 +596,7 @@ impl Archetype {
 
         let entities = mem::take(&mut self.entities);
 
-        let dst_slots = dst.allocate_n(&entities);
+        let dst_slots = dst.allocate_n_moved(&entities);
 
         // Migrate all changes before doing anything
         for (src_slot, dst_slot) in self.slots().iter().zip(dst_slots) {

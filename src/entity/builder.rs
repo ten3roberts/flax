@@ -144,6 +144,7 @@ impl EntityBuilder {
         });
     }
 
+    #[inline(always)]
     fn spawn_inner(&mut self, world: &mut World, parent: Option<Entity>) -> Entity {
         if let Some(parent) = parent {
             self.prepare(parent)

@@ -21,7 +21,6 @@ pub struct Batch<'q, Q> {
 impl<'q, Q> core::fmt::Debug for Batch<'q, Q> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Batch")
-            .field("arch", &self.arch)
             .field("pos", &self.pos)
             .field("end", &self.end)
             .finish()

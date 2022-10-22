@@ -230,6 +230,8 @@ mod util;
 /// Provides a debug visitor
 pub mod visitors;
 
+/// Subscribe to changes in the world
+pub mod events;
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein
 #[cfg(feature = "serde")]
