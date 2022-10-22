@@ -1,3 +1,4 @@
+use flax::events::ArchetypeEvent;
 use flax::*;
 
 component! {
