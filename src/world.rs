@@ -1,3 +1,4 @@
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use alloc::{boxed::Box, collections::BTreeMap};
@@ -14,6 +15,7 @@ use core::{
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
+use crate::events::{ArchetypeEvent, EventListener, FilterSubscriber, Subscriber};
 use crate::filter::ArchetypeFilter;
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
@@ -57,6 +59,9 @@ pub(crate) struct Archetypes {
     reserved: ArchetypeId,
     gen: u32,
     inner: EntityStore<Archetype>,
+
+    // These trickle down to the archetypes
+    subscribers: Vec<Arc<dyn Subscriber>>,
 }
 
 impl Archetypes {
@@ -70,6 +75,7 @@ impl Archetypes {
             inner: archetypes,
             gen: 2,
             reserved,
+            subscribers: Vec::new(),
         }
     }
 
@@ -98,7 +104,15 @@ impl Archetypes {
             cursor = match cur.outgoing(head.key) {
                 Some((_, id)) => id,
                 None => {
-                    let new = Archetype::new(cur.components().copied().chain([*head]));
+                    let mut new = Archetype::new(cur.components().copied().chain([*head]));
+
+                    // Insert the appropriate listeners
+                    new.subscribers = self
+                        .subscribers
+                        .iter()
+                        .filter(|v| v.is_interested(&new))
+                        .cloned()
+                        .collect_vec();
 
                     // Increase gen
                     self.gen = self.gen.wrapping_add(1);
@@ -152,27 +166,15 @@ impl Archetypes {
 
         arch
     }
-}
 
-/// Defines a type which can handle a world event, such as a component removal
-pub trait EventSender<T> {
-    /// Returns true if the sender is to be retained
-    fn on_event(&self, event: T) -> bool;
-}
+    fn subscribe(&mut self, subscriber: Arc<dyn Subscriber>) {
+        for (_, arch) in self.inner.iter_mut() {
+            if subscriber.is_interested(arch) {
+                arch.subscribers.push(subscriber.clone());
+            }
+        }
 
-impl<T, F> EventSender<(Entity, T)> for F
-where
-    F: Fn(Entity, T) -> bool,
-{
-    fn on_event(&self, (id, data): (Entity, T)) -> bool {
-        (self)(id, data)
-    }
-}
-
-#[cfg(feature = "flume")]
-impl<T> EventSender<T> for flume::Sender<T> {
-    fn on_event(&self, event: T) -> bool {
-        self.send(event).is_ok()
+        self.subscribers.push(subscriber)
     }
 }
 
@@ -442,6 +444,7 @@ impl World {
         self.spawn_component::<T>(name, meta)
     }
 
+    #[inline(always)]
     fn spawn_inner(
         &mut self,
         arch_id: ArchetypeId,
@@ -539,12 +542,6 @@ impl World {
             self.init_component(*component)
                 .expect("Failed to initialize component");
         }
-
-        // assert_eq!(
-        //     buffer.components().sorted().collect_vec(),
-        //     buffer.components().collect_vec(),
-        //     "Components are not sorted"
-        // );
 
         let (arch_id, _) = self.archetypes.init(buffer.components());
 
@@ -1331,7 +1328,7 @@ impl World {
     pub fn on_removed<T: ComponentValue + Clone>(
         &mut self,
         component: Component<T>,
-        handler: impl EventSender<(Entity, T)> + 'static + Send + Sync,
+        handler: impl EventListener<(Entity, T)> + 'static + Send + Sync,
     ) {
         let func = move |id: Entity, ptr: *const u8| unsafe {
             let val = ptr.cast::<T>().as_ref().expect("not null").clone();
@@ -1339,6 +1336,23 @@ impl World {
         };
 
         self.on_removed.register(component.key(), Box::new(func));
+    }
+
+    /// Subscribe to changes such as insertion and removal of components in the world using the provided
+    /// listener.
+    ///
+    /// The listener will be notified when the filter is matched for an entity, and when the filter
+    /// no longer matches.
+    ///
+    /// [`EventListener`](crate::events::EventListener) is implemented for functions and flume
+    /// channels, which allows waiting on entities in an async context.
+    pub fn subscribe<F, L>(&mut self, filter: F, listener: L)
+    where
+        F: StaticFilter + Send + Sync + 'static,
+        L: EventListener<(ArchetypeEvent, Entity)> + Send + Sync + 'static,
+    {
+        self.archetypes
+            .subscribe(Arc::new(FilterSubscriber { filter, listener }))
     }
 
     /// Merges `other` into `self`.
