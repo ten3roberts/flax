@@ -313,7 +313,7 @@ fn traverse_archetypes(
             for (&component, &(strong, arch_id)) in &cur.outgoing {
                 if strong {
                     let arch = archetypes.get(arch_id);
-                    debug_assert!(arch.components().any(|&v| v.key() == component));
+                    debug_assert!(arch.components().iter().any(|v| v.key() == component));
                     // This matches
                     if filter(arch_id, arch) {
                         result.push(arch_id);

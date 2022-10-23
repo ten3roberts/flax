@@ -203,7 +203,7 @@ where
                                 // Safety:
                                 // Since the component is the same except for the object,
                                 // the component type is guaranteed to be the same
-                                unsafe { v.borrow::<T>() },
+                                AtomicRef::map(v.borrow(), |v| unsafe { v.borrow() }),
                             ));
                         }
                     }

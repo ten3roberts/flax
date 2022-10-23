@@ -23,7 +23,7 @@ impl BatchSpawn {
     }
 
     /// Returns the components in the batch
-    pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
+    pub fn components(&self) -> impl Iterator<Item = ComponentInfo> + '_ {
         self.storage.values().map(|v| v.info())
     }
 
@@ -49,7 +49,8 @@ impl BatchSpawn {
         let mut storage = Storage::with_capacity(info, self.len);
 
         for item in iter.into_iter().take(self.len) {
-            storage.push(item)
+            // Type gurangeed by the component
+            unsafe { storage.push(item) }
         }
 
         debug_assert_eq!(storage.capacity(), self.len());

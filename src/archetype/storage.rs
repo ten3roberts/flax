@@ -1,10 +1,8 @@
-use core::{mem, ptr::NonNull};
+use core::{any::TypeId, mem, ptr::NonNull};
 
 use alloc::{
     alloc::alloc, alloc::dealloc, alloc::handle_alloc_error, alloc::realloc, alloc::Layout,
 };
-
-use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
 use crate::{ComponentInfo, ComponentKey, ComponentValue};
 
@@ -12,7 +10,7 @@ use super::Slot;
 
 /// Type erased but managed component store.
 pub(crate) struct Storage {
-    data: AtomicRefCell<NonNull<u8>>,
+    data: NonNull<u8>,
     len: usize,
     cap: usize,
     info: ComponentInfo,
@@ -36,7 +34,7 @@ impl Storage {
     pub fn with_capacity(info: ComponentInfo, cap: usize) -> Self {
         if cap == 0 {
             return Self {
-                data: AtomicRefCell::new(NonNull::dangling()),
+                data: NonNull::dangling(),
                 cap: 0,
                 len: 0,
                 info,
@@ -52,10 +50,10 @@ impl Storage {
                 None => handle_alloc_error(layout),
             };
             Self {
-                data: AtomicRefCell::new(data),
+                data,
                 cap,
-                info,
                 len: 0,
+                info,
             }
         }
     }
@@ -77,9 +75,9 @@ impl Storage {
         // );
 
         let old_layout =
-            Layout::from_size_align(self.info.size() * old_cap, self.info.layout.align()).unwrap();
+            Layout::from_size_align(self.info.size() * old_cap, self.info.align()).unwrap();
         let new_layout =
-            Layout::from_size_align(self.info.size() * new_cap, self.info.layout.align()).unwrap();
+            Layout::from_size_align(self.info.size() * new_cap, self.info.align()).unwrap();
 
         // Handle zst
         if new_layout.size() == 0 {
@@ -90,10 +88,10 @@ impl Storage {
         assert!(new_layout.size() < isize::MAX as usize);
 
         let ptr = if old_cap == 0 {
-            debug_assert_eq!(*self.data.get_mut(), NonNull::dangling());
+            debug_assert_eq!(self.data, NonNull::dangling());
             unsafe { alloc(new_layout) }
         } else {
-            let ptr = self.data.get_mut().as_ptr();
+            let ptr = self.data.as_ptr();
             unsafe { realloc(ptr, old_layout, new_layout.size()) }
         };
 
@@ -103,7 +101,7 @@ impl Storage {
         };
 
         self.cap = new_cap;
-        *self.data.get_mut() = ptr
+        self.data = ptr
     }
 
     pub fn swap_remove(&mut self, slot: Slot, on_move: impl FnOnce(*mut u8)) {
@@ -127,7 +125,7 @@ impl Storage {
 
     #[inline(always)]
     fn as_ptr(&mut self) -> *mut u8 {
-        self.data.get_mut().as_ptr()
+        self.data.as_ptr()
     }
 
     #[inline(always)]
@@ -135,7 +133,29 @@ impl Storage {
         if slot >= self.len {
             None
         } else {
-            Some(self.data.get_mut().as_ptr().add(self.info.size() * slot))
+            Some(self.data.as_ptr().add(self.info.size() * slot))
+        }
+    }
+
+    pub(crate) unsafe fn get<T: ComponentValue>(&self, slot: Slot) -> Option<&T> {
+        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
+        if slot >= self.len {
+            None
+        } else {
+            let p = self.data.as_ptr().add(self.info.size() * slot).cast::<T>();
+            let v = unsafe { &*p };
+            Some(v)
+        }
+    }
+
+    pub(crate) unsafe fn get_mut<T: ComponentValue>(&self, slot: Slot) -> Option<&mut T> {
+        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
+        if slot >= self.len {
+            None
+        } else {
+            let p = self.data.as_ptr().add(self.info.size() * slot).cast::<T>();
+            let v = unsafe { &mut *p };
+            Some(v)
         }
     }
 
@@ -157,7 +177,7 @@ impl Storage {
     /// # Safety
     /// Other must be of the same type as self
     pub(crate) unsafe fn append(&mut self, other: &mut Self) {
-        assert_eq!(self.info.type_id, other.info.type_id);
+        debug_assert_eq!(self.info.type_id, other.info.type_id, "Mismatched types");
 
         // This is faster than copying everything over if there is no elements
         // in self
@@ -179,48 +199,21 @@ impl Storage {
     }
 
     #[inline(always)]
-    pub(crate) fn info(&self) -> &ComponentInfo {
-        &self.info
+    /// # Safety
+    /// The types must match
+    pub unsafe fn borrow_mut<T: ComponentValue>(&mut self) -> &mut [T] {
+        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
+
+        core::slice::from_raw_parts_mut(self.data.as_ptr().cast::<T>(), self.len)
     }
 
     #[inline(always)]
-    pub unsafe fn borrow_mut<T: ComponentValue>(&self) -> AtomicRefMut<[T]> {
-        assert!(self.info.is::<T>(), "Mismatched types");
-        let data = match self.data.try_borrow_mut() {
-            Ok(v) => v,
-            Err(_) => panic!("Component {} is already borrowed", self.info.name()),
-        };
+    /// # Safety
+    /// The types must match
+    pub unsafe fn borrow<T: ComponentValue>(&self) -> &[T] {
+        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
 
-        AtomicRefMut::map(data, |v| {
-            core::slice::from_raw_parts_mut(v.as_ptr().cast::<T>(), self.len)
-        })
-    }
-
-    #[inline(always)]
-    pub unsafe fn borrow<T: ComponentValue>(&self) -> AtomicRef<[T]> {
-        assert!(self.info.is::<T>(), "Mismatched types");
-        let data = match self.data.try_borrow() {
-            Ok(v) => v,
-            Err(_) => panic!("Component {} is already borrowed mutably", self.info.name()),
-        };
-
-        AtomicRef::map(data, |v| {
-            core::slice::from_raw_parts(v.as_ptr().cast::<T>(), self.len)
-        })
-    }
-
-    #[inline(always)]
-    pub unsafe fn borrow_dyn(&self) -> StorageBorrowDyn {
-        let data = match self.data.try_borrow() {
-            Ok(v) => v,
-            Err(_) => panic!("Component {} is already borrowed mutably", self.info.name()),
-        };
-
-        StorageBorrowDyn {
-            data,
-            info: self.info,
-            len: self.len,
-        }
+        core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
     }
 
     pub fn clear(&mut self) {
@@ -240,8 +233,12 @@ impl Storage {
     }
 
     #[inline]
-    pub(crate) fn push<T: ComponentValue>(&mut self, item: T) {
-        debug_assert!(self.info.is::<T>(), "Mismatched types");
+    /// Push new data to the storage.
+    ///
+    /// # Safety
+    /// `item` must be of the same type.
+    pub(crate) unsafe fn push<T: ComponentValue>(&mut self, item: T) {
+        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
         unsafe {
             self.reserve(1);
 
@@ -261,6 +258,10 @@ impl Storage {
     pub(crate) fn capacity(&self) -> usize {
         self.cap
     }
+
+    pub(crate) fn info(&self) -> ComponentInfo {
+        self.info
+    }
 }
 
 impl Drop for Storage {
@@ -268,13 +269,13 @@ impl Drop for Storage {
         self.clear();
 
         // ZST
-        if self.cap == 0 || self.info().size() == 0 {
+        if self.cap == 0 || self.info.size() == 0 {
             return;
         }
 
         let ptr = self.as_ptr();
         let layout =
-            Layout::from_size_align(self.info.size() * self.cap, self.info.layout.align()).unwrap();
+            Layout::from_size_align(self.info.size() * self.cap, self.info.align()).unwrap();
 
         unsafe {
             dealloc(ptr, layout);
@@ -282,39 +283,57 @@ impl Drop for Storage {
     }
 }
 
-/// Type erased atomic borrow of a component
-pub(crate) struct StorageBorrowDyn<'a> {
-    data: AtomicRef<'a, NonNull<u8>>,
-    info: ComponentInfo,
-    len: usize,
-}
+#[cfg(test)]
+mod test {
+    use core::ptr;
 
-impl<'a> StorageBorrowDyn<'a> {
-    /// Returns a pointer to the value at the given slot.
-    ///
-    /// Returns None if the slot is out of bounds.
-    pub fn at(&self, slot: Slot) -> Option<*const u8> {
-        if slot < self.len {
-            Some(unsafe { self.data.as_ptr().add(self.info.size() * slot) })
-        } else {
-            None
+    use alloc::sync::Arc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::*;
+    use alloc::string::String;
+    use alloc::string::ToString;
+
+    component! {
+        a:i32,
+        b:Arc<String>,
+    }
+
+    #[test]
+    fn push() {
+        let mut storage = Storage::new(a().info());
+        unsafe {
+            storage.push(5);
+            storage.push(7);
+
+            assert_eq!(storage.borrow::<i32>(), [5, 7]);
+            storage.swap_remove(0, |v| ptr::drop_in_place(v.cast::<i32>()));
+
+            assert_eq!(storage.borrow::<i32>(), [7]);
+
+            let mut other = Storage::new(a().info());
+            other.push(8);
+            other.push(9);
+            other.push(10);
+
+            storage.append(&mut other);
+            assert_eq!(storage.borrow::<i32>(), [7, 8, 9, 10]);
         }
     }
 
-    /// Returns the component info for the storage
-    pub fn info(&self) -> ComponentInfo {
-        self.info
-    }
+    #[test]
+    fn drop() {
+        let v = Arc::new("This is shared".to_string());
+        let mut storage = Storage::new(b().info());
+        unsafe {
+            storage.push(v.clone());
+            storage.push(v.clone());
+            storage.push(v.clone());
+        }
 
-    /// Returns the number of items in the storage
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    #[must_use]
-    /// Returns true if the storage is empty
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        assert_eq!(Arc::strong_count(&v), 4);
+        mem::drop(storage);
+        assert_eq!(Arc::strong_count(&v), 1);
     }
 }

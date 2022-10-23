@@ -66,7 +66,7 @@ pub trait SystemFn<'this, Args, Ret> {
 pub(crate) struct Verbatim<'a>(pub(crate) &'a str);
 impl<'a> fmt::Debug for Verbatim<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.0)
     }
 }
 

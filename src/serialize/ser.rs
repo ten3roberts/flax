@@ -1,5 +1,5 @@
 use crate::{
-    archetype::StorageBorrowDyn, component_info, filter::And, filter::StaticFilter, All, Archetype,
+    archetype::Storage, component_info, filter::And, filter::StaticFilter, All, Archetype,
     ArchetypeId, Component, ComponentKey, ComponentValue, Entity, World,
 };
 
@@ -14,10 +14,7 @@ use super::SerializeFormat;
 #[derive(Clone)]
 struct Slot {
     /// Takes a whole column and returns a serializer for it
-    ser: for<'x> fn(
-        storage: &'x StorageBorrowDyn<'_>,
-        slot: usize,
-    ) -> &'x dyn erased_serde::Serialize,
+    ser: for<'x> fn(storage: &'x Storage, slot: usize) -> &'x dyn erased_serde::Serialize,
     key: String,
 }
 
@@ -65,15 +62,11 @@ where
     where
         T: ComponentValue + serde::Serialize,
     {
-        fn ser_col<'a, T: serde::Serialize + ComponentValue>(
-            storage: &'a StorageBorrowDyn<'_>,
+        fn ser_col<T: serde::Serialize + ComponentValue + Sized>(
+            storage: &Storage,
             slot: usize,
-        ) -> &'a dyn erased_serde::Serialize {
-            let ptr = storage.at(slot).expect("Slot outside range");
-            unsafe {
-                let val = ptr.cast::<T>().as_ref().expect("not null");
-                val
-            }
+        ) -> &dyn erased_serde::Serialize {
+            unsafe { storage.get::<T>(slot).unwrap() }
         }
 
         self.slots.insert(
@@ -304,7 +297,7 @@ struct SerializeStorages<'a> {
 }
 
 struct SerializeStorage<'a> {
-    storage: &'a StorageBorrowDyn<'a>,
+    storage: &'a Storage,
     slot: &'a Slot,
 }
 

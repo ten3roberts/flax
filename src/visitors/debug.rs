@@ -4,14 +4,14 @@ use alloc::collections::BTreeMap;
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{Slot, StorageBorrowDyn},
+    archetype::{Slot, Storage},
     buffer::ComponentBuffer,
     component, Archetype, ComponentInfo, ComponentKey, ComponentValue, MetaData,
 };
 
 /// Format a component with debug
 pub struct DebugVisitor {
-    visit: for<'x> unsafe fn(&'x StorageBorrowDyn, slot: Slot) -> &'x dyn fmt::Debug,
+    visit: for<'x> unsafe fn(&'x Storage, slot: Slot) -> &'x dyn fmt::Debug,
 }
 
 impl DebugVisitor {
@@ -21,14 +21,7 @@ impl DebugVisitor {
         T: ComponentValue + core::fmt::Debug,
     {
         Self {
-            visit: |storage, slot| unsafe {
-                storage
-                    .at(slot)
-                    .expect("Out of bounds")
-                    .cast::<T>()
-                    .as_ref()
-                    .expect("Not null")
-            },
+            visit: |storage, slot| unsafe { storage.get::<T>(slot).unwrap() },
         }
     }
 }

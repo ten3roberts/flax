@@ -1,4 +1,4 @@
-use alloc::{collections::BTreeMap, format, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, collections::BTreeMap, format, sync::Arc, vec::Vec};
 use core::{
     alloc::Layout,
     any::{type_name, TypeId},
@@ -111,7 +111,8 @@ impl ArchetypeInfo {
 /// A collection of entities with the same components.
 /// Stored as columns of contiguous component data.
 pub struct Archetype {
-    storage: BTreeMap<ComponentKey, Storage>,
+    components: Box<[ComponentInfo]>,
+    storage: BTreeMap<ComponentKey, AtomicRefCell<Storage>>,
     changes: BTreeMap<ComponentKey, AtomicRefCell<Changes>>,
     /// Slot to entity id
     pub(crate) entities: Vec<Entity>,
@@ -130,6 +131,7 @@ unsafe impl Sync for Archetype {}
 impl Archetype {
     pub(crate) fn empty() -> Self {
         Self {
+            components: Box::new([]),
             storage: BTreeMap::new(),
             changes: BTreeMap::new(),
             outgoing: BTreeMap::new(),
@@ -151,20 +153,27 @@ impl Archetype {
 
     /// Create a new archetype.
     /// Assumes `components` are sorted by id.
-    pub(crate) fn new(components: impl IntoIterator<Item = ComponentInfo>) -> Self {
-        let (storage, changes) = components
+    pub(crate) fn new<I>(components: I) -> Self
+    where
+        I: IntoIterator<Item = ComponentInfo>,
+    {
+        let (components, storage, changes): (Vec<_>, _, _) = components
             .into_iter()
             .map(|info| {
-                let id = info.key();
+                let key = info.key();
 
                 (
-                    (id, Storage::new(info)),
-                    (id, AtomicRefCell::new(Changes::new(info))),
+                    (info),
+                    (key, AtomicRefCell::new(Storage::new(info))),
+                    (key, AtomicRefCell::new(Changes::new(info))),
                 )
             })
-            .unzip();
+            .multiunzip();
+
+        let components = components.into_boxed_slice();
 
         Self {
+            components,
             storage,
             changes,
             incoming: BTreeMap::new(),
@@ -217,6 +226,14 @@ impl Archetype {
             .get_mut()
     }
 
+    pub(crate) fn borrow<T: ComponentValue>(
+        &self,
+        component: ComponentKey,
+    ) -> Option<AtomicRef<[T]>> {
+        let storage = self.storage.get(&component)?.borrow();
+        Some(AtomicRef::map(storage, |v| unsafe { v.borrow() }))
+    }
+
     /// Access a component storage mutably.
     /// # Panics
     /// If the storage is already borrowed
@@ -224,7 +241,8 @@ impl Archetype {
         &self,
         component: Component<T>,
     ) -> Option<AtomicRefMut<[T]>> {
-        Some(unsafe { self.storage.get(&component.key())?.borrow_mut() })
+        let storage = self.storage.get(&component.key())?.borrow_mut();
+        Some(AtomicRefMut::map(storage, |v| unsafe { v.borrow_mut() }))
     }
 
     // pub fn remove_slot_changes(&mut self, slot: Slot) {
@@ -287,8 +305,9 @@ impl Archetype {
             .storage
             .values()
             .map(|v| {
+                let v = v.borrow();
                 (
-                    *v.info(),
+                    v.info(),
                     StorageInfo {
                         cap: v.capacity(),
                         len: v.len(),
@@ -324,21 +343,6 @@ impl Archetype {
         Some(changes)
     }
 
-    pub(crate) fn borrow<T: ComponentValue>(
-        &self,
-        component: ComponentKey,
-    ) -> Option<AtomicRef<[T]>> {
-        Some(unsafe { self.storage.get(&component)?.borrow() })
-    }
-
-    /// Borrow a storage dynamically
-    ///
-    /// # Panics
-    /// If the storage is already borrowed mutably
-    pub(crate) fn borrow_dyn(&self, component: ComponentKey) -> Option<StorageBorrowDyn> {
-        Some(unsafe { self.storage.get(&component)?.borrow_dyn() })
-    }
-
     /// Returns the value of a component from a unique access
     pub fn get_unique<T: ComponentValue>(
         &mut self,
@@ -348,7 +352,7 @@ impl Archetype {
         let storage = self.storage.get_mut(&component.key())?;
 
         unsafe {
-            let ptr = storage.at_mut(slot)?;
+            let ptr = storage.get_mut().at_mut(slot)?;
             Some(ptr.cast::<T>().as_mut().unwrap())
         }
     }
@@ -359,14 +363,14 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRefMut<T>> {
-        let storage = self.storage.get(&component.key())?;
+        let storage = self.storage.get(&component.key())?.borrow_mut();
 
-        AtomicRefMut::filter_map(unsafe { storage.borrow_mut() }, |v| v.get_mut(slot))
+        AtomicRefMut::filter_map(storage, |v| unsafe { v.get_mut(slot) })
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
     pub fn get_dyn(&mut self, slot: Slot, component: ComponentKey) -> Option<*mut u8> {
-        let storage = self.storage.get_mut(&component)?;
+        let storage = self.storage.get_mut(&component)?.get_mut();
 
         unsafe { storage.at_mut(slot) }
     }
@@ -377,11 +381,11 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRef<T>> {
-        let storage = self.storage.get(&component.key())?;
+        let storage = self.storage.get(&component.key())?.borrow();
 
         // If a dummy slot is used, the archetype must have no components, so `storage.get` fails,
         // which is safe
-        AtomicRef::filter_map(unsafe { storage.borrow() }, |v| v.get(slot))
+        AtomicRef::filter_map(storage, |v| unsafe { v.get(slot) })
     }
 
     /// Insert a new entity into the archetype.
@@ -394,7 +398,7 @@ impl Archetype {
         let slot = self.allocate(id);
         unsafe {
             for (component, src) in components.take_all() {
-                let storage = self.storage.get_mut(&component.key).unwrap();
+                let storage = self.storage.get_mut(&component.key).unwrap().get_mut();
                 storage.extend(src, 1);
             }
         }
@@ -463,7 +467,7 @@ impl Archetype {
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
     /// The component must be Send + Sync
     pub unsafe fn push(&mut self, component: ComponentKey, src: *mut u8) -> Result<(), *mut u8> {
-        let storage = self.storage.get_mut(&component).ok_or(src)?;
+        let storage = self.storage.get_mut(&component).ok_or(src)?.get_mut();
         storage.extend(src, 1);
 
         // TODO remove and make internal
@@ -483,7 +487,7 @@ impl Archetype {
     /// The length of the passed data must be equal to the slice and the slice
     /// must point to a currently uninitialized region in the archetype.
     pub(crate) unsafe fn extend(&mut self, src: &mut Storage) -> Option<usize> {
-        let storage = self.storage.get_mut(&src.info().key())?;
+        let storage = self.storage.get_mut(&src.info().key())?.get_mut();
 
         let additional = src.len();
         storage.append(src);
@@ -509,7 +513,8 @@ impl Archetype {
         let dst_slot = dst.allocate_moved(id);
 
         for (&id, storage) in &mut self.storage {
-            let info = *storage.info();
+            let storage = storage.get_mut();
+            let info = storage.info();
             storage.swap_remove(slot, |p| {
                 if let Err(p) = dst.push(id, p) {
                     (on_drop)(&info, p)
@@ -545,7 +550,9 @@ impl Archetype {
         let id = self.entity(slot).expect("Invalid entity");
 
         for storage in self.storage.values_mut() {
-            let info = *storage.info();
+            let storage = storage.get_mut();
+            let info = storage.info();
+
             storage.swap_remove(slot, |p| {
                 (on_take)(&info, p);
             })
@@ -572,7 +579,8 @@ impl Archetype {
         let slot = self.len() - 1;
 
         for storage in self.storage.values_mut() {
-            let info = *storage.info();
+            let storage = storage.get_mut();
+            let info = storage.info();
             storage.swap_remove(slot, |p| {
                 (on_take)(info, p);
             })
@@ -604,6 +612,7 @@ impl Archetype {
         }
 
         for storage in self.storage.values_mut() {
+            let storage = storage.get_mut();
             // Copy this storage to the end of dst
             unsafe {
                 let _ = dst.extend(storage);
@@ -620,6 +629,7 @@ impl Archetype {
     /// len remains unchanged, as does the internal order
     pub fn reserve(&mut self, additional: usize) {
         for storage in self.storage.values_mut() {
+            let storage = storage.get_mut();
             storage.reserve(additional);
         }
     }
@@ -630,8 +640,9 @@ impl Archetype {
     }
 
     /// Drops all components while keeping the storage intact
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         for storage in self.storage.values_mut() {
+            let storage = storage.get_mut();
             storage.clear()
         }
 
@@ -651,19 +662,13 @@ impl Archetype {
     }
 
     /// Get a reference to the archetype's components.
-    pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
-        self.storage.values().map(|v| v.info())
-    }
-
-    /// Returns the names of all components.
-    /// Useful for debug purposes
-    pub fn component_names(&self) -> impl Iterator<Item = &str> {
-        self.storage.values().map(|v| v.info().name())
+    pub(crate) fn components(&self) -> &[ComponentInfo] {
+        &self.components
     }
 
     /// Returns a iterator which borrows each storage in the archetype
-    pub(crate) fn borrow_all(&self) -> impl Iterator<Item = StorageBorrowDyn> {
-        self.components().map(|v| self.borrow_dyn(v.key()).unwrap())
+    pub(crate) fn borrow_all(&self) -> impl Iterator<Item = AtomicRef<Storage>> {
+        self.storage.values().map(|v| v.borrow())
     }
 
     /// Access the entities in the archetype for each slot. Entity is None if
@@ -672,11 +677,11 @@ impl Archetype {
         self.entities.as_ref()
     }
 
-    pub(crate) fn storage(&self) -> &BTreeMap<ComponentKey, Storage> {
+    pub(crate) fn storage(&self) -> &BTreeMap<ComponentKey, AtomicRefCell<Storage>> {
         &self.storage
     }
 
-    pub(crate) fn storage_mut(&mut self) -> &mut BTreeMap<ComponentKey, Storage> {
+    pub(crate) fn storage_mut(&mut self) -> &mut BTreeMap<ComponentKey, AtomicRefCell<Storage>> {
         &mut self.storage
     }
 
@@ -684,8 +689,13 @@ impl Archetype {
         &mut self.entities
     }
 
-    pub(crate) fn component(&self, id: ComponentKey) -> Option<&ComponentInfo> {
-        self.storage.get(&id).map(|v| v.info())
+    pub(crate) fn component(&self, id: ComponentKey) -> Option<ComponentInfo> {
+        self.storage.get(&id).map(|v| v.borrow().info())
+    }
+
+    pub(crate) fn push_subscriber(&mut self, s: Arc<dyn Subscriber>) {
+        self.subscribers.push(s);
+        self.subscribers.retain(|v| v.is_connected());
     }
 }
 
@@ -786,6 +796,10 @@ impl ComponentInfo {
     pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
         self.meta
     }
+
+    fn align(&self) -> usize {
+        self.layout.align()
+    }
 }
 
 component! {
@@ -798,7 +812,6 @@ mod tests {
     use crate::{component, entity::EntityKind};
     use alloc::string::{String, ToString};
     use alloc::sync::Arc;
-    use alloc::vec;
 
     use super::*;
     use core::num::NonZeroU32;
@@ -811,7 +824,7 @@ mod tests {
 
     #[test]
     pub fn test_archetype() {
-        let mut arch = Archetype::new(vec![
+        let mut arch = Archetype::new([
             ComponentInfo::of(a()),
             ComponentInfo::of(b()),
             ComponentInfo::of(c()),
