@@ -33,17 +33,17 @@ fn subscribe() {
         .set(b(), 4)
         .spawn(&mut world);
 
-    assert_eq!(rx.try_recv(), Ok((ArchetypeEvent::Inserted, id2)));
+    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Inserted(id2)));
 
     let id3 = Entity::builder().set(b(), 7).spawn(&mut world);
 
     assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
 
     world.set(id3, a(), -4.1).unwrap();
-    assert_eq!(rx.try_recv(), Ok((ArchetypeEvent::Inserted, id3)));
+    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Inserted(id3)));
 
     world.remove(id, a()).unwrap();
-    assert_eq!(rx.try_recv(), Ok((ArchetypeEvent::Removed, id)));
+    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Removed(id)));
 }
 
 #[test]
@@ -63,15 +63,15 @@ fn subscribe_inverted() {
     assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
     world.remove(id, b()).unwrap();
 
-    assert_eq!(rx.try_recv(), Ok((ArchetypeEvent::Inserted, id)));
+    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Inserted(id)));
 
     world.set(id, b(), 5).unwrap();
-    assert_eq!(rx.try_recv(), Ok((ArchetypeEvent::Removed, id)));
+    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Removed(id)));
 
     world.remove(id, b()).unwrap();
-    assert_eq!(rx.try_recv(), Ok((ArchetypeEvent::Inserted, id)));
+    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Inserted(id)));
 
     world.remove(id, a()).unwrap();
 
-    assert_eq!(rx.try_recv(), Ok((ArchetypeEvent::Removed, id)));
+    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Removed(id)));
 }

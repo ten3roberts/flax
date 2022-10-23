@@ -41,8 +41,11 @@ where
 
     let mut components = Vec::new();
     fetch.components(&mut components);
-    DifferenceIter::new(arch.components().map(|v| v.key()), components.into_iter())
-        .map(|v| *world.get(v.id, component_info()).unwrap())
+    DifferenceIter::new(
+        arch.components().iter().map(|v| v.key()),
+        components.into_iter(),
+    )
+    .map(|v| *world.get(v.id, component_info()).unwrap())
 }
 
 pub(crate) struct PreparedArchetype<'w, Q> {

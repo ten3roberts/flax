@@ -595,7 +595,7 @@ impl<'de, T: ComponentValue + de::Deserialize<'de>> Visitor<'de> for StorageVisi
         let mut storage = Storage::with_capacity(self.info, self.cap);
 
         while let Some(item) = seq.next_element::<T>()? {
-            storage.push(item)
+            unsafe { storage.push(item) }
         }
 
         Ok(storage)

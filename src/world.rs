@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use alloc::{boxed::Box, collections::BTreeMap};
+use core::iter::once;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use core::{
@@ -15,7 +16,9 @@ use core::{
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::events::{ArchetypeEvent, EventListener, FilterSubscriber, Subscriber};
+use crate::events::{
+    ArchetypeEvent, ChangeEvent, ChangeSubscriber, EventListener, FilterSubscriber, Subscriber,
+};
 use crate::filter::ArchetypeFilter;
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
@@ -104,7 +107,8 @@ impl Archetypes {
             cursor = match cur.outgoing(head.key) {
                 Some((_, id)) => id,
                 None => {
-                    let mut new = Archetype::new(cur.components().copied().chain([*head]));
+                    let mut new =
+                        Archetype::new(cur.components().iter().chain(once(head)).copied());
 
                     // Insert the appropriate listeners
                     new.subscribers = self
@@ -168,9 +172,12 @@ impl Archetypes {
     }
 
     fn subscribe(&mut self, subscriber: Arc<dyn Subscriber>) {
+        // Prune subscribers
+        self.subscribers.retain(|v| v.is_connected());
+
         for (_, arch) in self.inner.iter_mut() {
             if subscriber.is_interested(arch) {
-                arch.subscribers.push(subscriber.clone());
+                arch.push_subscriber(subscriber.clone());
             }
         }
 
@@ -289,7 +296,7 @@ impl World {
     pub fn spawn_batch(&mut self, batch: &mut BatchSpawn) -> Vec<Entity> {
         self.flush_reserved();
 
-        for &component in batch.components() {
+        for component in batch.components() {
             self.init_component(component)
                 .expect("Failed to initialize component");
         }
@@ -318,7 +325,7 @@ impl World {
                     .expect("Component not in archetype");
             }
 
-            arch.init_changes(*storage.info())
+            arch.init_changes(storage.info())
                 .set_inserted(Change::new(slots, change_tick));
         }
 
@@ -341,7 +348,7 @@ impl World {
         ids: &'a [Entity],
         batch: &mut BatchSpawn,
     ) -> Result<&'a [Entity]> {
-        for &component in batch.components() {
+        for component in batch.components() {
             self.init_component(component)
                 .expect("failed to initialize component");
         }
@@ -402,7 +409,7 @@ impl World {
                     .expect("Component not in archetype");
             }
 
-            arch.init_changes(*storage.info())
+            arch.init_changes(storage.info())
                 .set_inserted(Change::new(slots, change_tick));
         }
 
@@ -634,7 +641,7 @@ impl World {
         if !new_data.is_empty() {
             debug_assert_eq!(new_data.len(), new_components.len());
             let src = self.archetypes.get_mut(arch);
-            new_components.extend(src.components().copied());
+            new_components.extend(src.components());
             new_components.sort_unstable();
 
             // Make sure everything is in its order
@@ -810,6 +817,7 @@ impl World {
         let archetypes = Query::new(())
             .filter(ArchetypeFilter(|arch: &Archetype| {
                 arch.components()
+                    .iter()
                     .any(|v| v.key().id == id || v.key().object == Some(id))
             }))
             .get_archetypes(self);
@@ -828,7 +836,7 @@ impl World {
         for src in archetypes.into_iter().rev() {
             let mut src = self.archetypes.despawn(src);
 
-            let components = src.components().filter(|v| {
+            let components = src.components().iter().filter(|v| {
                 let cid = v.key();
                 !(cid.id == id || cid.object == Some(id))
             });
@@ -894,17 +902,23 @@ impl World {
         let dst_id = match src.outgoing(info.key()) {
             Some((_, dst)) => dst,
             None => {
-                let pivot = src.components().take_while(|v| v.key < info.key()).count();
+                let components = src.components();
+                let pivot = components.iter().take_while(|v| v.key < info.key()).count();
 
                 // Split the components
                 // A B C [new] D E F
-                let left = src.components().take(pivot).copied();
-                let right = src.components().skip(pivot).copied();
+                let left = &components[0..pivot];
+                let right = &components[pivot..];
 
-                let components: Vec<_> = left.chain([info]).chain(right).collect();
+                let components = left
+                    .iter()
+                    .chain(once(&info))
+                    .chain(right)
+                    .copied()
+                    .collect_vec();
 
                 // assert in order
-                let (dst_id, _) = self.archetypes.init(&components);
+                let (dst_id, _) = self.archetypes.init(components);
 
                 dst_id
             }
@@ -995,13 +1009,10 @@ impl World {
         let dst_id = match src.incoming(component.key()) {
             Some(dst) => dst,
             None => {
-                let components: Vec<_> = src
-                    .components()
-                    .filter(|v| v.key != component.key())
-                    .copied()
-                    .collect_vec();
+                let mut components = src.components().to_vec();
+                components.retain(|v| v.key != component.key());
 
-                let (dst_id, _) = self.archetypes.init(&components);
+                let (dst_id, _) = self.archetypes.init(components);
 
                 dst_id
             }
@@ -1349,10 +1360,30 @@ impl World {
     pub fn subscribe<F, L>(&mut self, filter: F, listener: L)
     where
         F: StaticFilter + Send + Sync + 'static,
-        L: EventListener<(ArchetypeEvent, Entity)> + Send + Sync + 'static,
+        L: EventListener<ArchetypeEvent> + Send + Sync + 'static,
     {
         self.archetypes
-            .subscribe(Arc::new(FilterSubscriber { filter, listener }))
+            .subscribe(Arc::new(FilterSubscriber::new(filter, listener)))
+    }
+
+    /// Subscribe to changes on components.
+    ///
+    /// The listener will be invoked when a component in an archetype matching the filter is
+    /// modified (mutably accessed).
+    ///
+    /// **Note**: This will only listen to if a component changed, and will not yield which
+    /// entities changed. This is to not generate too many events. It is recommended to pair with a
+    /// query.
+    pub fn subscribe_changed<F, L>(&mut self, filter: F, components: &[ComponentKey], listener: L)
+    where
+        F: StaticFilter + Send + Sync + 'static,
+        L: EventListener<ChangeEvent> + Send + Sync + 'static,
+    {
+        self.archetypes.subscribe(Arc::new(ChangeSubscriber::new(
+            filter,
+            components.into(),
+            listener,
+        )));
     }
 
     /// Merges `other` into `self`.
@@ -1417,7 +1448,8 @@ impl World {
             // Don't migrate static components
             if !arch.has(is_static().key()) {
                 let mut batch = BatchSpawn::new(arch.len());
-                for mut storage in mem::take(arch.storage_mut()).into_values() {
+                for storage in mem::take(arch.storage_mut()).into_values() {
+                    let mut storage = storage.into_inner();
                     let mut id = storage.info().key;
 
                     // Modify the relations to match new components
@@ -1555,7 +1587,7 @@ where
         for batch in query.iter_batched() {
             let arch = batch.arch();
             meta.clear();
-            meta.extend(arch.components().flat_map(|info| {
+            meta.extend(arch.components().iter().flat_map(|info| {
                 Some((
                     info.key(),
                     self.world.get(info.key().id, debug_visitor()).ok()?,
@@ -1596,7 +1628,7 @@ impl<'a> fmt::Debug for EntityFormatter<'a> {
             if let Ok(loc) = loc {
                 let arch = self.world.archetypes.get(loc.arch_id);
 
-                meta.extend(arch.components().flat_map(|info| {
+                meta.extend(arch.components().iter().flat_map(|info| {
                     Some((
                         info.key(),
                         self.world.get(info.key().id, debug_visitor()).ok()?,
