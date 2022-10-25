@@ -17,7 +17,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::events::{
-    ArchetypeEvent, ChangeEvent, ChangeSubscriber, EventListener, FilterSubscriber, Subscriber,
+    ArchetypeEvent, ChangeEvent, ChangeSubscriber, EventHandler, FilterSubscriber, Subscriber,
 };
 use crate::filter::ArchetypeFilter;
 use crate::{
@@ -108,13 +108,12 @@ impl Archetypes {
                 None => {
                     let mut new = Archetype::new(cur.components().chain(once(head)));
 
-                    // Insert the appropriate listeners
-                    new.subscribers = self
-                        .subscribers
-                        .iter()
-                        .filter(|v| v.is_interested(&new))
-                        .cloned()
-                        .collect_vec();
+                    // Insert the appropriate subscribers
+                    for s in &self.subscribers {
+                        if s.is_interested(&new) {
+                            new.push_subscriber(s.clone())
+                        }
+                    }
 
                     // Increase gen
                     self.gen = self.gen.wrapping_add(1);
@@ -532,13 +531,12 @@ impl World {
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
     pub fn spawn_with(&mut self, buffer: &mut ComponentBuffer) -> Entity {
-        let change_tick = self.advance_change_tick();
-
         for component in buffer.components() {
             self.init_component(*component)
                 .expect("Failed to initialize component");
         }
 
+        let change_tick = self.advance_change_tick();
         let (arch_id, _) = self.archetypes.init(buffer.components().copied());
 
         let (id, _, arch) = self.spawn_inner(arch_id, EntityKind::empty());
@@ -1326,7 +1324,7 @@ impl World {
     pub fn on_removed<T: ComponentValue + Clone>(
         &mut self,
         component: Component<T>,
-        handler: impl EventListener<(Entity, T)> + 'static + Send + Sync,
+        handler: impl EventHandler<(Entity, T)> + 'static + Send + Sync,
     ) {
         let func = move |id: Entity, ptr: *const u8| unsafe {
             let val = ptr.cast::<T>().as_ref().expect("not null").clone();
@@ -1344,10 +1342,10 @@ impl World {
     ///
     /// [`EventListener`](crate::events::EventListener) is implemented for functions and flume
     /// channels, which allows waiting on entities in an async context.
-    pub fn subscribe<F, L>(&mut self, filter: F, listener: L)
+    pub fn subscribe<F, H>(&mut self, filter: F, listener: H)
     where
         F: StaticFilter + Send + Sync + 'static,
-        L: EventListener<ArchetypeEvent> + Send + Sync + 'static,
+        H: EventHandler<ArchetypeEvent> + Send + Sync + 'static,
     {
         self.archetypes
             .subscribe(Arc::new(FilterSubscriber::new(filter, listener)))
@@ -1361,10 +1359,10 @@ impl World {
     /// **Note**: This will only listen to if a component changed, and will not yield which
     /// entities changed. This is to not generate too many events. It is recommended to pair with a
     /// query.
-    pub fn subscribe_changed<F, L>(&mut self, filter: F, components: &[ComponentKey], listener: L)
+    pub fn subscribe_changed<F, H>(&mut self, filter: F, components: &[ComponentKey], listener: H)
     where
         F: StaticFilter + Send + Sync + 'static,
-        L: EventListener<ChangeEvent> + Send + Sync + 'static,
+        H: EventHandler<ChangeEvent> + Send + Sync + 'static,
     {
         self.archetypes.subscribe(Arc::new(ChangeSubscriber::new(
             filter,

@@ -24,9 +24,12 @@ pub enum ArchetypeEvent {
 }
 
 /// Describes a component which changed in the matched archetype
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct ChangeEvent {
-    kind: ChangeKind,
-    component: ComponentKey,
+    /// The kind of change
+    pub kind: ChangeKind,
+    /// The component that changed
+    pub component: ComponentKey,
 }
 
 impl ChangeEvent {
@@ -58,12 +61,12 @@ impl<F, L> FilterSubscriber<F, L> {
 }
 
 /// Defines a type which can handle a world event, such as a component removal
-pub trait EventListener<T> {
+pub trait EventHandler<T> {
     /// Returns true if the listener is to be retained
     fn on_event(&self, event: T) -> bool;
 }
 
-impl<T, F> EventListener<T> for F
+impl<T, F> EventHandler<T> for F
 where
     F: Fn(T) -> bool,
 {
@@ -73,13 +76,13 @@ where
 }
 
 #[cfg(feature = "flume")]
-impl<T> EventListener<T> for flume::Sender<T> {
+impl<T> EventHandler<T> for flume::Sender<T> {
     fn on_event(&self, event: T) -> bool {
         self.send(event).is_ok()
     }
 }
 
-impl<F: StaticFilter + Send + Sync, L: Send + Sync + EventListener<ArchetypeEvent>> Subscriber
+impl<F: StaticFilter + Send + Sync, L: Send + Sync + EventHandler<ArchetypeEvent>> Subscriber
     for FilterSubscriber<F, L>
 {
     fn on_moved_from(&self, id: Entity, from: &Archetype, to: &Archetype) {
@@ -147,7 +150,7 @@ impl<F, L> ChangeSubscriber<F, L> {
     }
 }
 
-impl<F: StaticFilter + Send + Sync, L: Send + Sync + EventListener<ChangeEvent>> Subscriber
+impl<F: StaticFilter + Send + Sync, L: Send + Sync + EventHandler<ChangeEvent>> Subscriber
     for ChangeSubscriber<F, L>
 {
     fn on_change(&self, component: ComponentKey, kind: ChangeKind) {
@@ -161,7 +164,7 @@ impl<F: StaticFilter + Send + Sync, L: Send + Sync + EventListener<ChangeEvent>>
     }
 
     fn is_interested(&self, arch: &Archetype) -> bool {
-        self.filter.static_matches(arch)
+        self.filter.static_matches(arch) && self.components.iter().all(|&v| arch.has(v))
     }
 
     fn is_interested_component(&self, component: ComponentKey) -> bool {

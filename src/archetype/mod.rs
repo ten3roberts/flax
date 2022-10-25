@@ -170,9 +170,7 @@ impl Cell {
         changes.swap_remove(slot, last, |_, _| {});
 
         // Notify the subscribers that something was removed
-        self.subscribers
-            .iter()
-            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Removed))
+        self.notify_removed();
     }
 
     /// Clears (and drops) all components and changes.
@@ -184,9 +182,7 @@ impl Cell {
         changes.clear();
 
         // Notify subscribers
-        self.subscribers
-            .iter()
-            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Removed));
+        self.notify_removed();
     }
 
     /// Drain the values in the cell.
@@ -195,14 +191,33 @@ impl Cell {
         self.changes.get_mut().clear();
 
         // Notify subscribers
-        self.subscribers
-            .iter()
-            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Removed));
+        self.notify_removed();
         storage
     }
 
     pub(crate) fn storage(&self) -> &AtomicRefCell<Storage> {
         &self.storage
+    }
+
+    #[inline(always)]
+    fn notify_inserted(&self) {
+        self.subscribers
+            .iter()
+            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Inserted))
+    }
+
+    #[inline(always)]
+    fn notify_modified(&self) {
+        self.subscribers
+            .iter()
+            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Modified))
+    }
+
+    #[inline(always)]
+    fn notify_removed(&self) {
+        self.subscribers
+            .iter()
+            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Removed))
     }
 }
 
@@ -349,7 +364,10 @@ impl Archetype {
         &self,
         component: Component<T>,
     ) -> Option<AtomicRefMut<[T]>> {
-        let storage = self.cell(component.key())?.storage.borrow_mut();
+        let cell = self.cell(component.key())?;
+        let storage = cell.storage.borrow_mut();
+        cell.notify_modified();
+
         Some(AtomicRefMut::map(storage, |v| unsafe { v.borrow_mut() }))
     }
 
@@ -413,7 +431,9 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<&mut T> {
-        let storage = self.cell_mut(component.key())?.storage.get_mut();
+        let cell = self.cell_mut(component.key())?;
+        cell.notify_modified();
+        let storage = cell.storage.get_mut();
 
         unsafe { storage.get_mut(slot) }
     }
@@ -424,16 +444,20 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRefMut<T>> {
-        let storage = self.cell(component.key())?.storage.borrow_mut();
+        let cell = self.cell(component.key())?;
+        let storage = cell.storage.borrow_mut();
+        cell.notify_modified();
 
         AtomicRefMut::filter_map(storage, |v| unsafe { v.get_mut(slot) })
     }
 
     /// Get a component from the entity at `slot`
     pub fn get_dyn(&mut self, slot: Slot, component: ComponentKey) -> Option<*mut u8> {
-        let storage = self.cell_mut(component)?.storage.get_mut();
+        let cell = self.cell_mut(component)?;
 
-        unsafe { storage.at_mut(slot) }
+        cell.notify_modified();
+
+        unsafe { cell.storage.get_mut().at_mut(slot) }
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
@@ -549,6 +573,7 @@ impl Archetype {
             self.entities.len()
         );
 
+        cell.notify_inserted();
         cell.changes
             .get_mut()
             .set_inserted(Change::new(Slice::single(slot), tick));
@@ -567,10 +592,12 @@ impl Archetype {
         let storage = cell.storage.get_mut();
 
         let slots = Slice::new(storage.len(), storage.len() + src.len());
-        assert!(slots.start <= len);
+        debug_assert!(slots.start <= len);
 
         cell.storage.get_mut().append(src);
-        assert!(cell.storage.get_mut().len() <= len);
+        debug_assert!(cell.storage.get_mut().len() <= len);
+
+        cell.notify_inserted();
 
         cell.changes
             .get_mut()
@@ -866,6 +893,7 @@ impl Archetype {
         self.cell(key).map(|v| v.info)
     }
 
+    /// Add a new subscriber. The subscriber must be interested in this archetype
     pub(crate) fn push_subscriber(&mut self, s: Arc<dyn Subscriber>) {
         // For component changes
         for (&key, cell) in &mut self.cells {
