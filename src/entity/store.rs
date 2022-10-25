@@ -629,7 +629,6 @@ mod test {
         let mut store = EntityStore::new(EntityKind::empty());
         let a = store.spawn("a");
         let b = store.spawn("b");
-        dbg!(a, b);
         let _ = store.spawn("_");
         store.despawn(b).unwrap();
 

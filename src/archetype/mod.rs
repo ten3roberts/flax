@@ -571,7 +571,6 @@ impl Archetype {
 
         let additional = src.len();
         let slots = Slice::new(storage.len(), storage.len() + src.len());
-        eprintln!("Pushing for slots {slots:?}");
         assert!(slots.start <= len);
 
         cell.storage.get_mut().append(src);
