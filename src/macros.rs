@@ -102,7 +102,7 @@ macro_rules! component {
     ($(#[$outer:meta])* $vis: vis $name: ident( $obj: ident ): $ty: ty $(=> [$($metadata: ty),*])?, $($rest:tt)*) => {
         $crate::paste! {
             #[allow(dead_code)]
-            static [<COMPONENT_ $name:snake:upper _ID>]: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new(0);
+            static [<COMPONENT_ $name:snake:upper _ID>]: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
             $(#[$outer])*
             $vis fn $name($obj: $crate::Entity) -> $crate::Component<$ty> {
                 fn meta(_component: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
@@ -134,7 +134,7 @@ macro_rules! component {
 
         $crate::paste! {
             #[allow(dead_code)]
-            static [<COMPONENT_ $name:snake:upper _ID>]: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new(0);
+            static [<COMPONENT_ $name:snake:upper _ID>]: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
             $(#[$outer])*
             $vis fn $name() -> $crate::Component<$ty> {
                 fn meta(_component: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
@@ -163,7 +163,7 @@ macro_rules! component {
     ($(#[$outer:meta])* $vis: vis $name: ident, $($rest:tt)*) => {
         $crate::paste! {
             #[allow(dead_code)]
-            static [<ENTITY_ $name:snake:upper _ID>]: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new(0);
+            static [<ENTITY_ $name:snake:upper _ID>]: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
             $(#[$outer])*
             $vis fn $name() -> $crate::Entity {
                 $crate::Entity::static_init(&[<ENTITY_ $name:snake:upper _ID>], $crate::entity::EntityKind::empty())
