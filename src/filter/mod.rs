@@ -585,7 +585,7 @@ pub(crate) struct WithObject {
 
 impl StaticFilter for WithObject {
     fn static_matches(&self, arch: &Archetype) -> bool {
-        arch.components().iter().any(|v| {
+        arch.components().any(|v| {
             if let Some(v) = v.key().object {
                 if v == self.object {
                     return true;
@@ -1046,7 +1046,7 @@ mod tests {
 
         let changes = AtomicRefCell::new(changes);
 
-        let filter = PreparedKindFilter::new(Some(changes.borrow()), 2);
+        let filter = PreparedKindFilter::new(changes.borrow(), 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -1084,8 +1084,8 @@ mod tests {
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedKindFilter::new(Some(changes_1.borrow()), 1);
-        let b = PreparedKindFilter::new(Some(changes_2.borrow()), 2);
+        let a = PreparedKindFilter::new(changes_1.borrow(), 1);
+        let b = PreparedKindFilter::new(changes_2.borrow(), 2);
 
         let filter = PreparedOr { left: a, right: b };
 
@@ -1101,8 +1101,8 @@ mod tests {
 
         // And
 
-        let a = PreparedKindFilter::new(Some(changes_1.borrow()), 1);
-        let b = PreparedKindFilter::new(Some(changes_2.borrow()), 2);
+        let a = PreparedKindFilter::new(changes_1.borrow(), 1);
+        let b = PreparedKindFilter::new(changes_2.borrow(), 2);
 
         let filter = PreparedAnd { left: a, right: b };
 

@@ -1,8 +1,9 @@
 use core::fmt::Formatter;
+use core::ops::Deref;
 
 use alloc::vec::Vec;
 use alloc::{string::ToString, vec};
-use atomic_refcell::AtomicRef;
+use atomic_refcell::{AtomicRef, AtomicRefCell};
 
 use crate::{
     archetype::{ChangeList, Slice},
@@ -10,6 +11,9 @@ use crate::{
     Access, Archetype, ArchetypeId, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
     Filter,
 };
+
+static EMPTY_CHANGELIST_CELL: AtomicRefCell<ChangeList> = AtomicRefCell::new(ChangeList::new());
+static EMPTY_CHANGELIST: ChangeList = ChangeList::new();
 
 #[derive(Clone)]
 /// Filter which only yields modified or inserted components
@@ -86,18 +90,21 @@ where
 }
 
 impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
-    type Prepared = PreparedKindFilter<'a>;
+    type Prepared = PreparedKindFilter<AtomicRef<'a, ChangeList>>;
 
     fn prepare(&'a self, arch: &'a Archetype, change_tick: u32) -> Self::Prepared {
         let changes = arch.changes(self.component.key());
 
-        if let Some(ref changes) = changes {
+        let changes = if let Some(changes) = changes {
+            // Make sure to enable modification tracking if it is actively used
             if self.kind.is_modified() {
                 changes.set_track_modified()
             }
-        }
 
-        let changes = changes.map(|v| AtomicRef::map(v, |v| v.get(self.kind)));
+            AtomicRef::map(changes, |changes| changes.get(self.kind))
+        } else {
+            EMPTY_CHANGELIST_CELL.borrow()
+        };
 
         PreparedKindFilter::new(changes, change_tick)
     }
@@ -127,47 +134,66 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
 
 #[derive(Debug)]
 #[doc(hidden)]
-pub struct PreparedKindFilter<'a> {
-    changes: Option<AtomicRef<'a, ChangeList>>,
+pub struct PreparedKindFilter<A> {
+    changes: A,
     cur: Option<Slice>,
     // The current change group.
     // Starts at the end and decrements
-    index: usize,
+    cursor: usize,
     tick: u32,
 }
 
-impl<'a> PreparedKindFilter<'a> {
-    pub(crate) fn new(changes: Option<AtomicRef<'a, ChangeList>>, tick: u32) -> Self {
+impl<A> PreparedKindFilter<A>
+where
+    A: Deref<Target = ChangeList>,
+{
+    pub(crate) fn new(changes: A, tick: u32) -> Self {
         Self {
             changes,
             cur: None,
-            index: 0,
+            cursor: 0,
             tick,
         }
     }
 
     pub fn current_slice(&mut self) -> Option<Slice> {
-        match (self.cur, self.changes.as_mut()) {
-            (Some(v), _) => Some(v),
-            (None, Some(changes)) => loop {
-                let v = changes.get(self.index);
-                if let Some(change) = v {
-                    self.index += 1;
-                    // Found a valid change slice
-                    if change.tick > self.tick {
-                        break Some(*self.cur.get_or_insert(change.slice));
-                    }
-                } else {
-                    // No more
-                    return None;
-                };
-            },
-            _ => None,
+        if let Some(cur) = self.cur {
+            return Some(cur);
         }
+
+        loop {
+            let change = self.changes.get(self.cursor)?;
+            self.cursor += 1;
+
+            if change.tick > self.tick {
+                return Some(*self.cur.insert(change.slice));
+            }
+        }
+
+        // match (self.cur, self.changes.as_mut()) {
+        //     (Some(v), _) => Some(v),
+        //     (None, changes) => loop {
+        //         let v = changes.get(self.cursor);
+        //         if let Some(change) = v {
+        //             self.cursor += 1;
+        //             // Found a valid change slice
+        //             if change.tick > self.tick {
+        //                 break Some(*self.cur.get_or_insert(change.slice));
+        //             }
+        //         } else {
+        //             // No more
+        //             return None;
+        //         };
+        //     },
+        //     _ => None,
+        // }
     }
 }
 
-impl<'a> PreparedFilter for PreparedKindFilter<'a> {
+impl<A> PreparedFilter for PreparedKindFilter<A>
+where
+    A: Deref<Target = ChangeList>,
+{
     fn filter(&mut self, slots: Slice) -> Slice {
         loop {
             let cur = match self.current_slice() {
@@ -187,12 +213,9 @@ impl<'a> PreparedFilter for PreparedKindFilter<'a> {
     }
 
     fn matches_slot(&mut self, slot: usize) -> bool {
-        match self.changes {
-            Some(ref changes) => changes
-                .iter()
-                .any(|change| change.tick > self.tick && change.slice.contains(slot)),
-            None => false,
-        }
+        self.changes
+            .iter()
+            .any(|change| change.tick > self.tick && change.slice.contains(slot))
     }
 }
 
@@ -257,12 +280,12 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
 }
 
 impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
-    type Prepared = PreparedKindFilter<'a>;
+    type Prepared = PreparedKindFilter<&'a ChangeList>;
 
-    fn prepare(&self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        let changes = archetype
-            .changes(self.component.key())
-            .map(|v| AtomicRef::map(v, |v| v.get(ChangeKind::Removed)));
+    fn prepare(&self, arch: &'a Archetype, change_tick: u32) -> Self::Prepared {
+        let changes = arch
+            .removals(self.component.key())
+            .unwrap_or(&EMPTY_CHANGELIST);
 
         PreparedKindFilter::new(changes, change_tick)
     }

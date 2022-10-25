@@ -159,7 +159,7 @@ impl Storage {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) unsafe fn extend(&mut self, src: *mut u8, len: usize) {
         self.reserve(len);
 
