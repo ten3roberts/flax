@@ -130,7 +130,7 @@ impl SerializeContext {
     ) -> impl Iterator<Item = (ArchetypeId, &'a Archetype)> {
         world.archetypes.iter().filter(|(_, arch)| {
             !arch.is_empty()
-                && arch.storage().keys().any(|id| self.slots.contains_key(id))
+                && arch.cells().keys().any(|id| self.slots.contains_key(id))
                 && !arch.has(component_info().key())
                 && self.filter.static_matches(arch)
         })
@@ -246,7 +246,7 @@ impl<'a> Serialize for SerializeEntityData<'a> {
     {
         let len = self
             .arch
-            .storage()
+            .cells()
             .keys()
             .filter(|key| self.context.slots.contains_key(key))
             .count();
@@ -322,7 +322,7 @@ impl<'a> serde::Serialize for SerializeStorages<'a> {
     {
         let len = self
             .arch
-            .storage()
+            .cells()
             .keys()
             .filter(|key| self.context.slots.contains_key(key))
             .count();

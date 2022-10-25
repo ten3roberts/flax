@@ -4,11 +4,11 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use crate::{archetype::Archetype, ChangeKind, ComponentKey, Entity, StaticFilter};
 
 pub(crate) trait Subscriber: Send + Sync {
-    fn on_moved_from(&self, id: Entity, from: &Archetype, to: &Archetype);
-    fn on_moved_to(&self, id: Entity, from: &Archetype, to: &Archetype);
-    fn on_spawned(&self, id: Entity, arch: &Archetype);
-    fn on_despawned(&self, id: Entity, arch: &Archetype);
-    fn on_change(&self, arch: &Archetype, component: ComponentKey, kind: ChangeKind);
+    fn on_moved_from(&self, _id: Entity, _from: &Archetype, _to: &Archetype) {}
+    fn on_moved_to(&self, _id: Entity, _from: &Archetype, _to: &Archetype) {}
+    fn on_spawned(&self, _id: Entity, _arch: &Archetype) {}
+    fn on_despawned(&self, _id: Entity, _arch: &Archetype) {}
+    fn on_change(&self, _component: ComponentKey, _kind: ChangeKind) {}
     fn is_connected(&self) -> bool;
     fn is_interested(&self, arch: &Archetype) -> bool;
     fn is_interested_component(&self, component: ComponentKey) -> bool;
@@ -114,7 +114,7 @@ impl<F: StaticFilter + Send + Sync, L: Send + Sync + EventListener<ArchetypeEven
         }
     }
 
-    fn on_change(&self, _: &Archetype, _: ComponentKey, _: ChangeKind) {}
+    fn on_change(&self, _: ComponentKey, _: ChangeKind) {}
 
     fn is_connected(&self) -> bool {
         self.connected.load(Ordering::Relaxed)
@@ -150,15 +150,7 @@ impl<F, L> ChangeSubscriber<F, L> {
 impl<F: StaticFilter + Send + Sync, L: Send + Sync + EventListener<ChangeEvent>> Subscriber
     for ChangeSubscriber<F, L>
 {
-    fn on_moved_from(&self, _: Entity, _: &Archetype, _: &Archetype) {}
-
-    fn on_moved_to(&self, _: Entity, _: &Archetype, _: &Archetype) {}
-
-    fn on_spawned(&self, _: Entity, _: &Archetype) {}
-
-    fn on_despawned(&self, _: Entity, _: &Archetype) {}
-
-    fn on_change(&self, _: &Archetype, component: ComponentKey, kind: ChangeKind) {
+    fn on_change(&self, component: ComponentKey, kind: ChangeKind) {
         if !self.listener.on_event(ChangeEvent { kind, component }) {
             self.connected.store(false, Ordering::Relaxed)
         }

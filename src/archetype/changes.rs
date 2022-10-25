@@ -14,11 +14,16 @@ use crate::ComponentInfo;
 use super::{Slice, Slot};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ChangeList {
+#[doc(hidden)]
+pub struct ChangeList {
     inner: Vec<Change>,
 }
 
 impl ChangeList {
+    pub(crate) const fn new() -> Self {
+        Self { inner: Vec::new() }
+    }
+
     #[cfg(feature = "internal_assert")]
     fn assert_normal(&self, msg: &str) {
         let ordered = self
@@ -96,6 +101,7 @@ impl ChangeList {
         self
     }
 
+    #[cfg(test)]
     pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
         self.remove(src_slot, |mut v| {
             // Change the slot
@@ -134,14 +140,9 @@ impl ChangeList {
             return;
         }
 
+        // No swapping needed
         if slot == last {
-            for v in self.iter_mut().filter(|v| v.slice.contains(last)) {
-                v.slice.end = last;
-                assert!(!v.slice.is_empty());
-
-                on_removed(Change::single(slot, v.tick))
-            }
-            return;
+            return self.remove(slot, on_removed);
         }
 
         // Pop off the changes from the very end
@@ -218,7 +219,7 @@ impl ChangeList {
     }
 
     /// Removes a slot from the change list
-    pub fn remove(&mut self, slot: Slot, mut on_removed: impl FnMut(Change)) {
+    pub(crate) fn remove(&mut self, slot: Slot, mut on_removed: impl FnMut(Change)) {
         let slice = Slice::single(slot);
         let mut result = Vec::with_capacity(self.inner.capacity());
 
@@ -282,8 +283,15 @@ impl ChangeList {
         ));
     }
 
+    pub fn iter_collapsed(&self) -> impl Iterator<Item = (Slot, u32)> + '_ {
+        self.inner.iter().flat_map(|v| {
+            let tick = v.tick;
+            v.slice.iter().map(move |slot| (slot, tick))
+        })
+    }
+
     /// Returns the changes in the change list at a particular index.
-    pub fn get(&self, index: usize) -> Option<&Change> {
+    pub(crate) fn get(&self, index: usize) -> Option<&Change> {
         self.inner.get(index)
     }
 
@@ -365,7 +373,7 @@ impl ChangeKind {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 /// Represents a change over a slice of entities in an archetype which ocurred
 /// at a specific time.
-pub(crate) struct Change {
+pub struct Change {
     /// The slice of entities in the archetype which are affected
     pub slice: Slice,
     /// The world tick of the change event
@@ -382,7 +390,6 @@ impl Change {
     }
 }
 
-#[derive(Debug)]
 /// A self compacting change tracking which holds either singular changes or a
 /// range of changes, automatically merging adjacent ones.
 ///
@@ -443,22 +450,27 @@ impl Changes {
         self
     }
 
-    pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
-        for (a, b) in self.map.iter_mut().zip(other.map.iter_mut()) {
-            a.migrate_to(b, src_slot, dst_slot)
-        }
-    }
-
     /// Removes `src` by swapping `dst` into its place
     pub(crate) fn swap_remove(
         &mut self,
         slot: Slot,
-        last: Slot,
+        dst: Slot,
         mut on_removed: impl FnMut(ChangeKind, Change),
     ) {
-        self.map[0].swap_remove_with(slot, last, |v| on_removed(ChangeKind::Modified, v));
-        self.map[1].swap_remove_with(slot, last, |v| on_removed(ChangeKind::Inserted, v));
-        self.map[2].swap_remove_with(slot, last, |v| on_removed(ChangeKind::Removed, v));
+        self.map[0].swap_remove_with(slot, dst, |v| on_removed(ChangeKind::Modified, v));
+        self.map[1].swap_remove_with(slot, dst, |v| on_removed(ChangeKind::Inserted, v));
+        self.map[2].swap_remove_with(slot, dst, |v| on_removed(ChangeKind::Removed, v));
+    }
+
+    #[inline(always)]
+    pub(crate) fn zip_map(
+        &mut self,
+        other: &mut Self,
+        mut f: impl FnMut(ChangeKind, &mut ChangeList, &mut ChangeList),
+    ) {
+        f(ChangeKind::Modified, &mut self.map[0], &mut other.map[0]);
+        f(ChangeKind::Inserted, &mut self.map[1], &mut other.map[1]);
+        f(ChangeKind::Removed, &mut self.map[2], &mut other.map[2]);
     }
 
     /// Removes a slot from the change list
@@ -479,6 +491,12 @@ impl Changes {
 
     pub(crate) fn track_modified(&self) -> bool {
         self.track_modified.load(sync::atomic::Ordering::Relaxed)
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.map[0].clear();
+        self.map[1].clear();
+        self.map[2].clear();
     }
 }
 
