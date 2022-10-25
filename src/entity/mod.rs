@@ -1,13 +1,16 @@
 mod builder;
 mod store;
 
+use core::fmt;
+use core::num::NonZeroU16;
 use core::sync::atomic::{AtomicU32, Ordering};
-use core::{fmt, num::NonZeroU32};
 
 pub use builder::*;
 pub(super) use store::*;
 
 use crate::EntityIds;
+
+pub(crate) const DEFAULT_GEN: EntityGen = unsafe { EntityGen::new_unchecked(1) };
 
 /// Represents an entity identifier.
 /// An entity can either declare an identifier spawned into the world,
@@ -44,46 +47,34 @@ impl Entity {
     /// Generate a new static id
     pub fn acquire_static_id(kind: EntityKind) -> Entity {
         let index = STATIC_IDS.fetch_add(1, Ordering::Relaxed);
-        Entity::from_parts(
-            NonZeroU32::new(index).unwrap(),
-            0,
-            kind | EntityKind::STATIC,
-        )
+        Entity::from_parts(index, DEFAULT_GEN, kind | EntityKind::STATIC)
     }
 
     #[doc(hidden)]
     pub fn static_init(id: &AtomicU32, kind: EntityKind) -> Self {
         let index = match id.fetch_update(Ordering::Acquire, Ordering::Relaxed, |v| {
-            if v != 0 {
+            if v != EntityIndex::MAX {
                 None
             } else {
-                Some(
-                    Self::acquire_static_id(kind | EntityKind::STATIC)
-                        .index()
-                        .get(),
-                )
+                Some(Self::acquire_static_id(kind | EntityKind::STATIC).index())
             }
         }) {
             Ok(_) => id.load(Ordering::Acquire),
             Err(old) => old,
         };
 
-        Self::from_parts(
-            EntityIndex::new(index).unwrap(),
-            1,
-            kind | EntityKind::STATIC,
-        )
+        Self::from_parts(index, DEFAULT_GEN, kind | EntityKind::STATIC)
     }
 
     /// Returns the entity index
     #[inline(always)]
-    pub fn index(&self) -> NonZeroU32 {
+    pub fn index(&self) -> EntityIndex {
         self.index
     }
 
     /// Returns the entity generation
     #[inline(always)]
-    pub fn gen(&self) -> u16 {
+    pub fn gen(&self) -> EntityGen {
         self.gen
     }
 
@@ -218,9 +209,9 @@ impl Default for EntityKind {
 }
 
 /// The entity id version
-pub type EntityGen = u16;
+pub type EntityGen = NonZeroU16;
 /// The index of the entity in the entity store
-pub type EntityIndex = NonZeroU32;
+pub type EntityIndex = u32;
 
 impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

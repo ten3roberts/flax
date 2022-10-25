@@ -1019,12 +1019,12 @@ component! {
 #[cfg(test)]
 mod tests {
 
+    use crate::entity::DEFAULT_GEN;
     use crate::{component, entity::EntityKind};
     use alloc::string::{String, ToString};
     use alloc::sync::Arc;
 
     use super::*;
-    use core::num::NonZeroU32;
 
     component! {
         a: i32,
@@ -1047,8 +1047,8 @@ mod tests {
         buffer.set(b(), "Foo".to_string());
         buffer.set(c(), shared.clone());
 
-        let id = Entity::from_parts(NonZeroU32::new(6).unwrap(), 2, EntityKind::empty());
-        let id_2 = Entity::from_parts(NonZeroU32::new(5).unwrap(), 2, EntityKind::empty());
+        let id = Entity::from_parts(6, DEFAULT_GEN.saturating_add(1), EntityKind::empty());
+        let id_2 = Entity::from_parts(5, DEFAULT_GEN.saturating_add(1), EntityKind::empty());
 
         let slot = arch.insert(id, &mut buffer);
 
