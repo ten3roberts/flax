@@ -315,7 +315,7 @@ impl World {
             })
             .collect_vec();
 
-        let slots = arch.allocate_n(&ids);
+        let _ = arch.allocate_n(&ids);
 
         for (_, mut storage) in batch.take_all() {
             unsafe {
@@ -394,7 +394,7 @@ impl World {
                 .unwrap();
         }
 
-        let slots = arch.allocate_n(ids);
+        let _ = arch.allocate_n(ids);
 
         let arch = self.archetypes.get_mut(arch_id);
 
@@ -541,7 +541,7 @@ impl World {
 
         let (arch_id, _) = self.archetypes.init(buffer.components().copied());
 
-        let (id, loc, arch) = self.spawn_inner(arch_id, EntityKind::empty());
+        let (id, _, arch) = self.spawn_inner(arch_id, EntityKind::empty());
 
         for (component, src) in buffer.take_all() {
             unsafe {
