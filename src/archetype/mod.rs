@@ -143,15 +143,13 @@ impl Cell {
         let storage = self.storage.get_mut();
         let changes = self.changes.get_mut();
 
-        let last = storage.len() - 1;
-
         let dst_storage = dst.storage.get_mut();
         let dst_changes = dst.changes.get_mut();
 
-        assert_eq!(dst_storage.len(), dst_start);
+        debug_assert_eq!(dst_storage.len(), dst_start);
         unsafe { dst_storage.append(storage) }
 
-        changes.zip_map(dst_changes, |kind, a, b| {
+        changes.zip_map(dst_changes, |_, a, b| {
             a.drain(..).for_each(|mut change| {
                 change.slice.start += dst_start;
                 change.slice.end += dst_start;
@@ -279,7 +277,7 @@ impl Archetype {
                     Cell {
                         info,
                         storage: AtomicRefCell::new(Storage::new(info)),
-                        changes: AtomicRefCell::new(Changes::new(info)),
+                        changes: AtomicRefCell::new(Changes::new()),
                         subscribers: Vec::new(),
                     },
                 )
@@ -303,7 +301,7 @@ impl Archetype {
 
     /// Returns true if the archtype has `component`
     pub fn has(&self, component: ComponentKey) -> bool {
-        self.cells.get(&component).is_some()
+        self.cells.contains_key(&component)
     }
 
     pub(crate) fn outgoing(&self, component: ComponentKey) -> Option<(bool, ArchetypeId)> {
@@ -340,7 +338,7 @@ impl Archetype {
         &self,
         component: ComponentKey,
     ) -> Option<AtomicRef<[T]>> {
-        let storage = self.cells.get(&component)?.storage.borrow();
+        let storage = self.cell(component)?.storage.borrow();
         Some(AtomicRef::map(storage, |v| unsafe { v.borrow() }))
     }
 
@@ -351,7 +349,7 @@ impl Archetype {
         &self,
         component: Component<T>,
     ) -> Option<AtomicRefMut<[T]>> {
-        let storage = self.cells.get(&component.key())?.storage.borrow_mut();
+        let storage = self.cell(component.key())?.storage.borrow_mut();
         Some(AtomicRefMut::map(storage, |v| unsafe { v.borrow_mut() }))
     }
 
@@ -359,7 +357,6 @@ impl Archetype {
     #[inline(always)]
     unsafe fn remove_slot(&mut self, slot: Slot) -> Option<(Entity, Slot)> {
         let last = self.len() - 1;
-        let len = self.len();
         if slot != last {
             self.entities[slot] = self.entities[last];
             Some((self.entities.pop().unwrap(), slot))
@@ -396,7 +393,7 @@ impl Archetype {
 
     /// Borrow the change list
     pub(crate) fn changes(&self, component: ComponentKey) -> Option<AtomicRef<Changes>> {
-        let changes = self.cells.get(&component)?.changes.borrow();
+        let changes = self.cell(component)?.changes.borrow();
         Some(changes)
     }
 
@@ -406,7 +403,7 @@ impl Archetype {
 
     /// Borrow the change list mutably
     pub(crate) fn changes_mut(&self, component: ComponentKey) -> Option<AtomicRefMut<Changes>> {
-        let changes = self.cells.get(&component)?.changes.borrow_mut();
+        let changes = self.cell(component)?.changes.borrow_mut();
         Some(changes)
     }
 
@@ -416,7 +413,7 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<&mut T> {
-        let storage = self.cells.get_mut(&component.key())?.storage.get_mut();
+        let storage = self.cell_mut(component.key())?.storage.get_mut();
 
         unsafe { storage.get_mut(slot) }
     }
@@ -427,14 +424,14 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRefMut<T>> {
-        let storage = self.cells.get(&component.key())?.storage.borrow_mut();
+        let storage = self.cell(component.key())?.storage.borrow_mut();
 
         AtomicRefMut::filter_map(storage, |v| unsafe { v.get_mut(slot) })
     }
 
     /// Get a component from the entity at `slot`
     pub fn get_dyn(&mut self, slot: Slot, component: ComponentKey) -> Option<*mut u8> {
-        let storage = self.cells.get_mut(&component)?.storage.get_mut();
+        let storage = self.cell_mut(component)?.storage.get_mut();
 
         unsafe { storage.at_mut(slot) }
     }
@@ -445,7 +442,7 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRef<T>> {
-        let storage = self.cells.get(&component.key())?.storage.borrow();
+        let storage = self.cell(component.key())?.storage.borrow();
 
         // If a dummy slot is used, the archetype must have no components, so `storage.get` fails,
         // which is safe
@@ -569,7 +566,6 @@ impl Archetype {
         let cell = self.cell_mut(src.info().key())?;
         let storage = cell.storage.get_mut();
 
-        let additional = src.len();
         let slots = Slice::new(storage.len(), storage.len() + src.len());
         assert!(slots.start <= len);
 
@@ -615,7 +611,7 @@ impl Archetype {
             if let Some(dst_cell) = dst_cell {
                 cell.move_to(slot, dst_cell, dst_slot);
             } else {
-                cell.take(slot, |info, p| (on_drop)(info, p));
+                cell.take(slot, &mut on_drop);
                 // storage.swap_remove(slot, |p| (on_drop)(&info, p));
                 // changes.swap_remove(slot, last, |_, _| {});
 
@@ -663,10 +659,9 @@ impl Archetype {
         slot: Slot,
         mut on_move: impl FnMut(ComponentInfo, *mut u8),
     ) -> Option<(Entity, Slot)> {
-        let last = self.len() - 1;
         let id = self.entity(slot).expect("Invalid entity");
 
-        for (&key, cell) in &mut self.cells {
+        for cell in self.cells.values_mut() {
             cell.take(slot, &mut on_move)
             // let storage = cell.storage.get_mut();
             // let info = cell.info;
@@ -760,7 +755,7 @@ impl Archetype {
                 //     .iter()
                 //     .for_each(|v| v.on_change(self, *key, ChangeKind::Removed));
 
-                // dst.push_removed(*key, Change::new(self.slots(), tick))
+                dst.push_removed(*key, Change::new(dst_slots, tick))
             }
         }
 
@@ -848,10 +843,6 @@ impl Archetype {
         &self.cells
     }
 
-    pub(crate) fn cells_mut(&mut self) -> &mut BTreeMap<ComponentKey, Cell> {
-        &mut self.cells
-    }
-
     pub(crate) fn drain(&mut self) -> ArchetypeDrain {
         self.subscribers.iter().for_each(|v| {
             for &id in &self.entities {
@@ -871,8 +862,8 @@ impl Archetype {
         &mut self.entities
     }
 
-    pub(crate) fn component(&self, id: ComponentKey) -> Option<ComponentInfo> {
-        self.cells.get(&id).map(|v| v.info)
+    pub(crate) fn component(&self, key: ComponentKey) -> Option<ComponentInfo> {
+        self.cell(key).map(|v| v.info)
     }
 
     pub(crate) fn push_subscriber(&mut self, s: Arc<dyn Subscriber>) {

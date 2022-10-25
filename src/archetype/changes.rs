@@ -9,8 +9,6 @@ use alloc::vec::Vec;
 use itertools::Itertools;
 use smallvec::SmallVec;
 
-use crate::ComponentInfo;
-
 use super::{Slice, Slot};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -102,11 +100,17 @@ impl ChangeList {
     }
 
     #[cfg(test)]
-    pub(crate) fn migrate_to(&mut self, other: &mut Self, src_slot: Slot, dst_slot: Slot) {
-        self.remove(src_slot, |mut v| {
+    pub(crate) fn swap_remove_to(
+        &mut self,
+        src_slot: Slot,
+        last: Slot,
+        dst: &mut Self,
+        dst_slot: Slot,
+    ) {
+        self.swap_remove_with(src_slot, last, |mut v| {
             // Change the slot
             v.slice = Slice::single(dst_slot);
-            other.set(v);
+            dst.set(v);
         })
     }
 
@@ -396,17 +400,13 @@ impl Change {
 ///
 /// The changes are always stored in a non-overlapping ascending order.
 pub(crate) struct Changes {
-    info: ComponentInfo,
-
     map: [ChangeList; 3],
     track_modified: AtomicBool,
 }
 
 impl Changes {
-    pub(crate) fn new(info: ComponentInfo) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            info,
-
             track_modified: AtomicBool::new(false),
             map: Default::default(),
         }
@@ -445,11 +445,6 @@ impl Changes {
         self
     }
 
-    pub(crate) fn set_removed(&mut self, change: Change) -> &mut Self {
-        self.map[ChangeKind::Removed as usize].set(change);
-        self
-    }
-
     /// Removes `src` by swapping `dst` into its place
     pub(crate) fn swap_remove(
         &mut self,
@@ -471,17 +466,6 @@ impl Changes {
         f(ChangeKind::Modified, &mut self.map[0], &mut other.map[0]);
         f(ChangeKind::Inserted, &mut self.map[1], &mut other.map[1]);
         f(ChangeKind::Removed, &mut self.map[2], &mut other.map[2]);
-    }
-
-    /// Removes a slot from the change list
-    pub fn remove(&mut self, slot: Slot) {
-        self.map[0].remove(slot, |_| {});
-        self.map[1].remove(slot, |_| {});
-        self.map[2].remove(slot, |_| {});
-    }
-
-    pub(crate) fn info(&self) -> ComponentInfo {
-        self.info
     }
 
     pub(crate) fn set_track_modified(&self) {
@@ -588,7 +572,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate() {
+    fn swap_remove_to() {
         let mut changes_1 = ChangeList::default();
         let mut changes_2 = ChangeList::default();
 
@@ -604,14 +588,15 @@ mod tests {
             ]
         );
 
-        changes_1.migrate_to(&mut changes_2, 25, 67);
+        changes_1.swap_remove_to(25, 97, &mut changes_2, 67);
 
         assert_eq!(
             changes_1.inner,
             [
                 Change::new(Slice::new(20, 25), 1),
+                Change::new(Slice::new(25, 26), 2),
                 Change::new(Slice::new(26, 32), 1),
-                Change::new(Slice::new(32, 98), 2)
+                Change::new(Slice::new(32, 97), 2)
             ]
         );
 
