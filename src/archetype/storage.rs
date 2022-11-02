@@ -232,6 +232,11 @@ impl Storage {
         self.len
     }
 
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     #[inline]
     /// Push new data to the storage.
     ///
@@ -239,13 +244,12 @@ impl Storage {
     /// `item` must be of the same type.
     pub(crate) unsafe fn push<T: ComponentValue>(&mut self, item: T) {
         debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
-        unsafe {
-            self.reserve(1);
 
-            core::ptr::write(self.as_ptr().cast::<T>().add(self.len), item);
+        self.reserve(1);
 
-            self.len += 1
-        }
+        core::ptr::write(self.as_ptr().cast::<T>().add(self.len), item);
+
+        self.len += 1
     }
 
     /// Changes the id of the stored component.
