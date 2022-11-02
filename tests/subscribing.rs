@@ -119,12 +119,53 @@ fn subscribing() {
     assert_eq!(q.borrow(&world).iter().collect_vec(), [id]);
 }
 
+#[tokio::test]
+#[cfg(feature = "tokio")]
+async fn tokio_subscribe() {
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+    use tokio::sync::Notify;
+    let notify = Arc::new(Notify::new());
+
+    let mut world = World::new();
+
+    let (tx, mut modified) = mpsc::unbounded_channel();
+    world.subscribe_changed(All, &[a().key()], tx);
+
+    world.subscribe(a().with() | b().with(), Arc::downgrade(&notify));
+
+    let id = Entity::builder().set(a(), 5).spawn(&mut world);
+
+    notify.notified().await;
+
+    assert_eq!(
+        modified.recv().await,
+        Some(ChangeEvent {
+            kind: flax::ChangeKind::Inserted,
+            component: a().key()
+        })
+    );
+
+    world.remove(id, a()).unwrap();
+
+    assert_eq!(
+        modified.recv().await,
+        Some(ChangeEvent {
+            kind: flax::ChangeKind::Removed,
+            component: a().key()
+        })
+    );
+    notify.notified().await;
+    world.set(id, b(), "Hello, World!".into()).unwrap();
+    notify.notified().await;
+}
+
 #[test]
 fn moving_changes() {
     let mut world = World::new();
 
     let (tx, tracking) = flume::unbounded();
-    world.subscribe((a().with() & c().without()), tx);
+    world.subscribe(a().with() & c().without(), tx);
     let (tx, modified) = flume::unbounded();
 
     world.subscribe_changed(All, &[a().key()], tx);

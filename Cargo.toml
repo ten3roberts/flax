@@ -20,17 +20,23 @@ flax-derive = { path = "./flax-derive", version = "0.3.0" }
 
 flume = { version = "0.10.14", default_features = false, optional = true }
 
+
 atomic_refcell = "0.1.8"
 bitflags = "1.3.2"
 eyre = "0.6.8"
 itertools = "0.10.3"
 paste = "1.0.7"
 rayon = { version = "1.5.3", optional = true }
+tokio = { version = "1.21", default_features = false, features = [
+  "sync",
+], optional = true }
 smallvec = { version = "1.8.0", default_features = false }
 tracing = { version = "0.1.35", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 erased-serde = { version = "0.3", features = [], optional = true }
+
 [dev-dependencies]
+tokio = { version = "1.21", features = ["test-util", "macros"] }
 itertools = { version = "0.10.3", default_features = false }
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 test-log = { version = "0.2.11", default_features = false, features = [

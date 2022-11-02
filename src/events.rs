@@ -1,4 +1,7 @@
-use alloc::boxed::Box;
+use alloc::{
+    boxed::Box,
+    sync::{Arc, Weak},
+};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{archetype::Archetype, ChangeKind, ComponentKey, Entity, StaticFilter};
@@ -79,6 +82,39 @@ where
 impl<T> EventHandler<T> for flume::Sender<T> {
     fn on_event(&self, event: T) -> bool {
         self.send(event).is_ok()
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<T> EventHandler<T> for tokio::sync::mpsc::UnboundedSender<T> {
+    fn on_event(&self, event: T) -> bool {
+        self.send(event).is_ok()
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<T> EventHandler<T> for tokio::sync::mpsc::Sender<T> {
+    fn on_event(&self, event: T) -> bool {
+        self.blocking_send(event).is_ok()
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<T> EventHandler<T> for tokio::sync::broadcast::Sender<T> {
+    fn on_event(&self, event: T) -> bool {
+        self.send(event).is_ok()
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<T> EventHandler<T> for Weak<tokio::sync::Notify> {
+    fn on_event(&self, _: T) -> bool {
+        if let Some(notify) = self.upgrade() {
+            notify.notify_one();
+            true
+        } else {
+            false
+        }
     }
 }
 
