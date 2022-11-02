@@ -366,7 +366,9 @@ impl Archetype {
     ) -> Option<AtomicRefMut<[T]>> {
         let cell = self.cell(component.key())?;
         let storage = cell.storage.borrow_mut();
-        cell.notify_modified();
+        if !storage.is_empty() {
+            cell.notify_modified();
+        }
 
         Some(AtomicRefMut::map(storage, |v| unsafe { v.borrow_mut() }))
     }

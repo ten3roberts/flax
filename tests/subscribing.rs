@@ -1,4 +1,16 @@
-use flax::{component, Entity, World};
+use core::iter::once;
+use core::iter::repeat;
+
+use flax::events::ArchetypeEvent;
+use flax::{component, entity_ids, events::ChangeEvent, name, All, Entity, Query, World};
+use itertools::Itertools;
+use pretty_assertions::assert_eq;
+
+component! {
+    a:i32,
+    b:String,
+    c:f32,
+}
 
 #[test]
 #[cfg(feature = "flume")]
@@ -9,12 +21,6 @@ fn subscribing() {
         ChangeKind, Query,
     };
     use itertools::Itertools;
-
-    component! {
-        a:i32,
-        b:String,
-        c:f32,
-    }
 
     let mut world = World::new();
 
@@ -111,4 +117,76 @@ fn subscribing() {
     world.set(id2, b(), "Bar".to_string()).unwrap();
 
     assert_eq!(q.borrow(&world).iter().collect_vec(), [id]);
+}
+
+#[test]
+fn moving_changes() {
+    let mut world = World::new();
+
+    let (tx, tracking) = flume::unbounded();
+    world.subscribe((a().with() & c().without()), tx);
+    let (tx, modified) = flume::unbounded();
+
+    world.subscribe_changed(All, &[a().key()], tx);
+
+    let ids = (0..10)
+        .map(|i| {
+            Entity::builder()
+                .set(name(), i.to_string())
+                .set(a(), 5)
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let mut query = Query::new((entity_ids(), a().modified()));
+
+    assert_eq!(
+        tracking.drain().collect_vec(),
+        ids.iter()
+            .map(|&id| { ArchetypeEvent::Inserted(id) })
+            .collect_vec()
+    );
+
+    assert_eq!(
+        query.borrow(&world).iter().collect_vec(),
+        ids.iter().copied().zip(repeat(&5)).collect_vec()
+    );
+
+    world.set(ids[3], a(), 7).unwrap();
+
+    assert_eq!(
+        modified.drain().collect_vec(),
+        repeat(ChangeEvent {
+            kind: flax::ChangeKind::Inserted,
+            component: a().key()
+        })
+        .take(10)
+        .chain(once(ChangeEvent {
+            kind: flax::ChangeKind::Modified,
+            component: a().key()
+        }))
+        .collect_vec()
+    );
+
+    for &id in &ids {
+        world.set(id, b(), "Foo".into()).unwrap();
+    }
+
+    assert_eq!(tracking.drain().collect_vec(), []);
+    world.set(ids[2], c(), 5.4).unwrap();
+    world.set(ids[6], c(), 5.4).unwrap();
+    world.set(ids[1], c(), 5.4).unwrap();
+
+    assert_eq!(
+        tracking.drain().collect_vec(),
+        [ids[2], ids[6], ids[1]]
+            .iter()
+            .map(|&id| { ArchetypeEvent::Removed(id) })
+            .collect_vec()
+    );
+
+    assert_eq!(modified.drain().collect_vec(), []);
+
+    // Make sure the change survived the migrations
+    assert_eq!(query.borrow(&world).iter().collect_vec(), [(ids[3], &7)]);
 }

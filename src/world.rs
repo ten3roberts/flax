@@ -1340,8 +1340,13 @@ impl World {
     /// The listener will be notified when the filter is matched for an entity, and when the filter
     /// no longer matches.
     ///
-    /// [`EventListener`](crate::events::EventListener) is implemented for functions and flume
+    /// [`EventHandler`](crate::events::EventHandler) is implemented for functions and flume
     /// channels, which allows waiting on entities in an async context.
+    /// **Note**: When using Or combinatorials, the listener won't be invoked if the entity's
+    /// components are hopscotched. E.g; with a filter of (a() | b()), the listener wont be invoked
+    /// for: `(a) => (a, b) => (b)`, as there was never a time the entity did not match the filter.
+    ///
+    /// It will however be invoked for: `(a) => () => (b)`
     pub fn subscribe<F, H>(&mut self, filter: F, listener: H)
     where
         F: StaticFilter + Send + Sync + 'static,
