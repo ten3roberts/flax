@@ -9,6 +9,7 @@ component! {
 #[test]
 #[cfg(feature = "flume")]
 fn subscribe() {
+    use flax::events::{ArchetypeSubscriber, SubscriberFilterExt};
     use flume::TryRecvError;
 
     let mut world = World::new();
@@ -20,7 +21,7 @@ fn subscribe() {
 
     let (tx, rx) = flume::unbounded();
 
-    world.subscribe(a().with(), tx);
+    world.subscribe(ArchetypeSubscriber::new(tx).filter(a().with()));
 
     assert_eq!(rx.try_recv(), Err(flume::TryRecvError::Empty));
 
@@ -49,11 +50,12 @@ fn subscribe() {
 #[test]
 #[cfg(feature = "flume")]
 fn subscribe_inverted() {
+    use flax::events::{ArchetypeSubscriber, SubscriberFilterExt};
     use flume::TryRecvError;
 
     let mut world = World::new();
     let (tx, rx) = flume::unbounded();
-    world.subscribe(a().with() & b().without(), tx);
+    world.subscribe(ArchetypeSubscriber::new(tx).filter(a().with() & b().without()));
 
     let id = Entity::builder()
         .set(a(), 1.5)

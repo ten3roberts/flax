@@ -27,6 +27,7 @@ provide the application logic.
 - [Ergonomic entity builder](crate::EntityBuilder)
 - Tracing
 - [Serialization and deserialization](https://docs.rs/flax/latest/flax/serialize/)
+- [(async) event subscription](crate::World::subscribe)
 - Runtime components
 
 ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/guide)**

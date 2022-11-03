@@ -161,6 +161,8 @@ impl Cell {
 
     /// Move a slot out of the cell by swapping with the last
     fn take(&mut self, slot: Slot, mut on_move: impl FnMut(ComponentInfo, *mut u8)) {
+        self.notify_removed();
+
         let storage = self.storage.get_mut();
         let changes = self.changes.get_mut();
 
@@ -170,11 +172,11 @@ impl Cell {
         changes.swap_remove(slot, last, |_, _| {});
 
         // Notify the subscribers that something was removed
-        self.notify_removed();
     }
 
     /// Clears (and drops) all components and changes.
     fn clear(&mut self) {
+        self.notify_removed();
         let storage = self.storage.get_mut();
         let changes = self.changes.get_mut();
 
@@ -182,16 +184,15 @@ impl Cell {
         changes.clear();
 
         // Notify subscribers
-        self.notify_removed();
     }
 
     /// Drain the values in the cell.
     pub(crate) fn drain(&mut self) -> Storage {
+        self.notify_removed();
         let storage = mem::replace(self.storage.get_mut(), Storage::new(self.info));
         self.changes.get_mut().clear();
 
         // Notify subscribers
-        self.notify_removed();
         storage
     }
 
@@ -200,34 +201,44 @@ impl Cell {
     }
 
     #[inline(always)]
-    fn notify_inserted(&self) {
-        self.subscribers
-            .iter()
-            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Inserted))
+    fn notify_inserted(&mut self) {
+        let storage = self.storage.get_mut();
+        if !storage.is_empty() {
+            for v in self.subscribers.iter() {
+                v.on_change(self.info, ChangeKind::Inserted)
+            }
+        }
     }
 
     #[inline(always)]
     fn notify_modified(&self) {
-        self.subscribers
-            .iter()
-            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Modified))
+        let storage = self.storage.borrow();
+        if !storage.is_empty() {
+            for v in self.subscribers.iter() {
+                v.on_change(self.info, ChangeKind::Modified)
+            }
+        }
     }
 
     #[inline(always)]
-    fn notify_removed(&self) {
-        self.subscribers
-            .iter()
-            .for_each(|v| v.on_change(self.info.key(), ChangeKind::Removed))
+    fn notify_removed(&mut self) {
+        let storage = self.storage.get_mut();
+        if !storage.is_empty() {
+            for v in self.subscribers.iter() {
+                v.on_change(self.info, ChangeKind::Removed)
+            }
+        }
     }
 }
 
 impl Drop for Cell {
     fn drop(&mut self) {
-        if self.storage.get_mut().len() > 0 {
+        let storage = self.storage.get_mut();
+        if !storage.is_empty() {
             // Notify subscribers
-            self.subscribers
-                .iter()
-                .for_each(|v| v.on_change(self.info.key(), ChangeKind::Removed));
+            for v in self.subscribers.iter() {
+                v.on_change(self.info, ChangeKind::Removed)
+            }
         }
     }
 }
@@ -365,10 +376,9 @@ impl Archetype {
         component: Component<T>,
     ) -> Option<AtomicRefMut<[T]>> {
         let cell = self.cell(component.key())?;
+        cell.notify_modified();
+
         let storage = cell.storage.borrow_mut();
-        if !storage.is_empty() {
-            cell.notify_modified();
-        }
 
         Some(AtomicRefMut::map(storage, |v| unsafe { v.borrow_mut() }))
     }
@@ -447,8 +457,8 @@ impl Archetype {
         component: Component<T>,
     ) -> Option<AtomicRefMut<T>> {
         let cell = self.cell(component.key())?;
-        let storage = cell.storage.borrow_mut();
         cell.notify_modified();
+        let storage = cell.storage.borrow_mut();
 
         AtomicRefMut::filter_map(storage, |v| unsafe { v.get_mut(slot) })
     }

@@ -16,9 +16,7 @@ use core::{
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::events::{
-    ArchetypeEvent, ChangeEvent, ChangeSubscriber, EventHandler, FilterSubscriber, Subscriber,
-};
+use crate::events::{EventHandler, Subscriber};
 use crate::filter::ArchetypeFilter;
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
@@ -1334,46 +1332,16 @@ impl World {
         self.on_removed.register(component.key(), Box::new(func));
     }
 
-    /// Subscribe to changes such as insertion and removal of components in the world using the provided
-    /// listener.
+    /// Subscribe to events in the world using the provided subscriber.
     ///
-    /// The listener will be notified when the filter is matched for an entity, and when the filter
-    /// no longer matches.
+    /// **See**: [`ArchetypeSubscriber`](crate::events::ArchetypeSubscriber), [`ChangeSubscriber`](crate::events::ChangeSubscriber).
     ///
-    /// [`EventHandler`](crate::events::EventHandler) is implemented for functions and flume
-    /// channels, which allows waiting on entities in an async context.
-    /// **Note**: When using Or combinatorials, the listener won't be invoked if the entity's
-    /// components are hopscotched. E.g; with a filter of (a() | b()), the listener wont be invoked
-    /// for: `(a) => (a, b) => (b)`, as there was never a time the entity did not match the filter.
-    ///
-    /// It will however be invoked for: `(a) => () => (b)`
-    pub fn subscribe<F, H>(&mut self, filter: F, listener: H)
+    /// This allows reacting to changes in other systems, in async contexts by using channels or [`tokio::sync::Notify`], or on other threads.
+    pub fn subscribe<S>(&mut self, subscriber: S)
     where
-        F: StaticFilter + Send + Sync + 'static,
-        H: EventHandler<ArchetypeEvent> + Send + Sync + 'static,
+        S: Subscriber,
     {
-        self.archetypes
-            .subscribe(Arc::new(FilterSubscriber::new(filter, listener)))
-    }
-
-    /// Subscribe to changes on components.
-    ///
-    /// The listener will be invoked when a component in an archetype matching the filter is
-    /// modified (mutably accessed).
-    ///
-    /// **Note**: This will only listen to if a component changed, and will not yield which
-    /// entities changed. This is to not generate too many events. It is recommended to pair with a
-    /// query.
-    pub fn subscribe_changed<F, H>(&mut self, filter: F, components: &[ComponentKey], listener: H)
-    where
-        F: StaticFilter + Send + Sync + 'static,
-        H: EventHandler<ChangeEvent> + Send + Sync + 'static,
-    {
-        self.archetypes.subscribe(Arc::new(ChangeSubscriber::new(
-            filter,
-            components.into(),
-            listener,
-        )));
+        self.archetypes.subscribe(Arc::new(subscriber))
     }
 
     /// Merges `other` into `self`.

@@ -1,8 +1,14 @@
 use core::iter::once;
 use core::iter::repeat;
 
-use flax::events::ArchetypeEvent;
-use flax::{component, entity_ids, events::ChangeEvent, name, All, Entity, Query, World};
+use flax::events::ArchetypeSubscriber;
+use flax::events::ChangeSubscriber;
+use flax::events::SubscriberFilterExt;
+use flax::{
+    component, entity_ids,
+    events::{ArchetypeEvent, ChangeEvent},
+    name, Entity, Query, World,
+};
 use itertools::Itertools;
 use pretty_assertions::assert_eq;
 
@@ -17,7 +23,9 @@ component! {
 fn subscribing() {
     use flax::{
         entity_ids,
-        events::{ArchetypeEvent, ChangeEvent},
+        events::{
+            ArchetypeEvent, ArchetypeSubscriber, ChangeEvent, ChangeSubscriber, SubscriberFilterExt,
+        },
         ChangeKind, Query,
     };
     use itertools::Itertools;
@@ -25,10 +33,10 @@ fn subscribing() {
     let mut world = World::new();
 
     let (tx, events) = flume::unbounded();
-    world.subscribe(a().with(), tx);
+    world.subscribe(ArchetypeSubscriber::new(tx).filter(a().with()));
 
     let (tx, changed) = flume::unbounded();
-    world.subscribe_changed(a().with(), &[a().key()], tx);
+    world.subscribe(ChangeSubscriber::new(&[a().key()], tx));
 
     let mut q = Query::new(entity_ids()).filter(a().removed());
 
@@ -122,6 +130,8 @@ fn subscribing() {
 #[tokio::test]
 #[cfg(feature = "tokio")]
 async fn tokio_subscribe() {
+    use flax::events::ArchetypeSubscriber;
+    use flax::events::SubscriberFilterExt;
     use std::sync::Arc;
     use tokio::sync::mpsc;
     use tokio::sync::Notify;
@@ -130,9 +140,11 @@ async fn tokio_subscribe() {
     let mut world = World::new();
 
     let (tx, mut modified) = mpsc::unbounded_channel();
-    world.subscribe_changed(All, &[a().key()], tx);
+    world.subscribe(flax::events::ChangeSubscriber::new(&[a().key()], tx));
 
-    world.subscribe(a().with() | b().with(), Arc::downgrade(&notify));
+    world.subscribe(
+        ArchetypeSubscriber::new(Arc::downgrade(&notify)).filter(a().with() | b().with()),
+    );
 
     let id = Entity::builder().set(a(), 5).spawn(&mut world);
 
@@ -165,10 +177,10 @@ fn moving_changes() {
     let mut world = World::new();
 
     let (tx, tracking) = flume::unbounded();
-    world.subscribe(a().with() & c().without(), tx);
+    world.subscribe(ArchetypeSubscriber::new(tx).filter(a().with() & c().without()));
     let (tx, modified) = flume::unbounded();
 
-    world.subscribe_changed(All, &[a().key()], tx);
+    world.subscribe(ChangeSubscriber::new(&[a().key()], tx));
 
     let ids = (0..10)
         .map(|i| {
