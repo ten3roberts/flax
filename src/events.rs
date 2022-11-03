@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, sync::Weak};
+use alloc::boxed::Box;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
@@ -234,7 +234,7 @@ impl<T> EventHandler<T> for tokio::sync::broadcast::Sender<T> {
 }
 
 #[cfg(feature = "tokio")]
-impl<T> EventHandler<T> for Weak<tokio::sync::Notify> {
+impl<T> EventHandler<T> for alloc::sync::Weak<tokio::sync::Notify> {
     fn on_event(&self, _: T) -> bool {
         if let Some(notify) = self.upgrade() {
             notify.notify_one();
