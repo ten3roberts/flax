@@ -9,7 +9,8 @@ use crate::{ComponentInfo, ComponentKey, ComponentValue};
 use super::Slot;
 
 /// Type erased but managed component store.
-pub(crate) struct Storage {
+#[doc(hidden)]
+pub struct Storage {
     data: NonNull<u8>,
     len: usize,
     cap: usize,
