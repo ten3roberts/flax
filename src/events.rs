@@ -14,7 +14,7 @@ pub trait Subscriber: 'static + Send + Sync {
     /// This is called from the context of the source archetype **before** the entity components
     /// are moved
     fn on_moved_pre(&self, _id: Entity, _slot: Slot, _from: &Archetype, _to: &Archetype) {}
-    /// Same as [Subscriber::on_moved_from] but called from the context of the destination
+    /// Same as [Subscriber::on_moved_pre] but called from the context of the destination
     /// archetype
     fn on_moved_post(&self, _id: Entity, _from: &Archetype, _to: &Archetype) {}
     /// Called when a new entity is allocated in the archetype
