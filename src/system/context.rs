@@ -10,7 +10,7 @@ use crate::{Access, AccessKind, CommandBuffer, SystemAccess, SystemData, World};
 /// taken into consideration when multithreading in the schedule, and will as
 /// such not require locks.
 ///
-/// The implementation is an Arc<AtomicRefCell> and is thus cheap to clone
+/// The implementation is an `Arc<AtomicRefCell>` and is thus cheap to clone
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SharedResource<T>(Arc<AtomicRefCell<T>>);
 

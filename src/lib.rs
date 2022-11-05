@@ -1,24 +1,24 @@
 //! Flax is a performant and easy to use Entity Component System.
 //!
-//! The world is organized by simple identifiers known as an [Entity](crate::Entity), which can have any number of components attached to them.
+//! The world is organized by simple identifiers known as an [Entity](https://docs.rs/flax/latest/flax/entity/struct.Entity.html), which can have any number of components attached to them.
 //!
 //! Systems operate and iterate upon entities and their attached components and
 //! provide the application logic.
 //!
 //! ## Features
-//! - [Declarative component macro](crate::component!)
-//! - [Queries](crate::Query)
-//! - [Change detection](crate::Component::modified)
-//! - [Query filtering](crate::filter)
-//! - [System execution](crate::System)
-//! - [Multithreaded system execution through](crate::Schedule)
-//! - Many to many entity relation and graphs
-//! - [Reflection through component metadata](crate::component!)
-//! - [Ergonomic entity builder](crate::EntityBuilder)
+//! - [Declarative component macro](https://docs.rs/flax/latest/flax/macro.component.html)
+//! - [Queries](https://docs.rs/flax/latest/flax/struct.Query.html)
+//! - [Change detection](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified)
+//! - [Query filtering](https://docs.rs/flax/latest/flax/filter/index.html)
+//! - [System execution](https://docs.rs/flax/latest/flax/system/struct.System.html)
+//! - [Multithreaded system execution through](https://docs.rs/flax/latest/flax/schedule/struct.Schedule.html)
+//! - [Many to many entity relation and graphs](https://docs.rs/flax/latest/flax/macro.component.html#relations)
+//! - [Reflection through component metadata](https://docs.rs/flax/latest/flax/macro.component.html)
+//! - [Ergonomic entity builder](https://docs.rs/flax/latest/flax/struct.EntityBuilder.html)
 //! - Tracing
-//! - [Serialization and deserialization](crate::serialize)
-//! - [(async) event subscription](crate::World::subscribe)
-//! - Runtime components
+//! - [Serialization and deserialization](https://docs.rs/flax/latest/flax/serialize/)
+//! - [(async) event subscription](https://docs.rs/flax/latest/flax/struct.World.html#method.subscribe)
+//! - [Runtime components](https://docs.rs/flax/latest/flax/struct.World.html#method.spawn_component)
 //!
 //! ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/guide)**
 //!
