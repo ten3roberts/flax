@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2022-11-05
+
+### Bug Fixes
+
+- Set(_with) not working for reserved entities
+- Make EntityIndex primitive
+- No-default-features lints
+- Blanklines in example
+- Doclinks in README
+
+### Features
+
+- Filter subscription
+- Tokio subscribers
+- Extensible event subscription
+
+### Miscellaneous Tasks
+
+- CHANGELOG.md
+- Fix tests
+- Simplify internal archetype borrowing api
+- Fix no-std
+- Fix warnings
+- Remove duplicate simpler event_registry
+- Doclinks
+
+### Refactor
+
+- Archetype change events
+
+### Testing
+
+- Change subscribing
+- Subscribe
+- Sparse or combinators
+
 ## [0.3.0] - 2022-10-18
 
 ### Bug Fixes
