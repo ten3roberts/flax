@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
-    archetype::Archetype, And, ChangeKind, ComponentInfo, ComponentKey, ComponentValue, Entity,
-    StaticFilter,
+    archetype::{Archetype, Slot},
+    And, ChangeKind, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, StaticFilter,
 };
 
 /// A subscriber of events to the world.
@@ -11,15 +11,16 @@ use crate::{
 /// The implementation should not block
 pub trait Subscriber: 'static + Send + Sync {
     /// Called then an entity is moved from one archetype to another
-    /// This is called from the context of the source archetype
-    fn on_moved_from(&self, _id: Entity, _from: &Archetype, _to: &Archetype) {}
+    /// This is called from the context of the source archetype **before** the entity components
+    /// are moved
+    fn on_moved_pre(&self, _id: Entity, _slot: Slot, _from: &Archetype, _to: &Archetype) {}
     /// Same as [Subscriber::on_moved_from] but called from the context of the destination
     /// archetype
-    fn on_moved_to(&self, _id: Entity, _from: &Archetype, _to: &Archetype) {}
+    fn on_moved_post(&self, _id: Entity, _from: &Archetype, _to: &Archetype) {}
     /// Called when a new entity is allocated in the archetype
     fn on_spawned(&self, _id: Entity, _arch: &Archetype) {}
     /// Called when an entity is completely removed from the archetypes.
-    fn on_despawned(&self, _id: Entity, _arch: &Archetype) {}
+    fn on_despawned(&self, _id: Entity, _slot: Slot, _arch: &Archetype) {}
     /// Invoked when a cell in the archetype is modified.
     ///
     /// **Note**: This is eager and will be invoked when it is accessed.
@@ -139,14 +140,14 @@ where
     L: ComponentValue + EventHandler<ArchetypeEvent>,
 {
     #[inline(always)]
-    fn on_moved_from(&self, id: Entity, _from: &Archetype, _to: &Archetype) {
+    fn on_moved_pre(&self, id: Entity, _slot: Slot, _from: &Archetype, _to: &Archetype) {
         if !self.listener.on_event(ArchetypeEvent::Removed(id)) {
             self.connected.store(false, Ordering::Relaxed)
         }
     }
 
     #[inline(always)]
-    fn on_moved_to(&self, id: Entity, _from: &Archetype, _to: &Archetype) {
+    fn on_moved_post(&self, id: Entity, _from: &Archetype, _to: &Archetype) {
         if !self.listener.on_event(ArchetypeEvent::Inserted(id)) {
             self.connected.store(false, Ordering::Relaxed)
         }
@@ -160,7 +161,7 @@ where
     }
 
     #[inline(always)]
-    fn on_despawned(&self, id: Entity, _arch: &Archetype) {
+    fn on_despawned(&self, id: Entity, _slot: Slot, _arch: &Archetype) {
         if !self.listener.on_event(ArchetypeEvent::Inserted(id)) {
             self.connected.store(false, Ordering::Relaxed)
         }
@@ -251,20 +252,20 @@ where
     S: Subscriber,
 {
     #[inline(always)]
-    fn on_moved_from(&self, id: Entity, from: &Archetype, to: &Archetype) {
+    fn on_moved_pre(&self, id: Entity, slot: Slot, from: &Archetype, to: &Archetype) {
         let b = self.filter.static_matches(to);
 
         if !b {
-            self.inner.on_moved_from(id, from, to)
+            self.inner.on_moved_pre(id, slot, from, to)
         }
     }
 
     #[inline(always)]
-    fn on_moved_to(&self, id: Entity, from: &Archetype, to: &Archetype) {
+    fn on_moved_post(&self, id: Entity, from: &Archetype, to: &Archetype) {
         let a = self.filter.static_matches(from);
 
         if !a {
-            self.inner.on_moved_to(id, from, to)
+            self.inner.on_moved_post(id, from, to)
         }
     }
 
@@ -276,9 +277,9 @@ where
     }
 
     #[inline(always)]
-    fn on_despawned(&self, id: Entity, arch: &Archetype) {
+    fn on_despawned(&self, id: Entity, slot: Slot, arch: &Archetype) {
         if self.filter.static_matches(arch) {
-            self.inner.on_despawned(id, arch)
+            self.inner.on_despawned(id, slot, arch)
         }
     }
 
@@ -351,5 +352,70 @@ where
 
     fn is_interested_component(&self, component: ComponentKey) -> bool {
         self.components.contains(&component)
+    }
+}
+
+/// Subscribe to changes to a set of components
+pub struct RemoveSubscriber<T: ComponentValue, L> {
+    listener: L,
+    component: Component<T>,
+    connected: AtomicBool,
+}
+
+impl<T: ComponentValue, L: EventHandler<(Entity, T)>> RemoveSubscriber<T, L> {
+    /// Creates a new change subscriber, which will track changes, similar to a query
+    pub fn new(component: Component<T>, listener: L) -> Self {
+        Self {
+            listener,
+            component,
+            connected: AtomicBool::new(true),
+        }
+    }
+}
+
+impl<T, F, L> SubscriberFilterExt<F> for RemoveSubscriber<T, L>
+where
+    F: StaticFilter + ComponentValue,
+    T: ComponentValue + Clone,
+    L: ComponentValue + EventHandler<(Entity, T)>,
+{
+    type Output = FilterSubscriber<F, Self>;
+
+    fn filter(self, filter: F) -> Self::Output {
+        FilterSubscriber::new(filter, self)
+    }
+}
+
+impl<T, L> Subscriber for RemoveSubscriber<T, L>
+where
+    T: ComponentValue + Clone,
+    L: ComponentValue + EventHandler<(Entity, T)>,
+{
+    fn on_moved_pre(&self, id: Entity, slot: Slot, from: &Archetype, to: &Archetype) {
+        if !to.has(self.component.key()) {
+            let value = from.get(slot, self.component).unwrap().clone();
+            if !self.listener.on_event((id, value)) {
+                self.connected.store(false, Ordering::Relaxed)
+            }
+        }
+    }
+
+    fn on_despawned(&self, id: Entity, slot: Slot, arch: &Archetype) {
+        let value = arch.get(slot, self.component).unwrap().clone();
+        if !self.listener.on_event((id, value)) {
+            self.connected.store(false, Ordering::Relaxed)
+        }
+    }
+
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed)
+    }
+
+    fn is_interested(&self, arch: &Archetype) -> bool {
+        arch.has(self.component.key())
+    }
+
+    fn is_interested_component(&self, _: ComponentKey) -> bool {
+        false
     }
 }

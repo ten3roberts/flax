@@ -463,48 +463,52 @@ const SHIP_TURN: f32 = 2.0;
 const WEAPON_COOLDOWN: f32 = 0.2;
 const PLUME_COOLDOWN: f32 = 0.02;
 
+#[derive(Fetch)]
+struct PlayerQuery {
+    id: EntityIds,
+    player: Component<()>,
+    pos: Component<Vec2>,
+    rot: Mutable<f32>,
+    vel: Mutable<Vec2>,
+    difficulty: Mutable<f32>,
+    invincibility: Mutable<f32>,
+    material: Component<f32>,
+}
+
+impl Default for PlayerQuery {
+    fn default() -> Self {
+        Self {
+            id: entity_ids(),
+            player: player(),
+            pos: position(),
+            rot: rotation().as_mut(),
+            vel: velocity().as_mut(),
+            difficulty: difficulty().as_mut(),
+            invincibility: invincibility().as_mut(),
+            material: material(),
+        }
+    }
+}
+
 fn player_system(dt: f32) -> BoxedSystem {
     let mut current_weapon_cooldown = 0.0;
     let mut current_plume_cooldown = 0.0;
 
     System::builder()
         .with_name("player_system")
-        .with(
-            Query::new((
-                entity_ids(),
-                position(),
-                material(),
-                velocity().as_mut(),
-                rotation().as_mut(),
-                difficulty().as_mut(),
-                invincibility().as_mut(),
-            ))
-            .with(player()),
-        )
+        .with(Query::new(PlayerQuery::default()))
         .write::<CommandBuffer>()
         .build(
-            move |mut q: QueryBorrow<
-                (
-                    EntityIds,
-                    Component<Vec2>,
-                    Component<f32>,
-                    Mutable<Vec2>,
-                    Mutable<f32>,
-                    Mutable<f32>,
-                    Mutable<f32>,
-                ),
-                And<All, With>,
-            >,
-                  cmd: &mut CommandBuffer| {
+            move |mut q: QueryBorrow<PlayerQuery>, cmd: &mut CommandBuffer| {
                 current_weapon_cooldown -= dt;
                 current_plume_cooldown -= dt;
 
-                for (player, pos, material, vel, rot, current_difficulty, invincibility) in &mut q {
-                    *invincibility = (*invincibility - 0.02).max(0.0);
+                for player in &mut q {
+                    *player.invincibility = (*player.invincibility - 0.02).max(0.0);
 
-                    *current_difficulty = (*material * 0.001).max(1.0);
+                    *player.difficulty = (*player.material * 0.001).max(1.0);
 
-                    let forward = vec2(rot.sin(), -rot.cos());
+                    let forward = vec2(player.rot.sin(), -player.rot.cos());
 
                     let acc = if is_key_down(KeyCode::W) {
                         forward * SHIP_THRUST
@@ -517,27 +521,27 @@ fn player_system(dt: f32) -> BoxedSystem {
                     if acc.length() > 0.0 && current_plume_cooldown <= 0.0 {
                         current_plume_cooldown = PLUME_COOLDOWN;
                         create_particle(8.0, 0.5, ORANGE)
-                            .set(position(), *pos - 30.0 * forward)
-                            .set(velocity(), *vel + -acc)
+                            .set(position(), *player.pos - 30.0 * forward)
+                            .set(velocity(), *player.vel + -acc)
                             .spawn_into(cmd)
                     }
 
                     if is_key_down(KeyCode::A) {
-                        *rot -= SHIP_TURN * dt;
+                        *player.rot -= SHIP_TURN * dt;
                     }
                     if is_key_down(KeyCode::D) {
-                        *rot += SHIP_TURN * dt;
+                        *player.rot += SHIP_TURN * dt;
                     }
 
                     if is_key_down(KeyCode::Space) && current_weapon_cooldown <= 0.0 {
                         current_weapon_cooldown = WEAPON_COOLDOWN;
-                        create_bullet(player)
-                            .set(velocity(), *vel + BULLET_SPEED * forward)
-                            .set(position(), *pos + 30.0 * forward)
+                        create_bullet(player.id)
+                            .set(velocity(), *player.vel + BULLET_SPEED * forward)
+                            .set(position(), *player.pos + 30.0 * forward)
                             .spawn_into(cmd)
                     }
 
-                    *vel += acc * dt;
+                    *player.vel += acc * dt;
                 }
             },
         )

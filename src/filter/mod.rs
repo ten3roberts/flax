@@ -390,7 +390,7 @@ where
             // This is caused by one of the sides being past the end of the
             // other slice. As such, force the slice lagging behind to catch up
             // to the upper floor
-            let max = l.start.max(r.start).min(slots.end);
+            let max = l.start.clamp(r.start, slots.end);
 
             let slots = Slice::new(max, slots.end);
             let l = self.left.filter(slots);

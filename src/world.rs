@@ -1,7 +1,7 @@
+use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
-use alloc::{boxed::Box, collections::BTreeMap};
 use core::iter::once;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
@@ -16,7 +16,7 @@ use core::{
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::events::{EventHandler, Subscriber};
+use crate::events::{EventHandler, RemoveSubscriber, Subscriber};
 use crate::filter::ArchetypeFilter;
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
@@ -180,32 +180,12 @@ impl Archetypes {
     }
 }
 
-type EventSenderDyn = Box<dyn Fn(Entity, *const u8) -> bool + Send + Sync>;
-
-#[derive(Default)]
-struct EventRegistry {
-    inner: BTreeMap<ComponentKey, Vec<EventSenderDyn>>,
-}
-
-impl EventRegistry {
-    fn register(&mut self, component: ComponentKey, sender: EventSenderDyn) {
-        self.inner.entry(component).or_default().push(sender)
-    }
-
-    fn send(&mut self, component: ComponentKey, id: Entity, value: *const u8) {
-        if let Some(senders) = self.inner.get_mut(&component) {
-            senders.retain_mut(|v| v(id, value));
-        }
-    }
-}
-
 /// Holds the entities and components of the ECS.
 pub struct World {
     entities: EntityStores,
     pub(crate) archetypes: Archetypes,
     change_tick: AtomicU32,
 
-    on_removed: EventRegistry,
     has_reserved: AtomicBool,
 }
 
@@ -216,7 +196,6 @@ impl World {
             entities: EntityStores::new(),
             archetypes: Archetypes::new(),
             change_tick: AtomicU32::new(0b11),
-            on_removed: EventRegistry::default(),
             has_reserved: AtomicBool::new(false),
         }
     }
@@ -558,12 +537,7 @@ impl World {
 
         let src = self.archetypes.get_mut(arch);
 
-        let swapped = unsafe {
-            src.take(slot, |c, p| {
-                self.on_removed.send(c.key(), id, p);
-                (c.drop)(p)
-            })
-        };
+        let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -736,7 +710,6 @@ impl World {
 
         let swapped = unsafe {
             src.take(slot, |c, p| {
-                self.on_removed.send(c.key(), id, p);
                 (c.drop)(p);
             })
         };
@@ -1019,7 +992,6 @@ impl World {
             slot,
             |_, p| {
                 let drop = on_drop.take().expect("On drop called more than once");
-                self.on_removed.send(component.key(), id, p);
                 (drop)(p);
             },
             change_tick,
@@ -1317,19 +1289,12 @@ impl World {
     ///
     /// The affected entity and component will be transmitted when the component is removed,
     /// or when the entity is despawned.
-    ///
-    /// At consumption, the entity may not be alive
     pub fn on_removed<T: ComponentValue + Clone>(
         &mut self,
         component: Component<T>,
         handler: impl EventHandler<(Entity, T)> + 'static + Send + Sync,
     ) {
-        let func = move |id: Entity, ptr: *const u8| unsafe {
-            let val = ptr.cast::<T>().as_ref().expect("not null").clone();
-            handler.on_event((id, val))
-        };
-
-        self.on_removed.register(component.key(), Box::new(func));
+        self.subscribe(RemoveSubscriber::new(component, handler))
     }
 
     /// Subscribe to events in the world using the provided subscriber.
