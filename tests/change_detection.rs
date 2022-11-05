@@ -92,13 +92,13 @@ fn change_detection() {
         .inspect(|v| eprintln!("removed: {v:?}"))
         .map(|v| v.0)
         .collect_vec();
+
     assert_eq!(removed, [ids[11], ids[12], ids[30]]);
-    drop(removed_rx);
 
     world.despawn(ids[35]).unwrap();
 
-    // let removed = removed_rx.drain().map(|v| v.0).collect_vec();
-    // assert_eq!(removed, [ids[35]]);
+    let removed = removed_rx.drain().map(|v| v.0).collect_vec();
+    assert_eq!(removed, [ids[35]]);
 
     dbg!(removed);
 }

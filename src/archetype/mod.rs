@@ -641,6 +641,11 @@ impl Archetype {
         // Allocate but do not create spawn events
         let dst_slot = dst.allocate_moved(id);
 
+        // Before the cells
+        for subscriber in &self.subscribers {
+            subscriber.on_moved_pre(id, slot, self, dst);
+        }
+
         for (&key, cell) in &mut self.cells {
             // let info = cell.info;
             // let storage = cell.storage.get_mut();
@@ -651,15 +656,6 @@ impl Archetype {
                 cell.move_to(slot, dst_cell, dst_slot);
             } else {
                 cell.take(slot, &mut on_drop);
-                // storage.swap_remove(slot, |p| (on_drop)(&info, p));
-                // changes.swap_remove(slot, last, |_, _| {});
-
-                // // Notify the subscribers that the component was removed
-                // cell.subscribers
-                //     .iter()
-                //     .for_each(|v| v.on_change(self, key, ChangeKind::Removed));
-
-                // Push a removal event to dst
                 dst.push_removed(key, Change::new(Slice::single(dst_slot), tick));
             }
         }
@@ -673,12 +669,8 @@ impl Archetype {
             })
         }
 
-        for subscriber in &self.subscribers {
-            subscriber.on_moved_from(id, self, dst);
-        }
-
         for subscriber in &dst.subscribers {
-            subscriber.on_moved_to(id, self, dst);
+            subscriber.on_moved_post(id, self, dst);
         }
 
         let swapped = self.remove_slot(slot);
@@ -700,6 +692,10 @@ impl Archetype {
     ) -> Option<(Entity, Slot)> {
         let id = self.entity(slot).expect("Invalid entity");
 
+        for subscriber in &self.subscribers {
+            subscriber.on_despawned(id, slot, self);
+        }
+
         for cell in self.cells.values_mut() {
             cell.take(slot, &mut on_move)
             // let storage = cell.storage.get_mut();
@@ -720,10 +716,6 @@ impl Archetype {
         // Remove the component removals for slot
         for removed in self.removals.values_mut() {
             removed.remove(slot, |_| {});
-        }
-
-        for subscriber in &self.subscribers {
-            subscriber.on_despawned(id, self);
         }
 
         self.remove_slot(slot)
@@ -762,6 +754,12 @@ impl Archetype {
         let entities = mem::take(&mut self.entities);
 
         let dst_slots = dst.allocate_n_moved(&entities);
+
+        for subscriber in &self.subscribers {
+            for (slot, &id) in entities.iter().enumerate() {
+                subscriber.on_moved_pre(id, slot, self, dst);
+            }
+        }
 
         for (key, cell) in &mut self.cells {
             let dst_cell = dst.cells.get_mut(key);
@@ -811,15 +809,9 @@ impl Archetype {
 
         debug_assert_eq!(self.len(), 0);
 
-        for subscriber in &self.subscribers {
-            for &id in &entities {
-                subscriber.on_moved_from(id, self, dst);
-            }
-        }
-
         for subscriber in &dst.subscribers {
             for &id in &entities {
-                subscriber.on_moved_to(id, self, dst);
+                subscriber.on_moved_post(id, self, dst);
             }
         }
 
@@ -843,8 +835,14 @@ impl Archetype {
 
     /// Drops all components while keeping the storage intact
     pub(crate) fn clear(&mut self) {
+        for (slot, &id) in self.entities.iter().enumerate() {
+            for s in &self.subscribers {
+                s.on_despawned(id, slot, self);
+            }
+        }
+
         for cell in self.cells.values_mut() {
-            cell.storage.get_mut().clear()
+            cell.clear()
         }
 
         self.entities.clear();
@@ -884,8 +882,8 @@ impl Archetype {
 
     pub(crate) fn drain(&mut self) -> ArchetypeDrain {
         self.subscribers.iter().for_each(|v| {
-            for &id in &self.entities {
-                v.on_despawned(id, self);
+            for (slot, &id) in self.entities.iter().enumerate() {
+                v.on_despawned(id, slot, self);
             }
         });
 
