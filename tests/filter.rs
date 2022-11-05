@@ -1,5 +1,6 @@
 use flax::*;
 use itertools::Itertools;
+use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
 component! {
@@ -208,4 +209,122 @@ fn bitops() {
             .collect_vec(),
         vec![id2, id3]
     );
+}
+
+#[test]
+fn sparse_or() {
+    let mut world = World::new();
+
+    let ids = (0..10)
+        .map(|_| {
+            Entity::builder()
+                .set(a(), 5.4)
+                .set(b(), "Foo".into())
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let mut query = Query::new(entity_ids()).filter(a().modified() | b().modified());
+
+    assert_eq!(query.borrow(&world).iter().collect_vec(), ids);
+
+    // ###--------
+    // --###---##
+
+    world.set(ids[0], a(), 7.1).unwrap();
+    world.set(ids[1], a(), 7.1).unwrap();
+    world.set(ids[2], a(), 7.1).unwrap();
+
+    world.set(ids[2], b(), "Bar".into()).unwrap();
+    world.set(ids[3], b(), "Bar".into()).unwrap();
+    world.set(ids[4], b(), "Bar".into()).unwrap();
+    world.set(ids[8], b(), "Bar".into()).unwrap();
+    world.set(ids[9], b(), "Bar".into()).unwrap();
+
+    {
+        let mut batches = query.borrow(&world);
+        let mut batches = batches.iter_batched();
+
+        assert_eq!(batches.next().unwrap().collect_vec(), ids[0..=4]);
+        assert_eq!(batches.next().unwrap().collect_vec(), ids[8..=9]);
+        assert!(batches.next().is_none());
+    }
+
+    // Check access compatability
+    let system_a = System::builder()
+        .with(query)
+        .build(|_query: QueryBorrow<EntityIds, _>| {})
+        .boxed();
+
+    let system_b = System::builder()
+        .with(Query::new(a().as_mut()))
+        .build(|_query: QueryBorrow<_, _>| {})
+        .boxed();
+
+    let mut schedule = Schedule::from([system_a, system_b]);
+    let batches = schedule.batch_info(&mut world);
+    assert_eq!(batches.len(), 2);
+}
+
+#[test]
+fn sparse_and() {
+    let mut world = World::new();
+
+    let ids = (0..10)
+        .map(|_| {
+            Entity::builder()
+                .set(a(), 5.4)
+                .set(b(), "Foo".into())
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let _ = (0..10)
+        .map(|_| {
+            Entity::builder()
+                .set(a(), 5.4)
+                .set(c(), Arc::new(5))
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let mut query = Query::new(entity_ids()).filter(a().modified() & b().modified());
+
+    assert_eq!(query.borrow(&world).iter().collect_vec(), ids);
+
+    // ###--------
+    // --###---##
+
+    world.set(ids[0], a(), 7.1).unwrap();
+    world.set(ids[1], a(), 7.1).unwrap();
+    world.set(ids[2], a(), 7.1).unwrap();
+
+    world.set(ids[2], b(), "Bar".into()).unwrap();
+    world.set(ids[3], b(), "Bar".into()).unwrap();
+    world.set(ids[4], b(), "Bar".into()).unwrap();
+    world.set(ids[8], b(), "Bar".into()).unwrap();
+    world.set(ids[9], b(), "Bar".into()).unwrap();
+
+    {
+        let mut batches = query.borrow(&world);
+        let mut batches = batches.iter_batched();
+
+        assert_eq!(batches.next().unwrap().collect_vec(), ids[2..=2]);
+        assert!(batches.next().is_none());
+    }
+
+    // Check access compatability
+    let system_a = System::builder()
+        .with(query)
+        .build(|_query: QueryBorrow<EntityIds, _>| {})
+        .boxed();
+
+    let system_b = System::builder()
+        .with(Query::new(a().as_mut()).with(c()))
+        .build(|_query: QueryBorrow<_, _>| {})
+        .boxed();
+
+    let mut schedule = Schedule::from([system_a, system_b]);
+    let batches = schedule.batch_info(&mut world);
+    assert_eq!(batches.len(), 1);
 }

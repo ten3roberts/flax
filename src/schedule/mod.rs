@@ -134,7 +134,7 @@ pub struct Schedule {
     archetype_gen: u32,
 }
 
-/// Holds information regarding a schedules batches
+/// Holds information regarding a schedule's batches
 #[derive(Debug, Clone)]
 pub struct BatchInfos(Vec<BatchInfo>);
 
