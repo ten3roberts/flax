@@ -72,11 +72,8 @@
 //! #   player: (),
 //! #   items: Vec<String>,
 //! # }
-//!
 //! # fn main() -> color_eyre::Result<()> {
-//!
 //! # let mut world = World::new();
-//!
 //! let regen_system = System::builder()
 //!     .with(Query::new((health().as_mut(), regen())))
 //!     .for_each(|(health, regen)| {
