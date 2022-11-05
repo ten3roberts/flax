@@ -74,9 +74,6 @@ Queries with logic can be abstracted into a system, and multiple systems can be
 collected into a schedule.
 
 ```rust
-
-
-
 let regen_system = System::builder()
     .with(Query::new((health().as_mut(), regen())))
     .for_each(|(health, regen)| {
