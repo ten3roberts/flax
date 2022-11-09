@@ -163,6 +163,7 @@ fn relations() {
 
     eprintln!("Before: {world:#?}");
     world.clear(parent2).unwrap();
+    world.detach(parent2);
     eprintln!("After: {world:#?}");
 
     assert!(world.is_alive(parent2));

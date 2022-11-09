@@ -74,6 +74,11 @@ impl EntityBuilder {
         self.buffer.get(component)
     }
 
+    /// Remove a component from the component buffer
+    pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Option<T> {
+        self.buffer.remove(component)
+    }
+
     /// Attach a child with the provided relation and value.
     /// The child is taken and cleared
     pub fn attach_with<T: ComponentValue>(
@@ -202,6 +207,13 @@ mod test {
 
         assert_eq!(builder.get(name()), Some(&"Player".into()));
         assert_eq!(builder.get(health()), Some(&100.0));
-        builder.spawn(&mut world);
+        builder.remove(health());
+        assert_eq!(builder.get(health()), None);
+
+        builder.set(health(), 50.0);
+        let id = builder.spawn(&mut world);
+
+        assert_eq!(world.get(id, name()).as_deref(), Ok(&"Player".into()));
+        assert_eq!(world.get(id, health()).as_deref(), Ok(&50.0));
     }
 }
