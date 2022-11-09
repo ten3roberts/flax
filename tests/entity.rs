@@ -1,4 +1,9 @@
-use flax::{component, name, Entity, World};
+use flax::{
+    child_of, component,
+    events::{ChangeEvent, ChangeSubscriber, ShapeSubscriber},
+    name, Entity, Query, RelationExt, World,
+};
+use itertools::Itertools;
 
 component! {
     a: i32,
@@ -11,7 +16,7 @@ component! {
 fn entity_ref() {
     use flax::{
         entity_ids,
-        events::{ArchetypeSubscriber, ChangeEvent, ChangeSubscriber, ShapeEvent, ShapeSubscriber},
+        events::{ChangeEvent, ChangeSubscriber, ShapeEvent, ShapeSubscriber},
         Query,
     };
     use itertools::Itertools;
@@ -74,4 +79,85 @@ fn entity_ref() {
     );
 
     assert_eq!(query.borrow(&world).iter().collect_vec(), [id]);
+}
+
+#[test]
+fn entity_hierarchy() {
+    let mut world = World::new();
+    let (tx, rx) = flume::unbounded();
+
+    world.subscribe(ShapeSubscriber::new(
+        name().with() & child_of.with_relation(),
+        tx,
+    ));
+
+    let (tx, track_a) = flume::unbounded();
+    world.subscribe(ChangeSubscriber::new(&[a().key()], tx));
+
+    let id = Entity::builder()
+        .set(name(), "root".into())
+        .set(a(), 1)
+        .attach(child_of, Entity::builder().set(name(), "child_1".into()))
+        .attach(
+            child_of,
+            Entity::builder()
+                .set(name(), "child_2".into())
+                .attach(child_of, Entity::builder().set(name(), "child_2_1".into())),
+        )
+        .spawn(&mut world);
+
+    assert_eq!(rx.drain().len(), 3);
+    assert_eq!(
+        track_a.drain().collect_vec(),
+        [ChangeEvent {
+            kind: flax::ChangeKind::Inserted,
+            component: a().key()
+        }]
+    );
+    assert_eq!(
+        Query::new(name())
+            .borrow(&world)
+            .iter()
+            .cloned()
+            .sorted()
+            .collect_vec(),
+        [
+            "child_1".to_string(),
+            "child_2".into(),
+            "child_2_1".into(),
+            "root".into()
+        ]
+    );
+
+    world.despawn_children(id, child_of).unwrap();
+
+    assert_eq!(rx.drain().len(), 3);
+    assert_eq!(
+        Query::new(name())
+            .borrow(&world)
+            .iter()
+            .cloned()
+            .collect_vec(),
+        ["root".to_string()]
+    );
+
+    let mut entity = world.entity_mut(id).unwrap();
+    assert_eq!(entity.get(name()).as_deref(), Ok(&"root".to_string()));
+    assert_eq!(entity.get(a()).as_deref(), Ok(&1));
+
+    entity.retain(|k| k == name().key());
+
+    assert_eq!(entity.get(name()).as_deref(), Ok(&"root".to_string()));
+    assert_eq!(
+        entity.get(a()).as_deref(),
+        Err(&flax::Error::MissingComponent(id, a().info()))
+    );
+    assert_eq!(rx.drain().collect_vec(), []);
+    assert_eq!(
+        track_a.drain().collect_vec(),
+        [ChangeEvent {
+            kind: flax::ChangeKind::Removed,
+            component: a().key()
+        }]
+    );
 }

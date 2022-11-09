@@ -6,7 +6,7 @@ use crate::{
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentValue, Entity, Error, World,
+    Component, ComponentKey, ComponentValue, Entity, Error, World,
 };
 
 /// Borrow all the components of an entity at once.
@@ -66,6 +66,16 @@ impl<'a> EntityRefMut<'a> {
 
         self.loc = loc;
         Ok(old)
+    }
+
+    /// Retain only the components specified by the predicate
+    pub fn retain(&mut self, f: impl FnMut(ComponentKey) -> bool) {
+        self.loc = self.world.retain_entity_components(self.id, self.loc, f)
+    }
+
+    /// See: [`crate::World::clear`]
+    pub fn clear(&mut self) {
+        self.retain(|_| false)
     }
 
     /// Returns the entity id
