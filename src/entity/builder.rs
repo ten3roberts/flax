@@ -64,6 +64,17 @@ impl EntityBuilder {
         self.set(component, Default::default())
     }
 
+    /// Convenience function for only setting the component if Some.
+    pub fn set_opt<T: ComponentValue>(
+        &mut self,
+        component: Component<T>,
+        value: Option<T>,
+    ) -> &mut Self {
+        if let Some(value) = value {
+            self.buffer.set(component, value);
+        }
+        self
+    }
     /// Return a mutable reference to the stored component.
     pub fn get_mut<T: ComponentValue>(&mut self, component: Component<T>) -> Option<&mut T> {
         self.buffer.get_mut(component)
@@ -194,6 +205,7 @@ mod test {
             health: f32,
             position: Vec3,
             is_player: (),
+            is_enemy: (),
         }
 
         let mut world = World::new();
@@ -202,7 +214,8 @@ mod test {
         builder
             .set(name(), "Player".into())
             .set(position(), vec3(0.0, 4.0, 2.0))
-            .set(health(), 100.0)
+            .set_opt(is_enemy(), None)
+            .set_opt(health(), Some(100.0))
             .tag(is_player());
 
         assert_eq!(builder.get(name()), Some(&"Player".into()));
@@ -215,5 +228,9 @@ mod test {
 
         assert_eq!(world.get(id, name()).as_deref(), Ok(&"Player".into()));
         assert_eq!(world.get(id, health()).as_deref(), Ok(&50.0));
+        assert_eq!(
+            world.get(id, is_enemy()).as_deref(),
+            Err(&Error::MissingComponent(id, is_enemy().info()))
+        );
     }
 }

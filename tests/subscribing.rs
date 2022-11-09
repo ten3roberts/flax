@@ -1,16 +1,10 @@
 use core::iter::once;
 use core::iter::repeat;
 
-use flax::events::ArchetypeSubscriber;
 use flax::events::ChangeSubscriber;
 use flax::events::ShapeEvent;
 use flax::events::ShapeSubscriber;
-use flax::events::SubscriberFilterExt;
-use flax::{
-    component, entity_ids,
-    events::{ArchetypeEvent, ChangeEvent},
-    name, Entity, Query, World,
-};
+use flax::{component, entity_ids, events::ChangeEvent, name, Entity, Query, World};
 use itertools::Itertools;
 use pretty_assertions::assert_eq;
 
