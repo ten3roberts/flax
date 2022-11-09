@@ -11,10 +11,7 @@ component! {
 fn entity_ref() {
     use flax::{
         entity_ids,
-        events::{
-            ArchetypeSubscriber, ChangeEvent, ChangeSubscriber, ShapeEvent, ShapeSubscriber,
-            SubscriberFilterExt,
-        },
+        events::{ArchetypeSubscriber, ChangeEvent, ChangeSubscriber, ShapeEvent, ShapeSubscriber},
         Query,
     };
     use itertools::Itertools;

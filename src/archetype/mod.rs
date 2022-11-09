@@ -785,13 +785,6 @@ impl Archetype {
                 // unsafe { dst.storage.get_mut().append(storage) }
             } else {
                 cell.clear();
-                // cell.take_all()
-                // storage.clear();
-                // // Notify the subscribers that the component was removed
-                // cell.subscribers
-                //     .iter()
-                //     .for_each(|v| v.on_change(self, *key, ChangeKind::Removed));
-
                 dst.push_removed(*key, Change::new(dst_slots, tick))
             }
         }
@@ -833,7 +826,7 @@ impl Archetype {
         self.entities.get(slot).copied()
     }
 
-    /// Drops all components while keeping the storage intact
+    /// Drops all components and changes.
     pub(crate) fn clear(&mut self) {
         for (slot, &id) in self.entities.iter().enumerate() {
             for s in &self.subscribers {

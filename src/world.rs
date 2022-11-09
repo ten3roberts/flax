@@ -151,6 +151,10 @@ impl Archetypes {
         self.inner.iter()
     }
 
+    pub fn iter_mut(&mut self) -> EntityStoreIterMut<Archetype> {
+        self.inner.iter_mut()
+    }
+
     /// Despawn an archetype, leaving a hole in the tree.
     ///
     /// It is the callers responibility to cleanup child nodes if the node is internal
@@ -555,12 +559,47 @@ impl World {
         }
 
         *self.location_mut(id).unwrap() = EntityLocation {
-            slot: self.archetypes.get_root().allocate(id),
+            slot: dst_slot,
             arch_id: self.archetypes.root,
         };
 
-        self.detach(id);
         Ok(())
+    }
+
+    fn retain_entity_components(
+        &mut self,
+        id: Entity,
+        loc: EntityLocation,
+        p: impl Fn(ComponentKey) -> bool,
+    ) {
+        let src = self.archetypes.get(loc.arch_id);
+        let change_tick = self.advance_change_tick();
+
+        let dst_components: SmallVec<[ComponentInfo; 8]> =
+            src.components().filter(|v| p(v.key())).collect();
+
+        let (dst_id, _) = self.archetypes.init(dst_components);
+
+        let (src, dst) = self.archetypes.get_disjoint(loc.arch_id, dst_id).unwrap();
+
+        let (dst_slot, swapped) =
+            unsafe { src.move_to(dst, loc.slot, |c, p| (c.drop)(p), change_tick) };
+
+        if let Some((swapped, slot)) = swapped {
+            // The last entity in src was moved into the slot occupied by id
+            self.entities
+                .init(swapped.kind())
+                .get_mut(swapped)
+                .expect("Invalid entity id")
+                .slot = slot;
+        }
+
+        let loc = EntityLocation {
+            slot: dst_slot,
+            arch_id: dst_id,
+        };
+
+        *self.location_mut(id).expect("Entity is not valid") = loc;
     }
 
     /// Add the components stored in a component buffer to an entity
@@ -708,9 +747,9 @@ impl World {
             slot,
         } = self.init_location(id)?;
 
-        if id.is_static() {
-            panic!("Attempt to despawn static component");
-        }
+        // if id.is_static() {
+        //     panic!("Attempt to despawn static component");
+        // }
 
         let src = self.archetypes.get_mut(arch);
 
@@ -755,23 +794,40 @@ impl World {
         id: Entity,
         relation: impl RelationExt<T>,
     ) -> Result<()> {
-        let mut to_remove = vec![id];
-
-        while let Some(id) = to_remove.pop() {
-            for (_, arch) in self
-                .archetypes
-                .iter()
-                .filter(|(_, arch)| arch.relations().any(|v| v == relation.of(id).key()))
-            {
-                to_remove.extend_from_slice(arch.entities());
-            }
-
-            self.despawn(id)?;
-        }
+        self.despawn_children(id, relation);
+        self.despawn(id)?;
 
         Ok(())
     }
 
+    /// Despawns all children of an entity recursively
+    pub fn despawn_children<T: ComponentValue>(
+        &mut self,
+        id: Entity,
+        relation: impl RelationExt<T>,
+    ) -> Result<()> {
+        self.flush_reserved();
+        let mut stack = vec![id];
+
+        while let Some(id) = stack.pop() {
+            for (_, arch) in self
+                .archetypes
+                .iter_mut()
+                .filter(|(_, arch)| arch.relations().any(|v| v == relation.of(id).key()))
+            {
+                // Remove all children of the children
+                for &id in arch.entities() {
+                    self.entities.init(id.kind()).despawn(id).unwrap();
+                    debug_assert!(!id.is_static());
+                }
+
+                stack.extend_from_slice(arch.entities());
+                arch.clear();
+            }
+        }
+
+        Ok(())
+    }
     /// Removes all instances of relations and component of the given entities
     /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
     /// on all the children.

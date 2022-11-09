@@ -3,6 +3,8 @@ use core::iter::repeat;
 
 use flax::events::ArchetypeSubscriber;
 use flax::events::ChangeSubscriber;
+use flax::events::ShapeEvent;
+use flax::events::ShapeSubscriber;
 use flax::events::SubscriberFilterExt;
 use flax::{
     component, entity_ids,
@@ -177,7 +179,7 @@ fn moving_changes() {
     let mut world = World::new();
 
     let (tx, tracking) = flume::unbounded();
-    world.subscribe(ArchetypeSubscriber::new(tx).filter(a().with() & c().without()));
+    world.subscribe(ShapeSubscriber::new(a().with() & c().without(), tx));
     let (tx, modified) = flume::unbounded();
 
     world.subscribe(ChangeSubscriber::new(&[a().key()], tx));
@@ -196,7 +198,7 @@ fn moving_changes() {
     assert_eq!(
         tracking.drain().collect_vec(),
         ids.iter()
-            .map(|&id| { ArchetypeEvent::Inserted(id) })
+            .map(|&id| { ShapeEvent::Matched(id) })
             .collect_vec()
     );
 
@@ -234,7 +236,7 @@ fn moving_changes() {
         tracking.drain().collect_vec(),
         [ids[2], ids[6], ids[1]]
             .iter()
-            .map(|&id| { ArchetypeEvent::Removed(id) })
+            .map(|&id| { ShapeEvent::Unmatched(id) })
             .collect_vec()
     );
 

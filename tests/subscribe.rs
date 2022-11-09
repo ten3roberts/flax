@@ -11,6 +11,7 @@ component! {
 fn subscribe() {
     use flax::events::{ArchetypeSubscriber, SubscriberFilterExt};
     use flume::TryRecvError;
+    use itertools::Itertools;
 
     let mut world = World::new();
 
@@ -27,7 +28,10 @@ fn subscribe() {
 
     world.set(id, name(), "id".into()).unwrap();
 
-    assert_eq!(rx.try_recv(), Err(flume::TryRecvError::Empty));
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [ArchetypeEvent::Removed(id), ArchetypeEvent::Inserted(id)]
+    );
 
     let id2 = Entity::builder()
         .set(a(), 5.7)
@@ -76,4 +80,47 @@ fn subscribe_inverted() {
     world.remove(id, a()).unwrap();
 
     assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Removed(id)));
+}
+
+#[test]
+#[cfg(feature = "flume")]
+fn subscribe_filter() {
+    use flax::events::{ChangeEvent, ChangeSubscriber, SubscriberFilterExt};
+    use itertools::Itertools;
+
+    let mut world = World::new();
+    let (tx, rx) = flume::unbounded();
+    world.subscribe(ChangeSubscriber::new(&[a().key()], tx).filter(b().with()));
+
+    let id = Entity::builder()
+        .set(a(), 1.5)
+        .set(b(), 7)
+        .spawn(&mut world);
+
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [ChangeEvent {
+            kind: ChangeKind::Inserted,
+            component: a().key()
+        }]
+    );
+
+    world.set(id, a(), 7.0).unwrap();
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [ChangeEvent {
+            kind: ChangeKind::Modified,
+            component: a().key()
+        }]
+    );
+
+    world.despawn(id).unwrap();
+
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [ChangeEvent {
+            kind: ChangeKind::Removed,
+            component: a().key()
+        }]
+    );
 }
