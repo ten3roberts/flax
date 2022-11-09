@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] - 2022-11-09
+
+### Bug Fixes
+
+- Clear not generating removal events for queries
+- ChangeSubscriber not working with filter
+
+### Features
+
+- EntityRefMut::retain
+- EntityBuilder::set_opt
+
+### Miscellaneous Tasks
+
+- Update changelog
+
 ## [0.3.1] - 2022-11-05
 
 ### Bug Fixes
