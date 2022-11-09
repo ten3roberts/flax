@@ -566,17 +566,17 @@ impl World {
         Ok(())
     }
 
-    fn retain_entity_components(
+    pub(crate) fn retain_entity_components(
         &mut self,
         id: Entity,
         loc: EntityLocation,
-        p: impl Fn(ComponentKey) -> bool,
-    ) {
+        mut f: impl FnMut(ComponentKey) -> bool,
+    ) -> EntityLocation {
         let src = self.archetypes.get(loc.arch_id);
         let change_tick = self.advance_change_tick();
 
         let dst_components: SmallVec<[ComponentInfo; 8]> =
-            src.components().filter(|v| p(v.key())).collect();
+            src.components().filter(|v| f(v.key())).collect();
 
         let (dst_id, _) = self.archetypes.init(dst_components);
 
@@ -600,6 +600,7 @@ impl World {
         };
 
         *self.location_mut(id).expect("Entity is not valid") = loc;
+        loc
     }
 
     /// Add the components stored in a component buffer to an entity
@@ -794,7 +795,7 @@ impl World {
         id: Entity,
         relation: impl RelationExt<T>,
     ) -> Result<()> {
-        self.despawn_children(id, relation);
+        self.despawn_children(id, relation)?;
         self.despawn(id)?;
 
         Ok(())
