@@ -364,34 +364,22 @@ where
 {
     #[inline(always)]
     fn on_moved_pre(&self, id: Entity, slot: Slot, from: &Archetype, to: &Archetype) {
-        let b = self.filter.static_matches(to);
-
-        if !b {
-            self.inner.on_moved_pre(id, slot, from, to)
-        }
+        self.inner.on_moved_pre(id, slot, from, to)
     }
 
     #[inline(always)]
     fn on_moved_post(&self, id: Entity, from: &Archetype, to: &Archetype) {
-        let a = self.filter.static_matches(from);
-
-        if !a {
-            self.inner.on_moved_post(id, from, to)
-        }
+        self.inner.on_moved_post(id, from, to)
     }
 
     #[inline(always)]
     fn on_spawned(&self, id: Entity, arch: &Archetype) {
-        if self.filter.static_matches(arch) {
-            self.inner.on_spawned(id, arch)
-        }
+        self.inner.on_spawned(id, arch)
     }
 
     #[inline(always)]
     fn on_despawned(&self, id: Entity, slot: Slot, arch: &Archetype) {
-        if self.filter.static_matches(arch) {
-            self.inner.on_despawned(id, slot, arch)
-        }
+        self.inner.on_despawned(id, slot, arch)
     }
 
     #[inline(always)]
@@ -401,12 +389,16 @@ where
 
     #[inline]
     fn is_interested(&self, arch: &Archetype) -> bool {
-        self.filter.static_matches(arch) && self.inner.is_connected()
+        self.filter.static_matches(arch) && self.inner.is_interested(arch)
     }
 
     #[inline(always)]
     fn is_interested_component(&self, component: ComponentKey) -> bool {
         self.inner.is_interested_component(component)
+    }
+
+    fn on_change(&self, component: ComponentInfo, kind: ChangeKind) {
+        self.inner.on_change(component, kind)
     }
 }
 
