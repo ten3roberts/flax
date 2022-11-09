@@ -12,6 +12,7 @@ use core::{
     ptr,
     sync::atomic::{AtomicU32, Ordering},
 };
+use smallvec::SmallVec;
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
@@ -535,9 +536,14 @@ impl World {
             slot,
         } = self.init_location(id)?;
 
-        let src = self.archetypes.get_mut(arch);
+        let change_tick = self.advance_change_tick();
+        let (src, dst) = self
+            .archetypes
+            .get_disjoint(arch, self.archetypes.root)
+            .unwrap();
 
-        let swapped = unsafe { src.take(slot, |c, p| (c.drop)(p)) };
+        let (dst_slot, swapped) =
+            unsafe { src.move_to(dst, slot, |c, p| (c.drop)(p), change_tick) };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id

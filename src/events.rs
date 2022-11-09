@@ -3,7 +3,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
     archetype::{Archetype, Slot},
-    And, ChangeKind, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, StaticFilter,
+    And, AsBorrow, ChangeKind, Component, ComponentInfo, ComponentKey, ComponentValue, Entity,
+    StaticFilter,
 };
 
 /// A subscriber of events to the world.
@@ -17,7 +18,7 @@ pub trait Subscriber: 'static + Send + Sync {
     /// Same as [Subscriber::on_moved_pre] but called from the context of the destination
     /// archetype
     fn on_moved_post(&self, _id: Entity, _from: &Archetype, _to: &Archetype) {}
-    /// Called when a new entity is allocated in the archetype
+    /// Called when a new entity is allocated in the world
     fn on_spawned(&self, _id: Entity, _arch: &Archetype) {}
     /// Called when an entity is completely removed from the archetypes.
     fn on_despawned(&self, _id: Entity, _slot: Slot, _arch: &Archetype) {}
@@ -48,9 +49,11 @@ where
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// Describes an event in the world
 pub enum ArchetypeEvent {
-    /// The entity matches the filter
+    /// The entity was inserted into a matching archetype
     Inserted(Entity),
-    /// The entity no longer matches the filter
+    /// The entity was removed from a matching archetype.
+    /// Note: The entity could be moved to another still matching archetype, in which case an
+    /// `Inserted` event is emitted afterwards
     Removed(Entity),
 }
 
@@ -108,6 +111,114 @@ where
     }
 }
 
+/// Event regarding a shape change of an entity.
+///
+/// This is similar to [ArchetypeEvent], but regards matching and then not
+/// matching a filter.
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum ShapeEvent {
+    /// A entity fulfills the shape. This can be either because the entity was spawned directly
+    /// with the required components, or the required components were inserted
+    Matched(Entity),
+    /// An entity no longer fulfills the shape, either because of despawn or component removal.
+    Unmatched(Entity),
+}
+
+/// Listen to shape changes of entities, such as a required component being removed, or an entity
+/// fulfilling the filter.
+pub struct ShapeSubscriber<F, L> {
+    shape: F,
+    listener: L,
+    connected: AtomicBool,
+}
+
+impl<F, L> ShapeSubscriber<F, L> {
+    /// Create a new subscriber to handle
+    pub fn new(shape: F, listener: L) -> Self {
+        Self {
+            shape,
+            listener,
+            connected: AtomicBool::new(true),
+        }
+    }
+}
+
+impl<F, G, L> SubscriberFilterExt<G> for ShapeSubscriber<F, L>
+where
+    F: StaticFilter + ComponentValue,
+    G: StaticFilter + ComponentValue,
+    L: ComponentValue + EventHandler<ShapeEvent>,
+{
+    type Output = FilterSubscriber<G, Self>;
+
+    fn filter(self, filter: G) -> Self::Output {
+        FilterSubscriber::new(filter, self)
+    }
+}
+
+impl<F, L> Subscriber for ShapeSubscriber<F, L>
+where
+    F: StaticFilter + ComponentValue,
+    L: ComponentValue + EventHandler<ShapeEvent>,
+{
+    #[inline(always)]
+    fn on_moved_pre(&self, id: Entity, _slot: Slot, _from: &Archetype, to: &Archetype) {
+        // Shape still matches
+        if self.shape.static_matches(to) {
+            return;
+        }
+
+        // If the shape was moved to an archetype not matching the shape, generate a
+        // unmatched event.
+        if !self.listener.on_event(ShapeEvent::Unmatched(id)) {
+            self.connected.store(false, Ordering::Relaxed)
+        }
+    }
+
+    #[inline(always)]
+    fn on_moved_post(&self, id: Entity, from: &Archetype, _to: &Archetype) {
+        // Shape matched before and now
+        if self.shape.static_matches(from) {
+            return;
+        }
+
+        // If the shape was from an archetype not matching the shape generate an
+        // matched event.
+        if !self.listener.on_event(ShapeEvent::Matched(id)) {
+            self.connected.store(false, Ordering::Relaxed)
+        }
+    }
+
+    #[inline(always)]
+    fn on_spawned(&self, id: Entity, _arch: &Archetype) {
+        if !self.listener.on_event(ShapeEvent::Matched(id)) {
+            self.connected.store(false, Ordering::Relaxed)
+        }
+    }
+
+    #[inline(always)]
+    fn on_despawned(&self, id: Entity, _slot: Slot, _arch: &Archetype) {
+        if !self.listener.on_event(ShapeEvent::Unmatched(id)) {
+            self.connected.store(false, Ordering::Relaxed)
+        }
+    }
+
+    #[inline(always)]
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed)
+    }
+
+    #[inline(always)]
+    fn is_interested(&self, arch: &Archetype) -> bool {
+        self.shape.static_matches(arch)
+    }
+
+    #[inline(always)]
+    fn is_interested_component(&self, _: ComponentKey) -> bool {
+        false
+    }
+}
+
 /// Subscribe to events such as entities being spawned, despawned, or moved between archetypes
 pub struct ArchetypeSubscriber<L> {
     listener: L,
@@ -162,7 +273,7 @@ where
 
     #[inline(always)]
     fn on_despawned(&self, id: Entity, _slot: Slot, _arch: &Archetype) {
-        if !self.listener.on_event(ArchetypeEvent::Inserted(id)) {
+        if !self.listener.on_event(ArchetypeEvent::Removed(id)) {
             self.connected.store(false, Ordering::Relaxed)
         }
     }
