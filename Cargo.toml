@@ -1,6 +1,6 @@
 [package]
 name = "flax"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 authors = ["Tei Leelo Roberts <ten3roberts@gmail.com>"]
 description = "An ergonomic archetypical ECS"
