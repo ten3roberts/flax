@@ -130,9 +130,6 @@ impl Archetypes {
         (cursor, self.inner.get_mut(cursor).unwrap())
     }
 
-    pub fn get_root(&mut self) -> &mut Archetype {
-        self.get_mut(self.root)
-    }
     pub fn root(&self) -> ArchetypeId {
         self.root
     }

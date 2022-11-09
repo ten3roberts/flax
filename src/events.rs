@@ -3,8 +3,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
     archetype::{Archetype, Slot},
-    And, AsBorrow, ChangeKind, Component, ComponentInfo, ComponentKey, ComponentValue, Entity,
-    StaticFilter,
+    And, ChangeKind, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, StaticFilter,
 };
 
 /// A subscriber of events to the world.
