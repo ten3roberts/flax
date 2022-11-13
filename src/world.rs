@@ -1809,8 +1809,8 @@ mod tests {
 
         // // Remove id
 
-        let mut query = Query::new((a(), c()));
-        let items = query.as_vec(&world);
+        let mut query = Query::new((a().as_cloned(), c().as_cloned()));
+        let items = query.borrow(&world).iter().collect_vec();
 
         assert_eq!(items, [(6, "Bar".into())]);
     }
