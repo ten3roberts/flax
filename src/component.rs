@@ -15,6 +15,7 @@ use crate::{
     archetype::ComponentInfo,
     buffer::ComponentBuffer,
     entity::EntityKind,
+    fetch::Cloned,
     filter::ChangeFilter,
     filter::With,
     filter::Without,
@@ -300,6 +301,11 @@ impl<T: ComponentValue> Component<T> {
     /// Transform this into a mutable fetch
     pub fn as_mut(self) -> Mutable<T> {
         Mutable(self)
+    }
+
+    /// Transform this into a cloned fetch
+    pub fn as_cloned(self) -> Cloned<T> {
+        Cloned(self)
     }
 
     /// Construct a fine grained change detection filter.

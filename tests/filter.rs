@@ -31,9 +31,9 @@ fn filters() {
         .map(|i| builder.set(a(), i as f32).spawn(&mut world))
         .collect_vec();
 
-    let mut query = Query::new(a()).filter(a().modified());
+    let mut query = Query::new(a().as_cloned()).filter(a().modified());
 
-    let items = query.as_vec(&world);
+    let items = query.borrow(&world).iter().collect_vec();
 
     // All changed entities
     assert_eq!(items.len(), 11);
@@ -43,7 +43,7 @@ fn filters() {
 
     eprintln!("Current change: {}", world.change_tick());
 
-    let items = query.as_vec(&world);
+    let items = query.borrow(&world).iter().collect_vec();
 
     assert_eq!(items, &[34.0]);
 
@@ -52,7 +52,7 @@ fn filters() {
         *a = -*a;
     });
 
-    let items = query.as_vec(&world);
+    let items = query.borrow(&world).iter().collect_vec();
 
     eprintln!("Items: {items:?}");
 
@@ -63,17 +63,16 @@ fn filters() {
         *a *= 10.0;
     });
 
-    let items = query.as_vec(&world);
+    let items = query.borrow(&world).iter().collect_vec();
     assert_eq!(items, &[-30.0, -40.0]);
 
     // Construct a new interted query
 
-    let mut query = Query::new(a()).filter(a().inserted());
+    let mut query = Query::new(a().as_cloned()).filter(a().inserted());
 
     let items = query
         .borrow(&world)
         .iter()
-        .copied()
         .sorted_by_key(|v| (v * 256.0) as i64)
         .collect_vec();
 
@@ -85,8 +84,8 @@ fn filters() {
     world.set(id2, a(), 29.5).unwrap();
 
     let items = query
-        .as_vec(&world)
-        .into_iter()
+        .borrow(&world)
+        .iter()
         .sorted_by_key(|v| (v * 256.0) as i64)
         .collect_vec();
 

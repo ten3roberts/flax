@@ -18,6 +18,11 @@ pub struct PreparedComponentMut<'a, T> {
 }
 
 #[doc(hidden)]
+pub struct PreparedComponentCloned<'a, T> {
+    borrow: AtomicRef<'a, [T]>,
+}
+
+#[doc(hidden)]
 pub struct PreparedComponent<'a, T> {
     borrow: AtomicRef<'a, [T]>,
 }
@@ -165,6 +170,75 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
     unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {
         self.changes
             .set_modified_if_tracking(Change::new(slots, change_tick));
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Component which clones the value.
+///
+/// This is useful as the query item is 'static
+/// See [crate::Component::as_mut]
+pub struct Cloned<T: ComponentValue>(pub(crate) Component<T>);
+
+impl<'w, T> Fetch<'w> for Cloned<T>
+where
+    T: ComponentValue + Clone,
+{
+    const MUTABLE: bool = false;
+    const HAS_FILTER: bool = false;
+
+    type Filter = Nothing;
+
+    type Prepared = PreparedComponentCloned<'w, T>;
+
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        let borrow = data.arch.borrow(self.0.key())?;
+
+        Some(PreparedComponentCloned { borrow })
+    }
+
+    fn matches(&self, data: FetchPrepareData) -> bool {
+        data.arch.has(self.0.key())
+    }
+
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        if data.arch.has(self.0.key()) {
+            vec![Access {
+                kind: AccessKind::Archetype {
+                    id: data.arch_id,
+                    component: self.0.key(),
+                },
+                mutable: false,
+            }]
+        } else {
+            vec![]
+        }
+    }
+
+    fn describe(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("clone ")?;
+        f.write_str(self.0.name())
+    }
+
+    fn filter(&self) -> Self::Filter {
+        Nothing
+    }
+
+    fn components(&self, result: &mut Vec<ComponentKey>) {
+        result.push(self.0.key())
+    }
+}
+
+impl<'q, T: ComponentValue + Clone> FetchItem<'q> for Cloned<T> {
+    type Item = T;
+}
+
+impl<'q, 'w, T: 'q + Clone> PreparedFetch<'q> for PreparedComponentCloned<'w, T> {
+    type Item = T;
+
+    #[inline(always)]
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+        self.borrow.get_unchecked(slot).clone()
     }
 }
 
