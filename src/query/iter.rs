@@ -1,4 +1,4 @@
-use core::slice::IterMut;
+use core::{iter::Flatten, slice::IterMut};
 
 use crate::{
     archetype::{Slice, Slot},
@@ -86,10 +86,11 @@ where
     F: Filter<'q>,
     'w: 'q,
 {
-    arch: &'q Archetype,
-    fetch: &'q mut Q::Prepared,
-    filter: FilterIter<<FilterWithFetch<RefFilter<'w, F>, Q::Filter> as Filter<'q>>::Prepared>,
-    new_tick: u32,
+    pub(crate) arch: &'q Archetype,
+    pub(crate) fetch: &'q mut Q::Prepared,
+    pub(crate) filter:
+        FilterIter<<FilterWithFetch<RefFilter<'w, F>, Q::Filter> as Filter<'q>>::Prepared>,
+    pub(crate) new_tick: u32,
 }
 
 impl<'q, 'w, Q, F> Iterator for Chunks<'q, 'w, Q, F>

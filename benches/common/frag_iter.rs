@@ -34,4 +34,12 @@ impl Benchmark {
             *data *= 2.0;
         }
     }
+
+    pub fn run_for_each(&mut self) {
+        Query::new(data().as_mut())
+            .borrow(&self.0)
+            .for_each(|data| {
+                *data *= 2.0;
+            })
+    }
 }

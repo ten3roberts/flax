@@ -10,7 +10,8 @@ use smallvec::SmallVec;
 
 use crate::{
     archetype::unknown_component,
-    filter::{PreparedFilter, RefFilter},
+    filter::{FilterIter, PreparedFilter, RefFilter},
+    Chunks,
 };
 use crate::{
     component_info,
@@ -192,7 +193,7 @@ where
         // Prepare all archetypes only if it is not already done
         // Clear previous borrows
         if self.prepared.len() != self.archetypes.len() {
-            self.prepared.clear();
+            self.clear_borrows();
             self.prepared = self
                 .archetypes
                 .iter()
@@ -224,18 +225,42 @@ where
         )
     }
 
-    /// Shorthand for:
-    /// ```rust,ignore
-    /// self.iter().for_each(&func)
-    /// ```
-    pub fn for_each<'q>(&'q mut self, func: impl Fn(<Q as FetchItem<'q>>::Item) + Send + Sync)
+    /// Execute a closure for each item in the iterator.
+    ///
+    /// This is more efficient than `.iter().for_each(|v| {})` as the archetypes can be temporarily
+    /// borrowed.
+    pub fn for_each(&mut self, func: impl Fn(<Q as FetchItem<'_>>::Item) + Send + Sync)
     where
-        'w: 'q,
-        Q::Prepared: Send,
-        BatchedIter<'q, 'w, Q, F>: Send,
-        F: Filter<'q>,
+        F: for<'x> Filter<'x>,
     {
-        self.iter().for_each(&func)
+        self.clear_borrows();
+        for &arch_id in self.archetypes {
+            let arch = self.world.archetypes.get(arch_id);
+            if arch.is_empty() {
+                continue;
+            }
+
+            let data = FetchPrepareData {
+                world: self.world,
+                arch,
+                arch_id,
+            };
+
+            let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
+
+            let mut fetch = self.fetch.prepare(data).unwrap();
+
+            let chunk: Chunks<Q, F> = Chunks {
+                arch,
+                fetch: &mut fetch,
+                filter,
+                new_tick: self.new_tick,
+            };
+
+            for item in chunk.flatten() {
+                func(item)
+            }
+        }
     }
 
     /// Shorthand for:
@@ -255,6 +280,11 @@ where
         self.iter_batched()
             .par_bridge()
             .for_each(|v| v.for_each(&func))
+    }
+
+    /// Release all borrowed archetypes
+    pub fn clear_borrows(&mut self) {
+        self.prepared.clear()
     }
 
     /// Consumes the iterator and returns the number of entities visited.
