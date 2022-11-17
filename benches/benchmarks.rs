@@ -11,11 +11,17 @@ fn benchmarks(c: &mut Criterion) {
     .bench_function("add_remove", |b| {
         let mut bench = add_remove::Benchmark::new();
         b.iter(|| bench.run())
-    })
-    .bench_function("frag_iter", |b| {
-        let mut bench = frag_iter::Benchmark::new();
-        b.iter(|| bench.run())
     });
+
+    c.benchmark_group("frag_iter")
+        .bench_function("for", |b| {
+            let mut bench = frag_iter::Benchmark::new();
+            b.iter(|| bench.run())
+        })
+        .bench_function("for_each", |b| {
+            let mut bench = frag_iter::Benchmark::new();
+            b.iter(|| bench.run_for_each())
+        });
 
     c.benchmark_group("simple_iter")
         .bench_function("iter", |b| {
