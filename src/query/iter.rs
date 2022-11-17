@@ -122,8 +122,7 @@ where
     Q: Fetch<'w>,
     F: Filter<'q>,
 {
-    iter: BatchedIter<'q, 'w, Q, F>,
-    current: Option<<BatchedIter<'q, 'w, Q, F> as Iterator>::Item>,
+    iter: Flatten<BatchedIter<'q, 'w, Q, F>>,
 }
 
 impl<'q, 'w, Q, F> QueryIter<'q, 'w, Q, F>
@@ -131,10 +130,11 @@ where
     Q: Fetch<'w>,
     F: Filter<'q>,
 {
+    #[inline(always)]
     pub(crate) fn new(iter: BatchedIter<'q, 'w, Q, F>) -> Self {
         Self {
-            iter,
-            current: None,
+            iter: iter.flatten(),
+            // current: None,
         }
     }
 }
@@ -147,16 +147,9 @@ where
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(ref mut batch) = self.current {
-                if let Some(item) = batch.next() {
-                    return Some(item);
-                }
-            }
-
-            self.current = Some(self.iter.next()?);
-        }
+        self.iter.next()
     }
 }
 
