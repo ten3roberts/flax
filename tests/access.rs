@@ -138,9 +138,8 @@ fn access() {
         schedule.batch_info(&mut world).to_names(),
         [
             vec!["regen_system", "weapons"],
-            vec!["blue_system"],
-            vec!["red_system"],
-            vec!["stats", "names"],
+            vec!["blue_system", "red_system"],
+            vec!["stats", "names"]
         ]
     );
 }

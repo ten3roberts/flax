@@ -91,6 +91,26 @@ impl Archetypes {
         arch
     }
 
+    /// Prunes a leaf and its ancestors from empty archetypes
+    fn prune_arch(&mut self, arch_id: ArchetypeId) -> bool {
+        let arch = self.get(arch_id);
+        if arch_id == self.root || !arch.is_empty() || !arch.outgoing.is_empty() {
+            return false;
+        }
+
+        // eprintln!("Removing arch: {arch_id}");
+        let arch = self.inner.despawn(arch_id).unwrap();
+
+        for (key, &dst_id) in arch.incoming.iter() {
+            self.get_mut(dst_id).outgoing.remove(key);
+            self.prune_arch(dst_id);
+        }
+
+        self.gen = self.gen.wrapping_add(1);
+
+        true
+    }
+
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
     fn init(
@@ -532,15 +552,12 @@ impl World {
 
     /// Removes all components from an entity without despawning the entity
     pub fn clear(&mut self, id: Entity) -> Result<()> {
-        let EntityLocation {
-            arch_id: arch,
-            slot,
-        } = self.init_location(id)?;
+        let EntityLocation { arch_id, slot } = self.init_location(id)?;
 
         let change_tick = self.advance_change_tick();
         let (src, dst) = self
             .archetypes
-            .get_disjoint(arch, self.archetypes.root)
+            .get_disjoint(arch_id, self.archetypes.root)
             .unwrap();
 
         let (dst_slot, swapped) =
@@ -554,6 +571,8 @@ impl World {
                 .expect("Invalid entity id")
                 .slot = slot;
         }
+
+        self.archetypes.prune_arch(arch_id);
 
         *self.location_mut(id).unwrap() = EntityLocation {
             slot: dst_slot,
@@ -591,6 +610,7 @@ impl World {
                 .slot = slot;
         }
 
+        self.archetypes.prune_arch(loc.arch_id);
         let loc = EntityLocation {
             slot: dst_slot,
             arch_id: dst_id,
@@ -686,6 +706,8 @@ impl World {
                         .slot = slot;
                 }
 
+                self.archetypes.prune_arch(src_id);
+
                 *self.location_mut(id).expect("Entity is not valid") = EntityLocation {
                     slot: dst_slot,
                     arch_id: dst_id,
@@ -766,6 +788,7 @@ impl World {
                 .slot = slot;
         }
 
+        self.archetypes.prune_arch(arch);
         self.entities.init(id.kind()).despawn(id)?;
         self.detach(id);
         Ok(())
@@ -870,6 +893,7 @@ impl World {
 
     /// Set the value of a component.
     /// If the component does not exist it will be added.
+    #[inline]
     pub fn set<T: ComponentValue>(
         &mut self,
         id: Entity,
@@ -934,47 +958,50 @@ impl World {
             }
         };
 
-        unsafe {
-            assert_ne!(src_id, dst_id);
-            // Borrow disjoint
-            let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
+        assert_ne!(src_id, dst_id);
+        // Borrow disjoint
+        let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
 
-            let (dst_slot, swapped) = src.move_to(
+        let (dst_slot, swapped) = unsafe {
+            src.move_to(
                 dst,
                 slot,
                 |c, _| panic!("Component {c:#?} was removed"),
                 change_tick,
-            );
+            )
+        };
 
-            // Add a quick edge to refer to later
-            src.add_outgoing(dst_id, false, info.key());
-            dst.add_incoming(src_id, info.key());
+        // Add a quick edge to refer to later
+        src.add_outgoing(dst_id, false, info.key());
+        dst.add_incoming(src_id, info.key());
 
-            // Insert the missing component
+        // Insert the missing component
+        unsafe {
             dst.push(info.key, value, change_tick)
                 .expect("Insert should not fail");
-
-            debug_assert_eq!(dst.entity(dst_slot), Some(id));
-
-            if let Some((swapped, slot)) = swapped {
-                // The last entity in src was moved into the slot occupied by id
-                let swapped_ns = self.entities.init(swapped.kind());
-                swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
-            }
-
-            let ns = self.entities.init(id.kind());
-            let loc = EntityLocation {
-                slot: dst_slot,
-                arch_id: dst_id,
-            };
-            *ns.get_mut(id).expect("Entity is not valid") = loc;
-
-            Ok(loc)
         }
+
+        debug_assert_eq!(dst.entity(dst_slot), Some(id));
+
+        if let Some((swapped, slot)) = swapped {
+            // The last entity in src was moved into the slot occupied by id
+            let swapped_ns = self.entities.init(swapped.kind());
+            swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+        }
+        self.archetypes.prune_arch(src_id);
+
+        let ns = self.entities.init(id.kind());
+        let loc = EntityLocation {
+            slot: dst_slot,
+            arch_id: dst_id,
+        };
+        *ns.get_mut(id).expect("Entity is not valid") = loc;
+
+        Ok(loc)
     }
 
-    #[inline]
     /// TODO benchmark with fully generic function
+    #[inline]
     pub(crate) fn set_inner<T: ComponentValue>(
         &mut self,
         id: Entity,
@@ -995,6 +1022,7 @@ impl World {
         Ok((old, loc))
     }
 
+    #[inline]
     pub(crate) fn remove_dyn(&mut self, id: Entity, component: ComponentInfo) -> Result<()> {
         unsafe {
             self.remove_inner(id, component, |ptr| (component.drop)(ptr))
@@ -1064,6 +1092,7 @@ impl World {
             let swapped_ns = self.entities.init(swapped.kind());
             swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
+        self.archetypes.prune_arch(src_id);
 
         let loc = EntityLocation {
             slot: dst_slot,
@@ -1076,6 +1105,7 @@ impl World {
     }
 
     /// Remove a component from the entity
+    #[inline]
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Result<T> {
         let mut res: MaybeUninit<T> = MaybeUninit::uninit();
         let res = unsafe {
