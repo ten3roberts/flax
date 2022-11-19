@@ -1,6 +1,9 @@
-use crate::{fetch::PreparedFetch, Fetch};
+use crate::{Fetch, FetchItem};
 
-use super::opt::{Opt, OptOr};
+use super::{
+    cloned::Cloned,
+    opt::{Opt, OptOr},
+};
 
 /// Extension trait for [crate::Fetch]
 pub trait FetchExt: Sized {
@@ -14,8 +17,8 @@ pub trait FetchExt: Sized {
     /// not exist for every entity.
     fn opt_or<V>(self, default: V) -> OptOr<Self, V>
     where
-        Self: for<'x> Fetch<'x>,
-        for<'x, 'y> <Self as Fetch<'x>>::Prepared: PreparedFetch<'y, Item = &'y V>,
+        Self: for<'w> Fetch<'w>,
+        for<'q> Self: FetchItem<'q, Item = &'q V>,
     {
         OptOr::new(self, default)
     }
@@ -24,11 +27,21 @@ pub trait FetchExt: Sized {
     /// fetch is not matched.
     fn opt_or_default<V>(self) -> OptOr<Self, V>
     where
-        Self: for<'x> Fetch<'x>,
-        for<'x, 'y> <Self as Fetch<'x>>::Prepared: PreparedFetch<'y, Item = &'y V>,
-        V: Default + 'static,
+        Self: for<'w> Fetch<'w>,
+        for<'q> Self: FetchItem<'q, Item = &'q V>,
+        V: Default,
     {
         self.opt_or(Default::default())
+    }
+
+    /// Transform this into a cloned fetch
+    fn cloned<V>(self) -> Cloned<Self>
+    where
+        Self: for<'w> Fetch<'w>,
+        for<'q> Self: FetchItem<'q, Item = &'q V>,
+        V: Clone,
+    {
+        Cloned(self)
     }
 }
 

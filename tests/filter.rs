@@ -31,7 +31,7 @@ fn filters() {
         .map(|i| builder.set(a(), i as f32).spawn(&mut world))
         .collect_vec();
 
-    let mut query = Query::new(a().as_cloned()).filter(a().modified());
+    let mut query = Query::new(a().cloned()).filter(a().modified());
 
     let items = query.borrow(&world).iter().collect_vec();
 
@@ -68,7 +68,7 @@ fn filters() {
 
     // Construct a new interted query
 
-    let mut query = Query::new(a().as_cloned()).filter(a().inserted());
+    let mut query = Query::new(a().cloned()).filter(a().inserted());
 
     let items = query
         .borrow(&world)

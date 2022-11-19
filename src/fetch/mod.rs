@@ -1,3 +1,4 @@
+mod cloned;
 mod component;
 mod ext;
 mod opt;
@@ -8,6 +9,7 @@ use core::fmt::{self, Formatter};
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub use cloned::*;
 pub use component::*;
 pub use ext::*;
 pub use opt::*;
@@ -66,7 +68,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared>;
 
     /// Returns true if the fetch matches the archetype
-    fn matches(&self, data: FetchPrepareData) -> bool;
+    fn matches(&self, arch: &Archetype) -> bool;
 
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, data: FetchPrepareData) -> Vec<Access>;
@@ -94,7 +96,7 @@ impl<'w> Fetch<'w> for () {
         Some(())
     }
 
-    fn matches(&self, _: FetchPrepareData) -> bool {
+    fn matches(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -176,7 +178,7 @@ impl<'w> Fetch<'w> for EntityIds {
         })
     }
 
-    fn matches(&self, _: FetchPrepareData) -> bool {
+    fn matches(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -228,8 +230,8 @@ macro_rules! tuple_impl {
             }
 
             #[inline(always)]
-            fn matches(&self, data: FetchPrepareData) -> bool {
-                ( $((self.$idx).matches(data)) && * )
+            fn matches(&self, arch: &Archetype) -> bool {
+                ( $((self.$idx).matches(arch)) && * )
             }
 
             #[inline(always)]

@@ -248,14 +248,9 @@ where
         let mut result = Vec::new();
         let archetypes = &world.archetypes;
 
-        let filter = |arch_id: ArchetypeId, arch: &Archetype| {
-            let data = FetchPrepareData {
-                world,
-                arch,
-                arch_id,
-            };
+        let filter = |_: ArchetypeId, arch: &Archetype| {
             (self.include_components || !arch.has(component_info().key()))
-                && self.fetch.matches(data)
+                && self.fetch.matches(arch)
                 && self.filter.matches(arch)
                 && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
         };
@@ -300,6 +295,7 @@ where
     }
 }
 
+#[inline]
 fn traverse_archetypes(
     archetypes: &Archetypes,
     cur: &Archetype,

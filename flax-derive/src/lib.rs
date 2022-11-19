@@ -187,8 +187,8 @@ fn derive_data_struct(
                     }
 
 
-                    fn matches(&self, data: #crate_name::fetch::FetchPrepareData) -> bool {
-                        ( #(self.#field_names.matches(data))&&* )
+                    fn matches(&self, arch: &#crate_name::archetype::Archetype) -> bool {
+                        ( #(self.#field_names.matches(arch))&&* )
                     }
 
                     fn describe(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
