@@ -1696,7 +1696,7 @@ mod tests {
 
     use alloc::{string::String, sync::Arc};
 
-    use crate::{component, CommandBuffer, EntityBuilder, Query};
+    use crate::{component, CommandBuffer, EntityBuilder, FetchExt, Query};
 
     use super::*;
 
@@ -1839,7 +1839,7 @@ mod tests {
 
         // // Remove id
 
-        let mut query = Query::new((a().as_cloned(), c().as_cloned()));
+        let mut query = Query::new((a().cloned(), c().cloned()));
         let items = query.borrow(&world).iter().collect_vec();
 
         assert_eq!(items, [(6, "Bar".into())]);

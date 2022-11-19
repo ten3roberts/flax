@@ -2,7 +2,10 @@ use core::fmt::{self, Formatter};
 
 use alloc::vec::Vec;
 
-use crate::{fetch::FetchPrepareData, fetch::PreparedFetch, ComponentKey, ComponentValue, Fetch};
+use crate::{
+    archetype::Archetype, fetch::FetchPrepareData, fetch::PreparedFetch, ComponentKey,
+    ComponentValue, Fetch,
+};
 
 use super::FetchItem;
 
@@ -28,7 +31,7 @@ where
         })
     }
 
-    fn matches(&self, _: FetchPrepareData) -> bool {
+    fn matches(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -100,7 +103,7 @@ where
         })
     }
 
-    fn matches(&self, _: FetchPrepareData) -> bool {
+    fn matches(&self, _: &Archetype) -> bool {
         true
     }
 

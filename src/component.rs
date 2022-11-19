@@ -303,11 +303,6 @@ impl<T: ComponentValue> Component<T> {
         Mutable(self)
     }
 
-    /// Transform this into a cloned fetch
-    pub fn as_cloned(self) -> Cloned<T> {
-        Cloned(self)
-    }
-
     /// Construct a fine grained change detection filter.
     pub fn modified(self) -> ChangeFilter<T> {
         ChangeFilter::new(self, ChangeKind::Modified)

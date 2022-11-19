@@ -60,8 +60,8 @@ where
         self.component.prepare(data)
     }
 
-    fn matches(&self, data: crate::fetch::FetchPrepareData) -> bool {
-        self.component.matches(data)
+    fn matches(&self, arch: &Archetype) -> bool {
+        self.component.matches(arch)
     }
 
     fn access(&self, data: crate::fetch::FetchPrepareData) -> Vec<Access> {
@@ -256,7 +256,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
         Some(())
     }
 
-    fn matches(&self, _: crate::fetch::FetchPrepareData) -> bool {
+    fn matches(&self, _: &Archetype) -> bool {
         true
     }
 
