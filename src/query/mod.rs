@@ -1,3 +1,5 @@
+#[cfg(feature = "async")]
+mod r#async;
 mod borrow;
 mod entity;
 use alloc::vec::Vec;
@@ -24,6 +26,9 @@ pub use borrow::*;
 pub use entity::*;
 pub use iter::*;
 
+#[cfg(feature = "async")]
+pub use r#async::*;
+
 type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Represents a query and state for a given world.
 /// The archetypes to visit is cached in the query which means it is more
@@ -33,11 +38,7 @@ type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
 #[derive(Clone)]
-pub struct Query<Q, F = All>
-where
-    Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
-{
+pub struct Query<Q, F = All> {
     // The archetypes to visit
     archetypes: Vec<ArchetypeId>,
     filter: F,

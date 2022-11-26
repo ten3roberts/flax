@@ -60,6 +60,7 @@ debug = true
 debug = true
 
 [features]
+async = []
 std = ["itertools/use_std", "itertools/use_alloc"]
 default = ["std", "parallel", "flume"]
 serde = ["dep:serde", "erased-serde"]

@@ -256,4 +256,7 @@ pub use system::*;
 pub use visitors::*;
 pub use world::*;
 
+#[cfg(feature = "async")]
+pub(crate) mod notify;
+
 pub use flax_derive::*;
