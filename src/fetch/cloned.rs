@@ -1,5 +1,7 @@
 use core::fmt::{self, Formatter};
 
+use alloc::vec::Vec;
+
 use crate::{
     archetype::{Archetype, Slot},
     filter::Nothing,
@@ -61,7 +63,7 @@ where
     }
 }
 
-impl<'w, 'q, F, V> FetchItem<'q> for Cloned<F>
+impl<'q, F, V> FetchItem<'q> for Cloned<F>
 where
     F: FetchItem<'q, Item = &'q V>,
     V: ComponentValue + Clone,

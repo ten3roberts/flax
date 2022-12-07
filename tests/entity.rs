@@ -82,6 +82,7 @@ fn entity_ref() {
 }
 
 #[test]
+#[cfg(feature = "flume")]
 fn entity_hierarchy() {
     let mut world = World::new();
     let (tx, rx) = flume::unbounded();
