@@ -1,5 +1,5 @@
+use core::fmt::Debug;
 use core::mem::MaybeUninit;
-use std::fmt::Debug;
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
@@ -201,7 +201,6 @@ mod test {
         assert!(!entity.has(health()));
 
         let entity = world.entity(id).unwrap();
-        dbg!(&entity);
 
         assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".into()));
 
@@ -212,7 +211,6 @@ mod test {
         let mut entity = world.entity_mut(id).unwrap();
 
         entity.set(pos(), (0.0, 0.0)).unwrap();
-        dbg!(&entity);
         let pos = entity.entry(pos()).and_modify(|v| v.0 += 1.0).or_default();
         assert_eq!(*pos, (1.0, 0.0));
     }

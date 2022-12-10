@@ -169,6 +169,7 @@ async fn tokio_subscribe() {
 }
 
 #[test]
+#[cfg(feature = "flume")]
 fn moving_changes() {
     let mut world = World::new();
 
