@@ -1627,12 +1627,14 @@ where
 
 /// Debug formats the specified entities,
 /// Created using [World::format_entities]
+#[doc(hidden)]
 pub struct EntityFormatter<'a> {
-    world: &'a World,
-    ids: &'a [Entity],
+    pub(crate) world: &'a World,
+    pub(crate) ids: &'a [Entity],
 }
 
 impl<'a> fmt::Debug for EntityFormatter<'a> {
+    #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut meta = BTreeMap::new();
         let mut list = f.debug_map();

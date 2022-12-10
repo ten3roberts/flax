@@ -863,6 +863,10 @@ impl Archetype {
         self.cells.values().map(|v| v.storage.borrow())
     }
 
+    /// Returns a iterator which attempts to borrows each storage in the archetype
+    pub(crate) fn try_borrow_all(&self) -> impl Iterator<Item = Option<AtomicRef<Storage>>> {
+        self.cells.values().map(|v| v.storage.try_borrow().ok())
+    }
     /// Access the entities in the archetype for each slot. Entity is None if
     /// the slot is not occupied, only for the last slots.
     pub fn entities(&self) -> &[Entity] {

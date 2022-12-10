@@ -15,7 +15,6 @@ use crate::{
     archetype::ComponentInfo,
     buffer::ComponentBuffer,
     entity::EntityKind,
-    fetch::Cloned,
     filter::ChangeFilter,
     filter::With,
     filter::Without,

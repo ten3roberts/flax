@@ -1,4 +1,5 @@
 use core::mem::MaybeUninit;
+use std::fmt::Debug;
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
@@ -6,7 +7,7 @@ use crate::{
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentKey, ComponentValue, Entity, Error, World,
+    Component, ComponentKey, ComponentValue, Entity, EntityFormatter, Error, World,
 };
 
 /// Borrow all the components of an entity at once.
@@ -97,6 +98,15 @@ impl<'a> EntityRefMut<'a> {
             })
         }
     }
+
+    // /// Returns a mutable reference to the contained world
+    // pub fn world_mut(&mut self) -> &'a mut World {
+    //     self.world
+    // }
+
+    // pub fn world(&self) -> &World {
+    //     self.world
+    // }
 }
 
 /// Borrow all the components of an entity at once.
@@ -132,6 +142,26 @@ impl<'a> EntityRef<'a> {
             .archetypes
             .get(self.loc.arch_id)
             .has(component.key())
+    }
+}
+
+impl<'a> Debug for EntityRef<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        EntityFormatter {
+            world: self.world,
+            ids: &[self.id],
+        }
+        .fmt(f)
+    }
+}
+
+impl<'a> Debug for EntityRefMut<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        EntityFormatter {
+            world: self.world,
+            ids: &[self.id],
+        }
+        .fmt(f)
     }
 }
 
@@ -171,6 +201,7 @@ mod test {
         assert!(!entity.has(health()));
 
         let entity = world.entity(id).unwrap();
+        dbg!(&entity);
 
         assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".into()));
 
@@ -181,6 +212,7 @@ mod test {
         let mut entity = world.entity_mut(id).unwrap();
 
         entity.set(pos(), (0.0, 0.0)).unwrap();
+        dbg!(&entity);
         let pos = entity.entry(pos()).and_modify(|v| v.0 += 1.0).or_default();
         assert_eq!(*pos, (1.0, 0.0));
     }
