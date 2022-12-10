@@ -81,7 +81,7 @@ impl fmt::Debug for ComponentName {
 impl<'a> fmt::Debug for RowFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
-        for storage in self.arch.borrow_all() {
+        for storage in self.arch.try_borrow_all().flatten() {
             let name = ComponentName {
                 base_name: storage.info().name(),
                 id: storage.info().key(),

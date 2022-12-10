@@ -61,7 +61,7 @@ where
     }
 }
 
-impl<'w, 'q, F, V> FetchItem<'q> for Cloned<F>
+impl<'q, F, V> FetchItem<'q> for Cloned<F>
 where
     F: FetchItem<'q, Item = &'q V>,
     V: ComponentValue + Clone,
