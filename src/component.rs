@@ -15,10 +15,7 @@ use crate::{
     archetype::ComponentInfo,
     buffer::ComponentBuffer,
     entity::EntityKind,
-    filter::ChangeFilter,
-    filter::With,
-    filter::Without,
-    filter::{RemovedFilter, WithRelation, WithoutRelation},
+    filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
     ChangeKind, Entity, MetaData, Mutable,
 };
 

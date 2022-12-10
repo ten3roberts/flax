@@ -1,5 +1,7 @@
 use core::fmt::{self, Formatter};
 
+use alloc::vec::Vec;
+
 use crate::{
     archetype::{Archetype, Slot},
     filter::Nothing,
