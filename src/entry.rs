@@ -1,3 +1,5 @@
+use core::mem;
+
 use atomic_refcell::AtomicRefMut;
 
 use crate::{Component, ComponentValue, Entity, World};
@@ -83,6 +85,17 @@ where
         match self {
             Entry::Vacant(slot) => slot.insert((func)()),
             Entry::Occupied(slot) => slot.into_mut(),
+        }
+    }
+
+    /// Replaces the current value and returns it
+    pub fn set(self, value: T) -> Option<T> {
+        match self {
+            Entry::Vacant(slot) => {
+                slot.insert(value);
+                None
+            }
+            Entry::Occupied(mut slot) => Some(mem::replace(&mut slot.borrow, value)),
         }
     }
 }
