@@ -2,6 +2,7 @@ use core::fmt::Debug;
 use core::mem::MaybeUninit;
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
+use once_cell::unsync::OnceCell;
 
 use crate::{
     entity::EntityLocation,
@@ -16,7 +17,7 @@ use crate::{
 /// without mentioning the id and performing re-lookups.
 pub struct EntityRefMut<'a> {
     pub(crate) world: &'a mut World,
-    pub(crate) loc: EntityLocation,
+    pub(crate) loc: OnceCell<EntityLocation>,
     pub(crate) id: Entity,
 }
 
@@ -24,14 +25,21 @@ impl<'a> EntityRefMut<'a> {
     /// Access a component
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
         self.world
-            .get_at(self.loc, component)
+            .get_at(self.loc(), component)
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+    }
+
+    #[inline]
+    fn loc(&self) -> EntityLocation {
+        *self
+            .loc
+            .get_or_init(|| self.world.location(self.id).unwrap())
     }
 
     /// Access a component mutably
     pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRefMut<T>> {
         self.world
-            .get_mut_at(self.loc, component)
+            .get_mut_at(self.loc(), component)
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
@@ -40,19 +48,15 @@ impl<'a> EntityRefMut<'a> {
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
         self.world
             .archetypes
-            .get(self.loc.arch_id)
+            .get(self.loc().arch_id)
             .has(component.key())
     }
 
     /// Set a component for the entity
-    pub fn set<T: ComponentValue>(
-        &mut self,
-        component: Component<T>,
-        value: T,
-    ) -> Result<Option<T>> {
-        let (old, loc) = self.world.set_inner(self.id, component, value)?;
-        self.loc = loc;
-        Ok(old)
+    pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
+        let (old, loc) = self.world.set_inner(self.id, component, value).unwrap();
+        self.loc = OnceCell::with_value(loc);
+        old
     }
 
     /// Remove a component
@@ -65,13 +69,13 @@ impl<'a> EntityRefMut<'a> {
             (res.assume_init(), loc)
         };
 
-        self.loc = loc;
+        self.loc = OnceCell::with_value(loc);
         Ok(old)
     }
 
     /// Retain only the components specified by the predicate
     pub fn retain(&mut self, f: impl FnMut(ComponentKey) -> bool) {
-        self.loc = self.world.retain_entity_components(self.id, self.loc, f)
+        self.loc = OnceCell::with_value(self.world.retain_entity_components(self.id, self.loc(), f))
     }
 
     /// See: [`crate::World::clear`]
@@ -87,8 +91,9 @@ impl<'a> EntityRefMut<'a> {
     /// See [`crate::World::entry`]
     pub fn entry<T: ComponentValue>(self, component: Component<T>) -> Entry<'a, T> {
         if self.has(component) {
+            let loc = self.loc();
             Entry::Occupied(OccupiedEntry {
-                borrow: self.world.get_mut_at(self.loc, component).unwrap(),
+                borrow: self.world.get_mut_at(loc, component).unwrap(),
             })
         } else {
             Entry::Vacant(VacantEntry {
@@ -103,7 +108,7 @@ impl<'a> EntityRefMut<'a> {
     pub fn downgrade_ref(&mut self) -> EntityRef {
         EntityRef {
             world: self.world,
-            loc: self.loc,
+            loc: self.loc(),
             id: self.id,
         }
     }
@@ -112,7 +117,7 @@ impl<'a> EntityRefMut<'a> {
     pub fn downgrade(self) -> EntityRef<'a> {
         EntityRef {
             world: self.world,
-            loc: self.loc,
+            loc: self.loc(),
             id: self.id,
         }
     }
@@ -204,7 +209,7 @@ mod test {
 
         let id = entity.id();
 
-        entity.set(name(), "Foo".into()).unwrap();
+        entity.set(name(), "Foo".into());
 
         assert_eq!(
             entity.world().get_mut(id, name()).as_deref(),
@@ -237,7 +242,7 @@ mod test {
 
         assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".into()));
 
-        entity.set(health(), 100.0).unwrap();
+        entity.set(health(), 100.0);
         // panic!("");
 
         assert_eq!(entity.get(name()).as_deref(), Ok(&"Foo".into()));
@@ -259,7 +264,7 @@ mod test {
 
         let mut entity = world.entity_mut(id).unwrap();
 
-        entity.set(pos(), (0.0, 0.0)).unwrap();
+        entity.set(pos(), (0.0, 0.0));
         let pos = entity.entry(pos()).and_modify(|v| v.0 += 1.0).or_default();
         assert_eq!(*pos, (1.0, 0.0));
     }

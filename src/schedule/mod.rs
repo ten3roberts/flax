@@ -483,8 +483,11 @@ mod test {
     #[cfg(feature = "std")]
     #[cfg_attr(miri, ignore)]
     fn schedule_par() {
+        use glam::{vec2, Vec2};
+
         use crate::{
-            components::name, entity_ids, CmpExt, CommandBuffer, Component, EntityIds, Mutable,
+            components::name, entity_ids, CmpExt, CommandBuffer, Component, EntityIds, Fetch,
+            Mutable,
         };
 
         #[derive(Debug, Clone)]
@@ -499,7 +502,7 @@ mod test {
             damage: f32,
             range: f32,
             weapon: Weapon,
-            pos: (f32, f32),
+            pos: Vec2,
         };
 
         let mut world = World::new();
@@ -513,7 +516,7 @@ mod test {
             .set(damage(), 15.0)
             .set(range(), 64.0)
             .set(weapon(), Weapon::Bow)
-            .set(pos(), (0.0, 0.0))
+            .set(pos(), vec2(0.0, 0.0))
             .spawn(&mut world);
 
         builder
@@ -521,7 +524,7 @@ mod test {
             .set(health(), 200.0)
             .set(damage(), 20.0)
             .set(weapon(), Weapon::Sword)
-            .set(pos(), (10.0, 1.0))
+            .set(pos(), vec2(10.0, 1.0))
             .spawn(&mut world);
 
         builder
@@ -530,13 +533,13 @@ mod test {
             .set(damage(), 20.0)
             .set(range(), 48.0)
             .set(weapon(), Weapon::Crossbow)
-            .set(pos(), (17.0, 20.0))
+            .set(pos(), vec2(17.0, 20.0))
             .spawn(&mut world);
 
         builder
             .set(name(), "peasant_1".to_string())
             .set(health(), 100.0)
-            .set(pos(), (10.0, 10.0))
+            .set(pos(), vec2(10.0, 10.0))
             .spawn(&mut world);
 
         let heal = System::builder()
@@ -561,22 +564,45 @@ mod test {
                 })
             });
 
+        #[derive(Fetch, Debug, Clone)]
+        struct BattleSubject {
+            id: EntityIds,
+            damage: Component<f32>,
+            range: Component<f32>,
+            pos: Component<Vec2>,
+        }
+
+        #[derive(Fetch, Debug, Clone)]
+        struct BattleObject {
+            id: EntityIds,
+            pos: Component<Vec2>,
+            health: Mutable<f32>,
+        }
+
         let battle = System::builder()
-            .with(Query::new((entity_ids(), damage(), range(), pos())))
-            .with(Query::new((entity_ids(), pos(), health().as_mut())))
+            .with(Query::new(BattleSubject {
+                id: EntityIds,
+                damage: damage(),
+                range: range(),
+                pos: pos(),
+            }))
+            .with(Query::new(BattleObject {
+                id: EntityIds,
+                pos: pos(),
+                health: health().as_mut(),
+            }))
             .with_name("battle")
             .build(
-                |mut sub: QueryBorrow<(_, _, Component<f32>, Component<(f32, f32)>)>,
-                 mut obj: QueryBorrow<(_, Component<(f32, f32)>, Mutable<f32>)>| {
+                |mut sub: QueryBorrow<BattleSubject>, mut obj: QueryBorrow<BattleObject>| {
                     eprintln!("Prepared queries, commencing battles");
-                    for (id1, damage, range, pos) in sub.iter() {
-                        for (id2, other_pos, health) in obj.iter() {
-                            let rel: (f32, f32) = (other_pos.0 - pos.0, other_pos.1 - pos.1);
-                            let dist = (rel.0 * rel.0 + rel.1 * rel.1).sqrt();
+                    for a in sub.iter() {
+                        for b in obj.iter() {
+                            let rel = *b.pos - *a.pos;
+                            let dist = rel.length();
                             // We are within range
-                            if dist < *range {
-                                eprintln!("{id1} Applying {damage} damage to {id2}");
-                                *health -= damage;
+                            if dist < *a.range {
+                                eprintln!("{} Applying {} damage to {}", a.id, a.damage, b.id);
+                                *b.health -= a.damage;
                             }
                         }
                     }
