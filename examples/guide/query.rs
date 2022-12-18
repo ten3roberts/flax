@@ -2,6 +2,7 @@ use flax::{
     component, entity_ids, CmpExt, CommandBuffer, Component, Debug, Entity, EntityBorrow, Mutable,
     Query, QueryBorrow, Schedule, System, World,
 };
+use glam::{vec2, Vec2};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::{
     prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, EnvFilter,
@@ -18,19 +19,19 @@ fn main() -> color_eyre::Result<()> {
     let mut world = World::new();
 
     component! {
-        position: (f32, f32) => [ Debug ],
+        position: Vec2 => [ Debug ],
         health: f32 => [ Debug ],
     }
 
     // Spawn two entities
     let id = world.spawn();
 
-    world.set(id, position(), (1.0, 4.0))?;
+    world.set(id, position(), vec2(1.0, 4.0))?;
     world.set(id, health(), 100.0)?;
 
     let id2 = world.spawn();
 
-    world.set(id2, position(), (-1.0, 4.0))?;
+    world.set(id2, position(), vec2(-1.0, 4.0))?;
     world.set(id2, health(), 75.0)?;
 
     let mut query = Query::new((position(), health()));
@@ -49,7 +50,7 @@ fn main() -> color_eyre::Result<()> {
 
     tracing::info!("Spawning id3");
     let id3 = world.spawn();
-    world.set(id3, position(), (5.0, 6.0))?;
+    world.set(id3, position(), vec2(5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
@@ -63,7 +64,7 @@ fn main() -> color_eyre::Result<()> {
     tracing::info!("Updating distances");
     for (id, pos, dist) in &mut query.borrow(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 
     // ANCHOR_END: query_modified
@@ -73,18 +74,18 @@ fn main() -> color_eyre::Result<()> {
     tracing::info!("Running query again");
     for (id, pos, dist) in &mut query.borrow(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
     // ANCHOR_END: query_repeat
 
     // ANCHOR: query_repeat_reboot
 
-    *world.get_mut(id2, position())? = (8.0, 3.0);
+    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
 
     tracing::info!("... and again");
     for (id, pos, dist) in &mut query.borrow(&world) {
         tracing::info!("Updating distance for {id} with position: {pos:?}");
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 
     // ANCHOR_END: query_repeat_reboot
@@ -107,10 +108,10 @@ fn main() -> color_eyre::Result<()> {
         .with_name("update_distance")
         .with(query)
         .build(
-            |mut query: QueryBorrow<(_, Component<(f32, f32)>, Mutable<f32>), _>| {
+            |mut query: QueryBorrow<(_, Component<Vec2>, Mutable<f32>), _>| {
                 for (id, pos, dist) in &mut query {
                     tracing::info!("Updating distance for {id} with position: {pos:?}");
-                    *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+                    *dist = pos.length();
                 }
             },
         );
@@ -127,7 +128,7 @@ fn main() -> color_eyre::Result<()> {
         )
         .for_each(|(id, pos, dist)| {
             tracing::debug!("Updating distance for {id} with position: {pos:?}");
-            *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+            *dist = pos.length();
         });
 
     for _ in 0..16 {
@@ -167,7 +168,7 @@ fn main() -> color_eyre::Result<()> {
     let mut rng = StdRng::seed_from_u64(42);
 
     for _ in 0..150 {
-        let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+        let pos = vec2(rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
         Entity::builder()
             .set(position(), pos)
             .set_default(distance())
@@ -181,12 +182,9 @@ fn main() -> color_eyre::Result<()> {
         .with_name("move_out")
         .with(Query::new(position().as_mut()).filter(is_static().without()))
         .for_each(|pos| {
-            let mag = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+            let dir = pos.normalize_or_zero();
 
-            let dir = (pos.0 / mag, pos.1 / mag);
-
-            pos.0 += dir.0;
-            pos.1 += dir.1;
+            *pos += dir;
         });
 
     // Spawn new entities with a random position each frame
@@ -195,7 +193,7 @@ fn main() -> color_eyre::Result<()> {
         .write::<CommandBuffer>()
         .build(move |cmd: &mut CommandBuffer| {
             for _ in 0..100 {
-                let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+                let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!("Spawning new entity at: {pos:?}");
                 Entity::builder()
                     .set(position(), pos)
@@ -216,7 +214,7 @@ fn main() -> color_eyre::Result<()> {
             frame_count += 1;
         });
 
-    // Assemple the schedule, takes care of dependency management
+    // Assemble the schedule, takes care of dependency management
     let mut schedule = Schedule::builder()
         .with_system(update_dist)
         .with_system(despawn)
