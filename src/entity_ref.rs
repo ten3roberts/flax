@@ -104,7 +104,24 @@ impl<'a> EntityRefMut<'a> {
         }
     }
 
-    /// Version of [`Self::downgrade`] which takes self by reference
+    /// Non consuming version of [`Self::entry`]
+    pub fn entry_ref<T: ComponentValue>(&mut self, component: Component<T>) -> Entry<T> {
+        if self.has(component) {
+            let loc = self.loc();
+            Entry::Occupied(OccupiedEntry {
+                borrow: self.world.get_mut_at(loc, component).unwrap(),
+            })
+        } else {
+            self.loc.take();
+            Entry::Vacant(VacantEntry {
+                world: self.world,
+                id: self.id,
+                component,
+            })
+        }
+    }
+
+    /// Non consuming version of [`Self::downgrade`]
     pub fn downgrade_ref(&mut self) -> EntityRef {
         EntityRef {
             world: self.world,
@@ -209,7 +226,11 @@ mod test {
 
         let id = entity.id();
 
-        entity.set(name(), "Foo".into());
+        assert_eq!(entity.entry_ref(name()).set("Bar".into()), None);
+        assert_eq!(
+            entity.entry_ref(name()).set("Foo".into()),
+            Some("Bar".into())
+        );
 
         assert_eq!(
             entity.world().get_mut(id, name()).as_deref(),
@@ -266,6 +287,7 @@ mod test {
 
         entity.set(pos(), (0.0, 0.0));
         let pos = entity.entry(pos()).and_modify(|v| v.0 += 1.0).or_default();
+
         assert_eq!(*pos, (1.0, 0.0));
     }
 }
