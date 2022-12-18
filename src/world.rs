@@ -1,16 +1,11 @@
-use alloc::collections::BTreeMap;
-use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
-use core::iter::once;
-use core::sync::atomic::AtomicBool;
-use core::sync::atomic::Ordering::Relaxed;
+use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};
 use core::{
     fmt,
     fmt::Formatter,
+    iter::once,
     mem::{self, MaybeUninit},
     ptr,
-    sync::atomic::{AtomicU32, Ordering},
+    sync::atomic::{AtomicBool, AtomicU32, Ordering, Ordering::Relaxed},
 };
 use once_cell::unsync::OnceCell;
 use smallvec::SmallVec;
@@ -18,21 +13,20 @@ use smallvec::SmallVec;
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
-use crate::events::{EventHandler, RemoveSubscriber, Subscriber};
-use crate::filter::ArchetypeFilter;
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
     buffer::ComponentBuffer,
     components::{component_info, name},
-    debug_visitor,
+    debug_visitor, dummy,
     entity::*,
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentKey, ComponentValue, Entity, Error, Filter, Query, RelationExt,
+    events::{EventHandler, RemoveSubscriber, Subscriber},
+    filter::ArchetypeFilter,
+    is_static, Component, ComponentKey, ComponentValue, Entity, Error, Filter, Query, RelationExt,
     RowFormatter, StaticFilter,
 };
-use crate::{dummy, is_static};
 
 #[derive(Debug, Default)]
 struct EntityStores {
@@ -760,10 +754,6 @@ impl World {
             self.spawn_at(id).unwrap();
         }
 
-        if self.has(info.key().id, component_info()) {
-            return Ok(info);
-        }
-
         self.set_with(id, &mut meta).unwrap();
 
         Ok(info)
@@ -909,9 +899,20 @@ impl World {
         &mut self,
         id: Entity,
         component: Component<T>,
-        value: T,
+        mut value: T,
     ) -> Result<Option<T>> {
-        self.set_inner(id, component, value).map(|v| v.0)
+        let mut old: Option<T> = None;
+
+        self.set_dyn(
+            id,
+            component.info(),
+            &mut value as *mut T as *mut u8,
+            |ptr| unsafe { old = Some(ptr.cast::<T>().read()) },
+        )?;
+
+        mem::forget(value);
+
+        Ok(old)
     }
 
     #[inline]
@@ -971,6 +972,10 @@ impl World {
         };
 
         assert_ne!(src_id, dst_id);
+
+        // Initialize component
+        self.init_component(info).unwrap();
+
         // Borrow disjoint
         let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
 
