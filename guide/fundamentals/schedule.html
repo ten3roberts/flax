@@ -182,7 +182,7 @@ sequence.</p>
     let mut rng = StdRng::seed_from_u64(42);
 
     for _ in 0..150 {
-        let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+        let pos = vec2(rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
         Entity::builder()
             .set(position(), pos)
             .set_default(distance())
@@ -196,12 +196,9 @@ sequence.</p>
         .with_name(&quot;move_out&quot;)
         .with(Query::new(position().as_mut()).filter(is_static().without()))
         .for_each(|pos| {
-            let mag = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+            let dir = pos.normalize_or_zero();
 
-            let dir = (pos.0 / mag, pos.1 / mag);
-
-            pos.0 += dir.0;
-            pos.1 += dir.1;
+            *pos += dir;
         });
 
     // Spawn new entities with a random position each frame
@@ -210,7 +207,7 @@ sequence.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(move |cmd: &amp;mut CommandBuffer| {
             for _ in 0..100 {
-                let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+                let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
                 Entity::builder()
                     .set(position(), pos)
@@ -231,7 +228,7 @@ sequence.</p>
             frame_count += 1;
         });
 
-    // Assemple the schedule, takes care of dependency management
+    // Assemble the schedule, takes care of dependency management
     let mut schedule = Schedule::builder()
         .with_system(update_dist)
         .with_system(despawn)

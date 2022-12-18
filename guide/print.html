@@ -346,19 +346,19 @@ a certain filter.</p>
 </span>    let mut world = World::new();
 
     component! {
-        position: (f32, f32) =&gt; [ Debug ],
+        position: Vec2 =&gt; [ Debug ],
         health: f32 =&gt; [ Debug ],
     }
 
     // Spawn two entities
     let id = world.spawn();
 
-    world.set(id, position(), (1.0, 4.0))?;
+    world.set(id, position(), vec2(1.0, 4.0))?;
     world.set(id, health(), 100.0)?;
 
     let id2 = world.spawn();
 
-    world.set(id2, position(), (-1.0, 4.0))?;
+    world.set(id2, position(), vec2(-1.0, 4.0))?;
     world.set(id2, health(), 75.0)?;
 
     let mut query = Query::new((position(), health()));
@@ -410,7 +410,7 @@ when an entity moves for every entity which are not despawned.</p>
 
     tracing::info!(&quot;Spawning id3&quot;);
     let id3 = world.spawn();
-    world.set(id3, position(), (5.0, 6.0))?;
+    world.set(id3, position(), vec2(5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
@@ -424,7 +424,7 @@ when an entity moves for every entity which are not despawned.</p>
     tracing::info!(&quot;Updating distances&quot;);
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -436,7 +436,7 @@ yields nothing.</p>
 </span>    tracing::info!(&quot;Running query again&quot;);
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 <span class="boring">}</span></code></pre></pre>
 <p>However, if the position were to be modified, the query would pick up that, and
@@ -444,12 +444,12 @@ only that change.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
-</span>    *world.get_mut(id2, position())? = (8.0, 3.0);
+</span>    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
 
     tracing::info!(&quot;... and again&quot;);
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -540,7 +540,7 @@ thrice could be turned into a query.</p>
 
     tracing::info!(&quot;Spawning id3&quot;);
     let id3 = world.spawn();
-    world.set(id3, position(), (5.0, 6.0))?;
+    world.set(id3, position(), vec2(5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
@@ -554,7 +554,7 @@ thrice could be turned into a query.</p>
     tracing::info!(&quot;Updating distances&quot;);
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -566,10 +566,10 @@ thrice could be turned into a query.</p>
         .with_name(&quot;update_distance&quot;)
         .with(query)
         .build(
-            |mut query: QueryBorrow&lt;(_, Component&lt;(f32, f32)&gt;, Mutable&lt;f32&gt;), _&gt;| {
+            |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
                 for (id, pos, dist) in &amp;mut query {
                     tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-                    *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+                    *dist = pos.length();
                 }
             },
         );
@@ -590,7 +590,7 @@ single query.</p>
         )
         .for_each(|(id, pos, dist)| {
             tracing::debug!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-            *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+            *dist = pos.length();
         });
 
     for _ in 0..16 {
@@ -671,7 +671,7 @@ sequence.</p>
     let mut rng = StdRng::seed_from_u64(42);
 
     for _ in 0..150 {
-        let pos = (rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+        let pos = vec2(rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
         Entity::builder()
             .set(position(), pos)
             .set_default(distance())
@@ -685,12 +685,9 @@ sequence.</p>
         .with_name(&quot;move_out&quot;)
         .with(Query::new(position().as_mut()).filter(is_static().without()))
         .for_each(|pos| {
-            let mag = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+            let dir = pos.normalize_or_zero();
 
-            let dir = (pos.0 / mag, pos.1 / mag);
-
-            pos.0 += dir.0;
-            pos.1 += dir.1;
+            *pos += dir;
         });
 
     // Spawn new entities with a random position each frame
@@ -699,7 +696,7 @@ sequence.</p>
         .write::&lt;CommandBuffer&gt;()
         .build(move |cmd: &amp;mut CommandBuffer| {
             for _ in 0..100 {
-                let pos = (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+                let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
                 Entity::builder()
                     .set(position(), pos)
@@ -720,7 +717,7 @@ sequence.</p>
             frame_count += 1;
         });
 
-    // Assemple the schedule, takes care of dependency management
+    // Assemble the schedule, takes care of dependency management
     let mut schedule = Schedule::builder()
         .with_system(update_dist)
         .with_system(despawn)

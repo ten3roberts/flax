@@ -150,19 +150,19 @@ a certain filter.</p>
 </span>    let mut world = World::new();
 
     component! {
-        position: (f32, f32) =&gt; [ Debug ],
+        position: Vec2 =&gt; [ Debug ],
         health: f32 =&gt; [ Debug ],
     }
 
     // Spawn two entities
     let id = world.spawn();
 
-    world.set(id, position(), (1.0, 4.0))?;
+    world.set(id, position(), vec2(1.0, 4.0))?;
     world.set(id, health(), 100.0)?;
 
     let id2 = world.spawn();
 
-    world.set(id2, position(), (-1.0, 4.0))?;
+    world.set(id2, position(), vec2(-1.0, 4.0))?;
     world.set(id2, health(), 75.0)?;
 
     let mut query = Query::new((position(), health()));
@@ -214,7 +214,7 @@ when an entity moves for every entity which are not despawned.</p>
 
     tracing::info!(&quot;Spawning id3&quot;);
     let id3 = world.spawn();
-    world.set(id3, position(), (5.0, 6.0))?;
+    world.set(id3, position(), vec2(5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
@@ -228,7 +228,7 @@ when an entity moves for every entity which are not despawned.</p>
     tracing::info!(&quot;Updating distances&quot;);
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -240,7 +240,7 @@ yields nothing.</p>
 </span>    tracing::info!(&quot;Running query again&quot;);
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 <span class="boring">}</span></code></pre></pre>
 <p>However, if the position were to be modified, the query would pick up that, and
@@ -248,12 +248,12 @@ only that change.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
-</span>    *world.get_mut(id2, position())? = (8.0, 3.0);
+</span>    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
 
     tracing::info!(&quot;... and again&quot;);
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
         tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = (pos.0 * pos.0 + pos.1 * pos.1).sqrt();
+        *dist = pos.length();
     }
 
 <span class="boring">}</span></code></pre></pre>
