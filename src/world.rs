@@ -288,6 +288,16 @@ impl World {
             .0
     }
 
+    /// Spawn a new empty entity and acquire an entity reference.
+    pub fn spawn_ref(&mut self) -> EntityRefMut {
+        let (id, loc, _) = self.spawn_inner(self.archetypes.root, EntityKind::empty());
+        EntityRefMut {
+            world: self,
+            loc,
+            id,
+        }
+    }
+
     /// Efficiently spawn many entities with the same components at once.
     pub fn spawn_batch(&mut self, batch: &mut BatchSpawn) -> Vec<Entity> {
         self.flush_reserved();
@@ -1596,6 +1606,7 @@ where
         let mut query = Query::new(())
             .with_components()
             .filter(self.filter.ref_filter());
+
         let mut query = query.borrow(self.world);
 
         for batch in query.iter_batched() {

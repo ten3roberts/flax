@@ -99,14 +99,15 @@ impl<'a> EntityRefMut<'a> {
         }
     }
 
-    // /// Returns a mutable reference to the contained world
-    // pub fn world_mut(&mut self) -> &'a mut World {
-    //     self.world
-    // }
+    /// Returns a mutable reference to the contained world
+    pub fn world_mut(&mut self) -> &mut World {
+        self.world
+    }
 
-    // pub fn world(&self) -> &World {
-    //     self.world
-    // }
+    /// Returns a reference to the contained world
+    pub fn world(&self) -> &World {
+        self.world
+    }
 }
 
 /// Borrow all the components of an entity at once.
@@ -167,9 +168,26 @@ impl<'a> Debug for EntityRefMut<'a> {
 
 #[cfg(test)]
 mod test {
+
     use crate::{component, components::name, EntityBuilder};
 
     use super::*;
+
+    #[test]
+    fn spawn_ref() {
+        let mut world = World::new();
+
+        let mut entity = world.spawn_ref();
+
+        let id = entity.id();
+
+        entity.set(name(), "Foo".into());
+
+        assert_eq!(
+            entity.world().get_mut(id, name()).as_deref(),
+            Ok(&"Foo".into())
+        );
+    }
 
     #[test]
     fn entity_ref() {
