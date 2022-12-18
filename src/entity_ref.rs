@@ -99,6 +99,24 @@ impl<'a> EntityRefMut<'a> {
         }
     }
 
+    /// Version of [`Self::downgrade`] which takes self by reference
+    pub fn downgrade_ref(&mut self) -> EntityRef {
+        EntityRef {
+            world: self.world,
+            loc: self.loc,
+            id: self.id,
+        }
+    }
+
+    /// Convert the [`EntityRefMut`] into a [`EntityRef`]
+    pub fn downgrade(self) -> EntityRef<'a> {
+        EntityRef {
+            world: self.world,
+            loc: self.loc,
+            id: self.id,
+        }
+    }
+
     /// Returns a mutable reference to the contained world
     pub fn world_mut(&mut self) -> &mut World {
         self.world
@@ -144,6 +162,11 @@ impl<'a> EntityRef<'a> {
             .get(self.loc.arch_id)
             .has(component.key())
     }
+
+    /// Returns the entity id
+    pub fn id(&self) -> Entity {
+        self.id
+    }
 }
 
 impl<'a> Debug for EntityRef<'a> {
@@ -169,7 +192,7 @@ impl<'a> Debug for EntityRefMut<'a> {
 #[cfg(test)]
 mod test {
 
-    use crate::{component, components::name, EntityBuilder};
+    use crate::{component, components::name, is_static, EntityBuilder};
 
     use super::*;
 
@@ -181,12 +204,20 @@ mod test {
 
         let id = entity.id();
 
-        entity.set(name(), "Foo".into());
+        entity.set(name(), "Foo".into()).unwrap();
 
         assert_eq!(
             entity.world().get_mut(id, name()).as_deref(),
             Ok(&"Foo".into())
         );
+
+        let entity = entity.downgrade();
+        let res = entity.get(is_static());
+
+        assert_eq!(
+            res.as_deref(),
+            Err(&Error::MissingComponent(id, is_static().info()))
+        )
     }
 
     #[test]
