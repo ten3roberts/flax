@@ -12,6 +12,7 @@ use core::{
     ptr,
     sync::atomic::{AtomicU32, Ordering},
 };
+use once_cell::unsync::OnceCell;
 use smallvec::SmallVec;
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
@@ -293,7 +294,7 @@ impl World {
         let (id, loc, _) = self.spawn_inner(self.archetypes.root, EntityKind::empty());
         EntityRefMut {
             world: self,
-            loc,
+            loc: OnceCell::with_value(loc),
             id,
         }
     }
@@ -913,6 +914,7 @@ impl World {
         self.set_inner(id, component, value).map(|v| v.0)
     }
 
+    #[inline]
     pub(crate) fn set_dyn(
         &mut self,
         id: Entity,
@@ -1343,7 +1345,7 @@ impl World {
         let loc = self.init_location(id)?;
         Ok(EntityRefMut {
             world: self,
-            loc,
+            loc: OnceCell::with_value(loc),
             id,
         })
     }

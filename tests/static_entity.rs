@@ -34,8 +34,7 @@ fn query() {
     world
         .entity_mut(resources())
         .unwrap()
-        .set(value(), "Baz".into())
-        .unwrap();
+        .set(value(), "Baz".into());
 
     assert!(query.borrow(&world).get(resources()).is_ok());
 }
