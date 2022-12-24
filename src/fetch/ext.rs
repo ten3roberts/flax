@@ -2,6 +2,7 @@ use crate::{Fetch, FetchItem};
 
 use super::{
     cloned::Cloned,
+    copied::Copied,
     opt::{Opt, OptOr},
 };
 
@@ -35,13 +36,19 @@ pub trait FetchExt: Sized {
     }
 
     /// Transform this into a cloned fetch
-    fn cloned<V>(self) -> Cloned<Self>
+    fn cloned(self) -> Cloned<Self>
     where
-        Self: for<'w> Fetch<'w>,
-        for<'q> Self: FetchItem<'q, Item = &'q V>,
-        V: Clone,
+        Cloned<Self>: for<'x> Fetch<'x>,
     {
         Cloned(self)
+    }
+
+    /// Transform this into a copied fetch
+    fn copied(self) -> Copied<Self>
+    where
+        Copied<Self>: for<'x> Fetch<'x>,
+    {
+        Copied(self)
     }
 }
 
