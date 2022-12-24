@@ -5,6 +5,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use once_cell::unsync::OnceCell;
 
 use crate::{
+    archetype::{Archetype, Slot},
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
@@ -123,19 +124,23 @@ impl<'a> EntityRefMut<'a> {
 
     /// Non consuming version of [`Self::downgrade`]
     pub fn downgrade_ref(&mut self) -> EntityRef {
+        let loc = self.loc();
         EntityRef {
-            world: self.world,
-            loc: self.loc(),
+            arch: self.world.archetypes.get(loc.arch_id),
+            slot: loc.slot,
             id: self.id,
+            world: self.world,
         }
     }
 
     /// Convert the [`EntityRefMut`] into a [`EntityRef`]
     pub fn downgrade(self) -> EntityRef<'a> {
+        let loc = self.loc();
         EntityRef {
-            world: self.world,
-            loc: self.loc(),
+            arch: self.world.archetypes.get(loc.arch_id),
+            slot: loc.slot,
             id: self.id,
+            world: self.world,
         }
     }
 
@@ -157,32 +162,30 @@ impl<'a> EntityRefMut<'a> {
 #[derive(Copy, Clone)]
 pub struct EntityRef<'a> {
     pub(crate) world: &'a World,
-    pub(crate) loc: EntityLocation,
+    pub(crate) arch: &'a Archetype,
+    pub(crate) slot: Slot,
     pub(crate) id: Entity,
 }
 
 impl<'a> EntityRef<'a> {
     /// Access a component
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
-        self.world
-            .get_at(self.loc, component)
+        self.arch
+            .get(self.slot, component)
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
     /// Access a component mutably
     pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRefMut<T>> {
-        self.world
-            .get_mut_at(self.loc, component)
+        self.arch
+            .get_mut(self.slot, component, self.world.advance_change_tick())
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
     /// Check if the entity currently has the specified component without
     /// borrowing.
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
-        self.world
-            .archetypes
-            .get(self.loc.arch_id)
-            .has(component.key())
+        self.arch.has(component.key())
     }
 
     /// Returns the entity id
@@ -195,7 +198,9 @@ impl<'a> Debug for EntityRef<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         EntityFormatter {
             world: self.world,
-            ids: &[self.id],
+            arch: self.arch,
+            slot: self.slot,
+            id: self.id,
         }
         .fmt(f)
     }
@@ -203,9 +208,15 @@ impl<'a> Debug for EntityRef<'a> {
 
 impl<'a> Debug for EntityRefMut<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let loc = self.loc();
+
+        let arch = self.world.archetypes.get(loc.arch_id);
+
         EntityFormatter {
             world: self.world,
-            ids: &[self.id],
+            id: self.id,
+            slot: loc.slot,
+            arch,
         }
         .fmt(f)
     }
