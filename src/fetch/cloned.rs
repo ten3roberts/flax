@@ -4,16 +4,10 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Archetype, Slot},
-    filter::Nothing,
     Access, ComponentKey, ComponentValue, Fetch, FetchItem,
 };
 
 use super::{FetchPrepareData, PreparedFetch};
-
-#[doc(hidden)]
-pub struct PreparedCloned<F> {
-    inner: F,
-}
 
 #[derive(Debug, Clone)]
 /// Component which clones the value.
@@ -28,17 +22,17 @@ where
     for<'q> <F as Fetch<'w>>::Prepared: PreparedFetch<'q, Item = &'q V>,
     V: ComponentValue + Clone,
 {
-    const MUTABLE: bool = false;
-    const HAS_FILTER: bool = false;
+    const MUTABLE: bool = F::MUTABLE;
+    const HAS_FILTER: bool = F::HAS_FILTER;
 
-    type Filter = Nothing;
+    type Filter = F::Filter;
 
-    type Prepared = PreparedCloned<F::Prepared>;
+    type Prepared = Cloned<F::Prepared>;
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let inner = self.0.prepare(data)?;
 
-        Some(PreparedCloned { inner })
+        Some(Cloned(inner))
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
@@ -55,7 +49,7 @@ where
     }
 
     fn filter(&self) -> Self::Filter {
-        Nothing
+        self.0.filter()
     }
 
     fn components(&self, result: &mut Vec<ComponentKey>) {
@@ -71,7 +65,7 @@ where
     type Item = V;
 }
 
-impl<'q, F, V> PreparedFetch<'q> for PreparedCloned<F>
+impl<'q, F, V> PreparedFetch<'q> for Cloned<F>
 where
     F: PreparedFetch<'q, Item = &'q V>,
     V: 'q + Clone,
@@ -80,6 +74,6 @@ where
 
     #[inline(always)]
     unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        self.inner.fetch(slot).clone()
+        self.0.fetch(slot).clone()
     }
 }
