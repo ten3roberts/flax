@@ -176,9 +176,14 @@ impl Cell {
 
     /// Clears (and drops) all components and changes.
     fn clear(&mut self) {
-        self.notify_removed();
         let storage = self.storage.get_mut();
         let changes = self.changes.get_mut();
+        if !storage.is_empty() {
+            // Notify removed
+            for v in self.subscribers.iter() {
+                v.on_change(self.info, ChangeKind::Removed)
+            }
+        }
 
         storage.clear();
         changes.clear();
@@ -202,31 +207,22 @@ impl Cell {
 
     #[inline(always)]
     fn notify_inserted(&mut self) {
-        let storage = self.storage.get_mut();
-        if !storage.is_empty() {
-            for v in self.subscribers.iter() {
-                v.on_change(self.info, ChangeKind::Inserted)
-            }
+        for v in self.subscribers.iter() {
+            v.on_change(self.info, ChangeKind::Inserted)
         }
     }
 
     #[inline(always)]
     fn notify_modified(&self) {
-        let storage = self.storage.borrow();
-        if !storage.is_empty() {
-            for v in self.subscribers.iter() {
-                v.on_change(self.info, ChangeKind::Modified)
-            }
+        for v in self.subscribers.iter() {
+            v.on_change(self.info, ChangeKind::Modified)
         }
     }
 
     #[inline(always)]
     fn notify_removed(&mut self) {
-        let storage = self.storage.get_mut();
-        if !storage.is_empty() {
-            for v in self.subscribers.iter() {
-                v.on_change(self.info, ChangeKind::Removed)
-            }
+        for v in self.subscribers.iter() {
+            v.on_change(self.info, ChangeKind::Removed)
         }
     }
 }
@@ -369,18 +365,29 @@ impl Archetype {
     }
 
     /// Access a component storage mutably.
+    ///
+    /// Return a reference to the change list, which must be used to push the slots which where
+    /// modified.
+    ///
     /// # Panics
-    /// If the storage is already borrowed
-    pub fn borrow_mut<T: ComponentValue>(
+    /// If the storage or changes is already borrowed
+    pub(crate) fn borrow_mut<T: ComponentValue>(
         &self,
         component: Component<T>,
-    ) -> Option<AtomicRefMut<[T]>> {
+    ) -> Option<(AtomicRefMut<[T]>, AtomicRefMut<Changes>)> {
         let cell = self.cell(component.key())?;
-        cell.notify_modified();
 
         let storage = cell.storage.borrow_mut();
+        let changes = cell.changes.borrow_mut();
 
-        Some(AtomicRefMut::map(storage, |v| unsafe { v.borrow_mut() }))
+        if !storage.is_empty() {
+            cell.notify_modified();
+        }
+
+        Some((
+            AtomicRefMut::map(storage, |v| unsafe { v.borrow_mut() }),
+            changes,
+        ))
     }
 
     /// Removes a slot and swaps in the last slot
@@ -432,44 +439,49 @@ impl Archetype {
     }
 
     /// Borrow the change list mutably
+    #[cfg(test)]
     pub(crate) fn changes_mut(&self, component: ComponentKey) -> Option<AtomicRefMut<Changes>> {
         let changes = self.cell(component)?.changes.borrow_mut();
         Some(changes)
     }
-
-    /// Returns the value of a component from a unique access
-    pub fn get_unique<T: ComponentValue>(
-        &mut self,
-        slot: Slot,
-        component: Component<T>,
-    ) -> Option<&mut T> {
-        let cell = self.cell_mut(component.key())?;
-        cell.notify_modified();
-        let storage = cell.storage.get_mut();
-
-        unsafe { storage.get_mut(slot) }
-    }
-
     /// Get a component from the entity at `slot`
     pub fn get_mut<T: ComponentValue>(
         &self,
         slot: Slot,
         component: Component<T>,
+        change_tick: u32,
     ) -> Option<AtomicRefMut<T>> {
         let cell = self.cell(component.key())?;
-        cell.notify_modified();
+
         let storage = cell.storage.borrow_mut();
 
-        AtomicRefMut::filter_map(storage, |v| unsafe { v.get_mut(slot) })
+        let value = AtomicRefMut::filter_map(storage, |v| unsafe { v.get_mut(slot) })?;
+
+        cell.notify_modified();
+        cell.changes
+            .borrow_mut()
+            .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
+
+        Some(value)
     }
 
     /// Get a component from the entity at `slot`
-    pub fn get_dyn(&mut self, slot: Slot, component: ComponentKey) -> Option<*mut u8> {
+    pub fn get_dyn_mut(
+        &mut self,
+        slot: Slot,
+        component: ComponentKey,
+        change_tick: u32,
+    ) -> Option<*mut u8> {
         let cell = self.cell_mut(component)?;
 
-        cell.notify_modified();
+        let value = unsafe { cell.storage.get_mut().at_mut(slot)? };
 
-        unsafe { cell.storage.get_mut().at_mut(slot) }
+        cell.notify_modified();
+        cell.changes
+            .get_mut()
+            .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
+
+        Some(value)
     }
 
     /// Get a component from the entity at `slot`. Assumes slot is valid.
@@ -586,6 +598,7 @@ impl Archetype {
         );
 
         cell.notify_inserted();
+
         cell.changes
             .get_mut()
             .set_inserted(Change::new(Slice::single(slot), tick));
@@ -1023,6 +1036,7 @@ impl ComponentInfo {
     }
 
     /// Returns the component id
+    #[inline]
     pub fn key(&self) -> ComponentKey {
         self.key
     }
@@ -1089,7 +1103,7 @@ mod tests {
         assert_eq!(arch.get(slot, b()).as_deref(), Some(&"Foo".to_string()));
         assert_eq!(arch.get(slot_2, b()).as_deref(), Some(&"Bar".to_string()));
 
-        arch.get_mut(slot, b()).unwrap().push_str("Bar");
+        arch.get_mut(slot, b(), 0).unwrap().push_str("Bar");
 
         assert_eq!(arch.get(slot, b()).as_deref(), Some(&"FooBar".to_string()));
         assert_eq!(arch.entity(slot), Some(id));

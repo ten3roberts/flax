@@ -1,5 +1,7 @@
 mod cloned;
 mod component;
+mod copied;
+mod entity_ref;
 mod ext;
 mod opt;
 
@@ -11,6 +13,7 @@ use alloc::vec::Vec;
 
 pub use cloned::*;
 pub use component::*;
+pub use entity_ref::*;
 pub use ext::*;
 pub use opt::*;
 
@@ -58,7 +61,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// true if the fetch has a filter
     const HAS_FILTER: bool = false;
     /// The filter associated to the fetch, if applicable. If the fetch does not
-    /// use a filter, use the [ `crate::All` ] filter
+    /// use a filter, use the [ `crate::Nothing` ] filter
     type Filter: for<'x> Filter<'x>;
 
     /// The prepared version of the fetch

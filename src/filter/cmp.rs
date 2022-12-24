@@ -10,7 +10,6 @@ use core::{
     any::type_name,
     cmp::Ordering,
     fmt::{self, Debug, Display},
-    ops,
 };
 
 use alloc::vec;
@@ -19,9 +18,6 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{ArchetypeId, Slice, Slot},
-    filter::And,
-    filter::Not,
-    filter::Or,
     filter::PreparedFilter,
     Access, Archetype, Component, ComponentValue, Filter,
 };
@@ -371,63 +367,5 @@ where
         };
 
         (self.func)(&borrow[slot])
-    }
-}
-
-impl<R, T> ops::BitOr<R> for OrdCmp<T>
-where
-    Self: for<'x> Filter<'x>,
-    R: for<'x> Filter<'x>,
-    T: ComponentValue + PartialOrd,
-{
-    type Output = Or<Self, R>;
-
-    fn bitor(self, rhs: R) -> Self::Output {
-        Or::new(self, rhs)
-    }
-}
-
-impl<R, T> ops::BitAnd<R> for OrdCmp<T>
-where
-    Self: for<'x> Filter<'x>,
-    T: ComponentValue + PartialOrd,
-    R: for<'x> Filter<'x>,
-{
-    type Output = And<Self, R>;
-
-    fn bitand(self, rhs: R) -> Self::Output {
-        And::new(self, rhs)
-    }
-}
-
-impl<T> ops::Neg for OrdCmp<T> {
-    type Output = Not<Self>;
-
-    fn neg(self) -> Self::Output {
-        Not(self)
-    }
-}
-
-impl<R, T, F> ops::BitOr<R> for Cmp<T, F> {
-    type Output = Or<Self, R>;
-
-    fn bitor(self, rhs: R) -> Self::Output {
-        Or::new(self, rhs)
-    }
-}
-
-impl<R, T, F> ops::BitAnd<R> for Cmp<T, F> {
-    type Output = And<Self, R>;
-
-    fn bitand(self, rhs: R) -> Self::Output {
-        And::new(self, rhs)
-    }
-}
-
-impl<T, F> ops::Neg for Cmp<T, F> {
-    type Output = Not<Self>;
-
-    fn neg(self) -> Self::Output {
-        Not(self)
     }
 }

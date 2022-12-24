@@ -6,7 +6,7 @@ use core::{
     any::type_name,
     fmt::{self, Formatter},
     iter::FusedIterator,
-    ops::{self, Neg},
+    ops,
 };
 
 use crate::{
@@ -16,6 +16,8 @@ use crate::{
 
 pub use change::*;
 pub use cmp::CmpExt;
+
+use self::cmp::{Cmp, OrdCmp};
 
 #[doc(hidden)]
 pub struct FmtFilter<'r, Q>(pub &'r Q);
@@ -49,11 +51,11 @@ macro_rules! gen_bitops {
             }
         }
 
-        impl<$($p),*> ops::Neg for $ty<$($p),*>
+        impl<$($p),*> ops::Not for $ty<$($p),*>
         {
             type Output = Not<Self>;
 
-            fn neg(self) -> Self::Output {
+            fn not(self) -> Self::Output {
                 Not(self)
             }
         }
@@ -83,6 +85,8 @@ gen_bitops! {
     With[];
     WithoutRelation[];
     Without[];
+    Cmp[A,B];
+    OrdCmp[T];
 }
 
 /// A filter which does not depend upon any state, such as a `with` filter
@@ -97,7 +101,7 @@ pub trait StaticFilter {
 /// A filter requires Debug for error messages for user conveniance
 pub trait Filter<'w>
 where
-    Self: Sized + ops::BitAnd + ops::BitOr + ops::Neg,
+    Self: Sized + ops::BitAnd + ops::BitOr + ops::Not,
 {
     /// The filter holding possible borrows
     type Prepared: PreparedFilter + 'w;
@@ -335,10 +339,10 @@ impl<R, T> ops::BitAnd<R> for Not<T> {
     }
 }
 
-impl<T> Neg for Not<T> {
+impl<T> ops::Not for Not<T> {
     type Output = T;
 
-    fn neg(self) -> Self::Output {
+    fn not(self) -> Self::Output {
         self.0
     }
 }
@@ -467,6 +471,7 @@ impl<'a> Filter<'a> for All {
 }
 
 impl StaticFilter for All {
+    #[inline(always)]
     fn static_matches(&self, _: &Archetype) -> bool {
         true
     }
@@ -809,10 +814,10 @@ impl<'a, R, F> ops::BitOr<R> for RefFilter<'a, F> {
     }
 }
 
-impl<'a, F> ops::Neg for RefFilter<'a, F> {
+impl<'a, F> ops::Not for RefFilter<'a, F> {
     type Output = Not<Self>;
 
-    fn neg(self) -> Self::Output {
+    fn not(self) -> Self::Output {
         Not(self)
     }
 }
@@ -999,10 +1004,10 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<$($ty, )*> ops::Neg for TupleOr<($($ty,)*)> {
+        impl<$($ty, )*> ops::Not for TupleOr<($($ty,)*)> {
             type Output = Not<Self>;
 
-            fn neg(self) -> Self::Output {
+            fn not(self) -> Self::Output {
                 Not(self)
             }
         }

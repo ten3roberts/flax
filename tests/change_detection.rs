@@ -1,6 +1,7 @@
 use flax::*;
 use glam::{Quat, Vec3};
 use itertools::Itertools;
+use pretty_assertions::assert_eq;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 #[test]
@@ -101,4 +102,54 @@ fn change_detection() {
     assert_eq!(removed, [ids[35]]);
 
     dbg!(removed);
+}
+
+#[test]
+fn query_changes() {
+    component! {
+        a: i32,
+        b: i32,
+        c: f32,
+    };
+
+    let mut world = World::new();
+
+    let ids = (0..10)
+        .map(|i| Entity::builder().set(a(), i).into())
+        .chain((0..30).map(|i| Entity::builder().set(a(), i).set(b(), -i).into()))
+        .chain((0..80).map(|i| {
+            Entity::builder()
+                .set(a(), i)
+                .set(b(), -i)
+                .set(c(), i as f32)
+                .into()
+        }))
+        .enumerate()
+        .map(|(i, mut v): (usize, EntityBuilder)| v.set(name(), format!("{i}")).spawn(&mut world))
+        .collect_vec();
+
+    let mut changed = Query::new((entity_ids(), a().modified().copied()));
+
+    let mut changed = |w| changed.borrow(w).iter().map(|v| v.0).collect_vec();
+
+    assert_eq!(changed(&world), ids);
+
+    Query::new(a().as_mut())
+        .with(b())
+        .without(c())
+        .borrow(&world)
+        .for_each(|v| *v *= 2);
+
+    assert_eq!(changed(&world), &ids[10..40]);
+
+    Query::new(a().as_mut())
+        .with(b())
+        .filter(!c().with() | c().gt(40.0))
+        .borrow(&world)
+        .for_each(|v| *v *= 2);
+
+    assert_eq!(
+        changed(&world),
+        [&ids[10..40], &ids[(40 + 41)..(40 + 80)]].concat()
+    );
 }

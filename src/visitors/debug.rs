@@ -1,12 +1,9 @@
 use core::fmt::{self, Formatter};
 
-use alloc::collections::BTreeMap;
-use atomic_refcell::AtomicRef;
-
 use crate::{
     archetype::{Slot, Storage},
     buffer::ComponentBuffer,
-    component, Archetype, ComponentInfo, ComponentKey, ComponentValue, MetaData,
+    component, Archetype, ComponentInfo, ComponentKey, ComponentValue, MetaData, World,
 };
 
 /// Format a component with debug
@@ -43,11 +40,6 @@ where
         buffer.set(debug_visitor(), DebugVisitor::new::<T>());
     }
 }
-pub(crate) struct RowFormatter<'a> {
-    pub arch: &'a Archetype,
-    pub slot: Slot,
-    pub meta: &'a BTreeMap<ComponentKey, AtomicRef<'a, DebugVisitor>>,
-}
 
 struct MissingDebug;
 
@@ -57,14 +49,10 @@ impl fmt::Debug for MissingDebug {
     }
 }
 
-impl<'a> RowFormatter<'a> {
-    pub fn new(
-        arch: &'a Archetype,
-        slot: Slot,
-        meta: &'a BTreeMap<ComponentKey, AtomicRef<'a, DebugVisitor>>,
-    ) -> Self {
-        Self { arch, slot, meta }
-    }
+pub(crate) struct RowValueFormatter<'a> {
+    pub world: &'a World,
+    pub arch: &'a Archetype,
+    pub slot: Slot,
 }
 
 struct ComponentName {
@@ -78,15 +66,18 @@ impl fmt::Debug for ComponentName {
     }
 }
 
-impl<'a> fmt::Debug for RowFormatter<'a> {
+impl<'a> fmt::Debug for RowValueFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
         for storage in self.arch.try_borrow_all().flatten() {
+            let info = storage.info();
+
             let name = ComponentName {
                 base_name: storage.info().name(),
-                id: storage.info().key(),
+                id: info.key(),
             };
-            if let Some(visitor) = self.meta.get(&storage.info().key()) {
+
+            if let Ok(visitor) = self.world.get(info.key().id, debug_visitor()) {
                 unsafe {
                     map.entry(&name, (visitor.visit)(&storage, self.slot));
                 }

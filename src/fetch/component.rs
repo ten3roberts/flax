@@ -100,8 +100,7 @@ where
     type Prepared = PreparedComponentMut<'w, T>;
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let borrow = data.arch.borrow_mut(self.0)?;
-        let changes = data.arch.changes_mut(self.0.key())?;
+        let (borrow, changes) = data.arch.borrow_mut(self.0)?;
 
         Some(PreparedComponentMut { borrow, changes })
     }

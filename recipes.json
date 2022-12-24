@@ -18,10 +18,14 @@
     "kind": "dap"
   },
   "check": {
-    "cmd": "cargo check --all-features --workspace --tests"
+    "cmd": "cargo check --all-features --workspace --tests --lib"
   },
   "test": {
     "cmd": "cargo nextest run --all-features",
+    "kind": "term"
+  },
+  "test-nostd": {
+    "cmd": "cargo nextest run --no-default-features",
     "kind": "term"
   },
   "build": {

@@ -14,18 +14,15 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeId, ArchetypeInfo, BatchSpawn, Change, ComponentInfo, Slice},
     buffer::ComponentBuffer,
     components::{component_info, name},
-    debug_visitor, dummy,
     entity::*,
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     events::{EventHandler, RemoveSubscriber, Subscriber},
     filter::ArchetypeFilter,
-    is_static, Component, ComponentKey, ComponentValue, Entity, Error, Filter, Query, RelationExt,
-    RowFormatter, StaticFilter,
+    *,
 };
 
 #[derive(Debug, Default)]
@@ -643,16 +640,12 @@ impl World {
         for (component, data) in components.take_all() {
             let src = self.archetypes.get_mut(arch);
 
-            if let Some(old) = src.get_dyn(slot, component.key) {
+            if let Some(old) = src.get_dyn_mut(slot, component.key, change_tick) {
                 // Drop old and copy the new value in
                 unsafe {
                     (component.drop)(old);
                     ptr::copy_nonoverlapping(data, old, component.size());
                 }
-
-                src.changes_mut(component.key())
-                    .unwrap()
-                    .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
             } else {
                 // Component does not exist yet, so defer a move
 
@@ -933,11 +926,7 @@ impl World {
 
         let src = self.archetypes.get_mut(src_id);
 
-        if let Some(old) = src.get_dyn(slot, info.key()) {
-            src.changes_mut(info.key())
-                .unwrap()
-                .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
-
+        if let Some(old) = src.get_dyn_mut(slot, info.key(), change_tick) {
             // Make the caller responsible for drop or store
             (on_drop(old));
 
@@ -1182,18 +1171,11 @@ impl World {
     ) -> Option<AtomicRefMut<T>> {
         let archetype = self.archetypes.get(arch);
 
-        let change_tick = self.advance_change_tick();
-
         if !archetype.has(component.key()) {
             return None;
         }
 
-        archetype
-            .changes_mut(component.key())
-            .expect("Change list is empty")
-            .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
-
-        archetype.get_mut(slot, component)
+        archetype.get_mut(slot, component, self.advance_change_tick())
     }
 
     /// Returns true if the entity has the specified component.
@@ -1315,8 +1297,8 @@ impl World {
     }
 
     /// Formats a set of entities using the debug visitor.
-    pub fn format_entities<'a>(&'a self, ids: &'a [Entity]) -> EntityFormatter<'a> {
-        EntityFormatter { world: self, ids }
+    pub fn format_entities<'a>(&'a self, ids: &'a [Entity]) -> EntitiesFormatter<'a> {
+        EntitiesFormatter { world: self, ids }
     }
 
     /// Returns a human friendly breakdown of the archetypes in the world
@@ -1360,10 +1342,12 @@ impl World {
     /// **Note**: Fails for static entities if they have not yet been spawned into the world
     pub fn entity(&self, id: Entity) -> Result<EntityRef> {
         let loc = self.location(id)?;
+        let arch = self.archetypes.get(loc.arch_id);
 
         Ok(EntityRef {
             world: self,
-            loc,
+            arch,
+            slot: loc.slot,
             id,
         })
     }
@@ -1607,7 +1591,6 @@ where
     F: for<'x> Filter<'x>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut meta = BTreeMap::new();
         let mut list = f.debug_map();
 
         let mut query = Query::new(())
@@ -1618,14 +1601,6 @@ where
 
         for batch in query.iter_batched() {
             let arch = batch.arch();
-            meta.clear();
-            meta.extend(arch.components().flat_map(|info| {
-                Some((
-                    info.key(),
-                    self.world.get(info.key().id, debug_visitor()).ok()?,
-                ))
-            }));
-
             for slot in batch.slots().iter() {
                 assert!(
                     slot < arch.len(),
@@ -1634,7 +1609,12 @@ where
                     arch.entities()
                 );
 
-                let row = RowFormatter::new(arch, slot, &meta);
+                let row = RowValueFormatter {
+                    world: self.world,
+                    arch,
+                    slot,
+                };
+
                 list.entry(&arch.entity(slot).unwrap(), &row);
             }
         }
@@ -1646,38 +1626,60 @@ where
 /// Debug formats the specified entities,
 /// Created using [World::format_entities]
 #[doc(hidden)]
-pub struct EntityFormatter<'a> {
+pub struct EntitiesFormatter<'a> {
     pub(crate) world: &'a World,
     pub(crate) ids: &'a [Entity],
 }
 
-impl<'a> fmt::Debug for EntityFormatter<'a> {
+impl<'a> fmt::Debug for EntitiesFormatter<'a> {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut meta = BTreeMap::new();
         let mut list = f.debug_map();
 
         for &id in self.ids {
-            let loc = self.world.location(id);
-            if let Ok(loc) = loc {
-                let arch = self.world.archetypes.get(loc.arch_id);
+            let Ok(loc) = self.world.location(id) else { continue };
 
-                meta.extend(arch.components().flat_map(|info| {
-                    Some((
-                        info.key(),
-                        self.world.get(info.key().id, debug_visitor()).ok()?,
-                    ))
-                }));
+            let arch = self.world.archetypes.get(loc.arch_id);
 
-                let row = RowFormatter::new(arch, loc.slot, &meta);
-                list.entry(&id, &row);
-            }
+            let row = RowValueFormatter {
+                world: self.world,
+                arch,
+                slot: loc.slot,
+            };
+
+            list.entry(&id, &row);
         }
 
         list.finish()
     }
 }
 
+/// Debug formats the specified entities,
+/// Created using [World::format_entities]
+#[doc(hidden)]
+pub struct EntityFormatter<'a> {
+    pub(crate) world: &'a World,
+    pub(crate) arch: &'a Archetype,
+    pub(crate) slot: Slot,
+    pub(crate) id: Entity,
+}
+
+impl<'a> fmt::Debug for EntityFormatter<'a> {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut list = f.debug_map();
+
+        let row = RowValueFormatter {
+            world: self.world,
+            slot: self.slot,
+            arch: self.arch,
+        };
+
+        list.entry(&self.id, &row);
+
+        list.finish()
+    }
+}
 impl Default for World {
     fn default() -> Self {
         Self::new()

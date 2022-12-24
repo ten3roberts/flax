@@ -84,6 +84,8 @@ fn entity_ref() {
 #[test]
 #[cfg(feature = "flume")]
 fn entity_hierarchy() {
+    use pretty_assertions::assert_eq;
+
     let mut world = World::new();
     let (tx, rx) = flume::unbounded();
 
