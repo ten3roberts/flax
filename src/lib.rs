@@ -247,7 +247,7 @@ pub use error::Error;
 pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
-pub use filter::{All, And, CmpExt, Filter, Or, StaticFilter, With, Without};
+pub use filter::{All, And, CmpExt, Filter, Nothing, Or, StaticFilter, With, Without};
 pub use meta::*;
 pub use paste::paste;
 pub use query::*;

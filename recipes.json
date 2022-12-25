@@ -20,9 +20,16 @@
   "check": {
     "cmd": "cargo check --all-features --workspace --tests --lib"
   },
+  "test-all": {
+    "cmd": "",
+    "depends_on": ["test", "doc", "test-nostd"]
+  },
   "test": {
     "cmd": "cargo nextest run --all-features",
     "kind": "term"
+  },
+  "doc": {
+    "cmd": "cargo doc --all-features"
   },
   "test-nostd": {
     "cmd": "cargo nextest run --no-default-features",
