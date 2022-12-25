@@ -33,7 +33,7 @@ provide the application logic.
 ## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/guide)**
 
 
-## Live Demo
+## [Live Demo](https://ten3roberts.github.io/flax/asteroids)
 See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/flax/asteroids).
 
 ## Example Usage
