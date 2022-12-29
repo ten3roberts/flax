@@ -193,7 +193,10 @@ pub struct EntityRef<'a> {
 impl<'a> EntityRef<'a> {
     /// Returns all relations to other entities of the specified kind
     #[inline]
-    pub fn relations<T: ComponentValue>(&self, relation: impl RelationExt<T>) -> RelationIter<T> {
+    pub fn relations<T: ComponentValue>(
+        &self,
+        relation: impl RelationExt<T>,
+    ) -> RelationIter<'a, T> {
         RelationIter::new(relation, self.arch, self.slot)
     }
 
@@ -202,7 +205,7 @@ impl<'a> EntityRef<'a> {
     pub fn relations_mut<T: ComponentValue>(
         &self,
         relation: impl RelationExt<T>,
-    ) -> RelationIterMut<T> {
+    ) -> RelationIterMut<'a, T> {
         RelationIterMut::new(
             relation,
             self.arch,
@@ -212,14 +215,17 @@ impl<'a> EntityRef<'a> {
     }
 
     /// Access a component
-    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
+    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<'a, T>> {
         self.arch
             .get(self.slot, component)
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRefMut<T>> {
+    pub fn get_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<AtomicRefMut<'a, T>> {
         self.arch
             .get_mut(self.slot, component, self.world.advance_change_tick())
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
