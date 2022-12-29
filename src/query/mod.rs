@@ -239,6 +239,15 @@ where
             .collect_vec()
     }
 
+    /// Collect all elements in the query into a vector
+    pub fn collect_vec<'w, T>(&'w mut self, world: &'w World) -> Vec<T>
+    where
+        T: 'static,
+        Q: for<'q> FetchItem<'q, Item = T>,
+    {
+        self.borrow(world).iter().collect()
+    }
+
     pub(crate) fn get_archetypes<'a>(&'a self, world: &'a World) -> Vec<ArchetypeId> {
         let mut components = Vec::new();
         self.fetch.components(&mut components);

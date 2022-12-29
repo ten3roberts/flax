@@ -230,6 +230,7 @@ pub mod visitors;
 
 /// Subscribe to changes in the world
 pub mod events;
+mod relation;
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein
 #[cfg(feature = "serde")]
@@ -251,6 +252,7 @@ pub use filter::{All, And, CmpExt, Filter, Nothing, Or, StaticFilter, With, With
 pub use meta::*;
 pub use paste::paste;
 pub use query::*;
+pub use relation::*;
 pub use schedule::*;
 pub use system::*;
 pub use visitors::*;

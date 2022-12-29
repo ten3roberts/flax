@@ -205,6 +205,28 @@ impl Cell {
         &self.storage
     }
 
+    pub(crate) unsafe fn get<T: ComponentValue>(&self, slot: Slot) -> Option<AtomicRef<T>> {
+        let storage = self.storage.borrow();
+        AtomicRef::filter_map(storage, |v| v.get(slot))
+    }
+
+    pub(crate) unsafe fn get_mut<T: ComponentValue>(
+        &self,
+        slot: Slot,
+        change_tick: u32,
+    ) -> Option<AtomicRefMut<T>> {
+        let storage = self.storage.borrow_mut();
+
+        let value = AtomicRefMut::filter_map(storage, |v| v.get_mut(slot))?;
+
+        self.notify_modified();
+        self.changes
+            .borrow_mut()
+            .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
+
+        Some(value)
+    }
+
     #[inline(always)]
     fn notify_inserted(&mut self) {
         for v in self.subscribers.iter() {
@@ -279,8 +301,14 @@ impl Archetype {
     }
 
     /// Returns the components with the specified relation type.
-    pub fn relations_like(&self, relation: Entity) -> impl Iterator<Item = ComponentKey> + '_ {
-        self.relations().filter(move |k| k.id == relation)
+    pub(crate) fn relations_like(
+        &self,
+        relation: Entity,
+    ) -> impl Iterator<Item = (&ComponentKey, &Cell)> {
+        self.cells.range(
+            ComponentKey::new(relation, Some(Entity::MIN))
+                ..=ComponentKey::new(relation, Some(Entity::MAX)),
+        )
     }
 
     /// Create a new archetype.
@@ -453,16 +481,7 @@ impl Archetype {
     ) -> Option<AtomicRefMut<T>> {
         let cell = self.cell(component.key())?;
 
-        let storage = cell.storage.borrow_mut();
-
-        let value = AtomicRefMut::filter_map(storage, |v| unsafe { v.get_mut(slot) })?;
-
-        cell.notify_modified();
-        cell.changes
-            .borrow_mut()
-            .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
-
-        Some(value)
+        unsafe { cell.get_mut(slot, change_tick) }
     }
 
     /// Get a component from the entity at `slot`
@@ -490,11 +509,8 @@ impl Archetype {
         slot: Slot,
         component: Component<T>,
     ) -> Option<AtomicRef<T>> {
-        let storage = self.cell(component.key())?.storage.borrow();
-
-        // If a dummy slot is used, the archetype must have no components, so `storage.get` fails,
-        // which is safe
-        AtomicRef::filter_map(storage, |v| unsafe { v.get(slot) })
+        let cell = self.cell(component.key())?;
+        unsafe { cell.get(slot) }
     }
 
     /// Insert a new entity into the archetype.

@@ -22,6 +22,7 @@ use crate::{
     error::Result,
     events::{EventHandler, RemoveSubscriber, Subscriber},
     filter::ArchetypeFilter,
+    relation::Relation,
     *,
 };
 
@@ -420,7 +421,7 @@ impl World {
 
         // Safety
         // The id is not used by anything else
-        let component = unsafe { Component::from_raw_id(ComponentKey::new(id, None), name, meta) };
+        let component = Component::from_key(ComponentKey::new(id, None), name, meta);
 
         let info = component.info();
 
@@ -439,8 +440,10 @@ impl World {
         &mut self,
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
-    ) -> impl RelationExt<T> + Copy {
-        self.spawn_component::<T>(name, meta)
+    ) -> Relation<T> {
+        let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
+
+        Relation::from_id(id, name, meta)
     }
 
     #[inline(always)]
@@ -1324,7 +1327,7 @@ impl World {
         }
         // Safety: the type
 
-        Some(unsafe { Component::from_raw_id(id, info.name(), info.meta()) })
+        Some(Component::from_key(id, info.name(), info.meta()))
     }
 
     /// Access, insert, and remove all components of an entity
@@ -1550,13 +1553,11 @@ impl Migrated {
             panic!("Mismatched component types {component:?} for {info:#?}");
         }
 
-        unsafe {
-            Component::from_raw_id(
-                ComponentKey::new(id, object),
-                component.name(),
-                component.meta(),
-            )
-        }
+        Component::from_key(
+            ComponentKey::new(id, object),
+            component.name(),
+            component.meta(),
+        )
     }
 
     /// Returns the migrated relation

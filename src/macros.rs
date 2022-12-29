@@ -102,9 +102,10 @@ macro_rules! component {
     ($(#[$outer:meta])* $vis: vis $name: ident( $obj: ident ): $ty: ty $(=> [$($metadata: ty),*])?, $($rest:tt)*) => {
         $crate::paste! {
             #[allow(dead_code)]
-            static [<COMPONENT_ $name:snake:upper _ID>]: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
             $(#[$outer])*
             $vis fn $name($obj: $crate::Entity) -> $crate::Component<$ty> {
+
+                static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
                 fn meta(_component: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
                     let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
@@ -122,7 +123,7 @@ macro_rules! component {
 
                 use $crate::entity::EntityKind;
                 use $crate::RelationExt;
-                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT, stringify!($name), meta).of($obj)
+                $crate::Component::static_init(&COMPONENT_ID, EntityKind::COMPONENT, stringify!($name), meta).of($obj)
             }
         }
 
