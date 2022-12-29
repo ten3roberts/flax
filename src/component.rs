@@ -197,15 +197,15 @@ pub struct Component<T> {
     meta: fn(ComponentInfo) -> ComponentBuffer,
 }
 
-impl<T: ComponentValue> Eq for Component<T> {}
+impl<T> Eq for Component<T> {}
 
-impl<T: ComponentValue> PartialEq for Component<T> {
+impl<T> PartialEq for Component<T> {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key
     }
 }
 
-impl<T: ComponentValue> Copy for Component<T> {}
+impl<T> Copy for Component<T> {}
 
 impl<T> Clone for Component<T> {
     fn clone(&self) -> Self {
@@ -218,13 +218,13 @@ impl<T> Clone for Component<T> {
     }
 }
 
-impl<T: ComponentValue> fmt::Debug for Component<T> {
+impl<T> fmt::Debug for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Component").field("id", &self.key).finish()
     }
 }
 
-impl<T: ComponentValue> Display for Component<T> {
+impl<T> Display for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}({})", self.name, self.key)
     }
