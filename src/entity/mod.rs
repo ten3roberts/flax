@@ -24,6 +24,28 @@ pub struct Entity {
 }
 
 impl Entity {
+    /// The lowest possible entity
+    ///
+    /// May or may not refer to a valid entity.
+    pub(crate) const MIN: Self = unsafe {
+        Entity {
+            index: 0,
+            gen: NonZeroU16::new_unchecked(1),
+            kind: EntityKind::empty(),
+        }
+    };
+
+    /// The greatest possible entity
+    ///
+    /// May or may not refer to a valid entity.
+    pub(crate) const MAX: Self = unsafe {
+        Entity {
+            index: u32::MAX,
+            gen: NonZeroU16::new_unchecked(u16::MAX),
+            kind: EntityKind::all(),
+        }
+    };
+
     pub(crate) fn from_parts(index: EntityIndex, gen: EntityGen, kind: EntityKind) -> Self {
         Self { index, gen, kind }
     }

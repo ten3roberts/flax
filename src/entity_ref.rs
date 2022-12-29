@@ -1,5 +1,4 @@
-use core::fmt::Debug;
-use core::mem::MaybeUninit;
+use core::{fmt::Debug, mem::MaybeUninit};
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use once_cell::unsync::OnceCell;
@@ -9,8 +8,9 @@ use crate::{
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentKey, ComponentValue, Entity, EntityFormatter, Error, World,
+    Component, ComponentKey, ComponentValue, Entity, EntityFormatter, Error, RelationExt, World,
 };
+use crate::{RelationIter, RelationIterMut};
 
 /// Borrow all the components of an entity at once.
 ///
@@ -51,6 +51,21 @@ impl<'a> EntityRefMut<'a> {
             .archetypes
             .get(self.loc().arch_id)
             .has(component.key())
+    }
+
+    /// Returns all relations to other entities of the specified kind
+    pub fn relations<T: ComponentValue>(&self, relation: impl RelationExt<T>) -> RelationIter<T> {
+        let (_, loc, arch) = self.parts();
+        RelationIter::new(relation, arch, loc.slot)
+    }
+
+    /// Returns all relations to other entities of the specified kind
+    pub fn relations_mut<T: ComponentValue>(
+        &self,
+        relation: impl RelationExt<T>,
+    ) -> RelationIterMut<T> {
+        let (world, loc, arch) = self.parts();
+        RelationIterMut::new(relation, arch, loc.slot, world.advance_change_tick())
     }
 
     /// Set a component for the entity
@@ -122,8 +137,15 @@ impl<'a> EntityRefMut<'a> {
         }
     }
 
+    fn parts(&self) -> (&World, EntityLocation, &Archetype) {
+        let loc = self.loc();
+        let arch = self.world.archetypes.get(loc.arch_id);
+        (self.world, loc, arch)
+    }
+
     /// Non consuming version of [`Self::downgrade`]
-    pub fn downgrade_ref(&mut self) -> EntityRef {
+    #[inline]
+    pub fn downgrade_ref(&self) -> EntityRef {
         let loc = self.loc();
         EntityRef {
             arch: self.world.archetypes.get(loc.arch_id),
@@ -134,6 +156,7 @@ impl<'a> EntityRefMut<'a> {
     }
 
     /// Convert the [`EntityRefMut`] into a [`EntityRef`]
+    #[inline]
     pub fn downgrade(self) -> EntityRef<'a> {
         let loc = self.loc();
         EntityRef {
@@ -168,6 +191,26 @@ pub struct EntityRef<'a> {
 }
 
 impl<'a> EntityRef<'a> {
+    /// Returns all relations to other entities of the specified kind
+    #[inline]
+    pub fn relations<T: ComponentValue>(&self, relation: impl RelationExt<T>) -> RelationIter<T> {
+        RelationIter::new(relation, self.arch, self.slot)
+    }
+
+    /// Returns all relations to other entities of the specified kind
+    #[inline]
+    pub fn relations_mut<T: ComponentValue>(
+        &self,
+        relation: impl RelationExt<T>,
+    ) -> RelationIterMut<T> {
+        RelationIterMut::new(
+            relation,
+            self.arch,
+            self.slot,
+            self.world.advance_change_tick(),
+        )
+    }
+
     /// Access a component
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
         self.arch

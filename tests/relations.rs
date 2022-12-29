@@ -91,3 +91,66 @@ fn relations() {
         3
     );
 }
+
+#[test]
+fn multiple_hierarchies() {
+    let mut world = World::new();
+
+    component! {
+        a(parent): (),
+        b(parent): String,
+    }
+
+    let root = Entity::builder()
+        .set(name(), "root".into())
+        .attach(
+            a,
+            Entity::builder()
+                .set(name(), "root.child(a)".into())
+                .attach(
+                    b,
+                    Entity::builder().set(name(), "root.child(a).child(b)".into()),
+                )
+                .attach(
+                    a,
+                    Entity::builder().set(name(), "root.child(a).child(a)".into()),
+                ),
+        )
+        .attach_with(
+            b,
+            "RelationValue".into(),
+            Entity::builder().set(name(), "root.child(b)".into()),
+        )
+        .spawn(&mut world);
+
+    eprintln!("World: {world:#?}");
+
+    let children = Query::new(name().cloned())
+        .with_relation(a)
+        .collect_vec(&world);
+
+    assert_eq!(children.len(), 2, "{children:#?}");
+
+    let children = Query::new(entity_ids()).with(a(root)).collect_vec(&world);
+
+    {
+        assert_eq!(children.len(), 1, "{children:#?}");
+        let child = world.entity_mut(children[0]).unwrap();
+
+        let relations = child.relations(a).collect_vec();
+        assert_eq!(relations.len(), 1);
+
+        assert_eq!(relations[0].0, root);
+    }
+
+    let children = Query::new(entity_ids()).with(b(root)).collect_vec(&world);
+
+    assert_eq!(children.len(), 1, "{children:#?}");
+    let child = world.entity(children[0]).unwrap();
+
+    let relations = child.relations(b).collect_vec();
+    assert_eq!(relations.len(), 1);
+
+    assert_eq!(relations[0].0, root);
+    assert_eq!(&*relations[0].1, "RelationValue");
+}

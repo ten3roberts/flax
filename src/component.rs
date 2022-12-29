@@ -16,7 +16,7 @@ use crate::{
     buffer::ComponentBuffer,
     entity::EntityKind,
     filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
-    ChangeKind, Entity, MetaData, Mutable,
+    ChangeKind, Entity, MetaData, Mutable, RelationExt,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
@@ -96,6 +96,18 @@ impl ComponentKey {
     pub(crate) fn new(id: Entity, object: Option<Entity>) -> Self {
         Self { id, object }
     }
+
+    #[inline]
+    /// Returns the object of the relation
+    pub fn object(&self) -> Option<Entity> {
+        self.object
+    }
+
+    #[inline]
+    /// Returns the component id
+    pub fn id(&self) -> Entity {
+        self.id
+    }
 }
 
 impl Display for ComponentKey {
@@ -119,68 +131,6 @@ pub type ComponentFn<T> = fn() -> Component<T>;
 /// Type alias for a function which instantiates a relation with the specified
 /// object
 pub type RelationFn<T> = fn(object: Entity) -> Component<T>;
-
-/// Relation helper trait
-pub trait RelationExt<T>
-where
-    T: ComponentValue,
-{
-    /// Instantiate the relation
-    fn of(&self, object: Entity) -> Component<T>;
-    /// Construct a new filter yielding entities with this kind of relation
-    fn with_relation(self) -> WithRelation;
-    /// Construct a new filter yielding entities without this kind of relation
-    fn without_relation(self) -> WithoutRelation;
-}
-
-impl<T: ComponentValue> RelationExt<T> for Component<T> {
-    fn of(&self, object: Entity) -> Component<T> {
-        Self {
-            key: ComponentKey::new(self.key.id, Some(object)),
-            ..*self
-        }
-    }
-
-    fn with_relation(self) -> WithRelation {
-        WithRelation {
-            relation: self.id(),
-            name: self.name(),
-        }
-    }
-
-    fn without_relation(self) -> WithoutRelation {
-        WithoutRelation {
-            relation: self.id(),
-            name: self.name(),
-        }
-    }
-}
-
-impl<T, F> RelationExt<T> for F
-where
-    F: Fn(Entity) -> Component<T>,
-    T: ComponentValue,
-{
-    fn of(&self, object: Entity) -> Component<T> {
-        (self)(object)
-    }
-
-    fn with_relation(self) -> WithRelation {
-        let c = self(dummy());
-        WithRelation {
-            relation: c.id(),
-            name: c.name(),
-        }
-    }
-
-    fn without_relation(self) -> WithoutRelation {
-        let c = self(dummy());
-        WithoutRelation {
-            relation: c.id(),
-            name: c.name(),
-        }
-    }
-}
 
 crate::component! {
     pub(crate) dummy,
@@ -220,7 +170,7 @@ impl<T> Clone for Component<T> {
 
 impl<T> fmt::Debug for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Component").field("id", &self.key).finish()
+        f.debug_struct("Component").field("key", &self.key).finish()
     }
 }
 
@@ -249,13 +199,13 @@ impl<T: ComponentValue> Component<T> {
     /// # Safety
     /// The constructed component can not be of a different type, name or meta
     /// than any existing component of the same id
-    pub(crate) unsafe fn from_raw_id(
-        id: ComponentKey,
+    pub(crate) fn from_key(
+        key: ComponentKey,
         name: &'static str,
         meta: fn(ComponentInfo) -> ComponentBuffer,
     ) -> Self {
         Self {
-            key: id,
+            key,
             name,
             marker: PhantomData,
             meta,
@@ -273,7 +223,12 @@ impl<T: ComponentValue> Component<T> {
 
         // Safety
         // The id is new
-        unsafe { Self::from_raw_id(ComponentKey::new(id, None), name, meta) }
+        Self {
+            key: ComponentKey::new(id, None),
+            name,
+            meta,
+            marker: PhantomData,
+        }
     }
 
     /// Get the component's id.
@@ -357,6 +312,35 @@ impl<T: ComponentValue> MetaData<T> for Component<T> {
 impl<T: ComponentValue> From<Component<T>> for Entity {
     fn from(v: Component<T>) -> Self {
         v.key().id
+    }
+}
+
+impl<T: ComponentValue> RelationExt<T> for Component<T> {
+    fn id(&self) -> Entity {
+        self.key().id
+    }
+
+    fn of(&self, object: Entity) -> Component<T> {
+        Self {
+            key: ComponentKey::new(self.key().id, Some(object)),
+            ..*self
+        }
+    }
+
+    #[inline]
+    fn with_relation(self) -> WithRelation {
+        WithRelation {
+            relation: self.id(),
+            name: self.name(),
+        }
+    }
+
+    #[inline]
+    fn without_relation(self) -> WithoutRelation {
+        WithoutRelation {
+            relation: self.id(),
+            name: self.name(),
+        }
     }
 }
 
