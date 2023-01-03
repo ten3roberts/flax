@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Archetype, Slot},
-    Access, ComponentKey, Fetch, FetchItem,
+    Access, Fetch, FetchItem,
 };
 
 use super::{FetchPrepareData, PreparedFetch};
@@ -53,8 +53,8 @@ where
         self.0.filter()
     }
 
-    fn components(&self, result: &mut Vec<ComponentKey>) {
-        self.0.components(result)
+    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
+        self.0.searcher(searcher)
     }
 }
 

@@ -205,8 +205,8 @@ fn derive_data_struct(
                         [ #(self.#field_names.access(data)),* ].concat()
                     }
 
-                    fn components(&self, result: &mut Vec<#crate_name::ComponentKey>) {
-                        #(self.#field_names.components(result));*
+                    fn searcher(&self, searcher: &mut #crate_name::ArchetypeSearcher) {
+                        #(self.#field_names.searcher(searcher));*
                     }
 
                     fn filter(&self) -> Self::Filter {

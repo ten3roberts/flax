@@ -1,4 +1,3 @@
-use alloc::vec::Vec;
 use core::{
     iter::Peekable,
     mem::{self, MaybeUninit},
@@ -40,10 +39,13 @@ where
 {
     let arch = world.archetypes.get(arch_id);
 
-    let mut components = Vec::new();
-    fetch.components(&mut components);
-    DifferenceIter::new(arch.components().map(|v| v.key()), components.into_iter())
-        .map(|v| *world.get(v.id, component_info()).unwrap())
+    let mut searcher = Default::default();
+    fetch.searcher(&mut searcher);
+    DifferenceIter::new(
+        arch.components().map(|v| v.key()),
+        searcher.required.into_iter(),
+    )
+    .map(|v| *world.get(v.id, component_info()).unwrap())
 }
 
 pub(crate) struct PreparedArchetype<'w, Q> {

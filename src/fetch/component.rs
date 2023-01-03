@@ -37,6 +37,8 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
+    const HAS_FILTER: bool = false;
+
     type Filter = Nothing;
 
     type Prepared = PreparedComponent<'w, T>;
@@ -72,11 +74,9 @@ where
         Nothing
     }
 
-    fn components(&self, result: &mut Vec<ComponentKey>) {
-        result.push(self.key())
+    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
+        searcher.add_required(self.key())
     }
-
-    const HAS_FILTER: bool = false;
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Component<T> {
@@ -141,8 +141,8 @@ where
         Nothing
     }
 
-    fn components(&self, result: &mut Vec<ComponentKey>) {
-        result.push(self.0.key())
+    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
+        searcher.add_required(self.0.key())
     }
 }
 
@@ -248,7 +248,7 @@ where
         Nothing
     }
 
-    fn components(&self, _: &mut Vec<ComponentKey>) {}
+    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {

@@ -1,8 +1,8 @@
 mod borrow;
 mod entity;
+pub(crate) mod searcher;
 use alloc::vec::Vec;
 mod iter;
-use core::cmp;
 use core::fmt::{self, Debug};
 
 use atomic_refcell::AtomicRef;
@@ -15,14 +15,15 @@ use crate::{
     filter::*,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, Archetypes, Component, ComponentKey, ComponentValue, FetchItem, Filter,
-    World,
+    Access, AccessKind, Component, ComponentValue, FetchItem, Filter, World,
 };
 use crate::{AsBorrow, Entity, RelationExt};
 
 pub use borrow::*;
 pub use entity::*;
 pub use iter::*;
+
+pub use self::searcher::ArchetypeSearcher;
 
 type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Represents a query and state for a given world.
@@ -249,31 +250,21 @@ where
     }
 
     pub(crate) fn get_archetypes<'a>(&'a self, world: &'a World) -> Vec<ArchetypeId> {
-        let mut components = Vec::new();
-        self.fetch.components(&mut components);
-        components.sort();
-        components.dedup();
+        let mut searcher = ArchetypeSearcher::default();
+        self.fetch.searcher(&mut searcher);
+        if !self.include_components {
+            searcher.add_excluded(component_info().key());
+        }
 
-        let mut result = Vec::new();
         let archetypes = &world.archetypes;
 
         let filter = |_: ArchetypeId, arch: &Archetype| {
-            (self.include_components || !arch.has(component_info().key()))
-                && self.fetch.matches(arch)
+            self.fetch.matches(arch)
                 && self.filter.matches(arch)
                 && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
         };
 
-        let root = archetypes.root();
-        let root_arch = archetypes.get(root);
-
-        if components.is_empty() && filter(root, root_arch) {
-            result.push(root);
-        }
-
-        traverse_archetypes(archetypes, root_arch, &components, &mut result, &filter);
-
-        result
+        searcher.find_archetypes(archetypes, filter)
     }
 }
 
@@ -301,57 +292,6 @@ where
                 mutable: false,
             }])
             .collect_vec()
-    }
-}
-
-#[inline]
-fn traverse_archetypes(
-    archetypes: &Archetypes,
-    cur: &Archetype,
-    components: &[ComponentKey],
-    result: &mut Vec<ArchetypeId>,
-    filter: &impl Fn(ArchetypeId, &Archetype) -> bool,
-) {
-    match components {
-        // All components are found, every archetype from now on is now matched
-        [] => {
-            for (&component, &(strong, arch_id)) in &cur.outgoing {
-                if strong {
-                    let arch = archetypes.get(arch_id);
-                    debug_assert!(arch.components().any(|v| v.key() == component));
-                    // This matches
-                    if filter(arch_id, arch) {
-                        result.push(arch_id);
-                    }
-                    traverse_archetypes(archetypes, arch, components, result, filter);
-                }
-            }
-        }
-        [head, tail @ ..] => {
-            // Since the components in the trie are in order, a value greater than head means the
-            // current component will never occur
-            for (&component, &(strong, arch_id)) in &cur.outgoing {
-                if strong {
-                    let arch = archetypes.get(arch_id);
-                    match component.cmp(head) {
-                        cmp::Ordering::Less => {
-                            // Not quite, keep looking
-                            traverse_archetypes(archetypes, arch, components, result, filter);
-                        }
-                        cmp::Ordering::Equal => {
-                            // One more component has been found, continue to search for the remaining ones
-                            if filter(arch_id, arch) {
-                                result.push(arch_id);
-                            }
-                            traverse_archetypes(archetypes, arch, tail, result, filter);
-                        }
-                        cmp::Ordering::Greater => {
-                            // We won't find anything of interest further down the tree
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

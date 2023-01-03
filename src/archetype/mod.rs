@@ -273,7 +273,8 @@ pub struct Archetype {
     pub(crate) entities: Vec<Entity>,
 
     // ComponentId => ArchetypeId
-    pub(crate) outgoing: BTreeMap<ComponentKey, (bool, ArchetypeId)>,
+    pub(crate) children: BTreeMap<ComponentKey, ArchetypeId>,
+    pub(crate) outgoing: BTreeMap<ComponentKey, ArchetypeId>,
     pub(crate) incoming: BTreeMap<ComponentKey, ArchetypeId>,
 
     pub(crate) subscribers: Vec<Arc<dyn Subscriber>>,
@@ -288,10 +289,11 @@ impl Archetype {
         Self {
             cells: BTreeMap::new(),
             removals: BTreeMap::new(),
-            outgoing: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
             subscribers: Vec::new(),
+            children: Default::default(),
+            outgoing: Default::default(),
         }
     }
 
@@ -338,9 +340,10 @@ impl Archetype {
             cells,
             removals: BTreeMap::new(),
             incoming: BTreeMap::new(),
-            outgoing: BTreeMap::new(),
             entities: Vec::new(),
             subscribers: Vec::new(),
+            children: Default::default(),
+            outgoing: Default::default(),
         }
     }
 
@@ -354,30 +357,23 @@ impl Archetype {
         self.cells.contains_key(&component)
     }
 
-    pub(crate) fn outgoing(&self, component: ComponentKey) -> Option<(bool, ArchetypeId)> {
-        self.outgoing.get(&component).copied()
-    }
-
     pub(crate) fn incoming(&self, component: ComponentKey) -> Option<ArchetypeId> {
         self.incoming.get(&component).copied()
     }
 
-    pub(crate) fn add_incoming(&mut self, dst_id: ArchetypeId, component: ComponentKey) {
+    pub(crate) fn add_incoming(&mut self, component: ComponentKey, dst_id: ArchetypeId) {
         self.incoming.insert(component, dst_id);
     }
 
-    pub(crate) fn add_outgoing(
-        &mut self,
-        dst_id: ArchetypeId,
-        strong_link: bool,
-        component: ComponentKey,
-    ) {
-        let link = self
-            .outgoing
-            .entry(component)
-            .or_insert((strong_link, dst_id));
+    pub(crate) fn add_outgoing(&mut self, component: ComponentKey, dst_id: ArchetypeId) {
+        self.outgoing.insert(component, dst_id);
+    }
 
-        link.0 = link.0 || strong_link;
+    pub(crate) fn add_child(&mut self, component: ComponentKey, id: ArchetypeId) {
+        self.outgoing.insert(component, id);
+
+        let existing = self.children.insert(component, id);
+        debug_assert!(existing.is_none());
     }
 
     fn push_removed(&mut self, key: ComponentKey, change: Change) {
@@ -955,6 +951,12 @@ impl Archetype {
 
     fn last(&self) -> Option<Entity> {
         self.entities.last().copied()
+    }
+
+    pub(crate) fn remove_link(&mut self, component: ComponentKey) {
+        let linked = self.outgoing.remove(&component);
+        self.children.remove(&component);
+        assert!(linked.is_some());
     }
 }
 

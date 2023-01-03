@@ -52,7 +52,7 @@ impl<'w> Fetch<'w> for EntityRefs {
         Nothing
     }
 
-    fn components(&self, _: &mut Vec<crate::ComponentKey>) {}
+    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }
 
 #[doc(hidden)]
