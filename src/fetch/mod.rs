@@ -17,12 +17,11 @@ pub use entity_ref::*;
 pub use ext::*;
 pub use opt::*;
 
-use crate::filter::TupleOr;
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    filter::Nothing,
+    filter::{Nothing, TupleOr},
     system::Access,
-    ArchetypeId, ComponentKey, Entity, Filter, World,
+    ArchetypeId, ArchetypeSearcher, Entity, Filter, World,
 };
 
 #[doc(hidden)]
@@ -85,7 +84,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// Returns the required component for the fetch.
     ///
     /// This is used for the query to determine which archetypes to visit
-    fn components(&self, result: &mut Vec<ComponentKey>);
+    fn searcher(&self, searcher: &mut ArchetypeSearcher);
 }
 
 impl<'w> Fetch<'w> for () {
@@ -115,7 +114,7 @@ impl<'w> Fetch<'w> for () {
         Nothing
     }
 
-    fn components(&self, _: &mut Vec<ComponentKey>) {}
+    fn searcher(&self, _: &mut ArchetypeSearcher) {}
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -197,7 +196,7 @@ impl<'w> Fetch<'w> for EntityIds {
         Nothing
     }
 
-    fn components(&self, _: &mut Vec<ComponentKey>) {}
+    fn searcher(&self, _: &mut ArchetypeSearcher) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
@@ -252,8 +251,8 @@ macro_rules! tuple_impl {
             }
 
             #[inline(always)]
-            fn components(&self, result: &mut Vec<ComponentKey>) {
-                $((self.$idx).components(result));*
+            fn searcher(&self, searcher: &mut ArchetypeSearcher) {
+                $((self.$idx).searcher(searcher));*
             }
 
             #[inline(always)]

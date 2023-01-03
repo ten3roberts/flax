@@ -75,7 +75,12 @@ impl Archetypes {
     }
 
     pub fn get(&self, arch_id: ArchetypeId) -> &Archetype {
-        self.inner.get(arch_id).expect("Invalid archetype")
+        match self.inner.get(arch_id) {
+            Some(v) => v,
+            None => {
+                panic!("Invalid archetype: {arch_id}");
+            }
+        }
     }
 
     pub fn get_mut(&mut self, arch_id: ArchetypeId) -> &mut Archetype {
@@ -91,11 +96,12 @@ impl Archetypes {
             return false;
         }
 
-        // eprintln!("Removing arch: {arch_id}");
         let arch = self.inner.despawn(arch_id).unwrap();
 
-        for (key, &dst_id) in arch.incoming.iter() {
-            self.get_mut(dst_id).outgoing.remove(key);
+        for (&key, &dst_id) in &arch.incoming {
+            let dst = self.get_mut(dst_id);
+            dst.remove_link(key);
+
             self.prune_arch(dst_id);
         }
 
@@ -115,8 +121,8 @@ impl Archetypes {
         for head in components {
             let cur = &mut self.inner.get(cursor).expect("Invalid archetype id");
 
-            cursor = match cur.outgoing(head.key) {
-                Some((_, id)) => id,
+            cursor = match cur.outgoing.get(&head.key) {
+                Some(&id) => id,
                 None => {
                     let mut new = Archetype::new(cur.components().chain(once(head)));
 
@@ -132,8 +138,8 @@ impl Archetypes {
                     let new_id = self.inner.spawn(new);
 
                     let (cur, new) = self.inner.get_disjoint(cursor, new_id).unwrap();
-                    cur.add_outgoing(new_id, true, head.key);
-                    new.add_incoming(cursor, head.key);
+                    cur.add_child(head.key, new_id);
+                    new.add_incoming(head.key, cursor);
 
                     new_id
                 }
@@ -173,8 +179,9 @@ impl Archetypes {
         let arch = self.inner.despawn(id).expect("Despawn invalid archetype");
 
         // Remove outgoing edges
-        for (component, dst_id) in &arch.incoming {
-            assert!(self.get_mut(*dst_id).outgoing.remove(component).is_some());
+        for (&component, &dst_id) in &arch.incoming {
+            let dst = self.get_mut(dst_id);
+            dst.remove_link(component);
         }
         self.gen = self.gen.wrapping_add(1);
 
@@ -944,8 +951,8 @@ impl World {
         }
 
         // Pick up the entity and move it to the destination archetype
-        let dst_id = match src.outgoing(info.key()) {
-            Some((_, dst)) => dst,
+        let dst_id = match src.outgoing.get(&info.key()) {
+            Some(&dst) => dst,
             None => {
                 let pivot = src.components().take_while(|v| v.key < info.key()).count();
 
@@ -981,8 +988,8 @@ impl World {
         };
 
         // Add a quick edge to refer to later
-        src.add_outgoing(dst_id, false, info.key());
-        dst.add_incoming(src_id, info.key());
+        src.add_outgoing(info.key(), dst_id);
+        dst.add_incoming(info.key(), src_id);
 
         // Insert the missing component
         unsafe {
@@ -1075,8 +1082,8 @@ impl World {
         assert_ne!(src_id, dst_id);
         // Borrow disjoint
         let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
-        src.add_incoming(dst_id, component.key());
-        dst.add_outgoing(src_id, false, component.key());
+        src.add_incoming(component.key(), dst_id);
+        dst.add_outgoing(component.key(), src_id);
 
         // Take the value
         // This moves the differing value out of the archetype before it is

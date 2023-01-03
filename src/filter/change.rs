@@ -84,8 +84,8 @@ where
         }
     }
 
-    fn components(&self, result: &mut Vec<crate::ComponentKey>) {
-        result.push(self.component.key())
+    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
+        searcher.add_required(self.component.key())
     }
 }
 
@@ -276,7 +276,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
         }
     }
 
-    fn components(&self, _: &mut Vec<crate::ComponentKey>) {}
+    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }
 
 impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
