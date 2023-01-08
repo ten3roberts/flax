@@ -1,13 +1,14 @@
 use alloc::vec::Vec;
 use core::cmp;
 
-use crate::{archetype::Archetype, ArchetypeId, Archetypes, ComponentKey};
+use crate::{archetype::Archetype, ArchetypeId, Archetypes, ComponentKey, Entity};
 
 #[derive(Default, Debug, Clone)]
 /// Declares search terms for a queries archetypes
 pub struct ArchetypeSearcher {
     pub(crate) required: Vec<ComponentKey>,
     excluded: Vec<ComponentKey>,
+    excluded_relations: Vec<Entity>,
 }
 
 impl ArchetypeSearcher {
@@ -21,52 +22,51 @@ impl ArchetypeSearcher {
         self.excluded.push(component)
     }
 
-    pub(crate) fn find_archetypes(
+    /// Add an excluded relation type
+    pub fn add_excluded_relation(&mut self, relation: Entity) {
+        self.excluded_relations.push(relation)
+    }
+
+    #[inline]
+    pub(crate) fn find_archetypes<'a>(
         &mut self,
-        archetypes: &Archetypes,
-        filter: impl Fn(ArchetypeId, &Archetype) -> bool,
-    ) -> Vec<ArchetypeId> {
+        archetypes: &'a Archetypes,
+        mut result: impl FnMut(ArchetypeId, &'a Archetype),
+    ) {
         self.required.sort();
         self.required.dedup();
 
-        let mut result = Vec::new();
         traverse_archetypes(
             archetypes,
             archetypes.root(),
             &self.required,
             &self.excluded,
             &mut result,
-            &filter,
         );
-
-        result
     }
 }
 
 #[inline]
-fn traverse_archetypes<F: Fn(ArchetypeId, &Archetype) -> bool>(
-    archetypes: &Archetypes,
+pub(crate) fn traverse_archetypes<'a>(
+    archetypes: &'a Archetypes,
     cur: ArchetypeId,
     components: &[ComponentKey],
     excluded: &[ComponentKey],
-    result: &mut Vec<ArchetypeId>,
-    filter: &F,
+    result: &mut impl FnMut(ArchetypeId, &'a Archetype),
 ) {
     let arch = archetypes.get(cur);
     match components {
         // All components are found, every archetype from now on is matched
         [] => {
             // This matches
-            if filter(cur, arch) {
-                result.push(cur);
-            }
+            result(cur, arch);
 
             for (&component, &arch_id) in &arch.children {
                 // Oops, don't even step on it
                 if excluded.contains(&component) {
                     continue;
                 }
-                traverse_archetypes(archetypes, arch_id, components, excluded, result, filter);
+                traverse_archetypes(archetypes, arch_id, components, excluded, result);
             }
         }
         [head, tail @ ..] => {
@@ -81,13 +81,11 @@ fn traverse_archetypes<F: Fn(ArchetypeId, &Archetype) -> bool>(
                 match component.cmp(head) {
                     cmp::Ordering::Less => {
                         // Not quite, keep looking
-                        traverse_archetypes(
-                            archetypes, arch_id, components, excluded, result, filter,
-                        );
+                        traverse_archetypes(archetypes, arch_id, components, excluded, result);
                     }
                     cmp::Ordering::Equal => {
                         // One more component has been found, continue to search for the remaining ones
-                        traverse_archetypes(archetypes, arch_id, tail, excluded, result, filter);
+                        traverse_archetypes(archetypes, arch_id, tail, excluded, result);
                     }
                     cmp::Ordering::Greater => {
                         // We won't find anything of interest further down the tree
