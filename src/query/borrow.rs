@@ -54,6 +54,24 @@ pub(crate) struct PreparedArchetype<'w, Q> {
     pub(crate) fetch: Q,
 }
 
+impl<'w, Q> PreparedArchetype<'w, Q> {
+    pub fn chunks<'q, 'f, F>(
+        &'q mut self,
+        old_tick: u32,
+        new_tick: u32,
+        filter: F,
+    ) -> ArchetypeChunks<'q, Q, F> {
+        let filter = FilterIter::new(self.arch.slots(), filter);
+
+        ArchetypeChunks {
+            arch: self.arch,
+            fetch: &mut self.fetch,
+            filter,
+            new_tick,
+        }
+    }
+}
+
 /// A lazily prepared query which borrows and hands out chunk iterators for
 /// each archetype matched.
 pub struct QueryBorrow<'w, Q, F = All>
@@ -248,16 +266,25 @@ where
                 arch_id,
             };
 
-            let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
-
-            let mut fetch = self.fetch.prepare(data).unwrap();
-
-            let chunk: ArchetypeChunks<Q, F> = ArchetypeChunks {
+            let mut arch = PreparedArchetype {
+                arch_id,
                 arch,
-                fetch: &mut fetch,
-                filter,
-                new_tick: self.new_tick,
+                fetch: self.fetch.prepare(data).unwrap(),
             };
+
+            let chunk = arch.chunks(
+                self.old_tick,
+                self.new_tick,
+                self.filter.prepare(arch.arch, self.old_tick),
+            );
+            // let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
+
+            // let chunk = ArchetypeChunks {
+            //     arch,
+            //     fetch: &mut fetch,
+            //     filter,
+            //     new_tick: self.new_tick,
+            // };
 
             for item in chunk.flatten() {
                 func(item)

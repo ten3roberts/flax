@@ -87,6 +87,7 @@ gen_bitops! {
     Without[];
     Cmp[A,B];
     OrdCmp[T];
+    SliceFilter[];
 }
 
 /// A filter which does not depend upon any state, such as a `with` filter
@@ -157,10 +158,10 @@ where
     L: Filter<'a>,
     R: Filter<'a>,
 {
-    type Prepared = PreparedAnd<L::Prepared, R::Prepared>;
+    type Prepared = And<L::Prepared, R::Prepared>;
 
     fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedAnd {
+        And {
             left: self.left.prepare(archetype, change_tick),
             right: self.right.prepare(archetype, change_tick),
         }
@@ -215,10 +216,10 @@ where
     L: Filter<'a>,
     R: Filter<'a>,
 {
-    type Prepared = PreparedOr<L::Prepared, R::Prepared>;
+    type Prepared = Or<L::Prepared, R::Prepared>;
 
     fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedOr {
+        Or {
             left: self.left.prepare(archetype, change_tick),
             right: self.right.prepare(archetype, change_tick),
         }
@@ -254,14 +255,7 @@ where
     }
 }
 
-/// Or filter combinator
-#[doc(hidden)]
-pub struct PreparedOr<L, R> {
-    left: L,
-    right: R,
-}
-
-impl<L, R> PreparedFilter for PreparedOr<L, R>
+impl<L, R> PreparedFilter for Or<L, R>
 where
     L: PreparedFilter,
     R: PreparedFilter,
@@ -365,20 +359,7 @@ where
     }
 }
 
-/// And filter combinator
-#[doc(hidden)]
-pub struct PreparedAnd<L, R> {
-    left: L,
-    right: R,
-}
-
-impl<L, R> PreparedAnd<L, R> {
-    pub fn new(left: L, right: R) -> Self {
-        Self { left, right }
-    }
-}
-
-impl<L, R> PreparedFilter for PreparedAnd<L, R>
+impl<L, R> PreparedFilter for And<L, R>
 where
     L: PreparedFilter,
     R: PreparedFilter,
@@ -474,6 +455,39 @@ impl StaticFilter for All {
     #[inline(always)]
     fn static_matches(&self, _: &Archetype) -> bool {
         true
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SliceFilter(pub(crate) Slice);
+
+impl<'w> Filter<'w> for SliceFilter {
+    type Prepared = Self;
+
+    fn prepare(&'w self, _: &'w Archetype, _: u32) -> Self::Prepared {
+        *self
+    }
+
+    fn matches(&self, _: &Archetype) -> bool {
+        true
+    }
+
+    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+        vec![]
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "slice {:?}", self.0)
+    }
+}
+
+impl PreparedFilter for SliceFilter {
+    fn filter(&mut self, slots: Slice) -> Slice {
+        self.0.intersect(&slots)
+    }
+
+    fn matches_slot(&mut self, slot: usize) -> bool {
+        self.0.contains(slot)
     }
 }
 
@@ -1092,7 +1106,7 @@ mod tests {
         let a = PreparedKindFilter::new(changes_1.borrow(), 1);
         let b = PreparedKindFilter::new(changes_2.borrow(), 2);
 
-        let filter = PreparedOr { left: a, right: b };
+        let filter = Or { left: a, right: b };
 
         // Use a brute force BTreeSet for solving it
         let chunks_set = slots
@@ -1109,7 +1123,7 @@ mod tests {
         let a = PreparedKindFilter::new(changes_1.borrow(), 1);
         let b = PreparedKindFilter::new(changes_2.borrow(), 2);
 
-        let filter = PreparedAnd { left: a, right: b };
+        let filter = And { left: a, right: b };
 
         // Use a brute force BTreeSet for solving it
         let chunks_set = slots
