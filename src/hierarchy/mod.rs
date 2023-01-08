@@ -1,10 +1,11 @@
 mod borrow;
+mod dfs;
 
 use alloc::collections::{btree_map, BTreeMap, BTreeSet};
 use smallvec::SmallVec;
 
 use crate::{
-    archetype::{Archetype, Slot},
+    archetype::Archetype,
     component_info,
     entity::EntityLocation,
     filter::{GatedFilter, RefFilter},
@@ -12,7 +13,8 @@ use crate::{
     Fetch, Filter, RelationExt, World,
 };
 
-use self::borrow::{DfsBorrow, QueryBorrowState};
+use self::borrow::QueryBorrowState;
+use self::dfs::*;
 
 /// Provides utilities for working with and manipulating hierarchies and graphs
 
@@ -240,7 +242,7 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{child_of, name, FetchExt};
+    use crate::{child_of, entity_ids, name, CmpExt, CommandBuffer, FetchExt, Query};
 
     use super::*;
 
@@ -250,6 +252,7 @@ mod test {
 
         component! {
             a: i32,
+            path: String,
             b: &'static str,
         }
 
@@ -285,9 +288,7 @@ mod test {
         let mut query =
             GraphQuery::with_strategy((name().cloned(), a().copied()), Dfs::new(child_of, root));
 
-        let mut borrow = query.borrow(&world);
-
-        let items = borrow.iter().collect_vec();
+        let items = query.borrow(&world).iter().collect_vec();
 
         assert_eq!(
             items,
@@ -297,6 +298,104 @@ mod test {
                 ("child.1".to_string(), 1),
                 ("child.1.1".to_string(), 2),
                 ("child.3".to_string(), 4)
+            ]
+        );
+
+        let mut cmd = CommandBuffer::new();
+
+        GraphQuery::with_strategy((entity_ids(), name()), Dfs::new(child_of, root))
+            .borrow(&world)
+            .cascade(&Vec::new(), |(id, name), prefix| {
+                let mut p = prefix.clone();
+                p.push(name.clone());
+
+                cmd.set(id, path(), p.join("::"));
+                p
+            });
+
+        cmd.apply(&mut world).unwrap();
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 0),
+                ("child.1".to_string(), 1),
+                ("child.1.1".to_string(), 2),
+                ("child.3".to_string(), 4),
+                ("child.2".to_string(), 3),
+            ]
+        );
+
+        let mut paths = Query::new(path().cloned()).collect_vec(&world);
+        paths.sort();
+
+        assert_eq!(
+            paths,
+            [
+                "root",
+                "root::child.1",
+                "root::child.1::child.1.1",
+                "root::child.2",
+                "root::child.3",
+            ]
+        );
+
+        // Change detection
+
+        let mut query = GraphQuery::with_strategy(
+            (name().cloned(), a().modified().copied()),
+            Dfs::new(child_of, root),
+        );
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 0),
+                ("child.1".to_string(), 1),
+                ("child.1.1".to_string(), 2),
+                ("child.3".to_string(), 4),
+                ("child.2".to_string(), 3),
+            ]
+        );
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, []);
+        *world.get_mut(root, a()).unwrap() -= 1;
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, [("root".to_string(), -1)]);
+
+        Query::new((child_of(root), a().as_mut()))
+            .borrow(&world)
+            .for_each(|(_, a)| {
+                *a *= -1;
+            });
+
+        // No changes, since the root is not modified
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, []);
+
+        Query::new(a().as_mut())
+            .filter(child_of(root).with() | name().eq("root".to_string()))
+            .borrow(&world)
+            .for_each(|a| {
+                *a *= -10;
+            });
+
+        let items = query.borrow(&world).iter().collect_vec();
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 10),
+                ("child.1".to_string(), 10),
+                ("child.3".to_string(), 40),
+                ("child.2".to_string(), 30),
             ]
         );
     }

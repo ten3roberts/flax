@@ -169,24 +169,6 @@ where
                 return Some(*self.cur.insert(change.slice));
             }
         }
-
-        // match (self.cur, self.changes.as_mut()) {
-        //     (Some(v), _) => Some(v),
-        //     (None, changes) => loop {
-        //         let v = changes.get(self.cursor);
-        //         if let Some(change) = v {
-        //             self.cursor += 1;
-        //             // Found a valid change slice
-        //             if change.tick > self.tick {
-        //                 break Some(*self.cur.get_or_insert(change.slice));
-        //             }
-        //         } else {
-        //             // No more
-        //             return None;
-        //         };
-        //     },
-        //     _ => None,
-        // }
     }
 }
 

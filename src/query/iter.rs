@@ -3,7 +3,7 @@ use core::{iter::Flatten, slice::IterMut};
 use crate::{
     archetype::{Slice, Slot},
     fetch::PreparedFetch,
-    filter::{FilterIter, RefFilter},
+    filter::{FilterIter, PreparedFilter, RefFilter},
     Archetype, Entity, Fetch, Filter,
 };
 
@@ -96,26 +96,19 @@ where
 /// An iterator over a single archetype which returns chunks.
 /// The chunk size is determined by the largest continuous matched entities for
 /// filters.
-pub struct ArchetypeChunks<'q, 'w, Q, F>
-where
-    Q: Fetch<'w>,
-    F: Filter<'q>,
-    'w: 'q,
-{
+pub struct ArchetypeChunks<'q, Q, F> {
     pub(crate) arch: &'q Archetype,
-    pub(crate) fetch: &'q mut Q::Prepared,
-    pub(crate) filter:
-        FilterIter<<FilterWithFetch<RefFilter<'w, F>, Q::Filter> as Filter<'q>>::Prepared>,
+    pub(crate) fetch: &'q mut Q,
+    pub(crate) filter: FilterIter<F>,
     pub(crate) new_tick: u32,
 }
 
-impl<'q, 'w, Q, F> Iterator for ArchetypeChunks<'q, 'w, Q, F>
+impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
 where
-    Q: Fetch<'w>,
-    F: Filter<'q>,
-    'w: 'q,
+    Q: PreparedFetch<'q>,
+    F: PreparedFilter,
 {
-    type Item = Batch<'q, Q::Prepared>;
+    type Item = Batch<'q, Q>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Get the next chunk
@@ -123,7 +116,7 @@ where
         let chunk = chunk?;
 
         // Fetch will never change and all calls are disjoint
-        let fetch = unsafe { &mut *(self.fetch as *mut Q::Prepared) };
+        let fetch = unsafe { &mut *(self.fetch as *mut Q) };
 
         // Set the chunk as visited
         unsafe { fetch.set_visited(chunk, self.new_tick) }
@@ -182,7 +175,9 @@ where
     pub(crate) new_tick: u32,
     pub(crate) filter: &'q FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
     pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
-    pub(crate) current: Option<ArchetypeChunks<'q, 'w, Q, F>>,
+    pub(crate) current: Option<
+        ArchetypeChunks<'q, Q::Prepared, <FilterWithFetch<F, Q::Filter> as Filter<'q>>::Prepared>,
+    >,
 }
 
 impl<'q, 'w, Q, F> BatchedIter<'q, 'w, Q, F>
