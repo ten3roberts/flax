@@ -1,4 +1,9 @@
-use alloc::{collections::BTreeMap, format, sync::Arc, vec::Vec};
+use alloc::{
+    collections::{btree_map, BTreeMap},
+    format,
+    sync::Arc,
+    vec::Vec,
+};
 use core::{
     alloc::Layout,
     any::{type_name, TypeId},
@@ -303,10 +308,7 @@ impl Archetype {
     }
 
     /// Returns the components with the specified relation type.
-    pub(crate) fn relations_like(
-        &self,
-        relation: Entity,
-    ) -> impl Iterator<Item = (&ComponentKey, &Cell)> {
+    pub(crate) fn relations_like(&self, relation: Entity) -> btree_map::Range<ComponentKey, Cell> {
         self.cells.range(
             ComponentKey::new(relation, Some(Entity::MIN))
                 ..=ComponentKey::new(relation, Some(Entity::MAX)),

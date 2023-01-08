@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 use crate::{
     archetype::unknown_component,
     filter::{FilterIter, PreparedFilter, RefFilter},
-    Chunks,
+    ArchetypeChunks,
 };
 use crate::{
     component_info,
@@ -252,7 +252,7 @@ where
 
             let mut fetch = self.fetch.prepare(data).unwrap();
 
-            let chunk: Chunks<Q, F> = Chunks {
+            let chunk: ArchetypeChunks<Q, F> = ArchetypeChunks {
                 arch,
                 fetch: &mut fetch,
                 filter,

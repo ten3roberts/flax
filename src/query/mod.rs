@@ -25,7 +25,7 @@ pub use iter::*;
 
 pub use self::searcher::ArchetypeSearcher;
 
-type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
+pub(crate) type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Represents a query and state for a given world.
 /// The archetypes to visit is cached in the query which means it is more
 /// performant to reuse the query than creating a new one.
@@ -258,13 +258,20 @@ where
 
         let archetypes = &world.archetypes;
 
-        let filter = |_: ArchetypeId, arch: &Archetype| {
+        let filter = |arch: &Archetype| {
             self.fetch.matches(arch)
                 && self.filter.matches(arch)
                 && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
         };
 
-        searcher.find_archetypes(archetypes, filter)
+        let mut result = Vec::new();
+        searcher.find_archetypes(archetypes, |arch_id, arch| {
+            if filter(arch) {
+                result.push(arch_id)
+            }
+        });
+
+        result
     }
 }
 

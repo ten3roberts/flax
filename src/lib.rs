@@ -108,7 +108,7 @@
 //! Relations are cache friendly and querying children of does not require random access. In
 //! addition, relations are cleaned up on despawns and are stable during serialization, even if the
 //! entity ids migrate due to collisions.
-//!     
+//!
 //! See [the guide](https://ten3roberts.github.io/flax/guide/fundamentals/relations.html) for more
 //! details.
 //!
@@ -228,8 +228,10 @@ mod util;
 /// Provides a debug visitor
 pub mod visitors;
 
+mod cascade;
 /// Subscribe to changes in the world
 pub mod events;
+mod hierarchy;
 mod relation;
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein

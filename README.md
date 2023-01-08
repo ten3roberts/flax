@@ -106,7 +106,7 @@ Relations can be both state-less or have associated data, like spring or joint s
 Relations are cache friendly and querying children of does not require random access. In
 addition, relations are cleaned up on despawns and are stable during serialization, even if the
 entity ids migrate due to collisions.
-    
+
 See [the guide](https://ten3roberts.github.io/flax/guide/fundamentals/relations.html) for more
 details.
 

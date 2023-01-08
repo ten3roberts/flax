@@ -4,7 +4,7 @@ use crate::{
     archetype::{Slice, Slot},
     fetch::PreparedFetch,
     filter::{FilterIter, RefFilter},
-    Archetype, Fetch, Filter,
+    Archetype, Entity, Fetch, Filter,
 };
 
 use super::{FilterWithFetch, PreparedArchetype};
@@ -77,10 +77,26 @@ where
     }
 }
 
+impl<'q, Q> Batch<'q, Q>
+where
+    Q: PreparedFetch<'q>,
+{
+    pub(crate) fn next_with_id(&mut self) -> Option<(Entity, Q::Item)> {
+        if self.pos == self.end {
+            None
+        } else {
+            let fetch = unsafe { &mut *(self.fetch as *mut Q) };
+            let item = unsafe { fetch.fetch(self.pos) };
+            let id = self.arch.entities[self.pos];
+            self.pos += 1;
+            Some((id, item))
+        }
+    }
+}
 /// An iterator over a single archetype which returns chunks.
 /// The chunk size is determined by the largest continuous matched entities for
 /// filters.
-pub struct Chunks<'q, 'w, Q, F>
+pub struct ArchetypeChunks<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
     F: Filter<'q>,
@@ -93,7 +109,7 @@ where
     pub(crate) new_tick: u32,
 }
 
-impl<'q, 'w, Q, F> Iterator for Chunks<'q, 'w, Q, F>
+impl<'q, 'w, Q, F> Iterator for ArchetypeChunks<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
     F: Filter<'q>,
@@ -154,7 +170,7 @@ where
     }
 }
 
-/// An iterator which yield disjoint continuous slices for each mathed archetype
+/// An iterator which yields disjoint continuous slices for each matched archetype
 /// and filter predicate.
 pub struct BatchedIter<'q, 'w, Q, F>
 where
@@ -166,7 +182,7 @@ where
     pub(crate) new_tick: u32,
     pub(crate) filter: &'q FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
     pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
-    pub(crate) current: Option<Chunks<'q, 'w, Q, F>>,
+    pub(crate) current: Option<ArchetypeChunks<'q, 'w, Q, F>>,
 }
 
 impl<'q, 'w, Q, F> BatchedIter<'q, 'w, Q, F>
@@ -209,7 +225,7 @@ where
             let PreparedArchetype { arch, fetch, .. } = self.archetypes.next()?;
             let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
 
-            let chunk = Chunks {
+            let chunk = ArchetypeChunks {
                 arch,
                 fetch,
                 filter,
