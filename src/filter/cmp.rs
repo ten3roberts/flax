@@ -8,8 +8,10 @@
 
 use core::{
     any::type_name,
+    borrow::Borrow,
     cmp::Ordering,
     fmt::{self, Debug, Display},
+    ops::Deref,
 };
 
 use alloc::vec;
@@ -18,33 +20,31 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{ArchetypeId, Slice, Slot},
+    fetch::{FetchPrepareData, PreparedFetch},
     filter::PreparedFilter,
-    Access, Archetype, Component, ComponentValue, Filter,
+    Access, Archetype, Component, ComponentValue, Entity, EntityIds, Fetch, Filter,
 };
 
 /// A filter which compare a component before yielding an item from the query
-pub trait CmpExt<T>
-where
-    T: ComponentValue,
-{
+pub trait CmpExt<T, Q> {
     /// Filter any component less than `other`.
-    fn lt(self, other: T) -> OrdCmp<T>
+    fn lt(self, other: T) -> OrdCmp<T, Q>
     where
         T: PartialOrd;
     /// Filter any component greater than `other`.
-    fn gt(self, other: T) -> OrdCmp<T>
+    fn gt(self, other: T) -> OrdCmp<T, Q>
     where
         T: PartialOrd;
     /// Filter any component greater than or equal to `other`.
-    fn ge(self, other: T) -> OrdCmp<T>
+    fn ge(self, other: T) -> OrdCmp<T, Q>
     where
         T: PartialOrd;
     /// Filter any component less than or equal to `other`.
-    fn le(self, other: T) -> OrdCmp<T>
+    fn le(self, other: T) -> OrdCmp<T, Q>
     where
         T: PartialOrd;
     /// Filter any component equal to `other`.
-    fn eq(self, other: T) -> OrdCmp<T>
+    fn eq(self, other: T) -> OrdCmp<T, Q>
     where
         T: PartialOrd;
     /// Filter any component by predicate.
@@ -53,7 +53,51 @@ where
         F: Fn(&T) -> bool + Send + Sync + 'static;
 }
 
-impl<T> CmpExt<T> for Component<T>
+impl CmpExt<Entity, EntityIds> for EntityIds {
+    fn lt(self, other: Entity) -> OrdCmp<Entity, EntityIds>
+    where
+        Entity: PartialOrd,
+    {
+        OrdCmp::new(self, CmpMethod::Less, other)
+    }
+
+    fn gt(self, other: Entity) -> OrdCmp<Entity, EntityIds>
+    where
+        Entity: PartialOrd,
+    {
+        OrdCmp::new(self, CmpMethod::Greater, other)
+    }
+
+    fn ge(self, other: Entity) -> OrdCmp<Entity, EntityIds>
+    where
+        Entity: PartialOrd,
+    {
+        OrdCmp::new(self, CmpMethod::GreaterEq, other)
+    }
+
+    fn le(self, other: Entity) -> OrdCmp<Entity, EntityIds>
+    where
+        Entity: PartialOrd,
+    {
+        OrdCmp::new(self, CmpMethod::LessEq, other)
+    }
+
+    fn eq(self, other: Entity) -> OrdCmp<Entity, EntityIds>
+    where
+        Entity: PartialOrd,
+    {
+        OrdCmp::new(self, CmpMethod::Eq, other)
+    }
+
+    fn cmp<F>(self, func: F) -> Cmp<Entity, F>
+    where
+        F: Fn(&Entity) -> bool + Send + Sync + 'static,
+    {
+        todo!()
+    }
+}
+
+impl<T> CmpExt<T, Component<T>> for Component<T>
 where
     T: ComponentValue + Debug,
 {
@@ -107,100 +151,86 @@ impl Display for CmpMethod {
 }
 
 #[derive(Clone)]
-pub struct OrdCmp<T> {
-    component: Component<T>,
+pub struct OrdCmp<T, Q = Component<T>> {
+    fetch: Q,
     method: CmpMethod,
     other: T,
 }
 
-impl<T> Debug for OrdCmp<T>
+impl<T, Q> Debug for OrdCmp<T, Q>
 where
+    Q: Debug,
     T: ComponentValue,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("OrdCmp")
-            .field("component", &self.component)
+            .field("fetch", &self.fetch)
             .field("method", &self.method)
             .finish()
     }
 }
 
-impl<T> OrdCmp<T>
-where
-    T: ComponentValue,
-{
-    fn new(component: Component<T>, method: CmpMethod, other: T) -> Self {
+impl<T, Q> OrdCmp<T, Q> {
+    fn new(fetch: Q, method: CmpMethod, other: T) -> Self {
         Self {
-            component,
+            fetch,
             method,
             other,
         }
     }
 }
 
-impl<'w, T> Filter<'w> for OrdCmp<T>
+impl<'w, T, Q> Filter<'w> for OrdCmp<T, Q>
 where
-    T: ComponentValue + PartialOrd + Debug,
+    Q: Fetch<'w>,
+    Q::Prepared: for<'q> PreparedFetch<'q, Item = &'q T>,
+    T: PartialOrd + 'w,
 {
-    type Prepared = PreparedOrdCmp<'w, T>;
+    type Prepared = PreparedOrdCmp<'w, T, Q::Prepared>;
 
-    fn prepare(&'w self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&'w self, data: FetchPrepareData<'w>, _: u32) -> Self::Prepared {
         PreparedOrdCmp {
-            borrow: archetype.borrow(self.component.key()),
+            borrow: self.fetch.prepare(data),
             method: self.method,
             other: &self.other,
         }
     }
 
-    fn matches(&self, archetype: &crate::Archetype) -> bool {
-        archetype.has(self.component.key())
+    fn matches(&self, arch: &crate::Archetype) -> bool {
+        self.fetch.matches(arch)
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(archetype) {
-            vec![Access {
-                kind: crate::AccessKind::Archetype {
-                    id,
-                    component: self.component.key(),
-                },
-                mutable: false,
-            }]
-        } else {
-            vec![]
-        }
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        self.fetch.access(data)
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {:?}",
-            self.component.name(),
-            self.method,
-            self.other
-        )
+        self.fetch.describe(f)?;
+        write!(f, " {}", self.method)
     }
 }
 
-pub struct PreparedOrdCmp<'w, T> {
-    borrow: Option<AtomicRef<'w, [T]>>,
+pub struct PreparedOrdCmp<'w, T, Q> {
+    borrow: Option<Q>,
     method: CmpMethod,
     other: &'w T,
 }
 
-impl<'w, T> PreparedFilter for PreparedOrdCmp<'w, T>
+impl<'w, T, Q> PreparedFilter for PreparedOrdCmp<'w, T, Q>
 where
-    T: ComponentValue + PartialOrd,
+    Q: for<'x> PreparedFetch<'x, Item = &'x T>,
+    T: PartialOrd + 'w,
 {
     fn filter(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
-        let borrow = match self.borrow {
-            Some(ref v) => v,
+        let borrow = match self.borrow.as_mut() {
+            Some(v) => v,
             None => return Slice::empty(),
         };
 
         let method = &self.method;
         let other = &self.other;
-        let cmp = |&slot: &Slot| {
-            let val = &borrow[slot];
+        let mut cmp = |slot: Slot| {
+            let val = unsafe { borrow.fetch(slot) };
 
             let ord = val.partial_cmp(other);
             if let Some(ord) = ord {
@@ -216,37 +246,34 @@ where
             }
         };
 
-        // How many entities yielded true
-        let mut start = slots.start;
+        // Find the first slot which yield true
+        let first = match slots.iter().position(&mut cmp) {
+            Some(v) => v,
+            None => return Slice::empty(),
+        };
+
         let count = slots
             .iter()
-            .skip_while(|slot| {
-                if !cmp(slot) {
-                    start += 1;
-                    true
-                } else {
-                    false
-                }
-            })
-            .take_while(cmp)
+            .skip(first)
+            .take_while(|&slot| cmp(slot))
             .count();
 
         Slice {
-            start,
-            end: start + count,
+            start: slots.start + first,
+            end: slots.start + first + count,
         }
     }
 
     fn matches_slot(&mut self, slot: usize) -> bool {
-        let borrow = match self.borrow {
-            Some(ref v) => v,
+        let borrow = match self.borrow.as_mut() {
+            Some(v) => v,
             None => return false,
         };
 
         let method = &self.method;
         let other = &self.other;
 
-        let val = &borrow[slot];
+        let val = unsafe { borrow.fetch(slot) };
 
         let ord = val.partial_cmp(other);
         if let Some(ord) = ord {
@@ -288,9 +315,9 @@ where
 {
     type Prepared = PreparedCmp<'w, T, F>;
 
-    fn prepare(&'w self, archetype: &'w crate::Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&'w self, data: FetchPrepareData<'w>, _: u32) -> Self::Prepared {
         PreparedCmp {
-            borrow: archetype.borrow(self.component.key()),
+            borrow: data.arch.borrow(self.component.key()),
             func: &self.func,
         }
     }
@@ -299,11 +326,11 @@ where
         archetype.has(self.component.key())
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if self.matches(archetype) {
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        if self.matches(data.arch) {
             vec![Access {
                 kind: crate::AccessKind::Archetype {
-                    id,
+                    id: data.arch_id,
                     component: self.component.key(),
                 },
                 mutable: false,

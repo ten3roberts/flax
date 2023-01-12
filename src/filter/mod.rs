@@ -11,7 +11,8 @@ use core::{
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    Access, ArchetypeId, ComponentKey, Entity,
+    fetch::FetchPrepareData,
+    Access, ComponentKey, Entity,
 };
 
 pub use change::*;
@@ -86,7 +87,7 @@ gen_bitops! {
     WithoutRelation[];
     Without[];
     Cmp[A,B];
-    OrdCmp[T];
+    OrdCmp[T,Q];
     SliceFilter[];
 }
 
@@ -110,7 +111,7 @@ where
     /// Prepare the filter for an archetype.
     /// `change_tick` refers to the last time this query was run. Useful for
     /// change detection.
-    fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared;
+    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared;
 
     /// Returns true if the filter will yield at least one entity from the
     /// archetype.
@@ -119,7 +120,7 @@ where
     /// archetype
     fn matches(&self, arch: &Archetype) -> bool;
     /// Returns which components and how will be accessed for an archetype.
-    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access>;
+    fn access(&self, data: FetchPrepareData) -> Vec<Access>;
     /// Describes the filter in a human-readable fashion
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 
@@ -153,17 +154,17 @@ impl<L, R> And<L, R> {
     }
 }
 
-impl<'a, L, R> Filter<'a> for And<L, R>
+impl<'w, L, R> Filter<'w> for And<L, R>
 where
-    L: Filter<'a>,
-    R: Filter<'a>,
+    L: Filter<'w>,
+    R: Filter<'w>,
 {
     type Prepared = And<L::Prepared, R::Prepared>;
 
-    fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
         And {
-            left: self.left.prepare(archetype, change_tick),
-            right: self.right.prepare(archetype, change_tick),
+            left: self.left.prepare(data, change_tick),
+            right: self.right.prepare(data, change_tick),
         }
     }
 
@@ -171,9 +172,9 @@ where
         self.left.matches(archetype) && self.right.matches(archetype)
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        let mut res = self.left.access(id, archetype);
-        res.append(&mut self.right.access(id, archetype));
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        let mut res = self.left.access(data);
+        res.append(&mut self.right.access(data));
         res
     }
 
@@ -211,17 +212,17 @@ impl<L, R> Or<L, R> {
     }
 }
 
-impl<'a, L, R> Filter<'a> for Or<L, R>
+impl<'w, L, R> Filter<'w> for Or<L, R>
 where
-    L: Filter<'a>,
-    R: Filter<'a>,
+    L: Filter<'w>,
+    R: Filter<'w>,
 {
     type Prepared = Or<L::Prepared, R::Prepared>;
 
-    fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
         Or {
-            left: self.left.prepare(archetype, change_tick),
-            right: self.right.prepare(archetype, change_tick),
+            left: self.left.prepare(data, change_tick),
+            right: self.right.prepare(data, change_tick),
         }
     }
 
@@ -229,9 +230,9 @@ where
         self.left.matches(archetype) || self.right.matches(archetype)
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        let mut accesses = self.left.access(id, archetype);
-        accesses.append(&mut self.right.access(id, archetype));
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        let mut accesses = self.left.access(data);
+        accesses.append(&mut self.right.access(data));
         accesses
     }
 
@@ -291,16 +292,16 @@ where
 {
     type Prepared = PreparedNot<T::Prepared>;
 
-    fn prepare(&'a self, archetype: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        PreparedNot(self.0.prepare(archetype, change_tick))
+    fn prepare(&'a self, data: FetchPrepareData<'a>, change_tick: u32) -> Self::Prepared {
+        PreparedNot(self.0.prepare(data, change_tick))
     }
 
     fn matches(&self, archetype: &Archetype) -> bool {
         !self.0.matches(archetype)
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        self.0.access(id, archetype)
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        self.0.access(data)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -399,7 +400,7 @@ impl<'a> Filter<'a> for Nothing {
     type Prepared = BooleanFilter;
 
     #[inline(always)]
-    fn prepare(&self, _: &'a Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&self, _: FetchPrepareData, _: u32) -> Self::Prepared {
         BooleanFilter(false)
     }
 
@@ -409,7 +410,7 @@ impl<'a> Filter<'a> for Nothing {
     }
 
     #[inline(always)]
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -432,7 +433,7 @@ impl<'a> Filter<'a> for All {
     type Prepared = BooleanFilter;
 
     #[inline(always)]
-    fn prepare(&self, _: &Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&self, _: FetchPrepareData, _: u32) -> Self::Prepared {
         BooleanFilter(true)
     }
 
@@ -442,7 +443,7 @@ impl<'a> Filter<'a> for All {
     }
 
     #[inline(always)]
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -464,7 +465,7 @@ pub(crate) struct SliceFilter(pub(crate) Slice);
 impl<'w> Filter<'w> for SliceFilter {
     type Prepared = Self;
 
-    fn prepare(&'w self, _: &'w Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&'w self, _: FetchPrepareData, _: u32) -> Self::Prepared {
         *self
     }
 
@@ -472,7 +473,7 @@ impl<'w> Filter<'w> for SliceFilter {
         true
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         vec![]
     }
 
@@ -547,15 +548,15 @@ impl StaticFilter for With {
 impl<'a> Filter<'a> for With {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(arch))
+    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(data.arch))
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
         arch.has(self.component)
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -574,15 +575,15 @@ pub struct Without {
 impl<'a> Filter<'a> for Without {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(arch))
+    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(data.arch))
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
         self.static_matches(arch)
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -619,15 +620,15 @@ impl StaticFilter for WithObject {
 impl<'a> Filter<'a> for WithObject {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(arch))
+    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(data.arch))
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
         self.static_matches(arch)
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -655,15 +656,15 @@ impl<F: Fn(&Archetype) -> bool> StaticFilter for ArchetypeFilter<F> {
 impl<'w, F: Fn(&Archetype) -> bool> Filter<'w> for ArchetypeFilter<F> {
     type Prepared = BooleanFilter;
 
-    fn prepare(&'w self, arch: &'w Archetype, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(arch))
+    fn prepare(&'w self, data: FetchPrepareData, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(data.arch))
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
         self.static_matches(arch)
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -673,7 +674,7 @@ impl<'w, F: Fn(&Archetype) -> bool> Filter<'w> for ArchetypeFilter<F> {
 }
 
 #[derive(Debug, Clone)]
-/// Yields all entitiens with the relation of the specified kind
+/// Yields all entities with the relation of the specified kind
 pub struct WithRelation {
     pub(crate) relation: Entity,
     pub(crate) name: &'static str,
@@ -688,15 +689,15 @@ impl StaticFilter for WithRelation {
 impl<'a> Filter<'a> for WithRelation {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(arch))
+    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(data.arch))
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
         self.static_matches(arch)
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -715,15 +716,15 @@ pub struct WithoutRelation {
 impl<'a> Filter<'a> for WithoutRelation {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, arch: &Archetype, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(arch))
+    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
+        BooleanFilter(self.matches(data.arch))
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
         self.static_matches(arch)
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -745,7 +746,7 @@ impl<'w> Filter<'w> for BooleanFilter {
     type Prepared = Self;
 
     #[inline(always)]
-    fn prepare(&'w self, _: &'w Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&'w self, _: FetchPrepareData, _: u32) -> Self::Prepared {
         *self
     }
 
@@ -755,7 +756,7 @@ impl<'w> Filter<'w> for BooleanFilter {
     }
 
     #[inline(always)]
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -795,16 +796,16 @@ where
 {
     type Prepared = F::Prepared;
 
-    fn prepare(&'w self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared {
-        (*self.0).prepare(archetype, change_tick)
+    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
+        (*self.0).prepare(data, change_tick)
     }
 
     fn matches(&self, arch: &Archetype) -> bool {
         (*self.0).matches(arch)
     }
 
-    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
-        (*self.0).access(id, arch)
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        (*self.0).access(data)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -871,10 +872,10 @@ impl<F: PreparedFilter> PreparedFilter for GatedFilter<F> {
 impl<'w, F: Filter<'w>> Filter<'w> for GatedFilter<F> {
     type Prepared = GatedFilter<F::Prepared>;
 
-    fn prepare(&'w self, archetype: &'w Archetype, change_tick: u32) -> Self::Prepared {
+    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
         GatedFilter {
             active: self.active,
-            filter: self.filter.prepare(archetype, change_tick),
+            filter: self.filter.prepare(data, change_tick),
         }
     }
 
@@ -882,8 +883,8 @@ impl<'w, F: Filter<'w>> Filter<'w> for GatedFilter<F> {
         !self.active || self.filter.matches(arch)
     }
 
-    fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
-        self.filter.access(id, arch)
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        self.filter.access(data)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -912,7 +913,7 @@ impl PreparedFilter for BatchSize {
 impl<'w> Filter<'w> for BatchSize {
     type Prepared = BatchSize;
 
-    fn prepare(&'w self, _: &'w Archetype, _: u32) -> Self::Prepared {
+    fn prepare(&'w self, _: FetchPrepareData, _: u32) -> Self::Prepared {
         if self.0 == 0 {
             panic!("Batch size of 0 will never yield");
         }
@@ -923,7 +924,7 @@ impl<'w> Filter<'w> for BatchSize {
         true
     }
 
-    fn access(&self, _: ArchetypeId, _: &Archetype) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
     }
 
@@ -977,9 +978,9 @@ macro_rules! tuple_impl {
         {
             type Prepared       = TupleOr<($($ty::Prepared,)*)>;
 
-            fn prepare(&'w self, arch: &'w Archetype, change_tick: u32) -> Self::Prepared {
+            fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
                 let inner = &self.0;
-                let p = ($(inner.$idx.prepare(arch, change_tick),)*);
+                let p = ($(inner.$idx.prepare(data, change_tick),)*);
                 TupleOr(p)
             }
 
@@ -988,8 +989,8 @@ macro_rules! tuple_impl {
                 $(inner.$idx.matches(arch))||*
             }
 
-            fn access(&self, id: ArchetypeId, arch: &Archetype) -> Vec<Access> {
-                [ $(self.0.$idx.access(id, arch),)* ].concat()
+            fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+                [ $(self.0.$idx.access(data),)* ].concat()
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -1047,7 +1048,7 @@ mod tests {
 
     use crate::{
         archetype::{Change, ChangeList},
-        component, ChangeKind,
+        component, ArchetypeId, ChangeKind, World,
     };
 
     use super::*;
@@ -1181,9 +1182,20 @@ mod tests {
             .filter(|v| (a_map.contains(v) && b_map.contains(v)) || (c_map.contains(v)))
             .collect_vec();
 
-        let chunks = FilterIter::new(slots, filter.prepare(&archetype, 1))
-            .flatten()
-            .collect_vec();
+        let world = World::new();
+        let chunks = FilterIter::new(
+            slots,
+            filter.prepare(
+                FetchPrepareData {
+                    world: &world,
+                    arch: &archetype,
+                    arch_id: ArchetypeId::MAX,
+                },
+                1,
+            ),
+        )
+        .flatten()
+        .collect_vec();
 
         assert_eq!(chunks, chunks_set);
     }

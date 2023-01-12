@@ -238,6 +238,7 @@ where
         }
 
         BatchedIter::new(
+            self.world,
             self.old_tick,
             self.new_tick,
             &self.filter,
@@ -266,16 +267,23 @@ where
                 arch_id,
             };
 
-            let mut arch = PreparedArchetype {
+            let mut p = PreparedArchetype {
                 arch_id,
                 arch,
                 fetch: self.fetch.prepare(data).unwrap(),
             };
 
-            let chunk = arch.chunks(
+            let chunk = p.chunks(
                 self.old_tick,
                 self.new_tick,
-                self.filter.prepare(arch.arch, self.old_tick),
+                self.filter.prepare(
+                    FetchPrepareData {
+                        world: self.world,
+                        arch: p.arch,
+                        arch_id,
+                    },
+                    self.old_tick,
+                ),
             );
             // let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
 
@@ -423,7 +431,14 @@ where
             // included otherwise.
             if !self
                 .filter
-                .prepare(prepared.arch, self.old_tick)
+                .prepare(
+                    FetchPrepareData {
+                        world: self.world,
+                        arch: prepared.arch,
+                        arch_id: prepared.arch_id,
+                    },
+                    self.old_tick,
+                )
                 .matches_slot(slot)
             {
                 return Err(Error::MismatchedFilter(id));
@@ -464,7 +479,14 @@ where
         // included otherwise.
         if !self
             .filter
-            .prepare(p.arch, self.old_tick)
+            .prepare(
+                FetchPrepareData {
+                    world: self.world,
+                    arch: p.arch,
+                    arch_id: p.arch_id,
+                },
+                self.old_tick,
+            )
             .matches_slot(slot)
         {
             return Err(Error::MismatchedFilter(id));

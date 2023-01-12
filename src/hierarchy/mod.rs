@@ -372,7 +372,7 @@ mod test {
 
         Query::new((child_of(root), a().as_mut()))
             .borrow(&world)
-            .for_each(|(_, a)| {
+            .par_for_each(|(_, a)| {
                 *a *= -1;
             });
 
@@ -384,7 +384,7 @@ mod test {
         Query::new(a().as_mut())
             .filter(child_of(root).with() | name().eq("root".to_string()))
             .borrow(&world)
-            .for_each(|a| {
+            .par_for_each(|a| {
                 *a *= -10;
             });
 

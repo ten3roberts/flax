@@ -291,7 +291,7 @@ where
                     arch_id,
                 };
                 let mut res = self.fetch.access(data);
-                res.append(&mut self.filter.access(arch_id, arch));
+                res.append(&mut self.filter.access(data));
                 res
             })
             .chain([Access {

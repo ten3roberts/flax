@@ -90,8 +90,14 @@ where
         }
 
         // Prepare the filter and check for dynamic filtering, for example modification filters
-        let mut filter = self.filter.prepare(arch, old_tick);
-        let mut fetch_filter = fetch_filter.prepare(arch, old_tick);
+        let data = FetchPrepareData {
+            world,
+            arch,
+            arch_id: loc.arch_id,
+        };
+
+        let mut filter = self.filter.prepare(data, old_tick);
+        let mut fetch_filter = fetch_filter.prepare(data, old_tick);
 
         if filter.matches_slot(loc.slot) && (!Q::HAS_FILTER || fetch_filter.matches_slot(loc.slot))
         {
@@ -264,7 +270,7 @@ where
                         arch_id: loc.arch_id,
                     };
                     let mut res = self.fetch.access(data);
-                    res.append(&mut self.filter.access(loc.arch_id, arch));
+                    res.append(&mut self.filter.access(data));
 
                     res.push(Access {
                         kind: AccessKind::World,
