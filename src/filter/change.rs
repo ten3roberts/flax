@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use alloc::{string::ToString, vec};
 use atomic_refcell::{AtomicRef, AtomicRefCell};
 
+use crate::fetch::FetchPrepareData;
 use crate::{
     archetype::{ChangeList, Slice},
     filter::PreparedFilter,
@@ -92,8 +93,8 @@ where
 impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
     type Prepared = PreparedKindFilter<AtomicRef<'a, ChangeList>>;
 
-    fn prepare(&'a self, arch: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        let changes = arch.changes(self.component.key());
+    fn prepare(&'a self, data: FetchPrepareData<'a>, change_tick: u32) -> Self::Prepared {
+        let changes = data.arch.changes(self.component.key());
 
         let changes = if let Some(changes) = changes {
             // Make sure to enable modification tracking if it is actively used
@@ -113,11 +114,11 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
         archetype.changes(self.component.key()).is_some()
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if Filter::matches(self, archetype) {
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        if Filter::matches(self, data.arch) {
             vec![Access {
                 kind: crate::AccessKind::ChangeEvent {
-                    id,
+                    id: data.arch_id,
                     component: self.component.key(),
                 },
                 mutable: false,
@@ -264,8 +265,9 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
 impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
     type Prepared = PreparedKindFilter<&'a ChangeList>;
 
-    fn prepare(&self, arch: &'a Archetype, change_tick: u32) -> Self::Prepared {
-        let changes = arch
+    fn prepare(&self, data: FetchPrepareData<'a>, change_tick: u32) -> Self::Prepared {
+        let changes = data
+            .arch
             .removals(self.component.key())
             .unwrap_or(&EMPTY_CHANGELIST);
 
@@ -276,11 +278,11 @@ impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
         true
     }
 
-    fn access(&self, id: ArchetypeId, archetype: &Archetype) -> Vec<Access> {
-        if Filter::matches(self, archetype) {
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        if Filter::matches(self, data.arch) {
             vec![Access {
                 kind: crate::AccessKind::ChangeEvent {
-                    id,
+                    id: data.arch_id,
                     component: self.component.key(),
                 },
                 mutable: false,

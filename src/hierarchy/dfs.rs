@@ -77,18 +77,26 @@ where
 
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
-        let arch = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
+        let p = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
 
         let root_filter = And::new(
-            self.state.filter.prepare(arch.arch, self.state.old_tick),
+            self.state.filter.prepare(
+                FetchPrepareData {
+                    world: self.world,
+                    arch: p.arch,
+                    arch_id: p.arch_id,
+                },
+                self.state.old_tick,
+            ),
             SliceFilter(Slice::single(loc.slot)),
         );
 
-        let stack = arch
+        let stack = p
             .chunks(self.state.old_tick, self.state.new_tick, root_filter)
             .collect();
 
         DfsIter {
+            world: self.world,
             state: &self.state,
             archetypes: &mut self.prepared[..],
             stack,
@@ -113,7 +121,14 @@ where
         let arch = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
 
         let root_filter = And::new(
-            self.state.filter.prepare(arch.arch, self.state.old_tick),
+            self.state.filter.prepare(
+                FetchPrepareData {
+                    world: self.world,
+                    arch: arch.arch,
+                    arch_id: arch.arch_id,
+                },
+                self.state.old_tick,
+            ),
             SliceFilter(Slice::single(loc.slot)),
         );
 
@@ -123,6 +138,7 @@ where
 
         if let Some(root) = root {
             Self::cascade_inner(
+                self.world,
                 &mut self.prepared,
                 &self.dfs_state.adj,
                 &self.state,
@@ -134,6 +150,7 @@ where
     }
 
     fn cascade_inner<'q, T, Fn>(
+        world: &'q World,
         archetypes: &mut [PreparedArchetype<'w, Q::Prepared>],
         adj: &BTreeMap<Entity, Vec<usize>>,
         state: &'q QueryBorrowState<'w, Q, F>,
@@ -154,14 +171,21 @@ where
 
                 // Promote the borrow of the fetch to 'q
                 // This is safe because each borrow is disjoint
-                let arch = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
+                let p = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
 
-                for batch in arch.chunks(
+                for batch in p.chunks(
                     state.old_tick,
                     state.new_tick,
-                    state.filter.prepare(arch.arch, state.old_tick),
+                    state.filter.prepare(
+                        FetchPrepareData {
+                            world,
+                            arch: p.arch,
+                            arch_id: p.arch_id,
+                        },
+                        state.old_tick,
+                    ),
                 ) {
-                    Self::cascade_inner(archetypes, adj, state, batch, &value, func)
+                    Self::cascade_inner(world, archetypes, adj, state, batch, &value, func)
                 }
             }
         }
@@ -174,6 +198,7 @@ where
     F: Filter<'q>,
     'w: 'q,
 {
+    world: &'w World,
     adj: &'q BTreeMap<Entity, Vec<usize>>,
     state: &'q QueryBorrowState<'w, Q, F>,
 
@@ -203,16 +228,23 @@ where
             if let Some((id, item)) = chunk.next_with_id() {
                 // Add the children
                 for &arch_index in self.adj.get(&id).into_iter().flatten() {
-                    let arch = &mut self.archetypes[arch_index];
+                    let p = &mut self.archetypes[arch_index];
 
                     // Promote the borrow of the fetch to 'q
                     // This is safe because each borrow is disjoint
-                    let arch = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
+                    let p = unsafe { &mut *(p as *mut PreparedArchetype<Q::Prepared>) };
 
-                    let chunks = arch.chunks(
+                    let chunks = p.chunks(
                         self.state.old_tick,
                         self.state.new_tick,
-                        self.state.filter.prepare(arch.arch, self.state.old_tick),
+                        self.state.filter.prepare(
+                            FetchPrepareData {
+                                world: self.world,
+                                arch: p.arch,
+                                arch_id: p.arch_id,
+                            },
+                            self.state.old_tick,
+                        ),
                     );
 
                     self.stack.extend(chunks);

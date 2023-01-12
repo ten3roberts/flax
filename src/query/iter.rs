@@ -2,9 +2,9 @@ use core::{iter::Flatten, slice::IterMut};
 
 use crate::{
     archetype::{Slice, Slot},
-    fetch::PreparedFetch,
+    fetch::{FetchPrepareData, PreparedFetch},
     filter::{FilterIter, PreparedFilter, RefFilter},
-    Archetype, Entity, Fetch, Filter,
+    Archetype, Entity, Fetch, Filter, World,
 };
 
 use super::{FilterWithFetch, PreparedArchetype};
@@ -171,6 +171,7 @@ where
     F: Filter<'q>,
     'w: 'q,
 {
+    world: &'w World,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
     pub(crate) filter: &'q FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
@@ -186,12 +187,14 @@ where
     F: Filter<'q>,
 {
     pub(super) fn new(
+        world: &'w World,
         old_tick: u32,
         new_tick: u32,
         filter: &'q FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
         archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
     ) -> Self {
         Self {
+            world,
             old_tick,
             new_tick,
             filter,
@@ -217,8 +220,23 @@ where
                 }
             }
 
-            let PreparedArchetype { arch, fetch, .. } = self.archetypes.next()?;
-            let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
+            let PreparedArchetype {
+                arch,
+                fetch,
+                arch_id,
+            } = self.archetypes.next()?;
+
+            let filter = FilterIter::new(
+                arch.slots(),
+                self.filter.prepare(
+                    FetchPrepareData {
+                        world: self.world,
+                        arch,
+                        arch_id: *arch_id,
+                    },
+                    self.old_tick,
+                ),
+            );
 
             let chunk = ArchetypeChunks {
                 arch,
