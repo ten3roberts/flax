@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
     archetype::{Archetype, Slot},
-    And, ChangeKind, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, StaticFilter,
+    And, ChangeKind, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Fetch,
 };
 
 /// A subscriber of events to the world.
@@ -36,7 +36,7 @@ pub trait Subscriber: 'static + Send + Sync {
 /// Provide a filter to any subscriber
 pub trait SubscriberFilterExt<F>
 where
-    F: StaticFilter + ComponentValue,
+    F: for<'x> Fetch<'x> + ComponentValue,
 {
     /// The filtered subscriber
     type Output: Subscriber;
@@ -99,8 +99,8 @@ impl<F, S> FilterSubscriber<F, S> {
 
 impl<F, G, S> SubscriberFilterExt<G> for FilterSubscriber<F, S>
 where
-    F: ComponentValue + StaticFilter,
-    G: ComponentValue + StaticFilter,
+    F: ComponentValue + for<'x> Fetch<'x>,
+    G: ComponentValue + for<'x> Fetch<'x>,
     S: Subscriber,
 {
     type Output = FilterSubscriber<And<F, G>, S>;
@@ -144,8 +144,8 @@ impl<F, L> ShapeSubscriber<F, L> {
 
 impl<F, G, L> SubscriberFilterExt<G> for ShapeSubscriber<F, L>
 where
-    F: StaticFilter + ComponentValue,
-    G: StaticFilter + ComponentValue,
+    F: for<'x> Fetch<'x> + ComponentValue,
+    G: for<'x> Fetch<'x> + ComponentValue,
     L: ComponentValue + EventHandler<ShapeEvent>,
 {
     type Output = FilterSubscriber<G, Self>;
@@ -157,13 +157,13 @@ where
 
 impl<F, L> Subscriber for ShapeSubscriber<F, L>
 where
-    F: StaticFilter + ComponentValue,
+    F: for<'x> Fetch<'x> + ComponentValue,
     L: ComponentValue + EventHandler<ShapeEvent>,
 {
     #[inline(always)]
     fn on_moved_pre(&self, id: Entity, _slot: Slot, _from: &Archetype, to: &Archetype) {
         // Shape still matches
-        if self.shape.static_matches(to) {
+        if self.shape.filter_arch(to) {
             return;
         }
 
@@ -177,7 +177,7 @@ where
     #[inline(always)]
     fn on_moved_post(&self, id: Entity, from: &Archetype, _to: &Archetype) {
         // Shape matched before and now
-        if self.shape.static_matches(from) {
+        if self.shape.filter_arch(from) {
             return;
         }
 
@@ -209,7 +209,7 @@ where
 
     #[inline(always)]
     fn is_interested(&self, arch: &Archetype) -> bool {
-        self.shape.static_matches(arch)
+        self.shape.filter_arch(arch)
     }
 
     #[inline(always)]
@@ -235,7 +235,7 @@ impl<L> ArchetypeSubscriber<L> {
 }
 impl<F, L> SubscriberFilterExt<F> for ArchetypeSubscriber<L>
 where
-    F: StaticFilter + ComponentValue,
+    F: for<'x> Fetch<'x> + ComponentValue,
     L: ComponentValue + EventHandler<ArchetypeEvent>,
 {
     type Output = FilterSubscriber<F, Self>;
@@ -358,7 +358,7 @@ impl<T> EventHandler<T> for alloc::sync::Weak<tokio::sync::Notify> {
 
 impl<F, S> Subscriber for FilterSubscriber<F, S>
 where
-    F: 'static + StaticFilter + Send + Sync,
+    F: 'static + for<'x> Fetch<'x> + Send + Sync,
     S: Subscriber,
 {
     #[inline(always)]
@@ -388,7 +388,7 @@ where
 
     #[inline]
     fn is_interested(&self, arch: &Archetype) -> bool {
-        self.filter.static_matches(arch) && self.inner.is_interested(arch)
+        self.filter.filter_arch(arch) && self.inner.is_interested(arch)
     }
 
     #[inline(always)]
@@ -421,7 +421,7 @@ impl<L> ChangeSubscriber<L> {
 
 impl<F, L> SubscriberFilterExt<F> for ChangeSubscriber<L>
 where
-    F: StaticFilter + ComponentValue,
+    F: for<'x> Fetch<'x> + ComponentValue,
     L: ComponentValue + EventHandler<ChangeEvent>,
 {
     type Output = FilterSubscriber<F, Self>;
@@ -477,7 +477,7 @@ impl<T: ComponentValue, L: EventHandler<(Entity, T)>> RemoveSubscriber<T, L> {
 
 impl<T, F, L> SubscriberFilterExt<F> for RemoveSubscriber<T, L>
 where
-    F: StaticFilter + ComponentValue,
+    F: for<'x> Fetch<'x> + ComponentValue,
     T: ComponentValue + Clone,
     L: ComponentValue + EventHandler<(Entity, T)>,
 {

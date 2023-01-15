@@ -11,8 +11,8 @@ use core::{
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    fetch::FetchPrepareData,
-    Access, ComponentKey, Entity,
+    fetch::{FetchPrepareData, PreparedFetch},
+    Access, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
 };
 
 pub use change::*;
@@ -23,9 +23,9 @@ use self::cmp::{Cmp, OrdCmp};
 #[doc(hidden)]
 pub struct FmtFilter<'r, Q>(pub &'r Q);
 
-impl<'r, 'w, Q> core::fmt::Debug for FmtFilter<'r, Q>
+impl<'r, 'w, 'q, Q> core::fmt::Debug for FmtFilter<'r, Q>
 where
-    Q: Filter<'w>,
+    Q: Fetch<'w>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.describe(f)
@@ -36,10 +36,10 @@ macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
         impl<R, $($p),*> ops::BitOr<R> for $ty<$($p),*>
         {
-            type Output = Or<Self, R>;
+            type Output = Or<(Self, R)>;
 
             fn bitor(self, rhs: R) -> Self::Output {
-                Or::new(self, rhs)
+                Or((self, rhs))
             }
         }
 
@@ -70,6 +70,93 @@ macro_rules! gen_bitops {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Filtered<Q, F> {
+    pub(crate) fetch: Q,
+    pub(crate) filter: F,
+}
+
+impl<Q, F> Filtered<Q, F> {
+    pub fn new(fetch: Q, filter: F) -> Self {
+        Self { fetch, filter }
+    }
+}
+
+impl<'w, Q, F> FetchItem<'w> for Filtered<Q, F>
+where
+    Q: FetchItem<'w>,
+{
+    type Item = Q::Item;
+}
+
+impl<'w, Q, F> Fetch<'w> for Filtered<Q, F>
+where
+    Q: Fetch<'w>,
+    F: Fetch<'w>,
+{
+    const MUTABLE: bool = Q::MUTABLE | F::MUTABLE;
+
+    type Prepared = Filtered<Q::Prepared, F::Prepared>;
+
+    #[inline]
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(Filtered {
+            fetch: self.fetch.prepare(data)?,
+            filter: self.filter.prepare(data)?,
+        })
+    }
+
+    #[inline]
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        self.fetch.filter_arch(arch) && self.filter.filter_arch(arch)
+    }
+
+    #[inline]
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        let mut v = self.fetch.access(data);
+        v.append(&mut self.filter.access(data));
+        v
+    }
+
+    #[inline]
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.fetch.describe(f)?;
+        write!(f, " & ");
+        self.filter.describe(f)
+    }
+
+    #[inline]
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {
+        self.fetch.searcher(searcher);
+        self.filter.searcher(searcher);
+    }
+}
+
+impl<'q, Q, F> PreparedFetch<'q> for Filtered<Q, F>
+where
+    Q: PreparedFetch<'q>,
+    F: PreparedFetch<'q>,
+{
+    type Item = Q::Item;
+
+    #[inline]
+    fn fetch(&mut self, slot: usize) -> Self::Item {
+        self.fetch.fetch(slot)
+    }
+
+    #[inline]
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        self.fetch
+            .filter_slots(slots)
+            .intersect(&self.filter.filter_slots(slots))
+    }
+
+    #[inline]
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        self.fetch.set_visited(slots, change_tick)
+    }
+}
+
 gen_bitops! {
     All[];
     And[A,B];
@@ -77,9 +164,8 @@ gen_bitops! {
     BatchSize[];
     BooleanFilter[];
     ChangeFilter[T];
-    GatedFilter[T];
     Nothing[];
-    Or[A,B];
+    Or[T];
     RemovedFilter[T];
     WithObject[];
     WithRelation[];
@@ -91,57 +177,8 @@ gen_bitops! {
     SliceFilter[];
 }
 
-/// A filter which does not depend upon any state, such as a `with` filter
-pub trait StaticFilter {
-    /// Returns true if the filter matches the archetype without state
-    fn static_matches(&self, arch: &Archetype) -> bool;
-}
-
-/// A filter over a query which will be prepared for an archetype, yielding
-/// subsets of slots.
-///
-/// A filter requires Debug for error messages for user conveniance
-pub trait Filter<'w>
-where
-    Self: Sized + ops::BitAnd + ops::BitOr + ops::Not,
-{
-    /// The filter holding possible borrows
-    type Prepared: PreparedFilter + 'w;
-
-    /// Prepare the filter for an archetype.
-    /// `change_tick` refers to the last time this query was run. Useful for
-    /// change detection.
-    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared;
-
-    /// Returns true if the filter will yield at least one entity from the
-    /// archetype.
-    ///
-    /// Returns false if an entity will never yield, such as a mismatched
-    /// archetype
-    fn matches(&self, arch: &Archetype) -> bool;
-    /// Returns which components and how will be accessed for an archetype.
-    fn access(&self, data: FetchPrepareData) -> Vec<Access>;
-    /// Describes the filter in a human-readable fashion
-    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
-
-    /// Allows the filter to be used by reference
-    fn ref_filter(&self) -> RefFilter<Self> {
-        RefFilter(self)
-    }
-}
-
-/// The prepared version of a filter, which can hold borrows from the world
-pub trait PreparedFilter {
-    /// Filters a slice of entity slots and returns a subset of the slice
-    fn filter(&mut self, slots: Slice) -> Slice;
-    /// Returns true if the filter would yield the specified slot.
-    ///
-    /// Assumes slot is valid.
-    fn matches_slot(&mut self, slot: usize) -> bool;
-}
-
 #[derive(Debug, Clone)]
-/// And filter combinator
+/// And combinator
 pub struct And<L, R> {
     left: L,
     right: R,
@@ -154,22 +191,32 @@ impl<L, R> And<L, R> {
     }
 }
 
-impl<'w, L, R> Filter<'w> for And<L, R>
+impl<'q, L, R> FetchItem<'q> for And<L, R>
 where
-    L: Filter<'w>,
-    R: Filter<'w>,
+    L: FetchItem<'q>,
+    R: FetchItem<'q>,
 {
+    type Item = (L::Item, R::Item);
+}
+
+impl<'w, L, R> Fetch<'w> for And<L, R>
+where
+    L: Fetch<'w>,
+    R: Fetch<'w>,
+{
+    const MUTABLE: bool = false;
+
     type Prepared = And<L::Prepared, R::Prepared>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
-        And {
-            left: self.left.prepare(data, change_tick),
-            right: self.right.prepare(data, change_tick),
-        }
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(And {
+            left: self.left.prepare(data)?,
+            right: self.right.prepare(data)?,
+        })
     }
 
-    fn matches(&self, archetype: &Archetype) -> bool {
-        self.left.matches(archetype) && self.right.matches(archetype)
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        self.left.filter_arch(arch) && self.right.filter_arch(arch)
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
@@ -179,125 +226,68 @@ where
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:?} & {:?}",
-            FmtFilter(&self.left),
-            FmtFilter(&self.right)
-        )
+        self.left.describe(f)?;
+        f.write_str(" & ")?;
+        self.right.describe(f)?;
+
+        Ok(())
+    }
+
+    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
+        self.left.searcher(searcher);
+        self.right.searcher(searcher);
     }
 }
 
-impl<L, R> StaticFilter for And<L, R>
+impl<'q, L, R> PreparedFetch<'q> for And<L, R>
 where
-    L: StaticFilter,
-    R: StaticFilter,
+    L: PreparedFetch<'q>,
+    R: PreparedFetch<'q>,
 {
-    fn static_matches(&self, archetype: &Archetype) -> bool {
-        self.left.static_matches(archetype) && self.right.static_matches(archetype)
+    type Item = (L::Item, R::Item);
+
+    fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+        (self.left.fetch(slot), self.right.fetch(slot))
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        self.left.set_visited(slots, change_tick);
+        self.right.set_visited(slots, change_tick);
+    }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        let l = self.left.filter_slots(slots);
+        let r = self.right.filter_slots(slots);
+        l.intersect(&r)
     }
 }
 
 #[derive(Debug, Clone)]
 /// Or filter combinator
-pub struct Or<L, R> {
-    left: L,
-    right: R,
-}
-
-impl<L, R> Or<L, R> {
-    /// Creates a new or filter
-    pub fn new(left: L, right: R) -> Self {
-        Self { left, right }
-    }
-}
-
-impl<'w, L, R> Filter<'w> for Or<L, R>
-where
-    L: Filter<'w>,
-    R: Filter<'w>,
-{
-    type Prepared = Or<L::Prepared, R::Prepared>;
-
-    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
-        Or {
-            left: self.left.prepare(data, change_tick),
-            right: self.right.prepare(data, change_tick),
-        }
-    }
-
-    fn matches(&self, archetype: &Archetype) -> bool {
-        self.left.matches(archetype) || self.right.matches(archetype)
-    }
-
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        let mut accesses = self.left.access(data);
-        accesses.append(&mut self.right.access(data));
-        accesses
-    }
-
-    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:?} | {:?}",
-            FmtFilter(&self.left),
-            FmtFilter(&self.right)
-        )
-    }
-}
-
-impl<L, R> StaticFilter for Or<L, R>
-where
-    L: StaticFilter,
-    R: StaticFilter,
-{
-    fn static_matches(&self, archetype: &Archetype) -> bool {
-        self.left.static_matches(archetype) || self.right.static_matches(archetype)
-    }
-}
-
-impl<L, R> PreparedFilter for Or<L, R>
-where
-    L: PreparedFilter,
-    R: PreparedFilter,
-{
-    #[inline(always)]
-    fn filter(&mut self, slots: Slice) -> Slice {
-        let l = self.left.filter(slots);
-        let r = self.right.filter(slots);
-        let u = l.union(&r);
-        match u {
-            Some(v) => v,
-            None => {
-                // The slices where not contiguous
-                // Return the left half for this run.
-                // The right will be kept
-                l
-            }
-        }
-    }
-
-    fn matches_slot(&mut self, slot: usize) -> bool {
-        self.left.matches_slot(slot) || self.right.matches_slot(slot)
-    }
-}
+pub struct Or<T>(pub T);
 
 #[derive(Debug, Clone)]
 /// Negate a filter
 pub struct Not<T>(pub T);
 
-impl<'a, T> Filter<'a> for Not<T>
-where
-    T: Filter<'a>,
-{
-    type Prepared = PreparedNot<T::Prepared>;
+impl<'q, T> FetchItem<'q> for Not<T> {
+    type Item = ();
+}
 
-    fn prepare(&'a self, data: FetchPrepareData<'a>, change_tick: u32) -> Self::Prepared {
-        PreparedNot(self.0.prepare(data, change_tick))
+impl<'w, T> Fetch<'w> for Not<T>
+where
+    T: Fetch<'w>,
+{
+    const MUTABLE: bool = true;
+
+    type Prepared = Not<Option<T::Prepared>>;
+
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(Not(self.0.prepare(data)))
     }
 
-    fn matches(&self, archetype: &Archetype) -> bool {
-        !self.0.matches(archetype)
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        !self.0.filter_arch(arch)
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
@@ -307,30 +297,40 @@ where
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "!{:?}", FmtFilter(&self.0))
     }
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
-impl<T> StaticFilter for Not<T>
+impl<'q, F> PreparedFetch<'q> for Not<Option<F>>
 where
-    T: StaticFilter,
+    F: PreparedFetch<'q>,
 {
-    fn static_matches(&self, archetype: &Archetype) -> bool {
-        !self.0.static_matches(archetype)
+    type Item = ();
+
+    fn fetch(&mut self, slot: usize) -> Self::Item {}
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        let v = self.0.filter_slots(slots);
+
+        slots.difference(v).unwrap()
     }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 impl<R, T> ops::BitOr<R> for Not<T> {
-    type Output = Or<Self, R>;
+    type Output = Or<(Self, R)>;
 
     fn bitor(self, rhs: R) -> Self::Output {
-        Or::new(self, rhs)
+        Or((self, rhs))
     }
 }
 
 impl<R, T> ops::BitAnd<R> for Not<T> {
-    type Output = And<Self, R>;
+    type Output = (Self, R);
 
     fn bitand(self, rhs: R) -> Self::Output {
-        And::new(self, rhs)
+        (self, rhs)
     }
 }
 
@@ -342,70 +342,62 @@ impl<T> ops::Not for Not<T> {
     }
 }
 
-#[doc(hidden)]
-pub struct PreparedNot<T>(T);
+// impl<L, R> PreparedFilter for And<L, R>
+// where
+//     L: PreparedFilter,
+//     R: PreparedFilter,
+// {
+//     #[inline(always)]
+//     fn filter(&mut self, slots: Slice) -> Slice {
+//         let l = self.left.filter(slots);
+//         let r = self.right.filter(slots);
 
-impl<T> PreparedFilter for PreparedNot<T>
-where
-    T: PreparedFilter,
-{
-    fn filter(&mut self, slots: Slice) -> Slice {
-        let a = self.0.filter(slots);
+//         let i = l.intersect(&r);
+//         if i.is_empty() {
+//             // Go again but start with the highest bound
+//             // This is caused by one of the sides being past the end of the
+//             // other slice. As such, force the slice lagging behind to catch up
+//             // to the upper floor
+//             let max = l.start.clamp(r.start, slots.end);
 
-        slots.difference(a).unwrap()
-    }
+//             let slots = Slice::new(max, slots.end);
+//             let l = self.left.filter(slots);
+//             let r = self.right.filter(slots);
+//             l.intersect(&r)
+//         } else {
+//             i
+//         }
+//     }
 
-    fn matches_slot(&mut self, slot: usize) -> bool {
-        !self.0.matches_slot(slot)
-    }
-}
-
-impl<L, R> PreparedFilter for And<L, R>
-where
-    L: PreparedFilter,
-    R: PreparedFilter,
-{
-    #[inline(always)]
-    fn filter(&mut self, slots: Slice) -> Slice {
-        let l = self.left.filter(slots);
-        let r = self.right.filter(slots);
-
-        let i = l.intersect(&r);
-        if i.is_empty() {
-            // Go again but start with the highest bound
-            // This is caused by one of the sides being past the end of the
-            // other slice. As such, force the slice lagging behind to catch up
-            // to the upper floor
-            let max = l.start.clamp(r.start, slots.end);
-
-            let slots = Slice::new(max, slots.end);
-            let l = self.left.filter(slots);
-            let r = self.right.filter(slots);
-            l.intersect(&r)
-        } else {
-            i
-        }
-    }
-
-    fn matches_slot(&mut self, slot: usize) -> bool {
-        self.left.matches_slot(slot) && self.right.matches_slot(slot)
-    }
-}
+//     fn matches_slot(&mut self, slot: usize) -> bool {
+//         self.left.matches_slot(slot) && self.right.matches_slot(slot)
+//     }
+// }
 
 #[derive(Debug, Clone)]
 /// A filter that yields, well, nothing
 pub struct Nothing;
 
-impl<'a> Filter<'a> for Nothing {
+impl<'q> FetchItem<'q> for Nothing {
+    type Item = ();
+}
+
+impl<'q> FetchItem<'q> for All {
+    type Item = ();
+}
+
+impl<'a> Fetch<'a> for Nothing {
+    const MUTABLE: bool = false;
+
     type Prepared = BooleanFilter;
 
     #[inline(always)]
-    fn prepare(&self, _: FetchPrepareData, _: u32) -> Self::Prepared {
-        BooleanFilter(false)
+    fn prepare(&self, _: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(BooleanFilter(false))
     }
 
     #[inline(always)]
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         false
     }
 
@@ -417,28 +409,24 @@ impl<'a> Filter<'a> for Nothing {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "false")
     }
-}
 
-impl StaticFilter for Nothing {
-    fn static_matches(&self, _: &Archetype) -> bool {
-        false
-    }
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
 /// Yields all entities
 #[derive(Debug, Clone)]
 pub struct All;
 
-impl<'a> Filter<'a> for All {
-    type Prepared = BooleanFilter;
+impl<'w> Fetch<'w> for All {
+    const MUTABLE: bool = false;
 
-    #[inline(always)]
-    fn prepare(&self, _: FetchPrepareData, _: u32) -> Self::Prepared {
-        BooleanFilter(true)
+    type Prepared = All;
+
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(All)
     }
 
-    #[inline(always)]
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, arch: &Archetype) -> bool {
         true
     }
 
@@ -450,26 +438,39 @@ impl<'a> Filter<'a> for All {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "true")
     }
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
-impl StaticFilter for All {
-    #[inline(always)]
-    fn static_matches(&self, _: &Archetype) -> bool {
-        true
+impl<'q> PreparedFetch<'q> for All {
+    type Item = ();
+
+    fn fetch(&mut self, slot: usize) -> Self::Item {}
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        slots
     }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SliceFilter(pub(crate) Slice);
 
-impl<'w> Filter<'w> for SliceFilter {
+impl<'q> FetchItem<'q> for SliceFilter {
+    type Item = ();
+}
+
+impl<'w, 'q> Fetch<'w> for SliceFilter {
+    const MUTABLE: bool = false;
+
     type Prepared = Self;
 
-    fn prepare(&'w self, _: FetchPrepareData, _: u32) -> Self::Prepared {
-        *self
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(*self)
     }
 
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, arch: &Archetype) -> bool {
         true
     }
 
@@ -480,16 +481,20 @@ impl<'w> Filter<'w> for SliceFilter {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "slice {:?}", self.0)
     }
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
-impl PreparedFilter for SliceFilter {
-    fn filter(&mut self, slots: Slice) -> Slice {
+impl<'q> PreparedFetch<'q> for SliceFilter {
+    type Item = ();
+
+    fn fetch(&mut self, slot: usize) -> Self::Item {}
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
         self.0.intersect(&slots)
     }
 
-    fn matches_slot(&mut self, slot: usize) -> bool {
-        self.0.contains(slot)
-    }
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 #[derive(Debug, Clone)]
@@ -507,14 +512,14 @@ impl<F> FilterIter<F> {
     }
 }
 
-impl<F> Iterator for FilterIter<F>
+impl<'q, F> Iterator for FilterIter<F>
 where
-    F: PreparedFilter,
+    F: PreparedFetch<'q>,
 {
     type Item = Slice;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let cur = self.filter.filter(self.slots);
+        let cur = self.filter.filter_slots(self.slots);
 
         if cur.is_empty() {
             None
@@ -530,29 +535,29 @@ where
     }
 }
 
-impl<F: PreparedFilter> FusedIterator for FilterIter<F> {}
+impl<'q, F: PreparedFetch<'q>> FusedIterator for FilterIter<F> {}
 
 #[derive(Debug, Clone)]
-/// Filter which only yields true if the entity has the specified component
+/// Fetch which only yields if the entity has the specified component
 pub struct With {
     pub(crate) component: ComponentKey,
     pub(crate) name: &'static str,
 }
 
-impl StaticFilter for With {
-    fn static_matches(&self, arch: &Archetype) -> bool {
-        arch.has(self.component)
-    }
+impl<'q> FetchItem<'q> for With {
+    type Item = ();
 }
 
-impl<'a> Filter<'a> for With {
+impl<'a> Fetch<'a> for With {
+    const MUTABLE: bool = false;
+
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(data.arch))
+    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(BooleanFilter(self.filter_arch(data.arch)))
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, arch: &Archetype) -> bool {
         arch.has(self.component)
     }
 
@@ -563,6 +568,8 @@ impl<'a> Filter<'a> for With {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "with {}", self.name)
     }
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
 #[derive(Debug, Clone)]
@@ -572,15 +579,19 @@ pub struct Without {
     pub(crate) name: &'static str,
 }
 
-impl<'a> Filter<'a> for Without {
+impl<'q> FetchItem<'q> for Without {
+    type Item = ();
+}
+
+impl<'w> Fetch<'w> for Without {
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(data.arch))
+    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(BooleanFilter(self.filter_arch(data.arch)))
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
-        self.static_matches(arch)
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        !arch.has(self.component)
     }
 
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
@@ -590,21 +601,30 @@ impl<'a> Filter<'a> for Without {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "without {}", self.name)
     }
+
+    const MUTABLE: bool = false;
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
-impl StaticFilter for Without {
-    fn static_matches(&self, arch: &Archetype) -> bool {
-        !arch.has(self.component)
-    }
-}
 #[derive(Debug, Clone)]
-/// Yields all entitiens with the relation of the specified kind
+/// Yields all entities with the relation of the specified kind
 pub(crate) struct WithObject {
     pub(crate) object: Entity,
 }
 
-impl StaticFilter for WithObject {
-    fn static_matches(&self, arch: &Archetype) -> bool {
+impl<'q> FetchItem<'q> for WithObject {
+    type Item = ();
+}
+
+impl<'w> Fetch<'w> for WithObject {
+    type Prepared = BooleanFilter;
+
+    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(BooleanFilter(self.filter_arch(data.arch)))
+    }
+
+    fn filter_arch(&self, arch: &Archetype) -> bool {
         arch.components().any(|v| {
             if let Some(v) = v.key().object {
                 if v == self.object {
@@ -615,18 +635,6 @@ impl StaticFilter for WithObject {
             false
         })
     }
-}
-
-impl<'a> Filter<'a> for WithObject {
-    type Prepared = BooleanFilter;
-
-    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(data.arch))
-    }
-
-    fn matches(&self, arch: &Archetype) -> bool {
-        self.static_matches(arch)
-    }
 
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Default::default()
@@ -634,6 +642,12 @@ impl<'a> Filter<'a> for WithObject {
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "with (*)({})", self.object)
+    }
+
+    const MUTABLE: bool = false;
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {
+        todo!()
     }
 }
 
@@ -647,21 +661,20 @@ impl<F> core::fmt::Debug for ArchetypeFilter<F> {
     }
 }
 
-impl<F: Fn(&Archetype) -> bool> StaticFilter for ArchetypeFilter<F> {
-    fn static_matches(&self, arch: &Archetype) -> bool {
-        (self.0)(arch)
-    }
+impl<'q, F> FetchItem<'q> for ArchetypeFilter<F> {
+    type Item = ();
 }
 
-impl<'w, F: Fn(&Archetype) -> bool> Filter<'w> for ArchetypeFilter<F> {
+impl<'w, F: Fn(&Archetype) -> bool> Fetch<'w> for ArchetypeFilter<F> {
+    const MUTABLE: bool = false;
     type Prepared = BooleanFilter;
 
-    fn prepare(&'w self, data: FetchPrepareData, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(data.arch))
+    fn prepare(&'w self, data: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(BooleanFilter(self.filter_arch(data.arch)))
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
-        self.static_matches(arch)
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        (self.0)(arch)
     }
 
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
@@ -671,6 +684,8 @@ impl<'w, F: Fn(&Archetype) -> bool> Filter<'w> for ArchetypeFilter<F> {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "archetype_filter {}", &type_name::<F>())
     }
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
 #[derive(Debug, Clone)]
@@ -680,21 +695,20 @@ pub struct WithRelation {
     pub(crate) name: &'static str,
 }
 
-impl StaticFilter for WithRelation {
-    fn static_matches(&self, arch: &Archetype) -> bool {
-        arch.relations_like(self.relation).next().is_some()
-    }
+impl<'q> FetchItem<'q> for WithRelation {
+    type Item = ();
 }
 
-impl<'a> Filter<'a> for WithRelation {
+impl<'w> Fetch<'w> for WithRelation {
+    const MUTABLE: bool = false;
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(data.arch))
+    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(BooleanFilter(self.filter_arch(data.arch)))
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
-        self.static_matches(arch)
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        arch.relations_like(self.relation).next().is_some()
     }
 
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
@@ -704,6 +718,8 @@ impl<'a> Filter<'a> for WithRelation {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "with {}(*)", self.name)
     }
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
 #[derive(Debug, Clone)]
@@ -713,15 +729,21 @@ pub struct WithoutRelation {
     pub(crate) name: &'static str,
 }
 
-impl<'a> Filter<'a> for WithoutRelation {
+impl<'q> FetchItem<'q> for WithoutRelation {
+    type Item = ();
+}
+
+impl<'a> Fetch<'a> for WithoutRelation {
+    const MUTABLE: bool = false;
+
     type Prepared = BooleanFilter;
 
-    fn prepare(&self, data: FetchPrepareData, _: u32) -> Self::Prepared {
-        BooleanFilter(self.matches(data.arch))
+    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(BooleanFilter(self.filter_arch(data.arch)))
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
-        self.static_matches(arch)
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        arch.relations_like(self.relation).next().is_none()
     }
 
     fn access(&self, _: FetchPrepareData) -> Vec<Access> {
@@ -731,27 +753,32 @@ impl<'a> Filter<'a> for WithoutRelation {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "without {}(*)", self.name)
     }
-}
 
-impl StaticFilter for WithoutRelation {
-    fn static_matches(&self, arch: &Archetype) -> bool {
-        arch.relations_like(self.relation).next().is_none()
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {
+        todo!()
     }
 }
 
 /// Like a bool literal
 #[derive(Copy, Debug, Clone)]
 pub struct BooleanFilter(pub bool);
-impl<'w> Filter<'w> for BooleanFilter {
+
+impl<'q> FetchItem<'q> for BooleanFilter {
+    type Item = ();
+}
+
+impl<'w> Fetch<'w> for BooleanFilter {
+    const MUTABLE: bool = false;
+
     type Prepared = Self;
 
     #[inline(always)]
-    fn prepare(&'w self, _: FetchPrepareData, _: u32) -> Self::Prepared {
-        *self
+    fn prepare(&'w self, _: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(*self)
     }
 
     #[inline(always)]
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         self.0
     }
 
@@ -763,11 +790,16 @@ impl<'w> Filter<'w> for BooleanFilter {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
+
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 }
 
-impl PreparedFilter for BooleanFilter {
-    #[inline(always)]
-    fn filter(&mut self, slots: Slice) -> Slice {
+impl<'q> PreparedFetch<'q> for BooleanFilter {
+    type Item = ();
+
+    fn fetch(&mut self, slot: usize) -> Self::Item {}
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
         if self.0 {
             slots
         } else {
@@ -775,152 +807,183 @@ impl PreparedFilter for BooleanFilter {
         }
     }
 
-    fn matches_slot(&mut self, _: usize) -> bool {
-        self.0
-    }
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
-/// Allows a filter to be used by reference.
-pub struct RefFilter<'a, F>(pub(crate) &'a F);
+// /// Allows a filter to be used by reference.
+// pub struct RefFilter<'a, F>(pub(crate) &'a F);
 
-impl<'a, F> Copy for RefFilter<'a, F> {}
-impl<'a, F> Clone for RefFilter<'a, F> {
-    fn clone(&self) -> Self {
-        Self(self.0)
-    }
-}
+// impl<'a, F> Copy for RefFilter<'a, F> {}
+// impl<'a, F> Clone for RefFilter<'a, F> {
+//     fn clone(&self) -> Self {
+//         Self(self.0)
+//     }
+// }
 
-impl<'a, 'w, F> Filter<'w> for RefFilter<'a, F>
+// impl<'a, 'w, F> Fetch<'w> for RefFilter<'a, F>
+// where
+//     F: Fetch<'w>,
+// {
+//     const MUTABLE: bool = F::MUTABLE;
+
+//     type Prepared = F::Prepared;
+
+//     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+//         (*self.0).prepare(data)
+//     }
+
+//     fn filter_arch(&self, arch: &Archetype) -> bool {
+//         (*self).matches(arch)
+//     }
+
+//     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+//         (*self).access(data)
+//     }
+
+//     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+//         (*self).describe(f)
+//     }
+
+//     fn searcher(&self, searcher: &mut ArchetypeSearcher) {
+//         (*self).searcher(searcher)
+//     }
+// }
+
+impl<'a, 'w, F> PreparedFetch<'w> for &'a F
 where
-    F: Filter<'w>,
+    F: PreparedFetch<'w>,
 {
-    type Prepared = F::Prepared;
+    type Item = F::Item;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
-        (*self.0).prepare(data, change_tick)
+    fn fetch(&mut self, slot: usize) -> Self::Item {
+        (*self).fetch(slot)
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
-        (*self.0).matches(arch)
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        (*self).filter_slots(slots)
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        (*self.0).access(data)
-    }
-
-    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        (*self.0).describe(f)
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        (*self).set_visited(slots, change_tick)
     }
 }
 
-impl<'a, R, F> ops::BitAnd<R> for RefFilter<'a, F> {
-    type Output = And<Self, R>;
+// impl<'a, R, F> ops::BitAnd<R> for &'a F {
+//     type Output = And<Self, R>;
 
-    fn bitand(self, rhs: R) -> Self::Output {
-        And::new(self, rhs)
-    }
-}
+//     fn bitand(self, rhs: R) -> Self::Output {
+//         And::new(self, rhs)
+//     }
+// }
 
-impl<'a, R, F> ops::BitOr<R> for RefFilter<'a, F> {
-    type Output = Or<Self, R>;
+// impl<'a, R, F> ops::BitOr<R> for &'a F {
+//     type Output = Or<(Self, R)>;
 
-    fn bitor(self, rhs: R) -> Self::Output {
-        Or::new(self, rhs)
-    }
-}
+//     fn bitor(self, rhs: R) -> Self::Output {
+//         Or::new(self, rhs)
+//     }
+// }
 
-impl<'a, F> ops::Not for RefFilter<'a, F> {
-    type Output = Not<Self>;
+// impl<'a, F> ops::Not for &'a F {
+//     type Output = Not<Self>;
 
-    fn not(self) -> Self::Output {
-        Not(self)
-    }
-}
+//     fn not(self) -> Self::Output {
+//         Not(self)
+//     }
+// }
 
-/// A filter which can be turned on or off
-/// When disabled, returns All
-#[derive(Debug, Clone)]
-pub struct GatedFilter<F> {
-    pub(crate) active: bool,
-    pub(crate) filter: F,
-}
+// /// A filter which can be turned on or off
+// /// When disabled, returns All
+// #[derive(Debug, Clone)]
+// pub struct GatedFilter<F> {
+//     pub(crate) active: bool,
+//     pub(crate) filter: F,
+// }
 
-impl<F> GatedFilter<F> {
-    pub(crate) fn new(active: bool, filter: F) -> Self {
-        Self { active, filter }
-    }
-}
+// impl<F> GatedFilter<F> {
+//     pub(crate) fn new(active: bool, filter: F) -> Self {
+//         Self { active, filter }
+//     }
+// }
 
-impl<F: PreparedFilter> PreparedFilter for GatedFilter<F> {
-    fn filter(&mut self, slots: Slice) -> Slice {
-        if self.active {
-            self.filter.filter(slots)
-        } else {
-            slots
-        }
-    }
+// impl<F: PreparedFilter> PreparedFilter for GatedFilter<F> {
+//     fn filter(&mut self, slots: Slice) -> Slice {
+//         if self.active {
+//             self.filter.filter(slots)
+//         } else {
+//             slots
+//         }
+//     }
 
-    fn matches_slot(&mut self, slot: usize) -> bool {
-        if self.active {
-            self.filter.matches_slot(slot)
-        } else {
-            true
-        }
-    }
-}
+//     fn matches_slot(&mut self, slot: usize) -> bool {
+//         if self.active {
+//             self.filter.matches_slot(slot)
+//         } else {
+//             true
+//         }
+//     }
+// }
 
-impl<'w, F: Filter<'w>> Filter<'w> for GatedFilter<F> {
-    type Prepared = GatedFilter<F::Prepared>;
+// impl<'w, F: Fetch<'w>> Fetch<'w> for GatedFilter<F> {
+//     type Prepared = GatedFilter<F::Prepared>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
-        GatedFilter {
-            active: self.active,
-            filter: self.filter.prepare(data, change_tick),
-        }
-    }
+//     fn prepare_filter(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
+//         GatedFilter {
+//             active: self.active,
+//             filter: self.filter.prepare_filter(data, change_tick),
+//         }
+//     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
-        !self.active || self.filter.matches(arch)
-    }
+//     fn filter_arch(&self, arch: &Archetype) -> bool {
+//         !self.active || self.filter.matches(arch)
+//     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        self.filter.access(data)
-    }
+//     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+//         self.filter.access(data)
+//     }
 
-    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.active {
-            self.filter.describe(f)
-        } else {
-            write!(f, "true")
-        }
-    }
-}
+//     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+//         if self.active {
+//             self.filter.describe(f)
+//         } else {
+//             write!(f, "true")
+//         }
+//     }
+// }
 
 #[derive(Copy, Debug, Clone)]
 /// Limit the batch size for a query
 pub struct BatchSize(pub(crate) Slot);
 
-impl PreparedFilter for BatchSize {
-    fn filter(&mut self, slots: Slice) -> Slice {
-        Slice::new(slots.start, slots.end.min(slots.start + self.0))
-    }
+impl<'q> PreparedFetch<'q> for BatchSize {
+    type Item = ();
 
-    fn matches_slot(&mut self, _: usize) -> bool {
-        true
+    fn fetch(&mut self, slot: usize) -> Self::Item {}
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        Slice::new(slots.start, slots.end.min(slots.start + self.0))
     }
 }
 
-impl<'w> Filter<'w> for BatchSize {
-    type Prepared = BatchSize;
+impl<'q> FetchItem<'q> for BatchSize {
+    type Item = ();
+}
 
-    fn prepare(&'w self, _: FetchPrepareData, _: u32) -> Self::Prepared {
+impl<'w> Fetch<'w> for BatchSize {
+    const MUTABLE: bool = false;
+
+    type Prepared = Self;
+
+    fn prepare(&'w self, _: FetchPrepareData) -> Option<Self::Prepared> {
         if self.0 == 0 {
             panic!("Batch size of 0 will never yield");
         }
-        *self
+        Some(*self)
     }
 
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -931,62 +994,30 @@ impl<'w> Filter<'w> for BatchSize {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "batch {}", self.0)
     }
-}
 
-#[doc(hidden)]
-#[derive(Debug, Clone)]
-pub struct TupleOr<T>(pub T);
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
+}
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<$($ty, )*> StaticFilter for TupleOr<($($ty,)*)>
-        where $($ty: StaticFilter,)*
-        {
-            fn static_matches(&self, arch: &Archetype) -> bool {
-                let inner = &self.0;
-                $(inner.$idx.static_matches(arch))||*
-            }
+        impl<'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
+            type Item = ();
         }
 
-        impl<$($ty, )*> PreparedFilter for TupleOr<($($ty,)*)>
-        where $($ty: PreparedFilter,)*
+        impl<'w, $($ty, )*> Fetch<'w> for Or<($($ty,)*)>
+        where $($ty: Fetch<'w>,)*
         {
-            fn filter(&mut self, slots: Slice) -> Slice {
-                let mut u = Slice::new(0, 0);
-            let inner = &mut self.0;
+            const MUTABLE: bool =  $($ty::MUTABLE )|*;
+            type Prepared       = Or<($(Option<$ty::Prepared>,)*)>;
 
-                $(
-                    match u.union(&inner.$idx.filter(slots)) {
-                        Some(v) => { u = v }
-                        None => { return u }
-                    }
-                )*
-
-                u
+            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+            todo!()
+                // Some(Or(($(self.0.$idx.prepare(data),)*)))
             }
 
-            fn matches_slot(&mut self, slot: usize) -> bool {
-            let inner = &mut self.0;
-                $(
-                inner.$idx.matches_slot(slot)
-            )||*
-            }
-        }
-
-        impl<'w, $($ty, )*> Filter<'w> for TupleOr<($($ty,)*)>
-        where $($ty: Filter<'w>,)*
-        {
-            type Prepared       = TupleOr<($($ty::Prepared,)*)>;
-
-            fn prepare(&'w self, data: FetchPrepareData<'w>, change_tick: u32) -> Self::Prepared {
+            fn filter_arch(&self, arch: &Archetype) -> bool {
                 let inner = &self.0;
-                let p = ($(inner.$idx.prepare(data, change_tick),)*);
-                TupleOr(p)
-            }
-
-            fn matches(&self, arch: &Archetype) -> bool {
-                let inner = &self.0;
-                $(inner.$idx.matches(arch))||*
+                $(inner.$idx.filter_arch(arch))||*
             }
 
             fn access(&self, data: FetchPrepareData) -> Vec<Access> {
@@ -994,37 +1025,42 @@ macro_rules! tuple_impl {
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                let mut s = f.debug_tuple("TupleOr");
+                let mut s = f.debug_tuple("Or");
                     let inner = &self.0;
                 $(
                     s.field(&FmtFilter(&inner.$idx));
                 )*
                 s.finish()
             }
+
+            fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
         }
 
-        impl<R, $($ty, )*> ops::BitAnd<R> for TupleOr<($($ty,)*)> {
-            type Output = And<Self, R>;
 
-            fn bitand(self, rhs: R) -> Self::Output {
-                And::new(self, rhs)
+        impl<'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
+        where $($ty: PreparedFetch<'q>,)*
+        {
+            type Item = ();
+
+            fn filter_slots(&mut self, slots: Slice) -> Slice {
+                let mut u = Slice::empty();
+                let inner = &mut self.0;
+
+                $(
+                match u.union(&inner.$idx.filter_slots(slots)) {
+                    Some(v) => { u = v }
+                    None => { return u }
+                }
+                )*
+                u
             }
-        }
 
-        impl<R, $($ty, )*> ops::BitOr<R> for TupleOr<($($ty,)*)> {
-            type Output = Or<Self, R>;
+            fn fetch(&mut self, slot: usize) -> Self::Item {}
 
-            fn bitor(self, rhs: R) -> Self::Output {
-                Or::new(self, rhs)
+            fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+                $( self.0.$idx.set_visited(slots, change_tick);)*
             }
-        }
 
-        impl<$($ty, )*> ops::Not for TupleOr<($($ty,)*)> {
-            type Output = Not<Self>;
-
-            fn not(self) -> Self::Output {
-                Not(self)
-            }
         }
     };
 }
@@ -1038,6 +1074,19 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
+
+pub trait StaticFilter {
+    fn static_filter(&self, arch: &Archetype) -> bool;
+}
+
+impl<F> StaticFilter for F
+where
+    for<'x> F: Fetch<'x>,
+{
+    fn static_filter(&self, arch: &Archetype) -> bool {
+        <F as Fetch>::filter_arch(self, arch)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1066,7 +1115,7 @@ mod tests {
 
         let changes = AtomicRefCell::new(changes);
 
-        let filter = PreparedKindFilter::new(changes.borrow(), 2);
+        let filter = PreparedKindFilter::new((), changes.borrow(), 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -1104,10 +1153,10 @@ mod tests {
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedKindFilter::new(changes_1.borrow(), 1);
-        let b = PreparedKindFilter::new(changes_2.borrow(), 2);
+        let a = PreparedKindFilter::new((), changes_1.borrow(), 1);
+        let b = PreparedKindFilter::new((), changes_2.borrow(), 2);
 
-        let filter = Or { left: a, right: b };
+        let filter = Or((Some(a), Some(b)));
 
         // Use a brute force BTreeSet for solving it
         let chunks_set = slots
@@ -1121,8 +1170,8 @@ mod tests {
 
         // And
 
-        let a = PreparedKindFilter::new(changes_1.borrow(), 1);
-        let b = PreparedKindFilter::new(changes_2.borrow(), 2);
+        let a = PreparedKindFilter::new((), changes_1.borrow(), 1);
+        let b = PreparedKindFilter::new((), changes_2.borrow(), 2);
 
         let filter = And { left: a, right: b };
 
@@ -1185,14 +1234,13 @@ mod tests {
         let world = World::new();
         let chunks = FilterIter::new(
             slots,
-            filter.prepare(
-                FetchPrepareData {
-                    world: &world,
-                    arch: &archetype,
-                    arch_id: ArchetypeId::MAX,
-                },
-                1,
-            ),
+            filter.prepare(FetchPrepareData {
+                world: &world,
+                arch: &archetype,
+                arch_id: ArchetypeId::MAX,
+                old_tick: 0,
+                new_tick: 1,
+            }),
         )
         .flatten()
         .collect_vec();

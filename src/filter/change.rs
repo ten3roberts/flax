@@ -1,16 +1,14 @@
 use core::fmt::Formatter;
 use core::ops::Deref;
 
+use alloc::vec;
 use alloc::vec::Vec;
-use alloc::{string::ToString, vec};
 use atomic_refcell::{AtomicRef, AtomicRefCell};
 
-use crate::fetch::FetchPrepareData;
+use crate::fetch::{FetchPrepareData, PreparedComponent, PreparedFetch};
 use crate::{
     archetype::{ChangeList, Slice},
-    filter::PreparedFilter,
-    Access, Archetype, ArchetypeId, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
-    Filter,
+    Access, Archetype, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
 static EMPTY_CHANGELIST_CELL: AtomicRefCell<ChangeList> = AtomicRefCell::new(ChangeList::new());
@@ -51,49 +49,10 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
-    const HAS_FILTER: bool = true;
 
-    type Filter = Self;
-
-    type Prepared = <Component<T> as Fetch<'w>>::Prepared;
+    type Prepared = PreparedKindFilter<PreparedComponent<'w, T>, AtomicRef<'w, ChangeList>>;
 
     fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        self.component.prepare(data)
-    }
-
-    fn matches(&self, arch: &Archetype) -> bool {
-        self.component.matches(arch)
-    }
-
-    fn access(&self, data: crate::fetch::FetchPrepareData) -> Vec<Access> {
-        self.component.access(data)
-    }
-
-    fn describe(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.write_str(&self.kind.to_string())?;
-        match f.write_str(" ") {
-            Ok(it) => it,
-            Err(err) => return Err(err),
-        };
-        self.component.describe(f)
-    }
-
-    fn filter(&self) -> Self::Filter {
-        Self {
-            component: self.component,
-            kind: self.kind,
-        }
-    }
-
-    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
-        searcher.add_required(self.component.key())
-    }
-}
-
-impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
-    type Prepared = PreparedKindFilter<AtomicRef<'a, ChangeList>>;
-
-    fn prepare(&'a self, data: FetchPrepareData<'a>, change_tick: u32) -> Self::Prepared {
         let changes = data.arch.changes(self.component.key());
 
         let changes = if let Some(changes) = changes {
@@ -107,35 +66,43 @@ impl<'a, T: ComponentValue> Filter<'a> for ChangeFilter<T> {
             EMPTY_CHANGELIST_CELL.borrow()
         };
 
-        PreparedKindFilter::new(changes, change_tick)
+        let fetch = self.component.prepare(data)?;
+        Some(PreparedKindFilter::new(fetch, changes, data.old_tick))
     }
 
-    fn matches(&self, archetype: &Archetype) -> bool {
-        archetype.changes(self.component.key()).is_some()
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        self.component.filter_arch(arch) && arch.changes(self.component.key()).is_some()
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        if Filter::matches(self, data.arch) {
-            vec![Access {
+    fn access(&self, data: crate::fetch::FetchPrepareData) -> Vec<Access> {
+        let mut v = self.component.access(data);
+
+        if self.filter_arch(data.arch) {
+            v.push(Access {
                 kind: crate::AccessKind::ChangeEvent {
                     id: data.arch_id,
                     component: self.component.key(),
                 },
                 mutable: false,
-            }]
-        } else {
-            vec![]
+            })
         }
+
+        v
     }
 
-    fn describe(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+    fn describe(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{} {}", self.kind, self.component.name())
+    }
+
+    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
+        searcher.add_required(self.component.key())
     }
 }
 
 #[derive(Debug)]
 #[doc(hidden)]
-pub struct PreparedKindFilter<A> {
+pub struct PreparedKindFilter<Q, A> {
+    fetch: Q,
     changes: A,
     cur: Option<Slice>,
     // The current change group.
@@ -144,12 +111,13 @@ pub struct PreparedKindFilter<A> {
     tick: u32,
 }
 
-impl<A> PreparedKindFilter<A>
+impl<Q, A> PreparedKindFilter<Q, A>
 where
     A: Deref<Target = ChangeList>,
 {
-    pub(crate) fn new(changes: A, tick: u32) -> Self {
+    pub(crate) fn new(fetch: Q, changes: A, tick: u32) -> Self {
         Self {
+            fetch,
             changes,
             cur: None,
             cursor: 0,
@@ -173,11 +141,18 @@ where
     }
 }
 
-impl<A> PreparedFilter for PreparedKindFilter<A>
+impl<'q, Q, A> PreparedFetch<'q> for PreparedKindFilter<Q, A>
 where
+    Q: PreparedFetch<'q>,
     A: Deref<Target = ChangeList>,
 {
-    fn filter(&mut self, slots: Slice) -> Slice {
+    type Item = Q::Item;
+
+    fn fetch(&mut self, slot: usize) -> Self::Item {
+        self.fetch.fetch(slot)
+    }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
         loop {
             let cur = match self.current_slice() {
                 Some(v) => v,
@@ -195,10 +170,8 @@ where
         }
     }
 
-    fn matches_slot(&mut self, slot: usize) -> bool {
-        self.changes
-            .iter()
-            .any(|change| change.tick > self.tick && change.slice.contains(slot))
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        todo!()
     }
 }
 
@@ -227,59 +200,26 @@ impl<'q, T: ComponentValue> FetchItem<'q> for RemovedFilter<T> {
     type Item = ();
 }
 
-impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
+impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
     const MUTABLE: bool = false;
-    const HAS_FILTER: bool = true;
 
-    type Filter = Self;
+    type Prepared = PreparedKindFilter<(), &'a ChangeList>;
 
-    type Prepared = ();
-
-    fn prepare(&self, _: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(())
-    }
-
-    fn matches(&self, _: &Archetype) -> bool {
-        true
-    }
-
-    fn access(&self, _: crate::fetch::FetchPrepareData) -> Vec<Access> {
-        Default::default()
-    }
-
-    fn describe(&self, f: &mut Formatter) -> core::fmt::Result {
-        f.write_str(&ChangeKind::Removed.to_string())?;
-        f.write_str(" ")?;
-        self.component.describe(f)
-    }
-
-    fn filter(&self) -> Self::Filter {
-        Self {
-            component: self.component,
-        }
-    }
-
-    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
-}
-
-impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
-    type Prepared = PreparedKindFilter<&'a ChangeList>;
-
-    fn prepare(&self, data: FetchPrepareData<'a>, change_tick: u32) -> Self::Prepared {
+    fn prepare(&self, data: FetchPrepareData<'a>) -> Option<Self::Prepared> {
         let changes = data
             .arch
             .removals(self.component.key())
             .unwrap_or(&EMPTY_CHANGELIST);
 
-        PreparedKindFilter::new(changes, change_tick)
+        Some(PreparedKindFilter::new((), changes, data.old_tick))
     }
 
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        if Filter::matches(self, data.arch) {
+        if self.filter_arch(data.arch) {
             vec![Access {
                 kind: crate::AccessKind::ChangeEvent {
                     id: data.arch_id,
@@ -294,5 +234,9 @@ impl<'a, T: ComponentValue> Filter<'a> for RemovedFilter<T> {
 
     fn describe(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "removed {}", self.component.name())
+    }
+
+    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
+        todo!()
     }
 }

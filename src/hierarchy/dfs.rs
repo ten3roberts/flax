@@ -1,15 +1,11 @@
-use core::mem;
-
 use alloc::collections::BTreeMap;
-use itertools::Itertools;
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
     archetype::Slice,
     fetch::{FetchPrepareData, PreparedFetch},
-    filter::{RefFilter, SliceFilter},
-    And, ArchetypeChunks, Batch, Entity, Fetch, FetchItem, Filter, ParForEach, PreparedArchetype,
-    World,
+    filter::Filtered,
+    Batch, Entity, Fetch, FetchItem, PreparedArchetype, World,
 };
 
 use super::{borrow::QueryBorrowState, DfsState};
@@ -17,23 +13,25 @@ use super::{borrow::QueryBorrowState, DfsState};
 pub struct DfsBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
     world: &'w World,
-    fetch: &'w Q,
+    fetch: &'w Filtered<Q, F>,
 
-    prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared>; 8]>,
-    state: QueryBorrowState<'w, Q, F>,
+    prepared: SmallVec<[PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>; 8]>,
+    state: QueryBorrowState,
     dfs_state: &'w DfsState,
 }
 
 impl<'w, Q, F> DfsBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
     pub(super) fn new(
         world: &'w World,
-        fetch: &'w Q,
-        state: QueryBorrowState<'w, Q, F>,
+        fetch: &'w Filtered<Q, F>,
+        state: QueryBorrowState,
         dfs_state: &'w DfsState,
     ) -> Self {
         let prepared = dfs_state
@@ -46,12 +44,16 @@ where
                     world,
                     arch,
                     arch_id,
+                    old_tick: state.old_tick,
+                    new_tick: state.new_tick,
                 };
+
+                let fetch = fetch.prepare(data).unwrap();
 
                 PreparedArchetype {
                     arch_id,
                     arch,
-                    fetch: fetch.prepare(data).unwrap(),
+                    fetch,
                 }
             })
             .collect();
@@ -68,7 +70,6 @@ where
     /// Iterate all items matched by query and filter.
     pub fn iter<'q>(&'q mut self) -> DfsIter<'w, 'q, Q, F>
     where
-        F: Filter<'q>,
         'w: 'q,
     {
         // Safety: the iterator will not borrow this archetype again
@@ -77,29 +78,21 @@ where
 
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
-        let p = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
-
-        let root_filter = And::new(
-            self.state.filter.prepare(
-                FetchPrepareData {
-                    world: self.world,
-                    arch: p.arch,
-                    arch_id: p.arch_id,
-                },
-                self.state.old_tick,
-            ),
-            SliceFilter(Slice::single(loc.slot)),
-        );
-
-        let stack = p
-            .chunks(self.state.old_tick, self.state.new_tick, root_filter)
-            .collect();
+        let p = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
+        let chunk = match p.manual_chunk(
+            Slice::single(loc.slot),
+            self.state.old_tick,
+            self.state.new_tick,
+        ) {
+            Some(v) => smallvec![v],
+            None => smallvec![],
+        };
 
         DfsIter {
             world: self.world,
             state: &self.state,
             archetypes: &mut self.prepared[..],
-            stack,
+            stack: chunk,
             adj: &self.dfs_state.adj,
         }
     }
@@ -109,7 +102,6 @@ where
         value: &T,
         mut func: Fn,
     ) where
-        F: Filter<'q>,
         'w: 'q,
     {
         // Safety: the iterator will not borrow this archetype again
@@ -118,23 +110,13 @@ where
 
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
-        let arch = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
+        let arch = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
 
-        let root_filter = And::new(
-            self.state.filter.prepare(
-                FetchPrepareData {
-                    world: self.world,
-                    arch: arch.arch,
-                    arch_id: arch.arch_id,
-                },
-                self.state.old_tick,
-            ),
-            SliceFilter(Slice::single(loc.slot)),
+        let root = arch.manual_chunk(
+            Slice::single(loc.slot),
+            self.state.old_tick,
+            self.state.new_tick,
         );
-
-        let root = arch
-            .chunks(self.state.old_tick, self.state.new_tick, root_filter)
-            .next();
 
         if let Some(root) = root {
             Self::cascade_inner(
@@ -151,15 +133,15 @@ where
 
     fn cascade_inner<'q, T, Fn>(
         world: &'q World,
-        archetypes: &mut [PreparedArchetype<'w, Q::Prepared>],
+        archetypes: &mut [PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>],
         adj: &BTreeMap<Entity, Vec<usize>>,
-        state: &'q QueryBorrowState<'w, Q, F>,
-        mut batch: Batch<'q, Q::Prepared>,
+        state: &'q QueryBorrowState,
+        mut batch: Batch<'q, Filtered<Q::Prepared, F::Prepared>>,
         value: &T,
         func: &mut Fn,
     ) where
         Q: 'w,
-        F: Filter<'q>,
+        F: Fetch<'w>,
         Fn: FnMut(<Q as FetchItem<'q>>::Item, &T) -> T,
         'w: 'q,
     {
@@ -171,20 +153,9 @@ where
 
                 // Promote the borrow of the fetch to 'q
                 // This is safe because each borrow is disjoint
-                let p = unsafe { &mut *(arch as *mut PreparedArchetype<Q::Prepared>) };
+                let p = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
 
-                for batch in p.chunks(
-                    state.old_tick,
-                    state.new_tick,
-                    state.filter.prepare(
-                        FetchPrepareData {
-                            world,
-                            arch: p.arch,
-                            arch_id: p.arch_id,
-                        },
-                        state.old_tick,
-                    ),
-                ) {
+                for batch in p.chunks(state.old_tick, state.new_tick) {
                     Self::cascade_inner(world, archetypes, adj, state, batch, &value, func)
                 }
             }
@@ -195,21 +166,21 @@ where
 pub struct DfsIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     world: &'w World,
     adj: &'q BTreeMap<Entity, Vec<usize>>,
-    state: &'q QueryBorrowState<'w, Q, F>,
+    state: &'q QueryBorrowState,
 
-    archetypes: &'q mut [PreparedArchetype<'w, Q::Prepared>],
-    stack: SmallVec<[Batch<'q, Q::Prepared>; 8]>,
+    archetypes: &'q mut [PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>],
+    stack: SmallVec<[Batch<'q, Filtered<Q::Prepared, F::Prepared>>; 8]>,
 }
 
 impl<'w, 'q, Q, F> DfsIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
     'w: 'q,
 {
 }
@@ -217,7 +188,7 @@ where
 impl<'w, 'q, Q, F> Iterator for DfsIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -232,20 +203,9 @@ where
 
                     // Promote the borrow of the fetch to 'q
                     // This is safe because each borrow is disjoint
-                    let p = unsafe { &mut *(p as *mut PreparedArchetype<Q::Prepared>) };
+                    let p = unsafe { &mut *(p as *mut PreparedArchetype<_>) };
 
-                    let chunks = p.chunks(
-                        self.state.old_tick,
-                        self.state.new_tick,
-                        self.state.filter.prepare(
-                            FetchPrepareData {
-                                world: self.world,
-                                arch: p.arch,
-                                arch_id: p.arch_id,
-                            },
-                            self.state.old_tick,
-                        ),
-                    );
+                    let chunks = p.chunks(self.state.old_tick, self.state.new_tick);
 
                     self.stack.extend(chunks);
                 }

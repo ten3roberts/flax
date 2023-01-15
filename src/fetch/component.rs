@@ -26,10 +26,16 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
     type Item = &'q T;
 
     #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         // Safety: bounds guaranteed by callee
-        self.borrow.get_unchecked(slot)
+        unsafe { self.borrow.get_unchecked(slot) }
     }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        slots
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 impl<'w, T> Fetch<'w> for Component<T>
@@ -37,9 +43,6 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
-    const HAS_FILTER: bool = false;
-
-    type Filter = Nothing;
 
     type Prepared = PreparedComponent<'w, T>;
 
@@ -48,7 +51,7 @@ where
         Some(PreparedComponent { borrow })
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, arch: &Archetype) -> bool {
         arch.has(self.key())
     }
 
@@ -70,10 +73,6 @@ where
         f.write_str(self.name())
     }
 
-    fn filter(&self) -> Self::Filter {
-        Nothing
-    }
-
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
         searcher.add_required(self.key())
     }
@@ -93,9 +92,6 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = true;
-    const HAS_FILTER: bool = false;
-
-    type Filter = Nothing;
 
     type Prepared = PreparedComponentMut<'w, T>;
 
@@ -105,7 +101,7 @@ where
         Some(PreparedComponentMut { borrow, changes })
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, arch: &Archetype) -> bool {
         arch.has(self.0.key())
     }
 
@@ -137,10 +133,6 @@ where
         f.write_str(self.0.name())
     }
 
-    fn filter(&self) -> Self::Filter {
-        Nothing
-    }
-
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
         searcher.add_required(self.0.key())
     }
@@ -154,16 +146,20 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
     type Item = &'q mut T;
 
     #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
-        &mut *(self.borrow.get_unchecked_mut(slot) as *mut T)
+        unsafe { &mut *(self.borrow.get_unchecked_mut(slot) as *mut T) }
     }
 
-    unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
         self.changes
             .set_modified_if_tracking(Change::new(slots, change_tick));
+    }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        slots
     }
 }
 
@@ -185,7 +181,6 @@ where
     T: ComponentValue,
 {
     const MUTABLE: bool = false;
-    type Filter = Nothing;
 
     type Prepared = PreparedRelations<'w, T>;
 
@@ -215,7 +210,7 @@ where
         Some(PreparedRelations { borrows })
     }
 
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -244,10 +239,6 @@ where
         write!(f, "relations({})", self.component.name())
     }
 
-    fn filter(&self) -> Self::Filter {
-        Nothing
-    }
-
     fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }
 
@@ -266,12 +257,18 @@ where
 {
     type Item = RelationsIter<'q, T>;
 
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         RelationsIter {
             borrows: self.borrows.iter(),
             slot,
         }
     }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        slots
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 /// Iterates the relation object and data for the yielded query item

@@ -4,13 +4,10 @@ mod dfs;
 use alloc::collections::{btree_map, BTreeMap, BTreeSet};
 use smallvec::SmallVec;
 
+use crate::filter::Filtered;
 use crate::{
-    archetype::Archetype,
-    component_info,
-    entity::EntityLocation,
-    filter::{GatedFilter, RefFilter},
-    All, And, ArchetypeId, ArchetypeSearcher, Archetypes, ComponentKey, ComponentValue, Entity,
-    Fetch, Filter, RelationExt, World,
+    archetype::Archetype, component_info, entity::EntityLocation, All, ArchetypeId,
+    ArchetypeSearcher, Archetypes, ComponentKey, ComponentValue, Entity, Fetch, RelationExt, World,
 };
 
 use self::borrow::QueryBorrowState;
@@ -20,8 +17,7 @@ use self::dfs::*;
 
 /// Allows traversing an entity graph following `relation`
 pub struct GraphQuery<Q, F> {
-    fetch: Q,
-    filter: F,
+    fetch: Filtered<Q, F>,
 
     change_tick: u32,
     archetype_gen: u32,
@@ -34,8 +30,7 @@ pub struct GraphQuery<Q, F> {
 impl<Q> GraphQuery<Q, All> {
     pub fn with_strategy(fetch: Q, strategy: Dfs) -> Self {
         Self {
-            fetch,
-            filter: All,
+            fetch: Filtered::new(fetch, All),
             change_tick: 0,
             archetype_gen: 0,
             include_components: false,
@@ -50,7 +45,7 @@ type AdjMap<'a> = BTreeMap<Entity, SmallVec<[(ArchetypeId, &'a Archetype); 8]>>;
 impl<Q, F> GraphQuery<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     /// Prepare the next change tick and return the old one for the last time
     /// the query ran
@@ -95,23 +90,12 @@ where
                 searcher.add_excluded(component_info().key());
             }
 
-            let filter = |arch: &Archetype| {
-                self.fetch.matches(arch)
-                    && self.filter.matches(arch)
-                    && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
-            };
+            let filter = |arch: &Archetype| self.fetch.filter_arch(arch);
 
             self.strategy.get_state(world, searcher, filter)
         });
 
-        let query_state = QueryBorrowState {
-            filter: And::new(
-                RefFilter(&self.filter),
-                GatedFilter::new(Q::HAS_FILTER, self.fetch.filter()),
-            ),
-            old_tick,
-            new_tick,
-        };
+        let query_state = QueryBorrowState { old_tick, new_tick };
 
         DfsBorrow::new(world, &self.fetch, query_state, state)
     }
@@ -239,7 +223,6 @@ impl Dfs {
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
     use crate::{child_of, entity_ids, name, CmpExt, CommandBuffer, FetchExt, Query};

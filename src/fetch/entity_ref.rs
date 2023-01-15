@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{archetype::Archetype, filter::Nothing, Access, EntityRef, Fetch, FetchItem, World};
+use crate::{archetype::Archetype, Access, EntityRef, Fetch, FetchItem, World};
 
 use super::PreparedFetch;
 
@@ -22,18 +22,16 @@ impl<'w> Fetch<'w> for EntityRefs {
     ///  Mutation through `get_mut` will cause an external change event
     const MUTABLE: bool = false;
 
-    type Filter = Nothing;
-
     type Prepared = PreparedEntityRef<'w>;
 
-    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<BatchSize> {
         Some(PreparedEntityRef {
             arch: data.arch,
             world: data.world,
         })
     }
 
-    fn matches(&self, _: &crate::archetype::Archetype) -> bool {
+    fn filter_arch(&self, _: &crate::archetype::Archetype) -> bool {
         true
     }
 
@@ -46,10 +44,6 @@ impl<'w> Fetch<'w> for EntityRefs {
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "entity_ref")
-    }
-
-    fn filter(&self) -> Self::Filter {
-        Nothing
     }
 
     fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
@@ -73,6 +67,12 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
             world: self.world,
         }
     }
+
+    fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
+        Default::default()
+    }
+
+    fn set_visited(&mut self, slots: crate::archetype::Slice, change_tick: u32) {}
 }
 
 #[cfg(test)]

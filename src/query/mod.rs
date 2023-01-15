@@ -15,7 +15,7 @@ use crate::{
     filter::*,
     system::{SystemAccess, SystemContext, SystemData},
     util::TupleCloned,
-    Access, AccessKind, Component, ComponentValue, FetchItem, Filter, World,
+    Access, AccessKind, Component, ComponentValue, FetchItem, World,
 };
 use crate::{AsBorrow, Entity, RelationExt};
 
@@ -25,7 +25,6 @@ pub use iter::*;
 
 pub use self::searcher::ArchetypeSearcher;
 
-pub(crate) type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Represents a query and state for a given world.
 /// The archetypes to visit is cached in the query which means it is more
 /// performant to reuse the query than creating a new one.
@@ -34,29 +33,24 @@ pub(crate) type FilterWithFetch<F, Q> = And<F, GatedFilter<Q>>;
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
 #[derive(Clone)]
-pub struct Query<Q, F = All>
-where
-    Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
-{
+pub struct Query<Q, F = All> {
     // The archetypes to visit
     archetypes: Vec<ArchetypeId>,
-    filter: F,
+    fetch: Filtered<Q, F>,
     include_components: bool,
     change_tick: u32,
     archetype_gen: u32,
-    fetch: Q,
 }
 
 impl<Q, F> Debug for Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Query")
-            .field("fetch", &FmtQuery(&self.fetch))
-            .field("filter", &FmtFilter(&self.filter))
+            .field("fetch", &FmtQuery(&self.fetch.fetch))
+            .field("filter", &FmtQuery(&self.fetch.filter))
             .finish()
     }
 }
@@ -78,8 +72,7 @@ where
     pub fn new(query: Q) -> Self {
         Self {
             archetypes: Vec::new(),
-            filter: All,
-            fetch: query,
+            fetch: Filtered::new(query, All),
             change_tick: 0,
             archetype_gen: 0,
             include_components: false,
@@ -100,13 +93,12 @@ where
 impl<Q, F> Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     /// Transform the query into a query for a single entity
     pub fn entity(self, id: Entity) -> EntityQuery<Q, F> {
         EntityQuery {
             fetch: self.fetch,
-            filter: self.filter,
             id,
             change_tick: self.change_tick,
         }
@@ -114,13 +106,15 @@ where
 
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<G: for<'x> Filter<'x>>(self, filter: G) -> Query<Q, And<F, G>> {
+    pub fn filter<G>(self, filter: G) -> Query<Q, And<F, G>>
+    where
+        G: for<'x> Fetch<'x>,
+    {
         Query {
-            filter: And::new(self.filter, filter),
+            fetch: Filtered::new(self.fetch.fetch, And::new(self.fetch.filter, filter)),
             archetypes: Vec::new(),
             change_tick: self.change_tick,
             archetype_gen: self.archetype_gen,
-            fetch: self.fetch,
             include_components: self.include_components,
         }
     }
@@ -218,14 +212,7 @@ where
             self.archetype_gen = archetype_gen;
         }
 
-        QueryBorrow::new(
-            world,
-            &self.archetypes,
-            &self.fetch,
-            &self.filter,
-            old_tick,
-            new_tick,
-        )
+        QueryBorrow::new(world, &self.archetypes, &self.fetch, old_tick, new_tick)
     }
 
     /// Gathers all elements in the query as a Vec of owned values.
@@ -258,11 +245,7 @@ where
 
         let archetypes = &world.archetypes;
 
-        let filter = |arch: &Archetype| {
-            self.fetch.matches(arch)
-                && self.filter.matches(arch)
-                && (!Q::HAS_FILTER || self.fetch.filter().matches(arch))
-        };
+        let filter = |arch: &Archetype| self.fetch.filter_arch(arch);
 
         let mut result = Vec::new();
         searcher.find_archetypes(archetypes, |arch_id, arch| {
@@ -278,7 +261,7 @@ where
 impl<Q, F> SystemAccess for Query<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     fn access(&self, world: &World) -> Vec<crate::system::Access> {
         self.get_archetypes(world)
@@ -289,9 +272,10 @@ where
                     world,
                     arch,
                     arch_id,
+                    old_tick: 1,
+                    new_tick: 1,
                 };
                 let mut res = self.fetch.access(data);
-                res.append(&mut self.filter.access(data));
                 res
             })
             .chain([Access {
@@ -306,7 +290,7 @@ where
 pub struct QueryData<'a, Q, F = All>
 where
     Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + 'static,
+    F: for<'x> Fetch<'x> + 'static,
 {
     world: AtomicRef<'a, World>,
     query: &'a mut Query<Q, F>,
@@ -315,7 +299,7 @@ where
 impl<'a, Q, F> SystemData<'a> for Query<Q, F>
 where
     Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + 'static,
+    F: for<'x> Fetch<'x> + 'static,
 {
     type Value = QueryData<'a, Q, F>;
 
@@ -334,7 +318,7 @@ where
 impl<'a, Q, F> QueryData<'a, Q, F>
 where
     for<'x> Q: Fetch<'x>,
-    for<'x> F: Filter<'x>,
+    for<'x> F: Fetch<'x>,
 {
     /// Prepare the query.
     ///
@@ -351,7 +335,7 @@ where
 impl<'a, 'w, Q, F> AsBorrow<'a> for QueryData<'w, Q, F>
 where
     Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + 'static,
+    F: for<'x> Fetch<'x> + 'static,
 {
     type Borrowed = QueryBorrow<'a, Q, F>;
 
@@ -414,7 +398,7 @@ mod test {
 
         let mut system = System::builder()
             .with(Query::new(name()).entity(id2))
-            .build(|mut q: EntityBorrow<_>| {
+            .build(|mut q: EntityBorrow<_, _>| {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             });
 

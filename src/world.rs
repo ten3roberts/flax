@@ -21,7 +21,7 @@ use crate::{
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     events::{EventHandler, RemoveSubscriber, Subscriber},
-    filter::ArchetypeFilter,
+    filter::{ArchetypeFilter, StaticFilter},
     relation::Relation,
     *,
 };
@@ -801,7 +801,7 @@ impl World {
     /// Despawns all entities which matches the filter
     pub fn despawn_many<F>(&mut self, filter: F)
     where
-        F: for<'x> Filter<'x>,
+        F: for<'x> Fetch<'x>,
     {
         self.flush_reserved();
         let mut query = Query::new(entity_ids()).filter(filter);
@@ -1596,7 +1596,7 @@ pub struct WorldFormatter<'a, F> {
 
 impl<'a, F> fmt::Debug for WorldFormatter<'a, F>
 where
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut list = f.debug_map();

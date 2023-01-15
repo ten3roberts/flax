@@ -1,35 +1,18 @@
-use core::{iter::Flatten, mem};
+use crate::{fetch::PreparedFetch, ArchetypeChunks, Batch, Entity, Fetch};
 
-use alloc::collections::BTreeMap;
-use smallvec::SmallVec;
-
-use crate::{
-    access_info,
-    archetype::{Slice, Slot},
-    fetch::{FetchPrepareData, PreparedEntities, PreparedFetch},
-    filter::{FilterIter, PreparedFilter, RefFilter, TupleOr},
-    All, ArchetypeChunks, ArchetypeId, Batch, Entity, EntityIds, Fetch, Filter, FilterWithFetch,
-    Nothing, PreparedArchetype, World,
-};
-
-pub(crate) struct QueryBorrowState<'w, Q, F>
-where
-    Q: Fetch<'w>,
-{
-    pub(crate) filter: FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
+pub(crate) struct QueryBorrowState {
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
 }
 
-struct BatchesWithId<'q, Q, F> {
-    chunks: ArchetypeChunks<'q, Q, F>,
+struct BatchesWithId<'q, Q> {
+    chunks: ArchetypeChunks<'q, Q>,
     current: Option<Batch<'q, Q>>,
 }
 
-impl<'q, Q, F> Iterator for BatchesWithId<'q, Q, F>
+impl<'q, Q> Iterator for BatchesWithId<'q, Q>
 where
     Q: PreparedFetch<'q>,
-    F: PreparedFilter,
 {
     type Item = (Entity, Q::Item);
 
