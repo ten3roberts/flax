@@ -7,9 +7,9 @@ use crate::{
     entity::EntityLocation,
     error::Result,
     fetch::{FetchPrepareData, FmtQuery, PreparedFetch},
-    filter::{FmtFilter, PreparedFilter},
-    find_missing_components, Access, AccessKind, All, AsBorrow, Entity, Error, Fetch, Filter,
-    SystemAccess, SystemContext, SystemData, World,
+    filter::Filtered,
+    find_missing_components, Access, AccessKind, All, AsBorrow, Entity, Error, Fetch, SystemAccess,
+    SystemContext, SystemData, World,
 };
 
 #[derive(Clone)]
@@ -25,13 +25,8 @@ use crate::{
 /// ergonomics in situations such as borrowing resources from a static resource entity.
 ///
 /// Create an entity query using [`Query::entity`](crate::Query::entity).
-pub struct EntityQuery<Q, F = All>
-where
-    Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
-{
-    pub(super) fetch: Q,
-    pub(super) filter: F,
+pub struct EntityQuery<Q, F = All> {
+    pub(super) fetch: Filtered<Q, F>,
     pub(super) id: Entity,
     pub(super) change_tick: u32,
 }
@@ -39,7 +34,7 @@ where
 impl<Q, F> EntityQuery<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     /// Prepare the next change tick and return the old one for the last time
     /// the query ran
@@ -72,21 +67,21 @@ where
         &'w mut self,
         world: &'w World,
         old_tick: u32,
-    ) -> (State<<Q as Fetch<'w>>::Prepared>, &Q, &F) {
+        new_tick: u32,
+    ) -> (
+        State<Filtered<<Q as Fetch<'w>>::Prepared, <F as Fetch<'w>>::Prepared>>,
+        &Filtered<Q, F>,
+    ) {
         let loc = match world.location(self.id) {
             Ok(v) => v,
-            Err(_) => return (State::NoSuchEntity(self.id), &self.fetch, &self.filter),
+            Err(_) => return (State::NoSuchEntity(self.id), &self.fetch),
         };
 
         let arch = world.archetypes.get(loc.arch_id);
-        let fetch_filter = self.fetch.filter();
+
         // Check static filtering
-        if !self.filter.matches(arch) || (Q::HAS_FILTER && !fetch_filter.matches(arch)) {
-            return (
-                State::MismatchedFilter(self.id, loc),
-                &self.fetch,
-                &self.filter,
-            );
+        if !self.fetch.filter_arch(arch) {
+            return (State::MismatchedFilter(self.id, loc), &self.fetch);
         }
 
         // Prepare the filter and check for dynamic filtering, for example modification filters
@@ -94,35 +89,19 @@ where
             world,
             arch,
             arch_id: loc.arch_id,
+            old_tick,
+            new_tick,
         };
 
-        let mut filter = self.filter.prepare(data, old_tick);
-        let mut fetch_filter = fetch_filter.prepare(data, old_tick);
-
-        if filter.matches_slot(loc.slot) && (!Q::HAS_FILTER || fetch_filter.matches_slot(loc.slot))
-        {
-            match self.fetch.prepare(FetchPrepareData {
-                world,
-                arch,
-                arch_id: loc.arch_id,
-            }) {
-                Some(v) => (
-                    State::Complete { loc, prepared: v },
-                    &self.fetch,
-                    &self.filter,
-                ),
-                None => (
-                    State::MismatchedFetch(self.id, loc),
-                    &self.fetch,
-                    &self.filter,
-                ),
-            }
-        } else {
-            (
-                State::MismatchedFilter(self.id, loc),
-                &self.fetch,
-                &self.filter,
-            )
+        match self.fetch.prepare(FetchPrepareData {
+            world,
+            arch,
+            arch_id: loc.arch_id,
+            old_tick,
+            new_tick,
+        }) {
+            Some(v) => (State::Complete { loc, prepared: v }, &self.fetch),
+            None => (State::MismatchedFetch(self.id, loc), &self.fetch),
         }
     }
 
@@ -132,12 +111,12 @@ where
     ///
     /// **Note**: This operation never fails if the entity does not exist or does not match the
     /// fetch. Instead, the error is returned by [`EntityBorrow::get`].
-    pub fn borrow<'w>(&'w mut self, world: &'w World) -> EntityBorrow<'w, Q> {
+    pub fn borrow<'w>(&'w mut self, world: &'w World) -> EntityBorrow<'w, Q, F> {
         let (old_tick, new_tick) = self.prepare_tick(world);
 
         // The entity may not exist, of it may not match the fetch (yet)
 
-        let (state, fetch, _) = self.state(world, old_tick);
+        let (state, fetch) = self.state(world, old_tick, new_tick);
 
         EntityBorrow {
             prepared: state,
@@ -151,12 +130,12 @@ where
 impl<Q, F> core::fmt::Debug for EntityQuery<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Query")
-            .field("fetch", &FmtQuery(&self.fetch))
-            .field("filter", &FmtFilter(&self.filter))
+            .field("fetch", &FmtQuery(&self.fetch.fetch))
+            .field("filter", &FmtQuery(&self.fetch.fetch))
             .finish()
     }
 }
@@ -173,19 +152,21 @@ enum State<Q> {
 ///
 /// A prepared query for a single entity. Holds the locks for the affected archetype and
 /// components.
-pub struct EntityBorrow<'w, Q>
+pub struct EntityBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
     world: &'w World,
-    prepared: State<Q::Prepared>,
-    fetch: &'w Q,
+    prepared: State<Filtered<Q::Prepared, F::Prepared>>,
+    fetch: &'w Filtered<Q, F>,
     new_tick: u32,
 }
 
-impl<'w, Q> EntityBorrow<'w, Q>
+impl<'w, Q, F> EntityBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
     /// Returns the results of the fetch.
     ///
@@ -218,7 +199,7 @@ where
 pub struct EntityQueryData<'a, Q, F>
 where
     Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + 'static,
+    F: for<'x> Fetch<'x> + 'static,
 {
     world: AtomicRef<'a, World>,
     query: &'a mut EntityQuery<Q, F>,
@@ -227,7 +208,7 @@ where
 impl<'a, Q, F> EntityQueryData<'a, Q, F>
 where
     for<'x> Q: Fetch<'x>,
-    for<'x> F: Filter<'x>,
+    for<'x> F: Fetch<'x>,
 {
     /// Prepare the query.
     ///
@@ -236,7 +217,7 @@ where
     ///
     /// The same query can be prepared multiple times, though not
     /// simultaneously.
-    pub fn borrow(&mut self) -> EntityBorrow<Q> {
+    pub fn borrow(&mut self) -> EntityBorrow<Q, F> {
         self.query.borrow(&self.world)
     }
 }
@@ -244,9 +225,9 @@ where
 impl<'a, 'w, Q, F> AsBorrow<'a> for EntityQueryData<'w, Q, F>
 where
     Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + 'static,
+    F: for<'x> Fetch<'x> + 'static,
 {
-    type Borrowed = EntityBorrow<'a, Q>;
+    type Borrowed = EntityBorrow<'a, Q, F>;
 
     fn as_borrow(&'a mut self) -> Self::Borrowed {
         self.borrow()
@@ -256,21 +237,23 @@ where
 impl<Q, F> SystemAccess for EntityQuery<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     fn access(&self, world: &World) -> alloc::vec::Vec<crate::system::Access> {
         let loc = world.location(self.id);
         match loc {
             Ok(loc) => {
                 let arch = world.archetypes.get(loc.arch_id);
-                if self.filter.matches(arch) {
+                if self.fetch.filter_arch(arch) {
                     let data = FetchPrepareData {
                         world,
                         arch,
                         arch_id: loc.arch_id,
+                        old_tick: 0,
+                        new_tick: 0,
                     };
+
                     let mut res = self.fetch.access(data);
-                    res.append(&mut self.filter.access(data));
 
                     res.push(Access {
                         kind: AccessKind::World,
@@ -289,7 +272,7 @@ where
 impl<'a, Q, F> SystemData<'a> for EntityQuery<Q, F>
 where
     Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Filter<'x> + 'static,
+    F: for<'x> Fetch<'x> + 'static,
 {
     type Value = EntityQueryData<'a, Q, F>;
 
@@ -350,7 +333,7 @@ mod test {
         assert_eq!(world.get(id, position()).as_deref(), Ok(&Vec3::X));
 
         let mut system = System::builder().with(Query::new(name()).entity(id)).build(
-            |mut q: EntityBorrow<_>| {
+            |mut q: EntityBorrow<_, _>| {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             },
         );

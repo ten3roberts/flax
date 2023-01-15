@@ -554,7 +554,8 @@ mod test {
             });
 
         let cleanup = System::builder()
-            .with(Query::new(entity_ids()).filter(health().le(0.0)))
+            // .with(Query::new(entity_ids()).filter(health().le(0.0)))
+            .with(Query::new(entity_ids()))
             .write::<CommandBuffer>()
             .with_name("cleanup")
             .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {

@@ -2,12 +2,12 @@ use core::{iter::Flatten, slice::IterMut};
 
 use crate::{
     archetype::{Slice, Slot},
-    fetch::{FetchPrepareData, PreparedFetch},
-    filter::{FilterIter, PreparedFilter, RefFilter},
-    Archetype, Entity, Fetch, Filter, World,
+    fetch::PreparedFetch,
+    filter::Filtered,
+    Archetype, Entity, Fetch, World,
 };
 
-use super::{FilterWithFetch, PreparedArchetype};
+use super::PreparedArchetype;
 
 /// Iterates over a chunk of entities, specified by a predicate.
 /// In essence, this is the unflattened version of [crate::QueryIter].
@@ -96,24 +96,44 @@ where
 /// An iterator over a single archetype which returns chunks.
 /// The chunk size is determined by the largest continuous matched entities for
 /// filters.
-pub struct ArchetypeChunks<'q, Q, F> {
+pub struct ArchetypeChunks<'q, Q> {
     pub(crate) arch: &'q Archetype,
     pub(crate) fetch: &'q mut Q,
-    pub(crate) filter: FilterIter<F>,
     pub(crate) new_tick: u32,
+    /// The slots which remain to iterate over
+    slots: Slice,
 }
 
-impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
+impl<'q, Q> ArchetypeChunks<'q, Q>
 where
     Q: PreparedFetch<'q>,
-    F: PreparedFilter,
+{
+    pub fn next_chunk(&mut self) -> Option<Slice> {
+        let cur = self.fetch.filter_slots(self.slots);
+
+        if cur.is_empty() {
+            None
+        } else {
+            let (_l, m, r) = self
+                .slots
+                .split_with(&cur)
+                .expect("Return value of filter must be a subset of `slots");
+
+            self.slots = r;
+            Some(m)
+        }
+    }
+}
+
+impl<'q, Q> Iterator for ArchetypeChunks<'q, Q>
+where
+    Q: PreparedFetch<'q>,
 {
     type Item = Batch<'q, Q>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Get the next chunk
-        let chunk = self.filter.next();
-        let chunk = chunk?;
+        let chunk = self.next_chunk()?;
 
         // Fetch will never change and all calls are disjoint
         let fetch = unsafe { &mut *(self.fetch as *mut Q) };
@@ -130,7 +150,7 @@ where
 pub struct QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
 {
     iter: Flatten<BatchedIter<'q, 'w, Q, F>>,
 }
@@ -138,7 +158,7 @@ where
 impl<'q, 'w, Q, F> QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
 {
     #[inline(always)]
     pub(crate) fn new(iter: BatchedIter<'q, 'w, Q, F>) -> Self {
@@ -152,7 +172,7 @@ where
 impl<'w, 'q, Q, F> Iterator for QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -168,36 +188,31 @@ where
 pub struct BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     world: &'w World,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
-    pub(crate) filter: &'q FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
-    pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
-    pub(crate) current: Option<
-        ArchetypeChunks<'q, Q::Prepared, <FilterWithFetch<F, Q::Filter> as Filter<'q>>::Prepared>,
-    >,
+    pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>>,
+    pub(crate) current: Option<ArchetypeChunks<'q, Filtered<Q::Prepared, F::Prepared>>>,
 }
 
 impl<'q, 'w, Q, F> BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
 {
     pub(super) fn new(
         world: &'w World,
         old_tick: u32,
         new_tick: u32,
-        filter: &'q FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
-        archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
+        archetypes: IterMut<'q, PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>>,
     ) -> Self {
         Self {
             world,
             old_tick,
             new_tick,
-            filter,
             archetypes,
             current: None,
         }
@@ -207,10 +222,10 @@ where
 impl<'w, 'q, Q, F> Iterator for BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = Batch<'q, Q::Prepared>;
+    type Item = Batch<'q, Filtered<Q::Prepared, F::Prepared>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -226,23 +241,25 @@ where
                 arch_id,
             } = self.archetypes.next()?;
 
-            let filter = FilterIter::new(
-                arch.slots(),
-                self.filter.prepare(
-                    FetchPrepareData {
-                        world: self.world,
-                        arch,
-                        arch_id: *arch_id,
-                    },
-                    self.old_tick,
-                ),
-            );
+            // let filter = FilterIter::new(
+            //     arch.slots(),
+            //     self.filter.prepare(
+            //         FetchPrepareData {
+            //             world: self.world,
+            //             arch,
+            //             arch_id: *arch_id,
+            //             old_tick: self.old_tick,
+            //             new_tick: todo!(),
+            //         },
+            //         self.old_tick,
+            //     ),
+            // );
 
             let chunk = ArchetypeChunks {
+                slots: arch.slots(),
+                new_tick: self.new_tick,
                 arch,
                 fetch,
-                filter,
-                new_tick: self.new_tick,
             };
 
             self.current = Some(chunk);

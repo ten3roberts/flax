@@ -228,7 +228,7 @@ mod util;
 /// Provides a debug visitor
 pub mod visitors;
 
-mod cascade;
+// mod cascade;
 /// Subscribe to changes in the world
 pub mod events;
 mod hierarchy;
@@ -250,7 +250,7 @@ pub use error::Error;
 pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
-pub use filter::{All, And, CmpExt, Filter, Nothing, Or, StaticFilter, With, Without};
+pub use filter::{All, And, CmpExt, Nothing, Or, With, Without};
 pub use meta::*;
 pub use paste::paste;
 pub use query::*;

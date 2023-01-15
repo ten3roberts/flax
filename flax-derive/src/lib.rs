@@ -84,7 +84,7 @@ fn derive_prepared_struct<'a>(
     prepared_name: &Ident,
     fields: impl Iterator<Item = &'a Field>,
 ) -> TokenStream {
-    let (types, expr): (Vec<_>, Vec<_>) = fields
+    let (types, names): (Vec<_>, Vec<_>) = fields
         .map(|field| {
             let name = field
                 .ident
@@ -96,12 +96,10 @@ fn derive_prepared_struct<'a>(
                 quote! {
                     #name: <#ty as #crate_name::Fetch<'w>>::Prepared
                 },
-                quote! {
-                    #name: self.#name.fetch(slot)
-                },
+                quote! { #name },
             )
         })
-        .unzip();
+        .multiunzip();
 
     let msg = format!("The prepared fetch for {name}");
 
@@ -117,8 +115,18 @@ fn derive_prepared_struct<'a>(
 
             unsafe fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
                 Self::Item {
-                    #(#expr),*
+                    #(#names: self.#names.fetch(slot),)*
                 }
+            }
+
+            unsafe fn set_visited(&mut self, slots: #crate_name::archetype::Slice, change_tick: u32) {
+                #(self.#names.set_visited(slots, change_tick);)*
+            }
+
+            fn filter_slots(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
+                let u = slots;
+                #(u = u.intersect(self.#names.filter_slots(slots));)*
+                u
             }
         }
     }
@@ -173,8 +181,6 @@ fn derive_data_struct(
                 where #(#types: Fetch<'w>),*
                 {
                     const MUTABLE: bool = #(<#types as Fetch<'w>>::MUTABLE)|*;
-                    type Filter = #crate_name::filter::TupleOr<(#(<#types as Fetch<'w>>::Filter),*)>;
-                    const HAS_FILTER: bool = #(<#types as Fetch<'w>>::HAS_FILTER)|*;
 
                     type Prepared = #prepared_name<'w>;
                     fn prepare(
@@ -187,8 +193,8 @@ fn derive_data_struct(
                     }
 
 
-                    fn matches(&self, arch: &#crate_name::archetype::Archetype) -> bool {
-                        ( #(self.#field_names.matches(arch))&&* )
+                    fn filter_arch(&self, arch: &#crate_name::archetype::Archetype) -> bool {
+                        ( #(self.#field_names.filter_arch(arch))&&* )
                     }
 
                     fn describe(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -207,10 +213,6 @@ fn derive_data_struct(
 
                     fn searcher(&self, searcher: &mut #crate_name::ArchetypeSearcher) {
                         #(self.#field_names.searcher(searcher));*
-                    }
-
-                    fn filter(&self) -> Self::Filter {
-                        #crate_name::filter::TupleOr( (#(self.#field_names.filter()),*) )
                     }
                 }
             })

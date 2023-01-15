@@ -2,16 +2,14 @@ use alloc::string::ToString;
 mod context;
 mod traits;
 
+use core::any::{type_name, TypeId};
 use core::fmt;
-use core::{
-    any::{type_name, TypeId},
-    fmt::Formatter,
-    marker::PhantomData,
-};
+use core::{fmt::Formatter, marker::PhantomData};
 
+use crate::filter::BatchSize;
 use crate::{
     archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer,
-    ComponentKey, Fetch, FetchItem, Filter, Query, QueryData, World,
+    ComponentKey, Fetch, FetchItem, Query, QueryData, World,
 };
 
 use alloc::boxed::Box;
@@ -57,8 +55,8 @@ pub struct ForEach<F> {
 
 impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ForEach<Func>
 where
-    for<'x> Q: Fetch<'x> + core::fmt::Debug,
-    for<'x> F: Filter<'x> + core::fmt::Debug,
+    for<'x> Q: Fetch<'x>,
+    for<'x> F: Fetch<'x>,
     for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
 {
     fn execute(&mut self, mut data: QueryData<Q, F>) {
@@ -98,10 +96,10 @@ pub struct ParForEach<F> {
 #[cfg(feature = "parallel")]
 impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ParForEach<Func>
 where
-    for<'x> Q: Fetch<'x> + core::fmt::Debug,
-    for<'x> F: Filter<'x> + core::fmt::Debug,
+    for<'x> Q: Fetch<'x>,
+    for<'x> F: Fetch<'x>,
     for<'x, 'y> crate::BatchedIter<'x, 'y, Q, F>: Send,
-    for<'x, 'y> crate::Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
+    for<'x, 'y> crate::Batch<'x, BatchSize>: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
 {
     fn execute(&mut self, mut data: QueryData<Q, F>) {
@@ -135,8 +133,8 @@ where
 }
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
-    for<'x> Q: Fetch<'x> + core::fmt::Debug + 'static,
-    for<'x> F: Filter<'x> + core::fmt::Debug + 'static,
+    for<'x> Q: Fetch<'x> + 'static,
+    for<'x> F: Fetch<'x> + 'static,
 {
     /// Execute a function for each item in the query
     pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, Query<Q, F>, ()>
@@ -154,10 +152,10 @@ where
 #[cfg(feature = "parallel")]
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
-    for<'x> Q: Fetch<'x> + core::fmt::Debug + 'static + Send,
-    for<'x> F: Filter<'x> + core::fmt::Debug + 'static + Send,
+    for<'x> Q: Fetch<'x> + 'static + Send,
+    for<'x> F: Fetch<'x> + 'static + Send,
     for<'x, 'y> crate::BatchedIter<'x, 'y, Q, F>: Send,
-    for<'x, 'y> crate::Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
+    for<'x, 'y> crate::Batch<'x, BatchSize>: Send,
 {
     /// Execute a function for each item in the query in parallel batches
     pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, Query<Q, F>, ()>

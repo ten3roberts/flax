@@ -19,18 +19,14 @@ where
     F: Fetch<'w>,
 {
     const MUTABLE: bool = F::MUTABLE;
-    const HAS_FILTER: bool = F::HAS_FILTER;
-    type Filter = F::Filter;
 
-    type Prepared = PreparedOpt<<F as Fetch<'w>>::Prepared>;
+    type Prepared = Opt<Option<BatchSize>>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(PreparedOpt {
-            inner: self.0.prepare(data),
-        })
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<BatchSize> {
+        Some(Opt(self.0.prepare(data)))
     }
 
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -39,12 +35,8 @@ where
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str("opt")?;
+        f.write_str("opt ")?;
         self.0.describe(f)
-    }
-
-    fn filter(&self) -> Self::Filter {
-        self.0.filter()
     }
 
     fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
@@ -59,14 +51,14 @@ pub struct PreparedOpt<F> {
     inner: Option<F>,
 }
 
-impl<'q, F> PreparedFetch<'q> for PreparedOpt<F>
+impl<'q, F> PreparedFetch<'q> for Opt<Option<F>>
 where
     F: for<'x> PreparedFetch<'x>,
 {
     type Item = Option<<F as PreparedFetch<'q>>::Item>;
 
     unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
-        self.inner.as_mut().map(|v| v.fetch(slot))
+        self.0.as_mut().map(|v| v.fetch(slot))
     }
 }
 
@@ -86,23 +78,21 @@ impl<F, V> OptOr<F, V> {
 impl<'w, F, V> Fetch<'w> for OptOr<F, V>
 where
     F: Fetch<'w> + for<'q> FetchItem<'q, Item = &'q V>,
-    for<'q> <F as Fetch<'w>>::Prepared: PreparedFetch<'q, Item = &'q V>,
+    for<'q> BatchSize: PreparedFetch<'q, Item = &'q V>,
     V: ComponentValue,
 {
     const MUTABLE: bool = F::MUTABLE;
-    const HAS_FILTER: bool = F::HAS_FILTER;
-    type Filter = F::Filter;
 
-    type Prepared = PreparedOptOr<'w, <F as Fetch<'w>>::Prepared, V>;
+    type Prepared = OptOr<Option<BatchSize>, &'w V>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(PreparedOptOr {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<BatchSize> {
+        Some(OptOr {
             inner: self.inner.prepare(data),
             or: &self.or,
         })
     }
 
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -114,10 +104,6 @@ where
         f.write_str("opt_or(")?;
         self.inner.describe(f)?;
         f.write_str(")")
-    }
-
-    fn filter(&self) -> Self::Filter {
-        self.inner.filter()
     }
 
     fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
@@ -133,9 +119,9 @@ pub struct PreparedOptOr<'w, F, V> {
     or: &'w V,
 }
 
-impl<'q, 'w, F, V> PreparedFetch<'q> for PreparedOptOr<'w, F, V>
+impl<'q, 'w, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>
 where
-    F: for<'x> PreparedFetch<'x, Item = &'x V>,
+    F: PreparedFetch<'q, Item = &'q V>,
     V: 'static,
 {
     type Item = &'q V;

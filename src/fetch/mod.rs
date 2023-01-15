@@ -19,9 +19,8 @@ pub use opt::*;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    filter::{Nothing, TupleOr},
     system::Access,
-    ArchetypeId, ArchetypeSearcher, Entity, Filter, World,
+    ArchetypeId, ArchetypeSearcher, Entity, World,
 };
 
 #[doc(hidden)]
@@ -45,6 +44,8 @@ pub struct FetchPrepareData<'w> {
     pub arch: &'w Archetype,
     /// The archetype id
     pub arch_id: ArchetypeId,
+    pub old_tick: u32,
+    pub new_tick: u32,
 }
 
 /// Trait which gives an associated `Item` fetch type
@@ -53,24 +54,25 @@ pub trait FetchItem<'q> {
     type Item;
 }
 
-/// Describes a type which can fetch itself from an archetype
+/// A fetch describes a retrieval of data from the world and archetypes during a query.
+///
+/// A fetch is prepared, wherein borrows are acquired and a `PreparedFetch` is returned, which is
+/// used to provide the query with values.
+///
+/// The PreparedFetch can in turn control the ranges of slots which are requested by the query,
+/// e.g; filtering changed components
 pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// true if the fetch mutates any component and thus needs a change event
     const MUTABLE: bool;
-    /// true if the fetch has a filter
-    const HAS_FILTER: bool = false;
-    /// The filter associated to the fetch, if applicable. If the fetch does not
-    /// use a filter, use the [ `crate::Nothing` ] filter
-    type Filter: for<'x> Filter<'x>;
 
     /// The prepared version of the fetch
     type Prepared: for<'x> PreparedFetch<'x, Item = <Self as FetchItem<'x>>::Item> + 'w;
-    /// Prepare the query against an archetype. Returns None if doesn't match.
-    /// If Self::matches true, this needs to return Some
+
+    /// Prepares the fetch for an archetype
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared>;
 
-    /// Returns true if the fetch matches the archetype
-    fn matches(&self, arch: &Archetype) -> bool;
+    /// Rough filter to exclude or include archetypes.
+    fn filter_arch(&self, arch: &Archetype) -> bool;
 
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, data: FetchPrepareData) -> Vec<Access>;
@@ -78,19 +80,27 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// Describes the fetch in a human-readable fashion
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 
-    /// Returns the filter if applicable
-    fn filter(&self) -> Self::Filter;
-
     /// Returns the required component for the fetch.
     ///
     /// This is used for the query to determine which archetypes to visit
     fn searcher(&self, searcher: &mut ArchetypeSearcher);
 }
 
+pub trait PreparedFetch<'q> {
+    type Item: 'q;
+
+    fn fetch(&'q mut self, slot: usize) -> Self::Item;
+    fn filter_slots(&mut self, slots: Slice) -> Slice;
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32);
+}
+
+impl<'q> FetchItem<'q> for () {
+    type Item = ();
+}
+
 impl<'w> Fetch<'w> for () {
     const MUTABLE: bool = false;
-    const HAS_FILTER: bool = false;
-    type Filter = Nothing;
 
     type Prepared = ();
 
@@ -98,7 +108,7 @@ impl<'w> Fetch<'w> for () {
         Some(())
     }
 
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, arch: &Archetype) -> bool {
         true
     }
 
@@ -110,48 +120,48 @@ impl<'w> Fetch<'w> for () {
         write!(f, "()")
     }
 
-    fn filter(&self) -> Self::Filter {
-        Nothing
-    }
-
     fn searcher(&self, _: &mut ArchetypeSearcher) {}
-}
-
-impl<'q> FetchItem<'q> for () {
-    type Item = ();
 }
 
 impl<'q> PreparedFetch<'q> for () {
     type Item = ();
 
-    unsafe fn fetch(&'q mut self, _: Slot) -> Self::Item {}
+    fn fetch(&'q mut self, _: Slot) -> Self::Item {}
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        slots
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
-/// A preborrowed fetch
-pub trait PreparedFetch<'q>
+impl<'q, F> PreparedFetch<'q> for Option<F>
 where
-    Self: Sized,
+    F: PreparedFetch<'q>,
 {
-    /// The items yielded by the fetch
-    type Item: Sized;
-    /// Fetch the item from entity at the slot in the prepared storage.
-    /// # Safety
-    /// Must return non-aliased references to the underlying borrow of the
-    /// prepared archetype.
-    ///
-    /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item;
+    type Item = Option<F::Item>;
 
-    /// Do something for a a slice of entity slots which have been visited, such
-    /// as updating change tracking for mutable queries. The current change tick
-    /// is passed.
-    ///
-    /// # Safety
-    /// The function can not modify any data which is returned by fetch.
-    /// References to `Self::Item` are still alive when this function is called.
-    /// As such, only disjoint data such as a separate Change borrow can be
-    /// accessed
-    unsafe fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
+    fn fetch(&mut self, slot: usize) -> Self::Item {
+        if let Some(fetch) = self {
+            Some(fetch.fetch(slot))
+        } else {
+            None
+        }
+    }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        if let Some(fetch) = self {
+            fetch.filter_slots(slots)
+        } else {
+            slots
+        }
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        if let Some(fetch) = self {
+            fetch.set_visited(slots, change_tick)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -168,9 +178,6 @@ impl<'q> FetchItem<'q> for EntityIds {
 
 impl<'w> Fetch<'w> for EntityIds {
     const MUTABLE: bool = false;
-    const HAS_FILTER: bool = false;
-
-    type Filter = Nothing;
 
     type Prepared = PreparedEntities<'w>;
 
@@ -180,7 +187,7 @@ impl<'w> Fetch<'w> for EntityIds {
         })
     }
 
-    fn matches(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, arch: &Archetype) -> bool {
         true
     }
 
@@ -192,19 +199,21 @@ impl<'w> Fetch<'w> for EntityIds {
         f.write_str("entity_ids")
     }
 
-    fn filter(&self) -> Self::Filter {
-        Nothing
-    }
-
     fn searcher(&self, _: &mut ArchetypeSearcher) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
-    type Item = Entity;
-
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    fn fetch(&mut self, slot: usize) -> Self::Item {
         self.entities[slot]
     }
+
+    type Item = Entity;
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        slots
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 // Implement for tuples
@@ -216,32 +225,62 @@ macro_rules! tuple_impl {
             type Item = ($($ty::Item,)*);
 
         }
+
+        impl<'q, $($ty, )*> PreparedFetch<'q> for ($($ty,)*)
+            where $($ty: PreparedFetch<'q>,)*
+        {
+
+            type Item           = ($($ty::Item,)*);
+            #[inline]
+            fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+                ($(
+                    (self.$idx).fetch(slot),
+                )*)
+            }
+
+            #[inline]
+            fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+                $((self.$idx).set_visited(slots, change_tick);)*
+            }
+
+            #[inline]
+            fn filter_slots(&mut self, slots: Slice) -> Slice {
+                // Find a union on which all filters agree on
+                let mut u = slots;
+
+                $(
+                    let slots = self.$idx.filter_slots(slots);
+                    u = u.intersect(&slots);
+                )*
+
+                u
+            }
+        }
+
         impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
         where $($ty: Fetch<'w>,)*
         {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
             type Prepared       = ($($ty::Prepared,)*);
-            type Filter         = TupleOr<($($ty::Filter,)*)>;
-            const HAS_FILTER: bool =  $($ty::HAS_FILTER )|*;
 
-            #[inline(always)]
+            #[inline]
             fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
                 Some(($(
                     (self.$idx).prepare(data)?,
                 )*))
             }
 
-            #[inline(always)]
-            fn matches(&self, arch: &Archetype) -> bool {
-                ( $((self.$idx).matches(arch)) && * )
+            #[inline]
+            fn filter_arch(&self, arch: &Archetype) -> bool {
+                ( $((self.$idx).filter_arch(arch)) && * )
             }
 
-            #[inline(always)]
+            #[inline]
             fn describe(&self, f: &mut Formatter) -> fmt::Result {
                 Debug::fmt(&($(FmtQuery(&self.$idx),)*), f)
             }
 
-            #[inline(always)]
+            #[inline]
             fn access(&self, data: FetchPrepareData) -> Vec<Access> {
                 [
                     $(
@@ -250,31 +289,9 @@ macro_rules! tuple_impl {
                 ].concat()
             }
 
-            #[inline(always)]
+            #[inline]
             fn searcher(&self, searcher: &mut ArchetypeSearcher) {
                 $((self.$idx).searcher(searcher));*
-            }
-
-            #[inline(always)]
-            fn filter(&self) -> Self::Filter {
-                TupleOr(( $(self.$idx.filter(),)* ))
-            }
-        }
-
-        impl<'q, $($ty, )*> PreparedFetch<'q> for ($($ty,)*)
-        where $($ty: PreparedFetch<'q>,)*
-        {
-            type Item = ($(<$ty as PreparedFetch<'q>>::Item,)*);
-
-            #[inline(always)]
-            unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-                ($(
-                    (self.$idx).fetch(slot),
-                )*)
-            }
-
-            unsafe fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-                $((self.$idx).set_visited(slots, change_tick);)*
             }
         }
     };

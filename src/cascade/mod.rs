@@ -2,7 +2,7 @@ use alloc::collections::{btree_map, BTreeMap, BTreeSet};
 
 use crate::{
     archetype::Archetype, component_info, visitors, ArchetypeId, ArchetypeSearcher, Archetypes,
-    Component, ComponentKey, Entity, Fetch, Filter, World,
+    Component, ComponentKey, Entity, Fetch, World,
 };
 
 #[derive(Debug, Clone)]
@@ -22,7 +22,7 @@ pub struct RecursiveQuery<Q, F> {
 impl<Q, F> RecursiveQuery<Q, F>
 where
     Q: for<'x> Fetch<'x>,
-    F: for<'x> Filter<'x>,
+    F: for<'x> Fetch<'x>,
 {
     pub fn get_archetypes(&self, world: &World) {
         let mut searcher = ArchetypeSearcher::default();
@@ -47,7 +47,7 @@ where
             }
         });
 
-        /// Perform a bottoms up topological search
+        // Perform a bottoms up topological search
         let mut visited = Default::default();
         let mut ordered = Default::default();
 

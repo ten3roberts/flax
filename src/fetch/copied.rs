@@ -1,11 +1,11 @@
-use core::fmt::{self, Formatter};
+use core::{
+    fmt::{self, Formatter},
+    ops::Deref,
+};
 
 use alloc::vec::Vec;
 
-use crate::{
-    archetype::{Archetype, Slot},
-    Access, Fetch, FetchItem,
-};
+use crate::{archetype::Archetype, Access, Fetch, FetchItem};
 
 use super::{FetchPrepareData, PreparedFetch};
 
@@ -16,28 +16,31 @@ use super::{FetchPrepareData, PreparedFetch};
 /// See [crate::Component::as_mut]
 pub struct Copied<F>(pub(crate) F);
 
+impl<'q, F, V> FetchItem<'q> for Copied<F>
+where
+    F: FetchItem<'q, Item = &'q V>,
+    V: 'static,
+{
+    type Item = V;
+}
+
 impl<'w, F, V> Fetch<'w> for Copied<F>
 where
-    F: Fetch<'w> + for<'q> FetchItem<'q, Item = &'q V>,
-    for<'q> <F as Fetch<'w>>::Prepared: PreparedFetch<'q, Item = &'q V>,
-    V: 'static + Copy,
+    F: Fetch<'w>,
+    F: for<'q> FetchItem<'q, Item = &'q V>,
+    V: 'static + Clone,
 {
     const MUTABLE: bool = F::MUTABLE;
-    const HAS_FILTER: bool = F::HAS_FILTER;
-
-    type Filter = F::Filter;
 
     type Prepared = Copied<F::Prepared>;
 
     #[inline(always)]
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let inner = self.0.prepare(data)?;
-
-        Some(Copied(inner))
+        Some(Copied(self.0.prepare(data)?))
     }
 
-    fn matches(&self, arch: &Archetype) -> bool {
-        self.0.matches(arch)
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        self.0.filter_arch(arch)
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
@@ -49,32 +52,28 @@ where
         self.0.describe(f)
     }
 
-    fn filter(&self) -> Self::Filter {
-        self.0.filter()
-    }
-
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
         self.0.searcher(searcher)
     }
 }
 
-impl<'q, F, V> FetchItem<'q> for Copied<F>
-where
-    F: FetchItem<'q, Item = &'q V>,
-    V: 'static + Copy,
-{
-    type Item = V;
-}
-
 impl<'q, F, V> PreparedFetch<'q> for Copied<F>
 where
-    F: PreparedFetch<'q, Item = &'q V>,
-    V: 'q + Copy,
+    F: PreparedFetch<'q>,
+    F::Item: Deref<Target = V>,
+    V: 'static,
 {
     type Item = V;
 
-    #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    #[inline]
+    fn fetch(&mut self, slot: usize) -> Self::Item {
         *self.0.fetch(slot)
+    }
+    fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
+        self.0.filter_slots(slots)
+    }
+
+    fn set_visited(&mut self, slots: crate::archetype::Slice, change_tick: u32) {
+        self.0.set_visited(slots, change_tick)
     }
 }

@@ -8,26 +8,18 @@ use rayon::prelude::{ParallelBridge, ParallelIterator};
 use smallvec::SmallVec;
 
 use crate::{
-    archetype::unknown_component,
-    filter::{FilterIter, PreparedFilter, RefFilter},
-    ArchetypeChunks,
+    archetype::{unknown_component, Slice},
+    filter::Filtered,
+    ArchetypeChunks, Batch,
 };
 use crate::{
-    component_info,
-    entity::EntityLocation,
-    error::Result,
-    fetch::FetchPrepareData,
-    fetch::PreparedFetch,
-    filter::All,
-    filter::{And, GatedFilter},
-    Archetype, ArchetypeId, Entity, Error, Fetch, FetchItem, Filter, World,
+    component_info, entity::EntityLocation, error::Result, fetch::FetchPrepareData,
+    fetch::PreparedFetch, filter::All, Archetype, ArchetypeId, Entity, Error, Fetch, FetchItem,
+    World,
 };
 use crate::{dummy, ComponentInfo};
 
-use super::{
-    iter::{BatchedIter, QueryIter},
-    FilterWithFetch,
-};
+use super::iter::{BatchedIter, QueryIter};
 
 pub(crate) fn find_missing_components<'q, 'a, Q>(
     fetch: &Q,
@@ -55,18 +47,34 @@ pub(crate) struct PreparedArchetype<'w, Q> {
 }
 
 impl<'w, Q> PreparedArchetype<'w, Q> {
-    pub fn chunks<'q, 'f, F>(
+    pub fn manual_chunk<'q>(
         &'q mut self,
+        slots: Slice,
         old_tick: u32,
         new_tick: u32,
-        filter: F,
-    ) -> ArchetypeChunks<'q, Q, F> {
-        let filter = FilterIter::new(self.arch.slots(), filter);
+    ) -> Option<Batch<'q, Q>>
+    where
+        Q: PreparedFetch<'q>,
+    {
+        let chunk = self.fetch.filter_slots(slots);
+        if chunk.is_empty() {
+            return None;
+        }
 
+        // Fetch will never change and all calls are disjoint
+        let fetch = unsafe { &mut *(&mut self.fetch as *mut Q) };
+
+        // Set the chunk as visited
+        unsafe { fetch.set_visited(chunk, new_tick) }
+        let chunk = Batch::new(self.arch, fetch, chunk);
+        Some(chunk)
+    }
+
+    pub fn chunks<'q>(&'q mut self, old_tick: u32, new_tick: u32) -> ArchetypeChunks<'q, Q> {
         ArchetypeChunks {
+            slots: self.arch.slots(),
             arch: self.arch,
             fetch: &mut self.fetch,
-            filter,
             new_tick,
         }
     }
@@ -77,12 +85,12 @@ impl<'w, Q> PreparedArchetype<'w, Q> {
 pub struct QueryBorrow<'w, Q, F = All>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
-    pub(crate) prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared>; 8]>,
+    pub(crate) prepared: SmallVec<[PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>; 8]>,
     pub(crate) world: &'w World,
     pub(crate) archetypes: &'w [ArchetypeId],
-    pub(crate) fetch: &'w Q,
-    pub(crate) filter: FilterWithFetch<RefFilter<'w, F>, Q::Filter>,
+    pub(crate) fetch: &'w Filtered<Q, F>,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
 }
@@ -90,7 +98,7 @@ where
 impl<'w, 'q, Q, F> IntoIterator for &'q mut QueryBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
-    F: Filter<'q>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     type Item = <Q as FetchItem<'q>>::Item;
@@ -162,23 +170,19 @@ mod test {
 impl<'w, Q, F> QueryBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
     /// Creates a new prepared query from a query, but does not allocate or lock anything.
     pub(super) fn new(
         world: &'w World,
         archetypes: &'w [ArchetypeId],
-        fetch: &'w Q,
-        filter: &'w F,
+        fetch: &'w Filtered<Q, F>,
         old_tick: u32,
         new_tick: u32,
     ) -> Self {
         Self {
             prepared: SmallVec::new(),
             fetch,
-            filter: And::new(
-                RefFilter(filter),
-                GatedFilter::new(Q::HAS_FILTER, fetch.filter()),
-            ),
             old_tick,
             new_tick,
             world,
@@ -190,7 +194,6 @@ where
     pub fn iter<'q>(&'q mut self) -> QueryIter<'q, 'w, Q, F>
     where
         'w: 'q,
-        F: Filter<'q>,
     {
         QueryIter::new(self.iter_batched())
     }
@@ -199,7 +202,6 @@ where
     pub fn first<'q>(&'q mut self) -> Option<<Q as FetchItem<'q>>::Item>
     where
         'w: 'q,
-        F: Filter<'q>,
     {
         self.iter().next()
     }
@@ -208,7 +210,6 @@ where
     pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'q, 'w, Q, F>
     where
         'w: 'q,
-        F: Filter<'q>,
     {
         // Prepare all archetypes only if it is not already done
         // Clear previous borrows
@@ -226,12 +227,16 @@ where
                         world: self.world,
                         arch,
                         arch_id,
+                        old_tick: self.old_tick,
+                        new_tick: self.new_tick,
                     };
+
+                    let fetch = self.fetch.prepare(data).unwrap();
 
                     Some(PreparedArchetype {
                         arch_id,
                         arch,
-                        fetch: self.fetch.prepare(data).unwrap(),
+                        fetch,
                     })
                 })
                 .collect();
@@ -241,7 +246,6 @@ where
             self.world,
             self.old_tick,
             self.new_tick,
-            &self.filter,
             self.prepared.iter_mut(),
         )
     }
@@ -250,10 +254,7 @@ where
     ///
     /// This is more efficient than `.iter().for_each(|v| {})` as the archetypes can be temporarily
     /// borrowed.
-    pub fn for_each(&mut self, func: impl Fn(<Q as FetchItem<'_>>::Item) + Send + Sync)
-    where
-        F: for<'x> Filter<'x>,
-    {
+    pub fn for_each(&mut self, func: impl Fn(<Q as FetchItem<'_>>::Item) + Send + Sync) {
         self.clear_borrows();
         for &arch_id in self.archetypes {
             let arch = self.world.archetypes.get(arch_id);
@@ -265,6 +266,8 @@ where
                 world: self.world,
                 arch,
                 arch_id,
+                old_tick: self.old_tick,
+                new_tick: self.new_tick,
             };
 
             let mut p = PreparedArchetype {
@@ -273,18 +276,7 @@ where
                 fetch: self.fetch.prepare(data).unwrap(),
             };
 
-            let chunk = p.chunks(
-                self.old_tick,
-                self.new_tick,
-                self.filter.prepare(
-                    FetchPrepareData {
-                        world: self.world,
-                        arch: p.arch,
-                        arch_id,
-                    },
-                    self.old_tick,
-                ),
-            );
+            let chunk = p.chunks(self.old_tick, self.new_tick);
             // let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
 
             // let chunk = ArchetypeChunks {
@@ -311,8 +303,8 @@ where
     where
         'w: 'q,
         Q::Prepared: Send,
+        F::Prepared: Send,
         BatchedIter<'q, 'w, Q, F>: Send,
-        F: Filter<'q>,
     {
         self.iter_batched()
             .par_bridge()
@@ -329,7 +321,6 @@ where
     pub fn count<'q>(&'q mut self) -> usize
     where
         'w: 'q,
-        F: Filter<'q>,
     {
         self.iter_batched().map(|v| v.slots().len()).sum()
     }
@@ -345,6 +336,8 @@ where
                 world: self.world,
                 arch,
                 arch_id,
+                old_tick: self.old_tick,
+                new_tick: self.new_tick,
             };
 
             let arch_id = *self.archetypes.iter().find(|&&v| v == arch_id)?;
@@ -370,7 +363,6 @@ where
     ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]>
     where
         'w: 'q,
-        F: Filter<'q>,
     {
         let mut sorted = ids;
         sorted.sort();
@@ -426,27 +418,33 @@ where
             let (idx, slot, id) = idxs[i];
 
             let prepared = &mut self.prepared[idx];
-
+            let chunk =
+                match prepared.manual_chunk(Slice::single(slot), self.old_tick, self.new_tick) {
+                    Some(v) => v,
+                    None => return Err(Error::MismatchedFilter(id)),
+                };
             // It is now guaranteed that the filter also matches since the archetype would not be
             // included otherwise.
-            if !self
-                .filter
-                .prepare(
-                    FetchPrepareData {
-                        world: self.world,
-                        arch: prepared.arch,
-                        arch_id: prepared.arch_id,
-                    },
-                    self.old_tick,
-                )
-                .matches_slot(slot)
-            {
-                return Err(Error::MismatchedFilter(id));
-            }
+            // TODO
+            // if !self
+            //     .filter
+            //     .prepare_filter(
+            //         FetchPrepareData {
+            //             world: self.world,
+            //             arch: prepared.arch,
+            //             arch_id: prepared.arch_id,
+            //             old_tick: self.,
+            //             new_tick: todo!(),
+            //         },
+            //         self.old_tick,
+            //     )
+            //     .matches_slot(slot)
+            // {
+            //     return Err(Error::MismatchedFilter(id));
+            // }
 
             // All entities are disjoint at this point
-            let fetch = unsafe { &mut *(&mut prepared.fetch as *mut Q::Prepared) };
-            items[i].write(unsafe { fetch.fetch(slot) });
+            items[i].write(chunk.next().unwrap());
         }
 
         unsafe {
@@ -456,10 +454,7 @@ where
     }
 
     /// Get the fetch items for an entity.
-    pub fn get<'q>(&'q mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item>
-    where
-        F: Filter<'q>,
-    {
+    pub fn get<'q>(&'q mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
         let EntityLocation { arch_id, slot } = self.world.location(id)?;
 
         let idx = self.prepare_archetype(arch_id).ok_or_else(|| {
@@ -474,25 +469,29 @@ where
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
         let p = &mut self.prepared[idx];
+        let chunk = match p.manual_chunk(Slice::single(slot), self.old_tick, self.new_tick) {
+            Some(v) => v,
+            None => return Err(Error::MismatchedFilter(id)),
+        };
 
         // It is now guaranteed that the filter also matches since the archetype would not be
         // included otherwise.
-        if !self
-            .filter
-            .prepare(
-                FetchPrepareData {
-                    world: self.world,
-                    arch: p.arch,
-                    arch_id: p.arch_id,
-                },
-                self.old_tick,
-            )
-            .matches_slot(slot)
-        {
-            return Err(Error::MismatchedFilter(id));
-        }
+        // if !self
+        //     .filter
+        //     .prepare_filter(
+        //         FetchPrepareData {
+        //             world: self.world,
+        //             arch: p.arch,
+        //             arch_id: p.arch_id,
+        //         },
+        //         self.old_tick,
+        //     )
+        //     .matches_slot(slot)
+        // {
+        //     return Err(Error::MismatchedFilter(id));
+        // }
 
-        let item = unsafe { p.fetch.fetch(slot) };
+        let item = chunk.next().unwrap();
 
         Ok(item)
     }
