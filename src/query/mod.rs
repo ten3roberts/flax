@@ -106,10 +106,7 @@ where
 
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<G>(self, filter: G) -> Query<Q, And<F, G>>
-    where
-        G: for<'x> Fetch<'x>,
-    {
+    pub fn filter<G>(self, filter: G) -> Query<Q, And<F, G>> {
         Query {
             fetch: Filtered::new(self.fetch.fetch, And::new(self.fetch.filter, filter)),
             archetypes: Vec::new(),
@@ -275,8 +272,7 @@ where
                     old_tick: 1,
                     new_tick: 1,
                 };
-                let mut res = self.fetch.access(data);
-                res
+                self.fetch.access(data)
             })
             .chain([Access {
                 kind: AccessKind::World,
@@ -425,11 +421,11 @@ mod test {
             .append_to(&mut world, resources())
             .unwrap();
 
-        let mut query = Query::new((
+        let mut query = Query::new((window_width(), window_height(), allow_vsync())).filter(Or((
             window_width().modified(),
             window_height().modified(),
             allow_vsync().modified(),
-        ));
+        )));
 
         assert_eq!(
             query.borrow(&world).get(resources()),

@@ -11,6 +11,7 @@ use crate::{
     archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer,
     ComponentKey, Fetch, FetchItem, Query, QueryData, World,
 };
+use crate::{Batch, BatchedIter};
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -98,8 +99,10 @@ impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ParForEach<Func>
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
-    for<'x, 'y> crate::BatchedIter<'x, 'y, Q, F>: Send,
-    for<'x, 'y> crate::Batch<'x, BatchSize>: Send,
+    for<'x> <Q as Fetch<'x>>::Prepared: Send,
+    for<'x> <F as Fetch<'x>>::Prepared: Send,
+    // for<'x, 'y> crate::BatchedIter<'x, 'y, Q, F>: Send,
+    // for<'x, 'y> crate::Batch<'x, <>: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
 {
     fn execute(&mut self, mut data: QueryData<Q, F>) {

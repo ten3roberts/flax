@@ -148,7 +148,7 @@ where
 {
     type Item = Q::Item;
 
-    fn fetch(&mut self, slot: usize) -> Self::Item {
+    fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.fetch.fetch(slot)
     }
 
@@ -171,7 +171,7 @@ where
     }
 
     fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        todo!()
+        self.fetch.set_visited(slots, change_tick)
     }
 }
 
@@ -237,6 +237,6 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
     }
 
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
-        todo!()
+        self.component.searcher(searcher)
     }
 }

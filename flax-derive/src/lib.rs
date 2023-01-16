@@ -113,19 +113,19 @@ fn derive_prepared_struct<'a>(
         impl<'w, 'q> #crate_name::fetch::PreparedFetch<'q> for #prepared_name<'w> {
             type Item = #item_name<'q>;
 
-            unsafe fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
+            fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
                 Self::Item {
                     #(#names: self.#names.fetch(slot),)*
                 }
             }
 
-            unsafe fn set_visited(&mut self, slots: #crate_name::archetype::Slice, change_tick: u32) {
+            fn set_visited(&mut self, slots: #crate_name::archetype::Slice, change_tick: u32) {
                 #(self.#names.set_visited(slots, change_tick);)*
             }
 
             fn filter_slots(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
-                let u = slots;
-                #(u = u.intersect(self.#names.filter_slots(slots));)*
+                let mut u = slots;
+                #(u = u.intersect(&self.#names.filter_slots(slots));)*
                 u
             }
         }

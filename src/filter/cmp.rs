@@ -23,25 +23,25 @@ use crate::{
 };
 
 /// A filter which compare a component before yielding an item from the query
-pub trait CmpExt<T, Q> {
+pub trait CmpExt<T> {
     /// Filter any component less than `other`.
-    fn lt(self, other: T) -> OrdCmp<T, Q>
+    fn lt(self, other: T) -> OrdCmp<T>
     where
         T: PartialOrd;
     /// Filter any component greater than `other`.
-    fn gt(self, other: T) -> OrdCmp<T, Q>
+    fn gt(self, other: T) -> OrdCmp<T>
     where
         T: PartialOrd;
     /// Filter any component greater than or equal to `other`.
-    fn ge(self, other: T) -> OrdCmp<T, Q>
+    fn ge(self, other: T) -> OrdCmp<T>
     where
         T: PartialOrd;
     /// Filter any component less than or equal to `other`.
-    fn le(self, other: T) -> OrdCmp<T, Q>
+    fn le(self, other: T) -> OrdCmp<T>
     where
         T: PartialOrd;
     /// Filter any component equal to `other`.
-    fn eq(self, other: T) -> OrdCmp<T, Q>
+    fn eq(self, other: T) -> OrdCmp<T>
     where
         T: PartialOrd;
     /// Filter any component by predicate.
@@ -50,51 +50,7 @@ pub trait CmpExt<T, Q> {
         F: Fn(&T) -> bool + Send + Sync + 'static;
 }
 
-impl CmpExt<Entity, EntityIds> for EntityIds {
-    fn lt(self, other: Entity) -> OrdCmp<Entity, EntityIds>
-    where
-        Entity: PartialOrd,
-    {
-        OrdCmp::new(self, CmpMethod::Less, other)
-    }
-
-    fn gt(self, other: Entity) -> OrdCmp<Entity, EntityIds>
-    where
-        Entity: PartialOrd,
-    {
-        OrdCmp::new(self, CmpMethod::Greater, other)
-    }
-
-    fn ge(self, other: Entity) -> OrdCmp<Entity, EntityIds>
-    where
-        Entity: PartialOrd,
-    {
-        OrdCmp::new(self, CmpMethod::GreaterEq, other)
-    }
-
-    fn le(self, other: Entity) -> OrdCmp<Entity, EntityIds>
-    where
-        Entity: PartialOrd,
-    {
-        OrdCmp::new(self, CmpMethod::LessEq, other)
-    }
-
-    fn eq(self, other: Entity) -> OrdCmp<Entity, EntityIds>
-    where
-        Entity: PartialOrd,
-    {
-        OrdCmp::new(self, CmpMethod::Eq, other)
-    }
-
-    fn cmp<F>(self, func: F) -> Cmp<Entity, F>
-    where
-        F: Fn(&Entity) -> bool + Send + Sync + 'static,
-    {
-        todo!()
-    }
-}
-
-impl<T> CmpExt<T, Component<T>> for Component<T>
+impl<T> CmpExt<T> for Component<T>
 where
     T: ComponentValue + Debug,
 {
@@ -148,98 +104,90 @@ impl Display for CmpMethod {
 }
 
 #[derive(Clone)]
-pub struct OrdCmp<T, Q = Component<T>> {
-    fetch: Q,
+pub struct OrdCmp<T> {
+    component: Component<T>,
     method: CmpMethod,
     other: T,
 }
 
-impl<T, Q> Debug for OrdCmp<T, Q>
-where
-    Q: Debug,
-    T: ComponentValue,
-{
+impl<T> Debug for OrdCmp<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("OrdCmp")
-            .field("fetch", &self.fetch)
+            .field("component", &self.component)
             .field("method", &self.method)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
-impl<T, Q> OrdCmp<T, Q> {
-    fn new(fetch: Q, method: CmpMethod, other: T) -> Self {
+impl<T> OrdCmp<T> {
+    fn new(component: Component<T>, method: CmpMethod, other: T) -> Self {
         Self {
-            fetch,
+            component,
             method,
             other,
         }
     }
 }
 
-impl<'q, T, Q> FetchItem<'q> for OrdCmp<T, Q>
-where
-    Q: FetchItem<'q>,
-{
-    type Item = <Q as FetchItem<'q>>::Item;
+impl<'q, T: 'q> FetchItem<'q> for OrdCmp<T> {
+    type Item = &'q T;
 }
 
-impl<'w, T, Q> Fetch<'w> for OrdCmp<T, Q>
+impl<'w, T> Fetch<'w> for OrdCmp<T>
 where
-    Q: Fetch<'w>,
-    Q: for<'q> FetchItem<'q, Item = &'q T>,
-    T: PartialOrd + 'static,
+    T: ComponentValue + PartialOrd + 'static,
 {
-    type Prepared = PreparedOrdCmp<'w, T, Q::Prepared>;
+    type Prepared = PreparedOrdCmp<'w, T>;
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(PreparedOrdCmp {
-            fetch: self.fetch.prepare(data)?,
+            borrow: data.arch.borrow(self.component.key())?,
             method: self.method,
             other: &self.other,
         })
     }
 
     fn filter_arch(&self, arch: &crate::Archetype) -> bool {
-        self.fetch.filter_arch(arch)
+        self.component.filter_arch(arch)
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        self.fetch.access(data)
+        self.component.access(data)
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.fetch.describe(f)?;
+        self.component.describe(f)?;
         write!(f, " {}", self.method)
     }
 
     const MUTABLE: bool = true;
 
-    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {}
+    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
+        self.component.searcher(searcher)
+    }
 }
 
-pub struct PreparedOrdCmp<'w, T, Q> {
-    fetch: Q,
+pub struct PreparedOrdCmp<'w, T> {
+    borrow: AtomicRef<'w, [T]>,
     method: CmpMethod,
     other: &'w T,
 }
 
-impl<'w, 'q, T, Q> PreparedFetch<'q> for PreparedOrdCmp<'w, T, Q>
+impl<'w, 'q, T> PreparedFetch<'q> for PreparedOrdCmp<'w, T>
 where
-    Q: PreparedFetch<'q, Item = &'q T>,
     T: PartialOrd + 'q,
 {
-    type Item = Q::Item;
+    type Item = &'q T;
 
-    fn fetch(&mut self, slot: usize) -> Self::Item {
-        self.fetch.fetch(slot)
+    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+        &self.borrow[slot]
     }
 
     fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         let method = &self.method;
         let other = &self.other;
         let mut cmp = |slot: Slot| {
-            let val = unsafe { self.fetch.fetch(slot) };
+            let val = &self.borrow[slot];
 
             let ord = val.partial_cmp(other);
             if let Some(ord) = ord {
@@ -339,7 +287,7 @@ where
     }
 
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
-        todo!()
+        self.component.searcher(searcher)
     }
 }
 
@@ -386,7 +334,5 @@ where
         }
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        todo!()
-    }
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }

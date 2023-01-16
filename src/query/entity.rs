@@ -152,7 +152,7 @@ enum State<Q> {
 ///
 /// A prepared query for a single entity. Holds the locks for the affected archetype and
 /// components.
-pub struct EntityBorrow<'w, Q, F>
+pub struct EntityBorrow<'w, Q, F = All>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,

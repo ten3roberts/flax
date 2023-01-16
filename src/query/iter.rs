@@ -101,14 +101,14 @@ pub struct ArchetypeChunks<'q, Q> {
     pub(crate) fetch: &'q mut Q,
     pub(crate) new_tick: u32,
     /// The slots which remain to iterate over
-    slots: Slice,
+    pub(crate) slots: Slice,
 }
 
 impl<'q, Q> ArchetypeChunks<'q, Q>
 where
     Q: PreparedFetch<'q>,
 {
-    pub fn next_chunk(&mut self) -> Option<Slice> {
+    pub(crate) fn next_chunk(&mut self) -> Option<Slice> {
         let cur = self.fetch.filter_slots(self.slots);
 
         if cur.is_empty() {

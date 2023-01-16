@@ -134,7 +134,7 @@ impl SerializeContext {
             !arch.is_empty()
                 && arch.cells().keys().any(|id| self.slots.contains_key(id))
                 && !arch.has(component_info().key())
-                && self.filter.static_matches(arch)
+                && self.filter.static_filter(arch)
         })
     }
 }
