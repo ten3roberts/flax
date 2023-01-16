@@ -24,7 +24,7 @@ impl<'w> Fetch<'w> for EntityRefs {
 
     type Prepared = PreparedEntityRef<'w>;
 
-    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<BatchSize> {
+    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(PreparedEntityRef {
             arch: data.arch,
             world: data.world,
@@ -59,7 +59,7 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
 
     #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
+    fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         EntityRef {
             arch: self.arch,
             slot,

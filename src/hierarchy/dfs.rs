@@ -141,7 +141,7 @@ where
         func: &mut Fn,
     ) where
         Q: 'w,
-        F: Fetch<'w>,
+        F: 'w,
         Fn: FnMut(<Q as FetchItem<'q>>::Item, &T) -> T,
         'w: 'q,
     {

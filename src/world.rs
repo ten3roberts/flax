@@ -1302,7 +1302,7 @@ impl World {
     {
         WorldFormatter {
             world: self,
-            filter,
+            filter: filter,
         }
     }
 
@@ -1603,7 +1603,7 @@ where
 
         let mut query = Query::new(())
             .with_components()
-            .filter(self.filter.ref_filter());
+            .filter(self.filter.by_ref());
 
         let mut query = query.borrow(self.world);
 

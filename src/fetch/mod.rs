@@ -17,6 +17,7 @@ pub use entity_ref::*;
 pub use ext::*;
 pub use opt::*;
 
+use crate::filter::RefFetch;
 use crate::{
     archetype::{Archetype, Slice, Slot},
     system::Access,
@@ -44,7 +45,9 @@ pub struct FetchPrepareData<'w> {
     pub arch: &'w Archetype,
     /// The archetype id
     pub arch_id: ArchetypeId,
+    /// The tick the previous time the query executed
     pub old_tick: u32,
+    /// The new tick to write if query is mutable
     pub new_tick: u32,
 }
 
@@ -84,14 +87,33 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     ///
     /// This is used for the query to determine which archetypes to visit
     fn searcher(&self, searcher: &mut ArchetypeSearcher);
+
+    /// Convert the fetch to a reference type which works with `HRTB`
+    fn by_ref(&self) -> RefFetch<Self>
+    where
+        Self: Sized,
+    {
+        RefFetch(self)
+    }
 }
 
+/// Borrowed state for a fetch
 pub trait PreparedFetch<'q> {
+    /// Item returned by fetch
     type Item: 'q;
-
+    // Fetch the item from entity at the slot in the prepared storage.
+    /// # Safety
+    /// Must return non-aliased references to the underlying borrow of the
+    /// prepared archetype.
+    ///
+    /// The callee is responsible for assuring disjoint calls.
     fn fetch(&'q mut self, slot: usize) -> Self::Item;
+    /// Filter the slots to visit
     fn filter_slots(&mut self, slots: Slice) -> Slice;
 
+    /// Do something for a a slice of entity slots which have been visited, such
+    /// as updating change tracking for mutable queries. The current change tick
+    /// is passed.
     fn set_visited(&mut self, slots: Slice, change_tick: u32);
 }
 
@@ -141,7 +163,7 @@ where
 {
     type Item = Option<F::Item>;
 
-    fn fetch(&mut self, slot: usize) -> Self::Item {
+    fn fetch(&'q mut self, slot: usize) -> Self::Item {
         if let Some(fetch) = self {
             Some(fetch.fetch(slot))
         } else {

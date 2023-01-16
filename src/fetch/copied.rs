@@ -28,7 +28,7 @@ impl<'w, F, V> Fetch<'w> for Copied<F>
 where
     F: Fetch<'w>,
     F: for<'q> FetchItem<'q, Item = &'q V>,
-    V: 'static + Clone,
+    V: 'static + Copy,
 {
     const MUTABLE: bool = F::MUTABLE;
 
@@ -61,12 +61,12 @@ impl<'q, F, V> PreparedFetch<'q> for Copied<F>
 where
     F: PreparedFetch<'q>,
     F::Item: Deref<Target = V>,
-    V: 'static,
+    V: 'static + Copy,
 {
     type Item = V;
 
     #[inline]
-    fn fetch(&mut self, slot: usize) -> Self::Item {
+    fn fetch(&'q mut self, slot: usize) -> Self::Item {
         *self.0.fetch(slot)
     }
     fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {

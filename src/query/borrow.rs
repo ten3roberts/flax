@@ -56,7 +56,9 @@ impl<'w, Q> PreparedArchetype<'w, Q> {
     where
         Q: PreparedFetch<'q>,
     {
+        eprintln!("Creating manual chunk: {slots:?} {old_tick} {new_tick}");
         let chunk = self.fetch.filter_slots(slots);
+        dbg!(chunk);
         if chunk.is_empty() {
             return None;
         }
@@ -418,7 +420,11 @@ where
             let (idx, slot, id) = idxs[i];
 
             let prepared = &mut self.prepared[idx];
-            let chunk =
+
+            // All entities are disjoint at this point
+            let prepared = unsafe { &mut *(prepared as *mut PreparedArchetype<_>) };
+
+            let mut chunk =
                 match prepared.manual_chunk(Slice::single(slot), self.old_tick, self.new_tick) {
                     Some(v) => v,
                     None => return Err(Error::MismatchedFilter(id)),
@@ -443,7 +449,6 @@ where
             //     return Err(Error::MismatchedFilter(id));
             // }
 
-            // All entities are disjoint at this point
             items[i].write(chunk.next().unwrap());
         }
 
@@ -469,7 +474,7 @@ where
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
         let p = &mut self.prepared[idx];
-        let chunk = match p.manual_chunk(Slice::single(slot), self.old_tick, self.new_tick) {
+        let mut chunk = match p.manual_chunk(Slice::single(slot), self.old_tick, self.new_tick) {
             Some(v) => v,
             None => return Err(Error::MismatchedFilter(id)),
         };

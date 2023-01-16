@@ -61,13 +61,13 @@ impl<'q, F, V> PreparedFetch<'q> for Cloned<F>
 where
     F: PreparedFetch<'q>,
     F::Item: Deref<Target = V>,
-    V: 'static,
+    V: 'static + Clone,
 {
     type Item = V;
 
     #[inline]
-    fn fetch(&mut self, slot: usize) -> Self::Item {
-        *self.0.fetch(slot)
+    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+        self.0.fetch(slot).clone()
     }
     fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.0.filter_slots(slots)

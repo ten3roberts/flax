@@ -3,7 +3,10 @@ use core::fmt::{self, Formatter};
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::Archetype, fetch::FetchPrepareData, fetch::PreparedFetch, ComponentValue, Fetch,
+    archetype::{Archetype, Slice},
+    fetch::FetchPrepareData,
+    fetch::PreparedFetch,
+    ComponentValue, Fetch,
 };
 
 use super::FetchItem;
@@ -20,9 +23,9 @@ where
 {
     const MUTABLE: bool = F::MUTABLE;
 
-    type Prepared = Opt<Option<BatchSize>>;
+    type Prepared = Opt<Option<F::Prepared>>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<BatchSize> {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(Opt(self.0.prepare(data)))
     }
 
@@ -57,8 +60,22 @@ where
 {
     type Item = Option<<F as PreparedFetch<'q>>::Item>;
 
-    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
+    fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         self.0.as_mut().map(|v| v.fetch(slot))
+    }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        if let Some(fetch) = &mut self.0 {
+            fetch.filter_slots(slots)
+        } else {
+            slots
+        }
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        if let Some(fetch) = &mut self.0 {
+            fetch.set_visited(slots, change_tick)
+        }
     }
 }
 
@@ -78,14 +95,14 @@ impl<F, V> OptOr<F, V> {
 impl<'w, F, V> Fetch<'w> for OptOr<F, V>
 where
     F: Fetch<'w> + for<'q> FetchItem<'q, Item = &'q V>,
-    for<'q> BatchSize: PreparedFetch<'q, Item = &'q V>,
+    for<'q> F::Prepared: PreparedFetch<'q, Item = &'q V>,
     V: ComponentValue,
 {
     const MUTABLE: bool = F::MUTABLE;
 
-    type Prepared = OptOr<Option<BatchSize>, &'w V>;
+    type Prepared = OptOr<Option<F::Prepared>, &'w V>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<BatchSize> {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(OptOr {
             inner: self.inner.prepare(data),
             or: &self.or,
@@ -126,10 +143,24 @@ where
 {
     type Item = &'q V;
 
-    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
+    fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         match self.inner {
             Some(ref mut v) => v.fetch(slot),
             None => self.or,
+        }
+    }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        if let Some(fetch) = &mut self.inner {
+            fetch.filter_slots(slots)
+        } else {
+            slots
+        }
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        if let Some(fetch) = &mut self.inner {
+            fetch.set_visited(slots, change_tick)
         }
     }
 }
