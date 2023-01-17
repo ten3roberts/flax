@@ -3,16 +3,13 @@ use core::ops::Deref;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use atomic_refcell::{AtomicRef, AtomicRefCell};
+use atomic_refcell::AtomicRef;
 
-use crate::fetch::{FetchPrepareData, PreparedComponent, PreparedFetch};
+use crate::fetch::{FetchPrepareData, PreparedFetch, ReadComponent};
 use crate::{
     archetype::{ChangeList, Slice},
     Access, Archetype, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
 };
-
-static EMPTY_CHANGELIST_CELL: AtomicRefCell<ChangeList> = AtomicRefCell::new(ChangeList::new());
-static EMPTY_CHANGELIST: ChangeList = ChangeList::new();
 
 #[derive(Clone)]
 /// Filter which only yields modified or inserted components
@@ -50,21 +47,17 @@ where
 {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedKindFilter<PreparedComponent<'w, T>, AtomicRef<'w, ChangeList>>;
+    type Prepared = PreparedKindFilter<ReadComponent<'w, T>, AtomicRef<'w, ChangeList>>;
 
     fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let changes = data.arch.changes(self.component.key());
+        let changes = data.arch.changes(self.component.key())?;
 
-        let changes = if let Some(changes) = changes {
-            // Make sure to enable modification tracking if it is actively used
-            if self.kind.is_modified() {
-                changes.set_track_modified()
-            }
+        // Make sure to enable modification tracking if it is actively used
+        if self.kind.is_modified() {
+            changes.set_track_modified()
+        }
 
-            AtomicRef::map(changes, |changes| changes.get(self.kind))
-        } else {
-            EMPTY_CHANGELIST_CELL.borrow()
-        };
+        let changes = AtomicRef::map(changes, |changes| changes.get(self.kind));
 
         let fetch = self.component.prepare(data)?;
         Some(PreparedKindFilter::new(fetch, changes, data.old_tick))
@@ -153,6 +146,7 @@ where
     }
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
+        eprintln!("Filtering slots");
         loop {
             let cur = match self.current_slice() {
                 Some(v) => v,
@@ -165,6 +159,7 @@ where
                 self.cur = None;
                 continue;
             } else {
+                eprintln!("Got: {intersect:?}");
                 return intersect;
             }
         }
@@ -206,16 +201,13 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
     type Prepared = PreparedKindFilter<(), &'a ChangeList>;
 
     fn prepare(&self, data: FetchPrepareData<'a>) -> Option<Self::Prepared> {
-        let changes = data
-            .arch
-            .removals(self.component.key())
-            .unwrap_or(&EMPTY_CHANGELIST);
+        let changes = data.arch.removals(self.component.key())?;
 
         Some(PreparedKindFilter::new((), changes, data.old_tick))
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
-        true
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        arch.removals(self.component.key()).is_some()
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
@@ -236,7 +228,5 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
         write!(f, "removed {}", self.component.name())
     }
 
-    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
-        self.component.searcher(searcher)
-    }
+    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }

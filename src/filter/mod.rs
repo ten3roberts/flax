@@ -258,9 +258,28 @@ where
     }
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
+        // TODO
+        // let l = self.left.filter_slots(slots);
+        // let r = self.right.filter_slots(slots);
+        // l.intersect(&r)
         let l = self.left.filter_slots(slots);
         let r = self.right.filter_slots(slots);
-        l.intersect(&r)
+
+        let i = l.intersect(&r);
+        if i.is_empty() {
+            // Go again but start with the highest bound
+            // This is caused by one of the sides being past the end of the
+            // other slice. As such, force the slice lagging behind to catch up
+            // to the upper floor
+            let max = l.start.clamp(r.start, slots.end);
+
+            let slots = Slice::new(max, slots.end);
+            let l = self.left.filter_slots(slots);
+            let r = self.right.filter_slots(slots);
+            l.intersect(&r)
+        } else {
+            i
+        }
     }
 }
 
@@ -424,11 +443,11 @@ impl<'w> Fetch<'w> for All {
 
     type Prepared = All;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&'w self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(All)
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -755,10 +774,6 @@ impl<'a> Fetch<'a> for WithoutRelation {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "without {}(*)", self.name)
     }
-
-    fn searcher(&self, searcher: &mut ArchetypeSearcher) {
-        todo!()
-    }
 }
 
 /// Like a bool literal
@@ -837,24 +852,29 @@ where
 
     type Prepared = F::Prepared;
 
+    #[inline]
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        (*self).prepare(data)
+        (*self.0).prepare(data)
     }
 
+    #[inline]
     fn filter_arch(&self, arch: &Archetype) -> bool {
-        (*self).filter_arch(arch)
+        (*self.0).filter_arch(arch)
     }
 
+    #[inline]
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        (*self).access(data)
+        (*self.0).access(data)
     }
 
+    #[inline]
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        (*self).describe(f)
+        (*self.0).describe(f)
     }
 
+    #[inline]
     fn searcher(&self, searcher: &mut ArchetypeSearcher) {
-        (*self).searcher(searcher)
+        (*self.0).searcher(searcher)
     }
 }
 
@@ -874,22 +894,27 @@ where
 
     type Prepared = F::Prepared;
 
+    #[inline]
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         (*self).prepare(data)
     }
 
+    #[inline]
     fn filter_arch(&self, arch: &Archetype) -> bool {
         (*self).filter_arch(arch)
     }
 
+    #[inline]
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
         (*self).access(data)
     }
 
+    #[inline]
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         (*self).describe(f)
     }
 
+    #[inline]
     fn searcher(&self, searcher: &mut ArchetypeSearcher) {
         (*self).searcher(searcher)
     }
@@ -1090,14 +1115,19 @@ macro_rules! tuple_impl {
             type Item = ();
 
             fn filter_slots(&mut self, slots: Slice) -> Slice {
+                eprintln!("\n\nOr{slots:?}");
                 let mut u = Slice::empty();
                 let inner = &mut self.0;
 
                 $(
-                match u.union(&inner.$idx.filter_slots(slots)) {
-                    Some(v) => { u = v }
-                    None => { return u }
-                }
+                    let v = inner.$idx.filter_slots(slots);
+                    dbg!(u, v);
+                    match u.union(&v) {
+                        Some(v) => { u = v }
+                        None => {
+                        eprintln!("No union: {u:?} {v:?}");
+                        return u }
+                    }
                 )*
                 u
             }
@@ -1142,6 +1172,7 @@ mod tests {
     use alloc::string::String;
     use atomic_refcell::AtomicRefCell;
     use itertools::Itertools;
+    use pretty_assertions::assert_eq;
 
     use crate::{
         archetype::{Change, ChangeList},

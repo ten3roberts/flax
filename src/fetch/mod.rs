@@ -86,7 +86,8 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// Returns the required component for the fetch.
     ///
     /// This is used for the query to determine which archetypes to visit
-    fn searcher(&self, searcher: &mut ArchetypeSearcher);
+    #[inline]
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 
     /// Convert the fetch to a reference type which works with `HRTB`
     fn by_ref(&self) -> RefFetch<Self>
@@ -109,12 +110,16 @@ pub trait PreparedFetch<'q> {
     /// The callee is responsible for assuring disjoint calls.
     fn fetch(&'q mut self, slot: usize) -> Self::Item;
     /// Filter the slots to visit
-    fn filter_slots(&mut self, slots: Slice) -> Slice;
+    #[inline]
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        slots
+    }
 
     /// Do something for a a slice of entity slots which have been visited, such
     /// as updating change tracking for mutable queries. The current change tick
     /// is passed.
-    fn set_visited(&mut self, slots: Slice, change_tick: u32);
+    #[inline]
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -149,12 +154,6 @@ impl<'q> PreparedFetch<'q> for () {
     type Item = ();
 
     fn fetch(&'q mut self, _: Slot) -> Self::Item {}
-
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        slots
-    }
-
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 impl<'q, F> PreparedFetch<'q> for Option<F>
@@ -164,11 +163,7 @@ where
     type Item = Option<F::Item>;
 
     fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        if let Some(fetch) = self {
-            Some(fetch.fetch(slot))
-        } else {
-            None
-        }
+        self.as_mut().map(|fetch| fetch.fetch(slot))
     }
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -190,7 +185,7 @@ where
 /// Returns the entity ids
 pub struct EntityIds;
 #[doc(hidden)]
-pub struct PreparedEntities<'a> {
+pub struct ReadEntities<'a> {
     entities: &'a [Entity],
 }
 
@@ -201,10 +196,10 @@ impl<'q> FetchItem<'q> for EntityIds {
 impl<'w> Fetch<'w> for EntityIds {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedEntities<'w>;
+    type Prepared = ReadEntities<'w>;
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(PreparedEntities {
+        Some(ReadEntities {
             entities: data.arch.entities(),
         })
     }
@@ -224,18 +219,13 @@ impl<'w> Fetch<'w> for EntityIds {
     fn searcher(&self, _: &mut ArchetypeSearcher) {}
 }
 
-impl<'w, 'q> PreparedFetch<'q> for PreparedEntities<'w> {
+impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
+    type Item = Entity;
+
+    #[inline]
     fn fetch(&mut self, slot: usize) -> Self::Item {
         self.entities[slot]
     }
-
-    type Item = Entity;
-
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        slots
-    }
-
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 // Implement for tuples

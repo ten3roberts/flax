@@ -12,17 +12,17 @@ use crate::{
 use super::*;
 
 #[doc(hidden)]
-pub struct PreparedComponentMut<'a, T> {
+pub struct WriteComponent<'a, T> {
     borrow: AtomicRefMut<'a, [T]>,
     changes: AtomicRefMut<'a, Changes>,
 }
 
 #[doc(hidden)]
-pub struct PreparedComponent<'a, T> {
+pub struct ReadComponent<'a, T> {
     borrow: AtomicRef<'a, [T]>,
 }
 
-impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
+impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     type Item = &'q T;
 
     #[inline(always)]
@@ -31,10 +31,12 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponent<'w, T> {
         unsafe { self.borrow.get_unchecked(slot) }
     }
 
+    #[inline]
     fn filter_slots(&mut self, slots: Slice) -> Slice {
         slots
     }
 
+    #[inline]
     fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
@@ -44,17 +46,20 @@ where
 {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedComponent<'w, T>;
+    type Prepared = ReadComponent<'w, T>;
 
+    #[inline]
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let borrow = data.arch.borrow(self.key())?;
-        Some(PreparedComponent { borrow })
+        Some(ReadComponent { borrow })
     }
 
+    #[inline]
     fn filter_arch(&self, arch: &Archetype) -> bool {
         arch.has(self.key())
     }
 
+    #[inline]
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
         if data.arch.has(self.key()) {
             vec![Access {
@@ -93,18 +98,21 @@ where
 {
     const MUTABLE: bool = true;
 
-    type Prepared = PreparedComponentMut<'w, T>;
+    type Prepared = WriteComponent<'w, T>;
 
+    #[inline]
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let (borrow, changes) = data.arch.borrow_mut(self.0)?;
 
-        Some(PreparedComponentMut { borrow, changes })
+        Some(WriteComponent { borrow, changes })
     }
 
+    #[inline]
     fn filter_arch(&self, arch: &Archetype) -> bool {
         arch.has(self.0.key())
     }
 
+    #[inline]
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
         if data.arch.has(self.0.key()) {
             vec![
@@ -142,7 +150,7 @@ impl<'q, T: ComponentValue> FetchItem<'q> for Mutable<T> {
     type Item = &'q mut T;
 }
 
-impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
+impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
     type Item = &'q mut T;
 
     #[inline(always)]
@@ -153,11 +161,13 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for PreparedComponentMut<'w, T> {
         unsafe { &mut *(self.borrow.get_unchecked_mut(slot) as *mut T) }
     }
 
+    #[inline]
     fn set_visited(&mut self, slots: Slice, change_tick: u32) {
         self.changes
             .set_modified_if_tracking(Change::new(slots, change_tick));
     }
 
+    #[inline]
     fn filter_slots(&mut self, slots: Slice) -> Slice {
         slots
     }
@@ -263,12 +273,6 @@ where
             slot,
         }
     }
-
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        slots
-    }
-
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 /// Iterates the relation object and data for the yielded query item
