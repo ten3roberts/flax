@@ -67,12 +67,6 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
             world: self.world,
         }
     }
-
-    fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
-        Default::default()
-    }
-
-    fn set_visited(&mut self, slots: crate::archetype::Slice, change_tick: u32) {}
 }
 
 #[cfg(test)]

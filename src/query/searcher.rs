@@ -50,23 +50,24 @@ impl ArchetypeSearcher {
 pub(crate) fn traverse_archetypes<'a>(
     archetypes: &'a Archetypes,
     cur: ArchetypeId,
-    components: &[ComponentKey],
+    required: &[ComponentKey],
     excluded: &[ComponentKey],
     result: &mut impl FnMut(ArchetypeId, &'a Archetype),
 ) {
     let arch = archetypes.get(cur);
-    match components {
+    match required {
         // All components are found, every archetype from now on is matched
         [] => {
             // This matches
             result(cur, arch);
 
+            dbg!(&arch.children);
             for (&component, &arch_id) in &arch.children {
                 // Oops, don't even step on it
                 if excluded.contains(&component) {
                     continue;
                 }
-                traverse_archetypes(archetypes, arch_id, components, excluded, result);
+                traverse_archetypes(archetypes, arch_id, required, excluded, result);
             }
         }
         [head, tail @ ..] => {
@@ -81,7 +82,7 @@ pub(crate) fn traverse_archetypes<'a>(
                 match component.cmp(head) {
                     cmp::Ordering::Less => {
                         // Not quite, keep looking
-                        traverse_archetypes(archetypes, arch_id, components, excluded, result);
+                        traverse_archetypes(archetypes, arch_id, required, excluded, result);
                     }
                     cmp::Ordering::Equal => {
                         // One more component has been found, continue to search for the remaining ones

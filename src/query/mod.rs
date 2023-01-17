@@ -236,6 +236,7 @@ where
     pub(crate) fn get_archetypes<'a>(&'a self, world: &'a World) -> Vec<ArchetypeId> {
         let mut searcher = ArchetypeSearcher::default();
         self.fetch.searcher(&mut searcher);
+
         if !self.include_components {
             searcher.add_excluded(component_info().key());
         }
