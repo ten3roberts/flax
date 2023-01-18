@@ -84,25 +84,29 @@ where
             return (State::MismatchedFilter(self.id, loc), &self.fetch);
         }
 
-        // Prepare the filter and check for dynamic filtering, for example modification filters
-        let data = FetchPrepareData {
-            world,
-            arch,
-            arch_id: loc.arch_id,
-            old_tick,
-            new_tick,
-        };
+        let mut fetch = self
+            .fetch
+            .prepare(FetchPrepareData {
+                world,
+                arch,
+                arch_id: loc.arch_id,
+                old_tick,
+                new_tick,
+            })
+            .unwrap();
 
-        match self.fetch.prepare(FetchPrepareData {
-            world,
-            arch,
-            arch_id: loc.arch_id,
-            old_tick,
-            new_tick,
-        }) {
-            Some(v) => (State::Complete { loc, prepared: v }, &self.fetch),
-            None => (State::MismatchedFetch(self.id, loc), &self.fetch),
+        eprintln!("Checking dynamic filter");
+        if fetch.filter_slots(Slice::single(loc.slot)).is_empty() {
+            return (State::MismatchedFilter(self.id, loc), &self.fetch);
         }
+
+        (
+            State::Complete {
+                loc,
+                prepared: fetch,
+            },
+            &self.fetch,
+        )
     }
 
     /// Borrow the entity query from the world.
@@ -293,7 +297,7 @@ mod test {
 
     use glam::{vec3, Vec3};
 
-    use crate::{component, name, Query, System};
+    use crate::{component, name, Or, Query, System};
 
     use super::*;
 
@@ -361,12 +365,13 @@ mod test {
             .append_to(&mut world, resources())
             .unwrap();
 
-        let mut query = Query::new((
-            window_width().modified(),
-            window_height().modified(),
-            allow_vsync().modified(),
-        ))
-        .entity(resources());
+        let mut query = Query::new((window_width(), window_height(), allow_vsync()))
+            .filter(Or((
+                window_width().modified(),
+                window_height().modified(),
+                allow_vsync().modified(),
+            )))
+            .entity(resources());
 
         assert_eq!(query.borrow(&world).get(), Ok((&800.0, &600.0, &false)));
         world.set(resources(), allow_vsync(), true).unwrap();

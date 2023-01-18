@@ -112,6 +112,7 @@ pub trait PreparedFetch<'q> {
     /// Filter the slots to visit
     #[inline]
     fn filter_slots(&mut self, slots: Slice) -> Slice {
+        eprintln!("Default slots: {slots:?}");
         slots
     }
 
@@ -256,13 +257,27 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            fn filter_slots(&mut self, slots: Slice) -> Slice {
-                // Find a union on which all filters agree on
+            fn filter_slots(&mut self, mut slots: Slice) -> Slice {
+                let mut start = slots.start;
+
+                ( $(
+                    {
+                        let v = self.$idx.filter_slots(slots);
+                        eprintln!("{:?}: {:?} {:?}", std::any::type_name::<$ty>(), stringify!($idx), v);
+                        start = start.max(v.start);
+                        v
+                    },
+                )*);
+
                 let mut u = slots;
 
+                // Clamp to end bound
+                start = start.min(slots.end);
+                eprintln!("Found common start: {slots:?} => {start}");
+                slots.start = start;
+
                 $(
-                    let slots = self.$idx.filter_slots(slots);
-                    u = u.intersect(&slots);
+                    u = u.intersect(&self.$idx.filter_slots(slots));
                 )*
 
                 u

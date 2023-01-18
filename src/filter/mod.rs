@@ -148,9 +148,25 @@ where
 
     #[inline]
     fn filter_slots(&mut self, slots: Slice) -> Slice {
-        self.fetch
-            .filter_slots(slots)
-            .intersect(&self.filter.filter_slots(slots))
+        let l = self.fetch.filter_slots(slots);
+        let r = self.filter.filter_slots(slots);
+        dbg!(l, r);
+
+        let i = l.intersect(&r);
+        if i.is_empty() {
+            // Go again but start with the highest bound
+            // This is caused by one of the sides being past the end of the
+            // other slice. As such, force the slice lagging behind to catch up
+            // to the upper floor
+            let common_start = l.start.max(r.start).clamp(slots.start, slots.end);
+
+            let slots = Slice::new(common_start, slots.end);
+            let l = self.fetch.filter_slots(slots);
+            let r = self.filter.filter_slots(slots);
+            l.intersect(&r)
+        } else {
+            i
+        }
     }
 
     #[inline]
@@ -264,6 +280,7 @@ where
         // l.intersect(&r)
         let l = self.left.filter_slots(slots);
         let r = self.right.filter_slots(slots);
+        dbg!(l, r);
 
         let i = l.intersect(&r);
         if i.is_empty() {
@@ -271,9 +288,9 @@ where
             // This is caused by one of the sides being past the end of the
             // other slice. As such, force the slice lagging behind to catch up
             // to the upper floor
-            let max = l.start.clamp(r.start, slots.end);
+            let common_start = l.start.max(r.start).clamp(slots.start, slots.end);
 
-            let slots = Slice::new(max, slots.end);
+            let slots = Slice::new(common_start, slots.end);
             let l = self.left.filter_slots(slots);
             let r = self.right.filter_slots(slots);
             l.intersect(&r)
@@ -540,15 +557,20 @@ where
     type Item = Slice;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.slots.is_empty() {
+            return None;
+        }
         let cur = self.filter.filter_slots(self.slots);
 
         if cur.is_empty() {
             None
         } else {
-            let (_l, m, r) = self
-                .slots
-                .split_with(&cur)
-                .expect("Return value of filter must be a subset of `slots");
+            let (_l, m, r) = {
+                match self.slots.split_with(&cur) {
+                    Some(val) => val,
+                    None => panic!("Return value of filter must be a subset of slots. Got: slots: {:?} cur: {cur:?}" ,self.slots),
+                }
+            };
 
             self.slots = r;
             Some(m)
@@ -1192,9 +1214,7 @@ mod tests {
         changes.set(Change::new(Slice::new(784, 800), 7));
         changes.set(Change::new(Slice::new(945, 1139), 8));
 
-        let changes = AtomicRefCell::new(changes);
-
-        let filter = PreparedKindFilter::new((), changes.borrow(), 2);
+        let filter = PreparedKindFilter::new((), changes.as_slice(), 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -1226,14 +1246,11 @@ mod tests {
         let b_map = changes_2.as_changed_set(2);
 
         // eprintln!("ChangeList: \n  {changes_1:?}\n  {changes_2:?}");
-        let changes_1 = AtomicRefCell::new(changes_1);
-        let changes_2 = AtomicRefCell::new(changes_2);
-
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedKindFilter::new((), changes_1.borrow(), 1);
-        let b = PreparedKindFilter::new((), changes_2.borrow(), 2);
+        let a = PreparedKindFilter::new((), changes_1.as_slice(), 1);
+        let b = PreparedKindFilter::new((), changes_2.as_slice(), 2);
 
         let filter = Or((Some(a), Some(b)));
 
@@ -1249,8 +1266,8 @@ mod tests {
 
         // And
 
-        let a = PreparedKindFilter::new((), changes_1.borrow(), 1);
-        let b = PreparedKindFilter::new((), changes_2.borrow(), 2);
+        let a = PreparedKindFilter::new((), changes_1.as_slice(), 1);
+        let b = PreparedKindFilter::new((), changes_2.as_slice(), 2);
 
         let filter = And { left: a, right: b };
 

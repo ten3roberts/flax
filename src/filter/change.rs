@@ -3,13 +3,18 @@ use core::ops::Deref;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use atomic_refcell::AtomicRef;
+use atomic_refcell::{AtomicRef, AtomicRefCell};
+use itertools::Itertools;
 
+use crate::archetype::{Change, Slot};
 use crate::fetch::{FetchPrepareData, PreparedFetch, ReadComponent};
 use crate::{
     archetype::{ChangeList, Slice},
     Access, Archetype, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
 };
+
+static EMPTY_CHANGELIST_CELL: AtomicRefCell<ChangeList> = AtomicRefCell::new(ChangeList::new());
+static EMPTY_CHANGELIST: ChangeList = ChangeList::new();
 
 #[derive(Clone)]
 /// Filter which only yields modified or inserted components
@@ -47,7 +52,7 @@ where
 {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedKindFilter<ReadComponent<'w, T>, AtomicRef<'w, ChangeList>>;
+    type Prepared = PreparedKindFilter<ReadComponent<'w, T>, AtomicRef<'w, [Change]>>;
 
     fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let changes = data.arch.changes(self.component.key())?;
@@ -57,7 +62,7 @@ where
             changes.set_track_modified()
         }
 
-        let changes = AtomicRef::map(changes, |changes| changes.get(self.kind));
+        let changes = AtomicRef::map(changes, |changes| changes.get(self.kind).as_slice());
 
         let fetch = self.component.prepare(data)?;
         Some(PreparedKindFilter::new(fetch, changes, data.old_tick))
@@ -98,46 +103,72 @@ pub struct PreparedKindFilter<Q, A> {
     fetch: Q,
     changes: A,
     cur: Option<Slice>,
-    // The current change group.
-    // Starts at the end and decrements
     cursor: usize,
-    tick: u32,
+    old_tick: u32,
 }
 
 impl<Q, A> PreparedKindFilter<Q, A>
 where
-    A: Deref<Target = ChangeList>,
+    A: Deref<Target = [Change]>,
 {
-    pub(crate) fn new(fetch: Q, changes: A, tick: u32) -> Self {
+    pub(crate) fn new(fetch: Q, changes: A, old_tick: u32) -> Self {
         Self {
             fetch,
             changes,
             cur: None,
             cursor: 0,
-            tick,
+            old_tick,
         }
     }
 
-    pub fn current_slice(&mut self) -> Option<Slice> {
+    pub(crate) fn find_slice(&mut self, slots: Slice) -> Option<Slice> {
+        // Short circuit
         if let Some(cur) = self.cur {
-            return Some(cur);
-        }
-
-        loop {
-            let change = self.changes.get(self.cursor)?;
-            self.cursor += 1;
-
-            if change.tick > self.tick {
-                return Some(*self.cur.insert(change.slice));
+            if cur.overlaps(slots) {
+                eprintln!("Found current {cur:?}");
+                return Some(cur);
             }
         }
+
+        let change = self.changes[self.cursor..]
+            .iter()
+            .filter(|v| v.tick > self.old_tick)
+            .find_position(|change| change.slice.overlaps(slots));
+
+        if let Some((idx, change)) = change {
+            eprintln!("Found slice: {change:?} containing {slots:?}");
+            self.cur = Some(change.slice);
+            self.cursor = idx;
+            return Some(change.slice);
+        }
+
+        let change = self.changes[..self.cursor]
+            .iter()
+            .filter(|v| v.tick > self.old_tick)
+            .find_position(|change| change.slice.overlaps(slots));
+
+        if let Some((_, change)) = change {
+            eprintln!("Found slice before: {change:?} containing {slots:?}");
+            return Some(change.slice);
+        }
+
+        None
+
+        // loop {
+        //     let change = self.changes.get(self.cursor)?;
+        //     self.cursor += 1;
+
+        //     if change.tick > self.old_tick {
+        //         return Some(*self.cur.insert(change.slice));
+        //     }
+        // }
     }
 }
 
 impl<'q, Q, A> PreparedFetch<'q> for PreparedKindFilter<Q, A>
 where
     Q: PreparedFetch<'q>,
-    A: Deref<Target = ChangeList>,
+    A: Deref<Target = [Change]>,
 {
     type Item = Q::Item;
 
@@ -146,9 +177,12 @@ where
     }
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
-        eprintln!("Filtering slots");
+        eprintln!(
+            "tick: {} changes: {:?} Looking for {slots:?}",
+            self.old_tick, &*self.changes
+        );
         loop {
-            let cur = match self.current_slice() {
+            let cur = match self.find_slice(slots) {
                 Some(v) => v,
                 None => return Slice::empty(),
             };
@@ -156,6 +190,7 @@ where
             let intersect = cur.intersect(&slots);
             // Try again with the next change group
             if intersect.is_empty() {
+                panic!("");
                 self.cur = None;
                 continue;
             } else {
@@ -198,16 +233,19 @@ impl<'q, T: ComponentValue> FetchItem<'q> for RemovedFilter<T> {
 impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedKindFilter<(), &'a ChangeList>;
+    type Prepared = PreparedKindFilter<(), &'a [Change]>;
 
     fn prepare(&self, data: FetchPrepareData<'a>) -> Option<Self::Prepared> {
-        let changes = data.arch.removals(self.component.key())?;
+        let changes = data
+            .arch
+            .removals(self.component.key())
+            .unwrap_or(&EMPTY_CHANGELIST);
 
         Some(PreparedKindFilter::new((), changes, data.old_tick))
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
-        arch.removals(self.component.key()).is_some()
+        true
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
@@ -229,4 +267,81 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
     }
 
     fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
+}
+
+#[cfg(test)]
+mod test {
+    use pretty_assertions::assert_eq;
+
+    use crate::filter::FilterIter;
+
+    use super::*;
+
+    #[test]
+    fn filter_slices() {
+        let changes = [
+            Change::new(Slice::new(10, 20), 3),
+            Change::new(Slice::new(20, 22), 4),
+            Change::new(Slice::new(30, 80), 3),
+            Change::new(Slice::new(100, 200), 4),
+        ];
+
+        let mut filter = PreparedKindFilter::new((), &changes[..], 2);
+
+        assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::empty());
+        assert_eq!(filter.filter_slots(Slice::new(0, 50)), Slice::new(10, 20));
+        assert_eq!(filter.filter_slots(Slice::new(20, 50)), Slice::new(20, 22));
+        assert_eq!(filter.filter_slots(Slice::new(22, 50)), Slice::new(30, 50));
+
+        assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::empty());
+        // Due to modified state
+        assert_eq!(filter.filter_slots(Slice::new(0, 50)), Slice::new(30, 50));
+
+        assert_eq!(
+            filter.filter_slots(Slice::new(120, 500)),
+            Slice::new(120, 200)
+        );
+    }
+
+    #[test]
+    fn filter_slices_consume() {
+        let changes = [
+            Change::new(Slice::new(10, 20), 3),
+            Change::new(Slice::new(20, 22), 4),
+            Change::new(Slice::new(30, 80), 3),
+            Change::new(Slice::new(100, 200), 4),
+        ];
+
+        let filter = PreparedKindFilter::new((), &changes[..], 2);
+
+        let slices = FilterIter::new(Slice::new(0, 500), filter).collect_vec();
+
+        assert_eq!(
+            &[
+                Slice::new(10, 20),
+                Slice::new(20, 22),
+                Slice::new(30, 80),
+                Slice::new(100, 200),
+            ],
+            &slices[..]
+        );
+    }
+
+    #[test]
+    fn filter_slices_partial() {
+        let changes = [
+            Change::new(Slice::new(10, 20), 3),
+            Change::new(Slice::new(20, 22), 4),
+            Change::new(Slice::new(30, 80), 3),
+            Change::new(Slice::new(100, 200), 4),
+        ];
+
+        let filter = PreparedKindFilter::new((), &changes[..], 2);
+
+        let slices = FilterIter::new(Slice::new(25, 150), filter)
+            .take(100)
+            .collect_vec();
+
+        assert_eq!(&[Slice::new(30, 80), Slice::new(100, 150),], &slices[..]);
+    }
 }
