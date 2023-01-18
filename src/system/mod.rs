@@ -11,7 +11,6 @@ use crate::{
     archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer,
     ComponentKey, Fetch, FetchItem, Query, QueryData, World,
 };
-use crate::{Batch, BatchedIter};
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;

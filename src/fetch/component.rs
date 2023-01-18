@@ -158,11 +158,6 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
         self.changes
             .set_modified_if_tracking(Change::new(slots, change_tick));
     }
-
-    #[inline]
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        slots
-    }
 }
 
 /// Query all relations of the specified kind
@@ -240,8 +235,6 @@ where
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "relations({})", self.component.name())
     }
-
-    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }
 
 impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {

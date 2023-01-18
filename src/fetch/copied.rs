@@ -52,6 +52,7 @@ where
         self.0.describe(f)
     }
 
+    #[inline]
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
         self.0.searcher(searcher)
     }
@@ -69,10 +70,13 @@ where
     fn fetch(&'q mut self, slot: usize) -> Self::Item {
         *self.0.fetch(slot)
     }
+
+    #[inline]
     fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.0.filter_slots(slots)
     }
 
+    #[inline]
     fn set_visited(&mut self, slots: crate::archetype::Slice, change_tick: u32) {
         self.0.set_visited(slots, change_tick)
     }

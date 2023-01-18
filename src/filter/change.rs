@@ -6,11 +6,11 @@ use alloc::vec::Vec;
 use atomic_refcell::{AtomicRef, AtomicRefCell};
 use itertools::Itertools;
 
-use crate::archetype::{Change, Slot};
+use crate::archetype::{Archetype, Change};
 use crate::fetch::{FetchPrepareData, PreparedFetch, ReadComponent};
 use crate::{
     archetype::{ChangeList, Slice},
-    Access, Archetype, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
+    Access, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
 static EMPTY_CHANGELIST_CELL: AtomicRefCell<ChangeList> = AtomicRefCell::new(ChangeList::new());
@@ -69,13 +69,13 @@ where
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
-        self.component.filter_arch(arch) && arch.changes(self.component.key()).is_some()
+        self.component.filter_arch(arch)
     }
 
     fn access(&self, data: crate::fetch::FetchPrepareData) -> Vec<Access> {
         let mut v = self.component.access(data);
 
-        if self.filter_arch(data.arch) {
+        if data.arch.has(self.component.key()) {
             v.push(Access {
                 kind: crate::AccessKind::ChangeEvent {
                     id: data.arch_id,
@@ -153,15 +153,6 @@ where
         }
 
         None
-
-        // loop {
-        //     let change = self.changes.get(self.cursor)?;
-        //     self.cursor += 1;
-
-        //     if change.tick > self.old_tick {
-        //         return Some(*self.cur.insert(change.slice));
-        //     }
-        // }
     }
 }
 
@@ -181,23 +172,15 @@ where
             "tick: {} changes: {:?} Looking for {slots:?}",
             self.old_tick, &*self.changes
         );
-        loop {
-            let cur = match self.find_slice(slots) {
-                Some(v) => v,
-                None => return Slice::empty(),
-            };
 
-            let intersect = cur.intersect(&slots);
-            // Try again with the next change group
-            if intersect.is_empty() {
-                panic!("");
-                self.cur = None;
-                continue;
-            } else {
-                eprintln!("Got: {intersect:?}");
-                return intersect;
-            }
-        }
+        let cur = match self.find_slice(slots) {
+            Some(v) => v,
+            None => return Slice::empty(),
+        };
+
+        let intersect = cur.intersect(&slots);
+        // Try again with the next change group
+        return intersect;
     }
 
     fn set_visited(&mut self, slots: Slice, change_tick: u32) {
@@ -249,24 +232,18 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        if self.filter_arch(data.arch) {
-            vec![Access {
-                kind: crate::AccessKind::ChangeEvent {
-                    id: data.arch_id,
-                    component: self.component.key(),
-                },
-                mutable: false,
-            }]
-        } else {
-            vec![]
-        }
+        vec![Access {
+            kind: crate::AccessKind::ChangeEvent {
+                id: data.arch_id,
+                component: self.component.key(),
+            },
+            mutable: false,
+        }]
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "removed {}", self.component.name())
     }
-
-    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }
 
 #[cfg(test)]

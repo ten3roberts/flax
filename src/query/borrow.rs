@@ -72,7 +72,7 @@ impl<'w, Q> PreparedArchetype<'w, Q> {
         Some(chunk)
     }
 
-    pub fn chunks<'q>(&'q mut self, old_tick: u32, new_tick: u32) -> ArchetypeChunks<'q, Q> {
+    pub fn chunks(&mut self, old_tick: u32, new_tick: u32) -> ArchetypeChunks<Q> {
         ArchetypeChunks {
             slots: self.arch.slots(),
             arch: self.arch,
@@ -233,7 +233,7 @@ where
                         new_tick: self.new_tick,
                     };
 
-                    let fetch = self.fetch.prepare(data).unwrap();
+                    let fetch = self.fetch.prepare(data)?;
 
                     Some(PreparedArchetype {
                         arch_id,
@@ -459,7 +459,7 @@ where
     }
 
     /// Get the fetch items for an entity.
-    pub fn get<'q>(&'q mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
+    pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
         let EntityLocation { arch_id, slot } = self.world.location(id)?;
 
         let idx = self.prepare_archetype(arch_id).ok_or_else(|| {

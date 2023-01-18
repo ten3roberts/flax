@@ -113,20 +113,21 @@ fn derive_prepared_struct<'a>(
         impl<'w, 'q> #crate_name::fetch::PreparedFetch<'q> for #prepared_name<'w> {
             type Item = #item_name<'q>;
 
+            #[inline]
             fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
                 Self::Item {
                     #(#names: self.#names.fetch(slot),)*
                 }
             }
 
+            #[inline]
             fn set_visited(&mut self, slots: #crate_name::archetype::Slice, change_tick: u32) {
                 #(self.#names.set_visited(slots, change_tick);)*
             }
 
+            #[inline]
             fn filter_slots(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
-                let mut u = slots;
-                #(u = u.intersect(&self.#names.filter_slots(slots));)*
-                u
+                #crate_name::fetch::PreparedFetch::filter_slots(&mut (#(&mut self.#names,)*), slots)
             }
         }
     }
@@ -146,7 +147,7 @@ fn derive_data_struct(
         syn::Fields::Named(ref fields) => {
             let fields = &fields.named;
 
-            let field_names = fields
+            let names = fields
                 .iter()
                 .map(|v| v.ident.as_ref().unwrap())
                 .collect_vec();
@@ -183,36 +184,37 @@ fn derive_data_struct(
                     const MUTABLE: bool = #(<#types as Fetch<'w>>::MUTABLE)|*;
 
                     type Prepared = #prepared_name<'w>;
+                    #[inline]
                     fn prepare(
                         &'w self,
                         data: #crate_name::fetch::FetchPrepareData<'w>,
                     ) -> Option<Self::Prepared> {
                         Some(Self::Prepared {
-                            #(#field_names: self.#field_names.prepare(data)?),*
+                            #(#names: self.#names.prepare(data)?),*
                         })
                     }
 
-
+                    #[inline]
                     fn filter_arch(&self, arch: &#crate_name::archetype::Archetype) -> bool {
-                        ( #(self.#field_names.filter_arch(arch))&&* )
+                        ( #(self.#names.filter_arch(arch))&&* )
                     }
 
                     fn describe(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                         let mut s = f.debug_struct(stringify!(#name));
 
                         #(
-                            s.field(stringify!(#field_names), &#crate_name::fetch::FmtQuery(&self.#field_names));
+                            s.field(stringify!(#names), &#crate_name::fetch::FmtQuery(&self.#names));
                         )*
 
                         s.finish()
                     }
 
                     fn access(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<#crate_name::Access> {
-                        [ #(self.#field_names.access(data)),* ].concat()
+                        [ #(self.#names.access(data)),* ].concat()
                     }
 
                     fn searcher(&self, searcher: &mut #crate_name::ArchetypeSearcher) {
-                        #(self.#field_names.searcher(searcher));*
+                        #(self.#names.searcher(searcher));*
                     }
                 }
             })
