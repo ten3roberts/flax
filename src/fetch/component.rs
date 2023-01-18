@@ -184,22 +184,12 @@ where
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let borrows: SmallVec<[(Entity, AtomicRef<[T]>); 4]> = {
             data.arch
-                .cells()
-                .iter()
-                .filter_map(move |(k, v)| {
-                    if let Some(object) = k.object {
-                        if k.id == self.component.key().id {
-                            return Some((
-                                object,
-                                // Safety:
-                                // Since the component is the same except for the object,
-                                // the component type is guaranteed to be the same
-                                AtomicRef::map(v.storage().borrow(), |v| unsafe { v.borrow() }),
-                            ));
-                        }
-                    }
-
-                    None
+                .relations_like(self.component.id())
+                .map(|(info, cell)| {
+                    (
+                        info.object.unwrap(),
+                        AtomicRef::map(cell.storage().borrow(), |v| unsafe { v.borrow() }),
+                    )
                 })
                 .collect()
         };
