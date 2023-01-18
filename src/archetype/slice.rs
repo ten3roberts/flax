@@ -132,9 +132,15 @@ impl Slice {
         }
     }
 
-    /// Returns true if the slice is a subset of `of`
-    pub fn is_subset(&self, of: &Self) -> bool {
-        self.is_empty() || (self.start >= of.start && self.end <= of.end)
+    /// Returns true if two slices have a non-zero overlap
+    #[inline]
+    pub fn overlaps(&self, other: Self) -> bool {
+        self.end > other.start && self.start < other.end
+    }
+
+    /// Returns true if the slice is a subset of `other`
+    pub fn is_subset(&self, other: &Self) -> bool {
+        self.is_empty() || (self.start >= other.start && self.end <= other.end)
     }
 }
 
@@ -212,5 +218,26 @@ mod tests {
         assert_eq!(a.difference(d), Some(Slice::new(20, 140)));
 
         assert_eq!(a.difference(e), None);
+    }
+
+    #[test]
+    fn slice_overlaps() {
+        pub fn overlaps(a: Slice, b: Slice) {
+            assert!(a.overlaps(b), "a: {a:?} b: {b:?}");
+            assert!(b.overlaps(a), "b: {b:?} a: {a:?}");
+        }
+
+        pub fn n_overlaps(a: Slice, b: Slice) {
+            assert!(!a.overlaps(b), "a: {a:?} b: {b:?}");
+            assert!(!b.overlaps(a), "b: {b:?} a: {a:?}");
+        }
+
+        n_overlaps(Slice::new(10, 20), Slice::new(0, 10));
+
+        overlaps(Slice::new(0, 50), Slice::new(10, 20));
+
+        overlaps(Slice::new(0, 20), Slice::new(0, 10));
+
+        n_overlaps(Slice::new(68, 85), Slice::new(123, 1000));
     }
 }

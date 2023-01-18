@@ -30,14 +30,6 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
         // Safety: bounds guaranteed by callee
         unsafe { self.borrow.get_unchecked(slot) }
     }
-
-    #[inline]
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        slots
-    }
-
-    #[inline]
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
 }
 
 impl<'w, T> Fetch<'w> for Component<T>

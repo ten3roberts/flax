@@ -78,16 +78,13 @@ fn change_detection() {
     world.remove(ids[12], rotation()).unwrap();
     world.remove(ids[30], rotation()).unwrap();
 
-    assert_eq!(
-        query
-            .borrow(&world)
-            .iter()
-            .map(|v| v.0)
-            .sorted()
-            .collect_vec(),
-        vec![ids[11], ids[12], ids[30]]
-    );
-
+    {
+        let mut borrow = query.borrow(&world);
+        assert_eq!(
+            borrow.iter().map(|v| v.0).sorted().collect_vec(),
+            vec![ids[11], ids[12], ids[30]]
+        );
+    }
     let removed = removed_rx
         .drain()
         .inspect(|v| eprintln!("removed: {v:?}"))

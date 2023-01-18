@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::cmp;
+use itertools::Itertools;
 
 use crate::{archetype::Archetype, ArchetypeId, Archetypes, ComponentKey, Entity};
 
@@ -33,6 +34,7 @@ impl ArchetypeSearcher {
         archetypes: &'a Archetypes,
         mut result: impl FnMut(ArchetypeId, &'a Archetype),
     ) {
+        dbg!(&self);
         self.required.sort();
         self.required.dedup();
 
@@ -55,10 +57,15 @@ pub(crate) fn traverse_archetypes<'a>(
     result: &mut impl FnMut(ArchetypeId, &'a Archetype),
 ) {
     let arch = archetypes.get(cur);
+    dbg!(cur, required, arch.component_names().collect_vec());
     match required {
         // All components are found, every archetype from now on is matched
         [] => {
             // This matches
+            eprintln!(
+                "Found archetype: {:?}",
+                arch.component_names().collect_vec()
+            );
             result(cur, arch);
 
             dbg!(&arch.children);
