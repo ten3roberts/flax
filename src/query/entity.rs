@@ -1,5 +1,6 @@
 use core::fmt::{self};
 
+use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
 
 use crate::{
@@ -84,18 +85,17 @@ where
             return (State::MismatchedFilter(self.id, loc), &self.fetch);
         }
 
-        let mut fetch = self
-            .fetch
-            .prepare(FetchPrepareData {
-                world,
-                arch,
-                arch_id: loc.arch_id,
-                old_tick,
-                new_tick,
-            })
-            .unwrap();
+        let mut fetch = match self.fetch.prepare(FetchPrepareData {
+            world,
+            arch,
+            arch_id: loc.arch_id,
+            old_tick,
+            new_tick,
+        }) {
+            Some(v) => v,
+            None => return (State::MismatchedFilter(self.id, loc), &self.fetch),
+        };
 
-        eprintln!("Checking dynamic filter");
         if fetch.filter_slots(Slice::single(loc.slot)).is_empty() {
             return (State::MismatchedFilter(self.id, loc), &self.fetch);
         }
@@ -243,30 +243,31 @@ where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Fetch<'x>,
 {
-    fn access(&self, world: &World) -> alloc::vec::Vec<crate::system::Access> {
+    fn access(&self, world: &World) -> Vec<crate::system::Access> {
         let loc = world.location(self.id);
         match loc {
             Ok(loc) => {
                 let arch = world.archetypes.get(loc.arch_id);
-                if self.fetch.filter_arch(arch) {
-                    let data = FetchPrepareData {
-                        world,
-                        arch,
-                        arch_id: loc.arch_id,
-                        old_tick: 0,
-                        new_tick: 0,
-                    };
 
-                    let mut res = self.fetch.access(data);
-
-                    res.push(Access {
-                        kind: AccessKind::World,
-                        mutable: false,
-                    });
-                    res
-                } else {
-                    Default::default()
+                if !self.fetch.filter_arch(arch) {
+                    return Vec::new();
                 }
+
+                let data = FetchPrepareData {
+                    world,
+                    arch,
+                    arch_id: loc.arch_id,
+                    old_tick: 0,
+                    new_tick: 0,
+                };
+
+                let mut res = self.fetch.access(data);
+
+                res.push(Access {
+                    kind: AccessKind::World,
+                    mutable: false,
+                });
+                res
             }
             Err(_) => Default::default(),
         }

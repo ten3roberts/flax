@@ -58,7 +58,7 @@ pub struct PreparedEntityRef<'a> {
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
 
-    #[inline(always)]
+    #[inline]
     fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         EntityRef {
             arch: self.arch,

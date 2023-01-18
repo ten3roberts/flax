@@ -41,8 +41,6 @@ where
         f.write_str("opt ")?;
         self.0.describe(f)
     }
-
-    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
@@ -122,8 +120,6 @@ where
         self.inner.describe(f)?;
         f.write_str(")")
     }
-
-    fn searcher(&self, _: &mut crate::ArchetypeSearcher) {}
 }
 
 impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {

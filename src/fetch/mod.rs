@@ -78,7 +78,10 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     fn filter_arch(&self, arch: &Archetype) -> bool;
 
     /// Returns which components and how will be accessed for an archetype.
-    fn access(&self, data: FetchPrepareData) -> Vec<Access>;
+    #[inline]
+    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+        Vec::new()
+    }
 
     /// Describes the fetch in a human-readable fashion
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
@@ -90,6 +93,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
 
     /// Convert the fetch to a reference type which works with `HRTB`
+    #[inline]
     fn by_ref(&self) -> RefFetch<Self>
     where
         Self: Sized,
@@ -109,10 +113,10 @@ pub trait PreparedFetch<'q> {
     ///
     /// The callee is responsible for assuring disjoint calls.
     fn fetch(&'q mut self, slot: usize) -> Self::Item;
+
     /// Filter the slots to visit
     #[inline]
     fn filter_slots(&mut self, slots: Slice) -> Slice {
-        eprintln!("Default slots: {slots:?}");
         slots
     }
 
@@ -121,6 +125,25 @@ pub trait PreparedFetch<'q> {
     /// is passed.
     #[inline]
     fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
+}
+
+impl<'q, F> PreparedFetch<'q> for &'q mut F
+where
+    F: PreparedFetch<'q>,
+{
+    type Item = F::Item;
+
+    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+        (*self).fetch(slot)
+    }
+
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
+        (*self).filter_slots(slots)
+    }
+
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        (*self).set_visited(slots, change_tick)
+    }
 }
 
 impl<'q> FetchItem<'q> for () {
@@ -140,15 +163,9 @@ impl<'w> Fetch<'w> for () {
         true
     }
 
-    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
-        vec![]
-    }
-
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "()")
     }
-
-    fn searcher(&self, _: &mut ArchetypeSearcher) {}
 }
 
 impl<'q> PreparedFetch<'q> for () {
@@ -171,7 +188,7 @@ where
         if let Some(fetch) = self {
             fetch.filter_slots(slots)
         } else {
-            slots
+            Slice::empty()
         }
     }
 
@@ -209,15 +226,9 @@ impl<'w> Fetch<'w> for EntityIds {
         true
     }
 
-    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
-        vec![]
-    }
-
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("entity_ids")
     }
-
-    fn searcher(&self, _: &mut ArchetypeSearcher) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {

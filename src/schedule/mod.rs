@@ -486,8 +486,7 @@ mod test {
         use glam::{vec2, Vec2};
 
         use crate::{
-            components::name, entity_ids, CmpExt, CommandBuffer, Component, EntityIds, Fetch,
-            Mutable,
+            components::name, entity_ids, CommandBuffer, Component, EntityIds, Fetch, Mutable,
         };
 
         #[derive(Debug, Clone)]

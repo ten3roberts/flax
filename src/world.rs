@@ -1304,7 +1304,7 @@ impl World {
     {
         WorldFormatter {
             world: self,
-            filter: filter,
+            filter,
         }
     }
 

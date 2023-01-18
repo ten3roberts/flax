@@ -137,6 +137,8 @@ impl<'w, T> Fetch<'w> for OrdCmp<T>
 where
     T: ComponentValue + PartialOrd + 'static,
 {
+    const MUTABLE: bool = true;
+
     type Prepared = PreparedOrdCmp<'w, T>;
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
@@ -160,8 +162,6 @@ where
         write!(f, " {}", self.method)
     }
 
-    const MUTABLE: bool = true;
-
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
         self.component.searcher(searcher)
     }
@@ -179,6 +179,7 @@ where
 {
     type Item = &'q T;
 
+    #[inline]
     fn fetch(&'q mut self, slot: usize) -> Self::Item {
         &self.borrow[slot]
     }
@@ -219,10 +220,6 @@ where
             start: slots.start + first,
             end: slots.start + first + count,
         }
-    }
-
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        todo!()
     }
 }
 
@@ -269,17 +266,7 @@ where
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        if self.filter_arch(data.arch) {
-            vec![Access {
-                kind: crate::AccessKind::Archetype {
-                    id: data.arch_id,
-                    component: self.component.key(),
-                },
-                mutable: false,
-            }]
-        } else {
-            vec![]
-        }
+        self.component.access(data)
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

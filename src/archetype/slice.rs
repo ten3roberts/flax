@@ -1,7 +1,4 @@
-use core::{
-    ops::{Index, Range, RangeBounds},
-    slice::SliceIndex,
-};
+use core::ops::Range;
 
 use alloc::collections::BTreeSet;
 

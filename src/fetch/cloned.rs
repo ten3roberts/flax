@@ -52,6 +52,7 @@ where
         self.0.describe(f)
     }
 
+    #[inline]
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
         self.0.searcher(searcher)
     }

@@ -1,4 +1,4 @@
-use crate::{fetch::PreparedFetch, ArchetypeChunks, Batch, Entity, Fetch};
+use crate::{fetch::PreparedFetch, ArchetypeChunks, Batch, Entity};
 
 pub(crate) struct QueryBorrowState {
     pub(crate) old_tick: u32,

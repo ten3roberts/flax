@@ -356,7 +356,7 @@ mod test {
 
         Query::new((child_of(root), a().as_mut()))
             .borrow(&world)
-            .par_for_each(|(_, a)| {
+            .for_each(|(_, a)| {
                 *a *= -1;
             });
 
@@ -365,10 +365,11 @@ mod test {
 
         assert_eq!(items, []);
 
-        Query::new(a().as_mut())
+        Query::new((name(), a().as_mut()))
             .filter(child_of(root).with() | name().eq("root".to_string()))
             .borrow(&world)
-            .par_for_each(|a| {
+            .for_each(|(id, a)| {
+                eprintln!("Writing to: {id}");
                 *a *= -10;
             });
 
