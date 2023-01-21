@@ -67,7 +67,7 @@ where
     type Item = V;
 
     #[inline]
-    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         *self.0.fetch(slot)
     }
 

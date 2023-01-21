@@ -114,7 +114,7 @@ fn derive_prepared_struct<'a>(
             type Item = #item_name<'q>;
 
             #[inline]
-            fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
+            unsafe fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
                 Self::Item {
                     #(#names: self.#names.fetch(slot),)*
                 }

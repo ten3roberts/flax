@@ -67,12 +67,12 @@ impl<'w, Q> PreparedArchetype<'w, Q> {
         let fetch = unsafe { &mut *(&mut self.fetch as *mut Q) };
 
         // Set the chunk as visited
-        unsafe { fetch.set_visited(chunk, new_tick) }
+        fetch.set_visited(chunk, new_tick);
         let chunk = Batch::new(self.arch, fetch, chunk);
         Some(chunk)
     }
 
-    pub fn chunks(&mut self, old_tick: u32, new_tick: u32) -> ArchetypeChunks<Q> {
+    pub fn chunks(&mut self, _: u32, new_tick: u32) -> ArchetypeChunks<Q> {
         ArchetypeChunks {
             slots: self.arch.slots(),
             arch: self.arch,

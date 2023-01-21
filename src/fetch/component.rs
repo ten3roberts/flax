@@ -26,7 +26,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     type Item = &'q T;
 
     #[inline(always)]
-    fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         // Safety: bounds guaranteed by callee
         unsafe { self.borrow.get_unchecked(slot) }
     }
@@ -146,7 +146,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
     type Item = &'q mut T;
 
     #[inline(always)]
-    fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
@@ -242,7 +242,7 @@ where
 {
     type Item = RelationsIter<'q, T>;
 
-    fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         RelationsIter {
             borrows: self.borrows.iter(),
             slot,

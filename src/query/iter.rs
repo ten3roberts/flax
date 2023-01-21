@@ -235,11 +235,7 @@ where
                 }
             }
 
-            let PreparedArchetype {
-                arch,
-                fetch,
-                arch_id,
-            } = self.archetypes.next()?;
+            let PreparedArchetype { arch, fetch, .. } = self.archetypes.next()?;
 
             // let filter = FilterIter::new(
             //     arch.slots(),

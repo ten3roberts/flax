@@ -142,7 +142,7 @@ where
     type Item = Q::Item;
 
     #[inline]
-    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.fetch.fetch(slot)
     }
 
@@ -265,7 +265,7 @@ where
     type Item = (L::Item, R::Item);
 
     #[inline]
-    fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         (self.left.fetch(slot), self.right.fetch(slot))
     }
 
@@ -346,7 +346,8 @@ where
 {
     type Item = ();
 
-    fn fetch(&mut self, _: usize) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
         let v = self.0.filter_slots(slots);
@@ -414,7 +415,7 @@ impl<'a> Fetch<'a> for Nothing {
 impl<'q> PreparedFetch<'q> for Nothing {
     type Item = ();
 
-    fn fetch(&mut self, slot: usize) -> Self::Item {}
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     fn filter_slots(&mut self, _: Slice) -> Slice {
         Slice::empty()
@@ -446,7 +447,8 @@ impl<'w> Fetch<'w> for All {
 impl<'q> PreparedFetch<'q> for All {
     type Item = ();
 
-    fn fetch(&mut self, slot: usize) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -461,11 +463,11 @@ impl<'w, 'q> Fetch<'w> for SliceFilter {
 
     type Prepared = Self;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&'w self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(*self)
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -477,7 +479,8 @@ impl<'w, 'q> Fetch<'w> for SliceFilter {
 impl<'q> PreparedFetch<'q> for SliceFilter {
     type Item = ();
 
-    fn fetch(&mut self, slot: usize) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
         self.0.intersect(&slots)
@@ -771,7 +774,8 @@ impl<'w> Fetch<'w> for BooleanFilter {
 impl<'q> PreparedFetch<'q> for BooleanFilter {
     type Item = ();
 
-    fn fetch(&mut self, slot: usize) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
         if self.0 {
@@ -781,7 +785,7 @@ impl<'q> PreparedFetch<'q> for BooleanFilter {
         }
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
+    fn set_visited(&mut self, _: Slice, _: u32) {}
 }
 
 /// Allows a fetch to be used by reference.
@@ -884,7 +888,8 @@ pub struct BatchSize(pub(crate) Slot);
 impl<'q> PreparedFetch<'q> for BatchSize {
     type Item = ();
 
-    fn fetch(&mut self, _: usize) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))
@@ -977,7 +982,8 @@ macro_rules! tuple_impl {
                 u
             }
 
-            fn fetch(&mut self, _: usize) -> Self::Item {}
+            #[inline]
+            unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
             fn set_visited(&mut self, slots: Slice, change_tick: u32) {
                 $( self.0.$idx.set_visited(slots, change_tick);)*
