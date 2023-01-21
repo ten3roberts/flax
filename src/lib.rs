@@ -207,7 +207,8 @@ mod component;
 pub mod entity;
 /// Filter items yielded queries
 pub mod filter;
-mod query;
+/// Query the world
+pub mod query;
 mod system;
 mod world;
 
@@ -250,10 +251,16 @@ pub use error::Error;
 pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
-pub use filter::{All, And, CmpExt, Nothing, Or, With, Without};
+pub use filter::{All, And, Cmp, Nothing, Or, With, Without};
 pub use meta::*;
 pub use paste::paste;
-pub use query::*;
+pub(crate) use query::{
+    find_missing_components, ArchetypeChunks, ArchetypeSearcher, Batch, PreparedArchetype,
+};
+pub use query::{
+    BatchedIter, EntityBorrow, EntityQuery, EntityQueryData, Query, QueryBorrow, QueryData,
+    QueryIter,
+};
 pub use relation::*;
 pub use schedule::*;
 pub use system::*;

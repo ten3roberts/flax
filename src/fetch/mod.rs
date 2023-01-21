@@ -1,9 +1,11 @@
 mod cloned;
 mod component;
+mod component_mut;
 mod copied;
 mod entity_ref;
 mod ext;
 mod opt;
+mod peek;
 
 use core::fmt::Debug;
 use core::fmt::{self, Formatter};
@@ -13,9 +15,11 @@ use alloc::vec::Vec;
 
 pub use cloned::*;
 pub use component::*;
+pub use component_mut::*;
 pub use entity_ref::*;
 pub use ext::*;
 pub use opt::*;
+pub use peek::*;
 
 use crate::filter::RefFetch;
 use crate::{
@@ -79,7 +83,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 
     /// Returns which components and how will be accessed for an archetype.
     #[inline]
-    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, _data: FetchPrepareData) -> Vec<Access> {
         Vec::new()
     }
 
@@ -90,7 +94,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     ///
     /// This is used for the query to determine which archetypes to visit
     #[inline]
-    fn searcher(&self, _: &mut ArchetypeSearcher) {}
+    fn searcher(&self, _searcher: &mut ArchetypeSearcher) {}
 
     /// Convert the fetch to a reference type which works with `HRTB`
     #[inline]
@@ -106,7 +110,8 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 pub trait PreparedFetch<'q> {
     /// Item returned by fetch
     type Item: 'q;
-    // Fetch the item from entity at the slot in the prepared storage.
+
+    /// Fetch the item from entity at the slot in the prepared storage.
     /// # Safety
     /// Must return non-aliased references to the underlying borrow of the
     /// prepared archetype.
@@ -188,7 +193,7 @@ where
         if let Some(fetch) = self {
             fetch.filter_slots(slots)
         } else {
-            Slice::empty()
+            slots
         }
     }
 

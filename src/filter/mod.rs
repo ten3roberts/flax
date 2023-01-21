@@ -16,9 +16,7 @@ use crate::{
 };
 
 pub use change::*;
-pub use cmp::CmpExt;
-
-use self::cmp::{Cmp, OrdCmp};
+pub use cmp::{Cmp, Equal, Greater, GreaterEq, Less, LessEq};
 
 #[doc(hidden)]
 pub struct FmtFilter<'r, Q>(pub &'r Q);
@@ -179,7 +177,6 @@ gen_bitops! {
     All[];
     And[A,B];
     BatchSize[];
-    BooleanFilter[];
     ChangeFilter[T];
     Nothing[];
     Or[T];
@@ -190,8 +187,7 @@ gen_bitops! {
     WithoutRelation[];
     Without[];
     Cmp[A,B];
-    OrdCmp[T];
-    SliceFilter[];
+    Slice[];
 }
 
 #[derive(Debug, Clone)]
@@ -395,11 +391,11 @@ impl<'q> FetchItem<'q> for All {
 impl<'a> Fetch<'a> for Nothing {
     const MUTABLE: bool = false;
 
-    type Prepared = Nothing;
+    type Prepared = bool;
 
     #[inline(always)]
     fn prepare(&self, _: FetchPrepareData) -> Option<Self::Prepared> {
-        Some(Nothing)
+        Some(false)
     }
 
     #[inline(always)]
@@ -412,16 +408,6 @@ impl<'a> Fetch<'a> for Nothing {
     }
 }
 
-impl<'q> PreparedFetch<'q> for Nothing {
-    type Item = ();
-
-    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
-
-    fn filter_slots(&mut self, _: Slice) -> Slice {
-        Slice::empty()
-    }
-}
-
 /// Yields all entities
 #[derive(Debug, Clone)]
 pub struct All;
@@ -429,10 +415,10 @@ pub struct All;
 impl<'w> Fetch<'w> for All {
     const MUTABLE: bool = false;
 
-    type Prepared = All;
+    type Prepared = bool;
 
     fn prepare(&'w self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(All)
+        Some(true)
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -444,21 +430,11 @@ impl<'w> Fetch<'w> for All {
     }
 }
 
-impl<'q> PreparedFetch<'q> for All {
-    type Item = ();
-
-    #[inline]
-    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct SliceFilter(pub(crate) Slice);
-
-impl<'q> FetchItem<'q> for SliceFilter {
+impl<'q> FetchItem<'q> for Slice {
     type Item = ();
 }
 
-impl<'w, 'q> Fetch<'w> for SliceFilter {
+impl<'w> Fetch<'w> for Slice {
     const MUTABLE: bool = false;
 
     type Prepared = Self;
@@ -472,18 +448,18 @@ impl<'w, 'q> Fetch<'w> for SliceFilter {
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "slice {:?}", self.0)
+        write!(f, "slice {:?}", self)
     }
 }
 
-impl<'q> PreparedFetch<'q> for SliceFilter {
+impl<'q> PreparedFetch<'q> for Slice {
     type Item = ();
 
     #[inline]
     unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
-        self.0.intersect(&slots)
+        self.intersect(&slots)
     }
 }
 
@@ -546,13 +522,13 @@ impl<'q> FetchItem<'q> for With {
 impl<'a> Fetch<'a> for With {
     const MUTABLE: bool = false;
 
-    type Prepared = All;
+    type Prepared = bool;
 
     fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
         if self.filter_arch(data.arch) {
-            Some(All)
+            Some(true)
         } else {
-            None
+            Some(false)
         }
     }
 
@@ -579,13 +555,13 @@ impl<'q> FetchItem<'q> for Without {
 impl<'w> Fetch<'w> for Without {
     const MUTABLE: bool = false;
 
-    type Prepared = All;
+    type Prepared = bool;
 
     fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
         if self.filter_arch(data.arch) {
-            Some(All)
+            Some(true)
         } else {
-            None
+            Some(false)
         }
     }
 
@@ -611,13 +587,13 @@ impl<'q> FetchItem<'q> for WithObject {
 impl<'w> Fetch<'w> for WithObject {
     const MUTABLE: bool = false;
 
-    type Prepared = All;
+    type Prepared = bool;
 
     fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
         if self.filter_arch(data.arch) {
-            Some(All)
+            Some(true)
         } else {
-            None
+            Some(false)
         }
     }
 
@@ -654,13 +630,13 @@ impl<'q, F> FetchItem<'q> for ArchetypeFilter<F> {
 
 impl<'w, F: Fn(&Archetype) -> bool> Fetch<'w> for ArchetypeFilter<F> {
     const MUTABLE: bool = false;
-    type Prepared = All;
+    type Prepared = bool;
 
     fn prepare(&'w self, data: FetchPrepareData) -> Option<Self::Prepared> {
         if self.filter_arch(data.arch) {
-            Some(All)
+            Some(true)
         } else {
-            None
+            Some(false)
         }
     }
 
@@ -686,13 +662,13 @@ impl<'q> FetchItem<'q> for WithRelation {
 
 impl<'w> Fetch<'w> for WithRelation {
     const MUTABLE: bool = false;
-    type Prepared = All;
+    type Prepared = bool;
 
     fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
         if self.filter_arch(data.arch) {
-            Some(All)
+            Some(true)
         } else {
-            None
+            Some(false)
         }
     }
 
@@ -719,13 +695,13 @@ impl<'q> FetchItem<'q> for WithoutRelation {
 impl<'a> Fetch<'a> for WithoutRelation {
     const MUTABLE: bool = false;
 
-    type Prepared = All;
+    type Prepared = bool;
 
     fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
         if self.filter_arch(data.arch) {
-            Some(All)
+            Some(true)
         } else {
-            None
+            Some(false)
         }
     }
 
@@ -738,15 +714,11 @@ impl<'a> Fetch<'a> for WithoutRelation {
     }
 }
 
-/// Like a bool literal
-#[derive(Copy, Debug, Clone)]
-pub struct BooleanFilter(pub bool);
-
-impl<'q> FetchItem<'q> for BooleanFilter {
+impl<'q> FetchItem<'q> for bool {
     type Item = ();
 }
 
-impl<'w> Fetch<'w> for BooleanFilter {
+impl<'w> Fetch<'w> for bool {
     const MUTABLE: bool = false;
 
     type Prepared = Self;
@@ -758,7 +730,7 @@ impl<'w> Fetch<'w> for BooleanFilter {
 
     #[inline(always)]
     fn filter_arch(&self, _: &Archetype) -> bool {
-        self.0
+        *self
     }
 
     #[inline(always)]
@@ -767,18 +739,18 @@ impl<'w> Fetch<'w> for BooleanFilter {
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self)
     }
 }
 
-impl<'q> PreparedFetch<'q> for BooleanFilter {
+impl<'q> PreparedFetch<'q> for bool {
     type Item = ();
 
     #[inline]
     unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     fn filter_slots(&mut self, slots: Slice) -> Slice {
-        if self.0 {
+        if *self {
             slots
         } else {
             Slice::empty()

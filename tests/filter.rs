@@ -202,7 +202,7 @@ fn bitops() {
 
     assert_eq!(
         Query::new(entity_ids())
-            .filter((a().cmp(|&v| v > 5.1 && v < 9.0)) | (d().without() & b().without()))
+            .filter((a().cmp(|&v: &f32| v > 5.1 && v < 9.0)) | (d().without() & b().without()))
             .borrow(&world)
             .iter()
             .collect_vec(),

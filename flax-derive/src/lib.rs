@@ -213,7 +213,7 @@ fn derive_data_struct(
                         [ #(self.#names.access(data)),* ].concat()
                     }
 
-                    fn searcher(&self, searcher: &mut #crate_name::ArchetypeSearcher) {
+                    fn searcher(&self, searcher: &mut #crate_name::query::ArchetypeSearcher) {
                         #(self.#names.searcher(searcher));*
                     }
                 }

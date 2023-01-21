@@ -1,4 +1,7 @@
-use crate::{Fetch, FetchItem};
+use crate::{
+    filter::{Equal, Greater, GreaterEq, Less, LessEq},
+    Cmp, Fetch, FetchItem,
+};
 
 use super::{
     cloned::Cloned,
@@ -49,6 +52,50 @@ pub trait FetchExt: Sized {
         Copied<Self>: for<'x> Fetch<'x>,
     {
         Copied(self)
+    }
+
+    /// Filter any component by predicate.
+    fn cmp<F>(self, func: F) -> Cmp<Self, F>
+    where
+        for<'x> Cmp<Self, F>: Fetch<'x>,
+    {
+        Cmp::new(self, func)
+    }
+
+    /// Filter any component less than `other`.
+    fn lt<T>(self, other: T) -> Cmp<Self, Less<T>>
+    where
+        for<'x> Cmp<Self, Less<T>>: Fetch<'x>,
+    {
+        Cmp::new(self, Less(other))
+    }
+    /// Filter any component greater than `other`.
+    fn gt<T>(self, other: T) -> Cmp<Self, Greater<T>>
+    where
+        for<'x> Cmp<Self, GreaterEq<T>>: Fetch<'x>,
+    {
+        Cmp::new(self, Greater(other))
+    }
+    /// Filter any component greater than or equal to `other`.
+    fn ge<T>(self, other: T) -> Cmp<Self, GreaterEq<T>>
+    where
+        for<'x> Cmp<Self, GreaterEq<T>>: Fetch<'x>,
+    {
+        Cmp::new(self, GreaterEq(other))
+    }
+    /// Filter any component less than or equal to `other`.
+    fn le<T>(self, other: T) -> Cmp<Self, LessEq<T>>
+    where
+        for<'x> Cmp<Self, LessEq<T>>: Fetch<'x>,
+    {
+        Cmp::new(self, LessEq(other))
+    }
+    /// Filter any component equal to `other`.
+    fn eq<T>(self, other: T) -> Cmp<Self, Equal<T>>
+    where
+        for<'x> Cmp<Self, Equal<T>>: Fetch<'x>,
+    {
+        Cmp::new(self, Equal(other))
     }
 }
 

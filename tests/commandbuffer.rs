@@ -75,7 +75,7 @@ fn commandbuffer() {
     );
 
     Query::new((entity_ids(), name()))
-        .filter(name().cmp(|name| name.contains("Unnamed")))
+        .filter(name().cmp(|name: &String| name.contains("Unnamed")))
         .borrow(&world)
         .iter()
         .for_each(|(id, n)| {

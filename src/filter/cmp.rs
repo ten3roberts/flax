@@ -9,198 +9,174 @@
 use core::{
     any::type_name,
     cmp::Ordering,
-    fmt::{self, Debug, Display},
+    fmt::{self, Debug},
 };
 
 use alloc::vec::Vec;
-use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Slice, Slot},
-    fetch::{FetchPrepareData, PreparedFetch},
-    Access, Component, ComponentValue, Fetch, FetchItem,
+    fetch::{FetchPrepareData, FmtQuery, PeekableFetch, PreparedFetch},
+    Access, Fetch, FetchItem, ParForEach,
 };
 
-/// A filter which compare a component before yielding an item from the query
-pub trait CmpExt<T> {
-    /// Filter any component less than `other`.
-    fn lt(self, other: T) -> OrdCmp<T>
-    where
-        T: PartialOrd;
-    /// Filter any component greater than `other`.
-    fn gt(self, other: T) -> OrdCmp<T>
-    where
-        T: PartialOrd;
-    /// Filter any component greater than or equal to `other`.
-    fn ge(self, other: T) -> OrdCmp<T>
-    where
-        T: PartialOrd;
-    /// Filter any component less than or equal to `other`.
-    fn le(self, other: T) -> OrdCmp<T>
-    where
-        T: PartialOrd;
-    /// Filter any component equal to `other`.
-    fn eq(self, other: T) -> OrdCmp<T>
-    where
-        T: PartialOrd;
-    /// Filter any component by predicate.
-    fn cmp<F>(self, func: F) -> Cmp<T, F>
-    where
-        F: Fn(&T) -> bool + Send + Sync + 'static;
+trait CmpMethod<L> {
+    fn compare(&self, lhs: L) -> bool;
 }
 
-impl<T> CmpExt<T> for Component<T>
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct Less<R>(pub(crate) R);
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct Greater<R>(pub(crate) R);
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct Equal<R>(pub(crate) R);
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct LessEq<R>(pub(crate) R);
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct GreaterEq<R>(pub(crate) R);
+
+impl<L, R> CmpMethod<L> for Less<R>
 where
-    T: ComponentValue + Debug,
+    L: for<'x> PartialOrd<&'x R>,
 {
-    fn lt(self, other: T) -> OrdCmp<T> {
-        OrdCmp::new(self, CmpMethod::Less, other)
-    }
-
-    fn gt(self, other: T) -> OrdCmp<T> {
-        OrdCmp::new(self, CmpMethod::Greater, other)
-    }
-
-    fn ge(self, other: T) -> OrdCmp<T> {
-        OrdCmp::new(self, CmpMethod::GreaterEq, other)
-    }
-
-    fn le(self, other: T) -> OrdCmp<T> {
-        OrdCmp::new(self, CmpMethod::LessEq, other)
-    }
-
-    fn eq(self, other: T) -> OrdCmp<T> {
-        OrdCmp::new(self, CmpMethod::Eq, other)
-    }
-
-    fn cmp<F: Fn(&T) -> bool + Send + Sync + 'static>(self, func: F) -> Cmp<T, F> {
-        Cmp {
-            component: self,
-            func,
-        }
+    fn compare(&self, lhs: L) -> bool {
+        matches!(lhs.partial_cmp(&&self.0), Some(Ordering::Less))
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum CmpMethod {
-    Less,
-    LessEq,
-    Eq,
-    GreaterEq,
-    Greater,
-}
-
-impl Display for CmpMethod {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CmpMethod::Less => write!(f, "<"),
-            CmpMethod::LessEq => write!(f, "<="),
-            CmpMethod::Eq => write!(f, "=="),
-            CmpMethod::GreaterEq => write!(f, ">="),
-            CmpMethod::Greater => write!(f, ">"),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct OrdCmp<T> {
-    component: Component<T>,
-    method: CmpMethod,
-    other: T,
-}
-
-impl<T> Debug for OrdCmp<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("OrdCmp")
-            .field("component", &self.component)
-            .field("method", &self.method)
-            .finish_non_exhaustive()
-    }
-}
-
-impl<T> OrdCmp<T> {
-    fn new(component: Component<T>, method: CmpMethod, other: T) -> Self {
-        Self {
-            component,
-            method,
-            other,
-        }
-    }
-}
-
-impl<'q, T: 'q> FetchItem<'q> for OrdCmp<T> {
-    type Item = &'q T;
-}
-
-impl<'w, T> Fetch<'w> for OrdCmp<T>
+impl<L, R> CmpMethod<L> for Greater<R>
 where
-    T: ComponentValue + PartialOrd + 'static,
+    L: for<'x> PartialOrd<&'x R>,
 {
-    const MUTABLE: bool = true;
+    fn compare(&self, lhs: L) -> bool {
+        matches!(lhs.partial_cmp(&&self.0), Some(Ordering::Greater))
+    }
+}
 
-    type Prepared = PreparedOrdCmp<'w, T>;
+impl<L, R> CmpMethod<L> for GreaterEq<R>
+where
+    L: for<'x> PartialOrd<&'x R>,
+{
+    fn compare(&self, lhs: L) -> bool {
+        matches!(
+            lhs.partial_cmp(&&self.0),
+            Some(Ordering::Greater | Ordering::Equal)
+        )
+    }
+}
+
+impl<L, R> CmpMethod<L> for LessEq<R>
+where
+    L: for<'x> PartialOrd<&'x R>,
+{
+    fn compare(&self, lhs: L) -> bool {
+        matches!(
+            lhs.partial_cmp(&&self.0),
+            Some(Ordering::Less | Ordering::Equal)
+        )
+    }
+}
+
+impl<L, R> CmpMethod<L> for Equal<R>
+where
+    L: for<'x> PartialEq<&'x R>,
+{
+    fn compare(&self, lhs: L) -> bool {
+        lhs.eq(&&self.0)
+    }
+}
+
+impl<T, F> CmpMethod<T> for F
+where
+    F: Fn(T) -> bool,
+{
+    fn compare(&self, lhs: T) -> bool {
+        (self)(lhs)
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Filter which allows comparison to peeked items
+pub struct Cmp<F, C> {
+    fetch: F,
+    method: C,
+}
+
+impl<F, C> Cmp<F, C> {
+    /// Creates a new comparison filter
+    pub fn new(fetch: F, method: C) -> Self {
+        Self { fetch, method }
+    }
+}
+
+impl<'q, F: FetchItem<'q>, M> FetchItem<'q> for Cmp<F, M> {
+    type Item = F::Item;
+}
+
+impl<'w, F, M> Fetch<'w> for Cmp<F, M>
+where
+    F: Fetch<'w>,
+    F::Prepared: for<'x> PeekableFetch<'x>,
+    M: for<'x> CmpMethod<<F::Prepared as PeekableFetch<'x>>::Peek> + 'w,
+{
+    const MUTABLE: bool = F::MUTABLE;
+
+    type Prepared = PreparedCmp<'w, F::Prepared, M>;
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(PreparedOrdCmp {
-            borrow: data.arch.borrow(self.component.key())?,
-            method: self.method,
-            other: &self.other,
+        Some(PreparedCmp {
+            fetch: self.fetch.prepare(data)?,
+            method: &self.method,
         })
     }
 
     fn filter_arch(&self, arch: &crate::Archetype) -> bool {
-        self.component.filter_arch(arch)
+        self.fetch.filter_arch(arch)
     }
 
     fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        self.component.access(data)
+        self.fetch.access(data)
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.component.describe(f)?;
-        write!(f, " {}", self.method)
+        write!(f, "{:?} <=> {}", FmtQuery(&self.fetch), &type_name::<M>())
     }
 
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
-        self.component.searcher(searcher)
+        self.fetch.searcher(searcher)
     }
 }
 
-pub struct PreparedOrdCmp<'w, T> {
-    borrow: AtomicRef<'w, [T]>,
-    method: CmpMethod,
-    other: &'w T,
+pub struct PreparedCmp<'w, F, M> {
+    fetch: F,
+    method: &'w M,
 }
 
-impl<'w, 'q, T> PreparedFetch<'q> for PreparedOrdCmp<'w, T>
+pub struct PreparedFilter<'w, F, M> {
+    fetch: F,
+    func: &'w M,
+}
+
+impl<'q, 'w, F, M> PreparedFetch<'q> for PreparedCmp<'w, F, M>
 where
-    T: PartialOrd + 'q,
+    F: PreparedFetch<'q> + for<'x> PeekableFetch<'x>,
+    M: for<'x> CmpMethod<<F as PeekableFetch<'x>>::Peek> + 'w,
 {
-    type Item = &'q T;
+    type Item = <F as PreparedFetch<'q>>::Item;
 
-    #[inline]
     unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        &self.borrow[slot]
+        self.fetch.fetch(slot)
     }
 
-    fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
-        let method = &self.method;
-        let other = &self.other;
+    fn filter_slots(&mut self, slots: Slice) -> Slice {
         let mut cmp = |slot: Slot| {
-            let val = &self.borrow[slot];
-
-            let ord = val.partial_cmp(other);
-            if let Some(ord) = ord {
-                match method {
-                    CmpMethod::Less => ord == Ordering::Less,
-                    CmpMethod::LessEq => ord == Ordering::Less || ord == Ordering::Equal,
-                    CmpMethod::Eq => ord == Ordering::Equal,
-                    CmpMethod::GreaterEq => ord == Ordering::Greater || ord == Ordering::Equal,
-                    CmpMethod::Greater => ord == Ordering::Greater,
-                }
-            } else {
-                false
-            }
+            let lhs = unsafe { self.fetch.peek(slot) };
+            self.method.compare(lhs)
         };
 
         // Find the first slot which yield true
@@ -220,105 +196,51 @@ where
             end: slots.start + first + count,
         }
     }
-}
 
-#[derive(Clone)]
-pub struct Cmp<T, F> {
-    component: Component<T>,
-    func: F,
-}
-
-impl<T, F> Debug for Cmp<T, F>
-where
-    T: ComponentValue,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Cmp")
-            .field("component", &self.component)
-            .field("func", &type_name::<F>())
-            .finish()
+    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+        self.fetch.set_visited(slots, change_tick)
     }
 }
 
-impl<'q, T: ComponentValue, F> FetchItem<'q> for Cmp<T, F> {
-    type Item = &'q T;
-}
+#[cfg(test)]
+mod test {
+    use itertools::Itertools;
+    use pretty_assertions::assert_eq;
 
-impl<'w, T, F> Fetch<'w> for Cmp<T, F>
-where
-    T: ComponentValue,
-    F: Fn(&T) -> bool + Send + Sync + 'static,
-{
-    const MUTABLE: bool = false;
+    use crate::{component, entity_ids, name, BatchSpawn, FetchExt, Query, World};
 
-    type Prepared = PreparedCmp<'w, T, F>;
+    use super::*;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(PreparedCmp {
-            borrow: data.arch.borrow(self.component.key())?,
-            func: &self.func,
-        })
-    }
+    #[test]
+    fn cmp_mut() {
+        let mut batch = BatchSpawn::new(128);
 
-    fn filter_arch(&self, archetype: &crate::Archetype) -> bool {
-        archetype.has(self.component.key())
-    }
-
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-        self.component.access(data)
-    }
-
-    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} <=> {}", self.component.name(), &type_name::<F>())
-    }
-
-    fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
-        self.component.searcher(searcher)
-    }
-}
-
-pub struct PreparedCmp<'w, T, F>
-where
-    T: ComponentValue,
-{
-    borrow: AtomicRef<'w, [T]>,
-    func: &'w F,
-}
-
-impl<'q, 'w, T, F> PreparedFetch<'q> for PreparedCmp<'w, T, F>
-where
-    T: ComponentValue,
-    F: Fn(&T) -> bool + Send + Sync + 'static,
-{
-    type Item = &'q T;
-
-    unsafe fn fetch(&mut self, slot: usize) -> Self::Item {
-        todo!()
-    }
-
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        let cmp = |&slot: &Slot| (self.func)(&self.borrow[slot]);
-
-        // How many entities yielded true
-        let mut start = slots.start;
-        let count = slots
-            .iter()
-            .skip_while(|slot| {
-                if !cmp(slot) {
-                    start += 1;
-                    true
-                } else {
-                    false
-                }
-            })
-            .take_while(cmp)
-            .count();
-
-        Slice {
-            start,
-            end: start + count,
+        component! {
+            a: i32,
         }
-    }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
+        batch.set(a(), (0..10).cycle()).unwrap();
+        batch.set(name(), (0..).map(|v| v.to_string())).unwrap();
+
+        let mut world = World::new();
+        let ids = batch.spawn(&mut world);
+
+        let mut changed = Query::new(entity_ids()).filter(a().modified());
+
+        assert_eq!(changed.collect_vec(&world), ids);
+
+        let mut query = Query::new(a().as_mut().opt().cmp(|v: Option<&i32>| v > Some(&3)));
+        for item in query.borrow(&world).iter().flatten() {
+            *item *= -1;
+        }
+
+        let changed_ids = ids
+            .iter()
+            .enumerate()
+            .filter(|&v| v.0 % 10 > 3)
+            .map(|v| *v.1)
+            .collect_vec();
+
+        assert_eq!(changed.collect_vec(&world), changed_ids);
+    }
 }

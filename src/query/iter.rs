@@ -109,6 +109,10 @@ where
     Q: PreparedFetch<'q>,
 {
     pub(crate) fn next_chunk(&mut self) -> Option<Slice> {
+        if self.slots.is_empty() {
+            return None;
+        }
+
         let cur = self.fetch.filter_slots(self.slots);
 
         if cur.is_empty() {
@@ -139,7 +143,7 @@ where
         let fetch = unsafe { &mut *(self.fetch as *mut Q) };
 
         // Set the chunk as visited
-        unsafe { fetch.set_visited(chunk, self.new_tick) }
+        fetch.set_visited(chunk, self.new_tick);
         let chunk = Batch::new(self.arch, fetch, chunk);
 
         Some(chunk)
