@@ -40,6 +40,17 @@ where
     }
 }
 
+/// Represents the world data necessary for declaring fetch access
+#[derive(Copy, Clone)]
+pub struct FetchAccessData<'w> {
+    /// The current world
+    pub world: &'w World,
+    /// The iterated archetype to prepare for
+    pub arch: &'w Archetype,
+    /// The archetype id
+    pub arch_id: ArchetypeId,
+}
+
 /// Represents the world data necessary for preparing a fetch
 #[derive(Copy, Clone)]
 pub struct FetchPrepareData<'w> {
@@ -83,7 +94,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 
     /// Returns which components and how will be accessed for an archetype.
     #[inline]
-    fn access(&self, _data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, _data: FetchAccessData) -> Vec<Access> {
         Vec::new()
     }
 
@@ -119,9 +130,13 @@ pub trait PreparedFetch<'q> {
     /// The callee is responsible for assuring disjoint calls.
     unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item;
 
-    /// Filter the slots to visit
     #[inline]
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    /// Filter the slots to visit
+    /// Returns the leftmost subslice of `slots` which should be visited
+    ///
+    /// # Safety
+    /// `slots` must not overlap any alive references returned by `fetch`
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         slots
     }
 
@@ -129,7 +144,7 @@ pub trait PreparedFetch<'q> {
     /// as updating change tracking for mutable queries. The current change tick
     /// is passed.
     #[inline]
-    fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
+    fn set_visited(&mut self, _slots: Slice) {}
 }
 
 impl<'q, F> PreparedFetch<'q> for &'q mut F
@@ -142,12 +157,12 @@ where
         (*self).fetch(slot)
     }
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         (*self).filter_slots(slots)
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        (*self).set_visited(slots, change_tick)
+    fn set_visited(&mut self, slots: Slice) {
+        (*self).set_visited(slots)
     }
 }
 
@@ -185,11 +200,13 @@ where
 {
     type Item = Option<F::Item>;
 
+    #[inline]
     unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.as_mut().map(|fetch| fetch.fetch(slot))
     }
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         if let Some(fetch) = self {
             fetch.filter_slots(slots)
         } else {
@@ -197,9 +214,10 @@ where
         }
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+    #[inline]
+    fn set_visited(&mut self, slots: Slice) {
         if let Some(fetch) = self {
-            fetch.set_visited(slots, change_tick)
+            fetch.set_visited(slots)
         }
     }
 }
@@ -245,6 +263,8 @@ impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
     }
 }
 
+use crate::Or;
+
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
@@ -268,12 +288,12 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-                $((self.$idx).set_visited(slots, change_tick);)*
+            fn set_visited(&mut self, slots: Slice) {
+                $((self.$idx).set_visited(slots);)*
             }
 
             #[inline]
-            fn filter_slots(&mut self, mut slots: Slice) -> Slice {
+            unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
                 let mut start = slots.start;
 
                 ( $(
@@ -324,7 +344,7 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+            fn access(&self, data: FetchAccessData) -> Vec<Access> {
                 [
                     $(
                         (self.$idx).access(data),
@@ -336,6 +356,75 @@ macro_rules! tuple_impl {
             fn searcher(&self, searcher: &mut ArchetypeSearcher) {
                 $((self.$idx).searcher(searcher));*
             }
+        }
+
+
+        // ----- OR -----
+        impl<'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
+            type Item = ();
+        }
+
+        impl<'w, $($ty, )*> Fetch<'w> for Or<($($ty,)*)>
+        where $($ty: Fetch<'w>,)*
+        {
+            const MUTABLE: bool =  $($ty::MUTABLE )|*;
+            type Prepared       = Or<($(Option<$ty::Prepared>,)*)>;
+
+            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+                let inner = &self.0;
+                Some(Or(($(inner.$idx.prepare(data),)*)))
+            }
+
+            fn filter_arch(&self, arch: &Archetype) -> bool {
+                let inner = &self.0;
+                $(inner.$idx.filter_arch(arch))||*
+            }
+
+            fn access(&self, data: FetchAccessData) -> Vec<Access> {
+                [ $(self.0.$idx.access(data),)* ].concat()
+            }
+
+            fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                let mut s = f.debug_tuple("Or");
+                    let inner = &self.0;
+                $(
+                    s.field(&FmtQuery(&inner.$idx));
+                )*
+                s.finish()
+            }
+        }
+
+
+        impl<'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
+        where $($ty: PreparedFetch<'q>,)*
+        {
+            type Item = ();
+
+            unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+                eprintln!("\n\nOr{slots:?}");
+                let mut u = Slice::empty();
+                let inner = &mut self.0;
+
+                $(
+                    let v = inner.$idx.filter_slots(slots);
+                    dbg!(u, v);
+                    match u.union(&v) {
+                        Some(v) => { u = v }
+                        None => {
+                        eprintln!("No union: {u:?} {v:?}");
+                        return u }
+                    }
+                )*
+                u
+            }
+
+            #[inline]
+            unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
+
+            fn set_visited(&mut self, slots: Slice) {
+                $( self.0.$idx.set_visited(slots);)*
+            }
+
         }
     };
 }

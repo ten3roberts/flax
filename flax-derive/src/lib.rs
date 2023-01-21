@@ -121,13 +121,13 @@ fn derive_prepared_struct<'a>(
             }
 
             #[inline]
-            fn set_visited(&mut self, slots: #crate_name::archetype::Slice, change_tick: u32) {
-                #(self.#names.set_visited(slots, change_tick);)*
+            unsafe fn filter_slots(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
+                #crate_name::fetch::PreparedFetch::filter_slots(&mut (#(&mut self.#names,)*), slots)
             }
 
             #[inline]
-            fn filter_slots(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
-                #crate_name::fetch::PreparedFetch::filter_slots(&mut (#(&mut self.#names,)*), slots)
+            fn set_visited(&mut self, slots: #crate_name::archetype::Slice) {
+                #(self.#names.set_visited(slots);)*
             }
         }
     }
@@ -209,7 +209,7 @@ fn derive_data_struct(
                         s.finish()
                     }
 
-                    fn access(&self, data: #crate_name::fetch::FetchPrepareData) -> Vec<#crate_name::Access> {
+                    fn access(&self, data: #crate_name::fetch::FetchAccessData) -> Vec<#crate_name::Access> {
                         [ #(self.#names.access(data)),* ].concat()
                     }
 

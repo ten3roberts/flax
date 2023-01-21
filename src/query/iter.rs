@@ -113,7 +113,9 @@ where
             return None;
         }
 
-        let cur = self.fetch.filter_slots(self.slots);
+        // Safety
+        // The yielded slots are split off of `self.slots`
+        let cur = unsafe { self.fetch.filter_slots(self.slots) };
 
         if cur.is_empty() {
             None
@@ -143,7 +145,7 @@ where
         let fetch = unsafe { &mut *(self.fetch as *mut Q) };
 
         // Set the chunk as visited
-        fetch.set_visited(chunk, self.new_tick);
+        fetch.set_visited(chunk);
         let chunk = Batch::new(self.arch, fetch, chunk);
 
         Some(chunk)

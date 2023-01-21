@@ -35,7 +35,7 @@ impl<'w> Fetch<'w> for EntityRefs {
         true
     }
 
-    fn access(&self, _: super::FetchPrepareData) -> Vec<Access> {
+    fn access(&self, _: super::FetchAccessData) -> Vec<Access> {
         alloc::vec![Access {
             kind: crate::AccessKind::World {},
             mutable: true,

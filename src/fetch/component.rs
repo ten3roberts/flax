@@ -51,7 +51,7 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         if data.arch.has(self.key()) {
             vec![Access {
                 kind: AccessKind::Archetype {
@@ -119,7 +119,7 @@ where
         true
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         let relation = self.component.key().id;
         data.arch
             .cells()

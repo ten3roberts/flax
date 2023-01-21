@@ -1,4 +1,4 @@
-use core::fmt::{self};
+use core::fmt;
 
 use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
@@ -7,7 +7,7 @@ use crate::{
     archetype::{unknown_component, Slice},
     entity::EntityLocation,
     error::Result,
-    fetch::{FetchPrepareData, FmtQuery, PreparedFetch},
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch},
     filter::Filtered,
     find_missing_components, Access, AccessKind, All, AsBorrow, Entity, Error, Fetch, SystemAccess,
     SystemContext, SystemData, World,
@@ -96,7 +96,9 @@ where
             None => return (State::MismatchedFilter(self.id, loc), &self.fetch),
         };
 
-        if fetch.filter_slots(Slice::single(loc.slot)).is_empty() {
+        // Safety
+        // Exclusive `self`
+        if unsafe { fetch.filter_slots(Slice::single(loc.slot)) }.is_empty() {
             return (State::MismatchedFilter(self.id, loc), &self.fetch);
         }
 
@@ -126,7 +128,6 @@ where
             prepared: state,
             fetch,
             world,
-            new_tick,
         }
     }
 }
@@ -164,7 +165,6 @@ where
     world: &'w World,
     prepared: State<Filtered<Q::Prepared, F::Prepared>>,
     fetch: &'w Filtered<Q, F>,
-    new_tick: u32,
 }
 
 impl<'w, Q, F> EntityBorrow<'w, Q, F>
@@ -182,7 +182,7 @@ where
         match &mut self.prepared {
             State::Complete { loc, prepared } => {
                 // self is a mutable reference, so this is the only reference to the slot
-                prepared.set_visited(Slice::single(loc.slot), self.new_tick);
+                prepared.set_visited(Slice::single(loc.slot));
                 unsafe { Ok(prepared.fetch(loc.slot)) }
             }
             State::NoSuchEntity(id) => Err(Error::NoSuchEntity(*id)),
@@ -251,12 +251,10 @@ where
                     return Vec::new();
                 }
 
-                let data = FetchPrepareData {
+                let data = FetchAccessData {
                     world,
                     arch,
                     arch_id: loc.arch_id,
-                    old_tick: 0,
-                    new_tick: 0,
                 };
 
                 let mut res = self.fetch.access(data);

@@ -16,8 +16,8 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Slice, Slot},
-    fetch::{FetchPrepareData, FmtQuery, PeekableFetch, PreparedFetch},
-    Access, Fetch, FetchItem, ParForEach,
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PeekableFetch, PreparedFetch},
+    Access, Fetch, FetchItem,
 };
 
 trait CmpMethod<L> {
@@ -139,7 +139,7 @@ where
         self.fetch.filter_arch(arch)
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         self.fetch.access(data)
     }
 
@@ -157,11 +157,6 @@ pub struct PreparedCmp<'w, F, M> {
     method: &'w M,
 }
 
-pub struct PreparedFilter<'w, F, M> {
-    fetch: F,
-    func: &'w M,
-}
-
 impl<'q, 'w, F, M> PreparedFetch<'q> for PreparedCmp<'w, F, M>
 where
     F: PreparedFetch<'q> + for<'x> PeekableFetch<'x>,
@@ -169,11 +164,13 @@ where
 {
     type Item = <F as PreparedFetch<'q>>::Item;
 
+    #[inline]
     unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.fetch.fetch(slot)
     }
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let mut cmp = |slot: Slot| {
             let lhs = unsafe { self.fetch.peek(slot) };
             self.method.compare(lhs)
@@ -197,8 +194,9 @@ where
         }
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        self.fetch.set_visited(slots, change_tick)
+    #[inline]
+    fn set_visited(&mut self, slots: Slice) {
+        self.fetch.set_visited(slots)
     }
 }
 
@@ -208,8 +206,6 @@ mod test {
     use pretty_assertions::assert_eq;
 
     use crate::{component, entity_ids, name, BatchSpawn, FetchExt, Query, World};
-
-    use super::*;
 
     #[test]
     fn cmp_mut() {

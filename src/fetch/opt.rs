@@ -9,13 +9,15 @@ use crate::{
     ComponentValue, Fetch,
 };
 
-use super::FetchItem;
+use super::{FetchAccessData, FetchItem};
 
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
 pub struct Opt<F>(pub(crate) F);
 
-impl<F> Opt<F> {}
+impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
+    type Item = Option<F::Item>;
+}
 
 impl<'w, F> Fetch<'w> for Opt<F>
 where
@@ -33,7 +35,7 @@ where
         true
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<crate::Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<crate::Access> {
         self.0.access(data)
     }
 
@@ -43,45 +45,16 @@ where
     }
 }
 
-impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
-    type Item = Option<F::Item>;
-}
-
-impl<'q, F> PreparedFetch<'q> for Opt<Option<F>>
-where
-    F: for<'x> PreparedFetch<'x>,
-{
-    type Item = Option<<F as PreparedFetch<'q>>::Item>;
-
-    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
-        self.0.as_mut().map(|v| v.fetch(slot))
-    }
-
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        if let Some(fetch) = &mut self.0 {
-            fetch.filter_slots(slots)
-        } else {
-            slots
-        }
-    }
-
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        if let Some(fetch) = &mut self.0 {
-            fetch.set_visited(slots, change_tick)
-        }
-    }
-}
-
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
 pub struct OptOr<F, V> {
-    inner: F,
+    fetch: F,
     or: V,
 }
 
 impl<F, V> OptOr<F, V> {
     pub(crate) fn new(inner: F, or: V) -> Self {
-        Self { inner, or }
+        Self { fetch: inner, or }
     }
 }
 
@@ -97,7 +70,7 @@ where
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(OptOr {
-            inner: self.inner.prepare(data),
+            fetch: self.fetch.prepare(data),
             or: &self.or,
         })
     }
@@ -106,13 +79,13 @@ where
         true
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<crate::Access> {
-        self.inner.access(data)
+    fn access(&self, data: FetchAccessData) -> Vec<crate::Access> {
+        self.fetch.access(data)
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("opt_or(")?;
-        self.inner.describe(f)?;
+        self.fetch.describe(f)?;
         f.write_str(")")
     }
 }
@@ -129,23 +102,20 @@ where
     type Item = &'q V;
 
     unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
-        match self.inner {
+        match self.fetch {
             Some(ref mut v) => v.fetch(slot),
             None => self.or,
         }
     }
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        if let Some(fetch) = &mut self.inner {
-            fetch.filter_slots(slots)
-        } else {
-            slots
-        }
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        self.fetch.filter_slots(slots)
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        if let Some(fetch) = &mut self.inner {
-            fetch.set_visited(slots, change_tick)
+    fn set_visited(&mut self, slots: Slice) {
+        if let Some(fetch) = &mut self.fetch {
+            fetch.set_visited(slots)
         }
     }
 }

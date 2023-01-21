@@ -11,24 +11,12 @@ use core::{
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    fetch::{FetchPrepareData, PreparedFetch},
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch},
     Access, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
 };
 
 pub use change::*;
 pub use cmp::{Cmp, Equal, Greater, GreaterEq, Less, LessEq};
-
-#[doc(hidden)]
-pub struct FmtFilter<'r, Q>(pub &'r Q);
-
-impl<'r, 'w, Q> core::fmt::Debug for FmtFilter<'r, Q>
-where
-    Q: Fetch<'w>,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.0.describe(f)
-    }
-}
 
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
@@ -112,7 +100,7 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         let mut v = self.fetch.access(data);
         v.append(&mut self.filter.access(data));
         v
@@ -145,7 +133,7 @@ where
     }
 
     #[inline]
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.fetch.filter_slots(slots);
         let r = self.filter.filter_slots(slots);
         dbg!(l, r);
@@ -168,8 +156,8 @@ where
     }
 
     #[inline]
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        self.fetch.set_visited(slots, change_tick)
+    fn set_visited(&mut self, slots: Slice) {
+        self.fetch.set_visited(slots)
     }
 }
 
@@ -233,7 +221,7 @@ where
         self.left.filter_arch(arch) && self.right.filter_arch(arch)
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         let mut res = self.left.access(data);
         res.append(&mut self.right.access(data));
         res
@@ -265,19 +253,15 @@ where
         (self.left.fetch(slot), self.right.fetch(slot))
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        self.left.set_visited(slots, change_tick);
-        self.right.set_visited(slots, change_tick);
+    fn set_visited(&mut self, slots: Slice) {
+        self.left.set_visited(slots);
+        self.right.set_visited(slots);
     }
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        // TODO
-        // let l = self.left.filter_slots(slots);
-        // let r = self.right.filter_slots(slots);
-        // l.intersect(&r)
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.left.filter_slots(slots);
         let r = self.right.filter_slots(slots);
-        dbg!(l, r);
 
         let i = l.intersect(&r);
         if i.is_empty() {
@@ -325,12 +309,12 @@ where
         !self.0.filter_arch(arch)
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         self.0.access(data)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "!{:?}", FmtFilter(&self.0))
+        write!(f, "!{:?}", FmtQuery(&self.0))
     }
 
     fn searcher(&self, _: &mut ArchetypeSearcher) {}
@@ -345,7 +329,7 @@ where
     #[inline]
     unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let v = self.0.filter_slots(slots);
 
         slots.difference(v).unwrap()
@@ -458,7 +442,8 @@ impl<'q> PreparedFetch<'q> for Slice {
     #[inline]
     unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         self.intersect(&slots)
     }
 }
@@ -488,7 +473,10 @@ where
         if self.slots.is_empty() {
             return None;
         }
-        let cur = self.filter.filter_slots(self.slots);
+
+        // Safety
+        // The yielded slots are split off of `self.slots`
+        let cur = unsafe { self.filter.filter_slots(self.slots) };
 
         if cur.is_empty() {
             None
@@ -734,7 +722,7 @@ impl<'w> Fetch<'w> for bool {
     }
 
     #[inline(always)]
-    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, _: FetchAccessData) -> Vec<Access> {
         Default::default()
     }
 
@@ -749,15 +737,13 @@ impl<'q> PreparedFetch<'q> for bool {
     #[inline]
     unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         if *self {
             slots
         } else {
             Slice::empty()
         }
     }
-
-    fn set_visited(&mut self, _: Slice, _: u32) {}
 }
 
 /// Allows a fetch to be used by reference.
@@ -796,7 +782,7 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         (*self.0).access(data)
     }
 
@@ -838,7 +824,7 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         (*self).access(data)
     }
 
@@ -863,7 +849,7 @@ impl<'q> PreparedFetch<'q> for BatchSize {
     #[inline]
     unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))
     }
 }
@@ -893,87 +879,6 @@ impl<'w> Fetch<'w> for BatchSize {
         write!(f, "batch {}", self.0)
     }
 }
-
-macro_rules! tuple_impl {
-    ($($idx: tt => $ty: ident),*) => {
-        impl<'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
-            type Item = ();
-        }
-
-        impl<'w, $($ty, )*> Fetch<'w> for Or<($($ty,)*)>
-        where $($ty: Fetch<'w>,)*
-        {
-            const MUTABLE: bool =  $($ty::MUTABLE )|*;
-            type Prepared       = Or<($(Option<$ty::Prepared>,)*)>;
-
-            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-                let inner = &self.0;
-                Some(Or(($(inner.$idx.prepare(data),)*)))
-            }
-
-            fn filter_arch(&self, arch: &Archetype) -> bool {
-                let inner = &self.0;
-                $(inner.$idx.filter_arch(arch))||*
-            }
-
-            fn access(&self, data: FetchPrepareData) -> Vec<Access> {
-                [ $(self.0.$idx.access(data),)* ].concat()
-            }
-
-            fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                let mut s = f.debug_tuple("Or");
-                    let inner = &self.0;
-                $(
-                    s.field(&FmtFilter(&inner.$idx));
-                )*
-                s.finish()
-            }
-        }
-
-
-        impl<'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
-        where $($ty: PreparedFetch<'q>,)*
-        {
-            type Item = ();
-
-            fn filter_slots(&mut self, slots: Slice) -> Slice {
-                eprintln!("\n\nOr{slots:?}");
-                let mut u = Slice::empty();
-                let inner = &mut self.0;
-
-                $(
-                    let v = inner.$idx.filter_slots(slots);
-                    dbg!(u, v);
-                    match u.union(&v) {
-                        Some(v) => { u = v }
-                        None => {
-                        eprintln!("No union: {u:?} {v:?}");
-                        return u }
-                    }
-                )*
-                u
-            }
-
-            #[inline]
-            unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
-
-            fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-                $( self.0.$idx.set_visited(slots, change_tick);)*
-            }
-
-        }
-    };
-}
-
-tuple_impl! { 0 => A }
-tuple_impl! { 0 => A, 1 => B }
-tuple_impl! { 0 => A, 1 => B, 2 => C }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
-tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
 
 #[doc(hidden)]
 pub trait StaticFilter {
