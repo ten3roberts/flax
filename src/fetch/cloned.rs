@@ -5,9 +5,12 @@ use core::{
 
 use alloc::vec::Vec;
 
-use crate::{archetype::Archetype, Access, Fetch, FetchItem};
+use crate::{
+    archetype::{Archetype, Slice},
+    Access, Fetch, FetchItem,
+};
 
-use super::{FetchPrepareData, PeekableFetch, PreparedFetch};
+use super::{FetchAccessData, FetchPrepareData, PeekableFetch, PreparedFetch};
 
 #[derive(Debug, Clone)]
 /// Component which cloned the value.
@@ -43,7 +46,7 @@ where
         self.0.filter_arch(arch)
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         self.0.access(data)
     }
 
@@ -70,12 +73,15 @@ where
     unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.0.fetch(slot).clone()
     }
-    fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
+
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         self.0.filter_slots(slots)
     }
 
-    fn set_visited(&mut self, slots: crate::archetype::Slice, change_tick: u32) {
-        self.0.set_visited(slots, change_tick)
+    #[inline]
+    fn set_visited(&mut self, slots: Slice) {
+        self.0.set_visited(slots)
     }
 }
 

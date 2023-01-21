@@ -271,13 +271,12 @@ where
             .into_iter()
             .flat_map(|arch_id| {
                 let arch = world.archetypes.get(arch_id);
-                let data = FetchPrepareData {
+                let data = FetchAccessData {
                     world,
                     arch,
                     arch_id,
-                    old_tick: 1,
-                    new_tick: 1,
                 };
+
                 self.fetch.access(data)
             })
             .chain([Access {

@@ -3,17 +3,16 @@ use core::ops::Deref;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use atomic_refcell::{AtomicRef, AtomicRefCell};
+use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
 use crate::archetype::{Archetype, Change};
-use crate::fetch::{FetchPrepareData, PreparedFetch, ReadComponent};
+use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadComponent};
 use crate::{
     archetype::{ChangeList, Slice},
     Access, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
-static EMPTY_CHANGELIST_CELL: AtomicRefCell<ChangeList> = AtomicRefCell::new(ChangeList::new());
 static EMPTY_CHANGELIST: ChangeList = ChangeList::new();
 
 #[derive(Clone)]
@@ -72,7 +71,7 @@ where
         self.component.filter_arch(arch)
     }
 
-    fn access(&self, data: crate::fetch::FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: crate::fetch::FetchAccessData) -> Vec<Access> {
         let mut v = self.component.access(data);
 
         if data.arch.has(self.component.key()) {
@@ -168,24 +167,18 @@ where
         self.fetch.fetch(slot)
     }
 
-    fn filter_slots(&mut self, slots: Slice) -> Slice {
-        eprintln!(
-            "tick: {} changes: {:?} Looking for {slots:?}",
-            self.old_tick, &*self.changes
-        );
-
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let cur = match self.find_slice(slots) {
             Some(v) => v,
             None => return Slice::empty(),
         };
 
-        let intersect = cur.intersect(&slots);
-        // Try again with the next change group
-        return intersect;
+        cur.intersect(&slots)
     }
 
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
-        self.fetch.set_visited(slots, change_tick)
+    fn set_visited(&mut self, slots: Slice) {
+        self.fetch.set_visited(slots)
     }
 }
 
@@ -232,7 +225,7 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
         true
     }
 
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         vec![Access {
             kind: crate::AccessKind::ChangeEvent {
                 id: data.arch_id,
@@ -266,19 +259,21 @@ mod test {
 
         let mut filter = PreparedKindFilter::new((), &changes[..], 2);
 
-        assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::empty());
-        assert_eq!(filter.filter_slots(Slice::new(0, 50)), Slice::new(10, 20));
-        assert_eq!(filter.filter_slots(Slice::new(20, 50)), Slice::new(20, 22));
-        assert_eq!(filter.filter_slots(Slice::new(22, 50)), Slice::new(30, 50));
+        unsafe {
+            assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::empty());
+            assert_eq!(filter.filter_slots(Slice::new(0, 50)), Slice::new(10, 20));
+            assert_eq!(filter.filter_slots(Slice::new(20, 50)), Slice::new(20, 22));
+            assert_eq!(filter.filter_slots(Slice::new(22, 50)), Slice::new(30, 50));
 
-        assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::empty());
-        // Due to modified state
-        assert_eq!(filter.filter_slots(Slice::new(0, 50)), Slice::new(30, 50));
+            assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::empty());
+            // Due to modified state
+            assert_eq!(filter.filter_slots(Slice::new(0, 50)), Slice::new(30, 50));
 
-        assert_eq!(
-            filter.filter_slots(Slice::new(120, 500)),
-            Slice::new(120, 200)
-        );
+            assert_eq!(
+                filter.filter_slots(Slice::new(120, 500)),
+                Slice::new(120, 200)
+            );
+        }
     }
 
     #[test]

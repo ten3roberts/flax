@@ -47,18 +47,11 @@ pub(crate) struct PreparedArchetype<'w, Q> {
 }
 
 impl<'w, Q> PreparedArchetype<'w, Q> {
-    pub fn manual_chunk<'q>(
-        &'q mut self,
-        slots: Slice,
-        old_tick: u32,
-        new_tick: u32,
-    ) -> Option<Batch<'q, Q>>
+    pub fn manual_chunk<'q>(&'q mut self, slots: Slice) -> Option<Batch<'q, Q>>
     where
         Q: PreparedFetch<'q>,
     {
-        eprintln!("Creating manual chunk: {slots:?} {old_tick} {new_tick}");
-        let chunk = self.fetch.filter_slots(slots);
-        dbg!(chunk);
+        let chunk = unsafe { self.fetch.filter_slots(slots) };
         if chunk.is_empty() {
             return None;
         }
@@ -67,7 +60,7 @@ impl<'w, Q> PreparedArchetype<'w, Q> {
         let fetch = unsafe { &mut *(&mut self.fetch as *mut Q) };
 
         // Set the chunk as visited
-        fetch.set_visited(chunk, new_tick);
+        fetch.set_visited(chunk);
         let chunk = Batch::new(self.arch, fetch, chunk);
         Some(chunk)
     }
@@ -424,11 +417,10 @@ where
             // All entities are disjoint at this point
             let prepared = unsafe { &mut *(prepared as *mut PreparedArchetype<_>) };
 
-            let mut chunk =
-                match prepared.manual_chunk(Slice::single(slot), self.old_tick, self.new_tick) {
-                    Some(v) => v,
-                    None => return Err(Error::MismatchedFilter(id)),
-                };
+            let mut chunk = match prepared.manual_chunk(Slice::single(slot)) {
+                Some(v) => v,
+                None => return Err(Error::MismatchedFilter(id)),
+            };
             // It is now guaranteed that the filter also matches since the archetype would not be
             // included otherwise.
             // TODO
@@ -474,7 +466,7 @@ where
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
         let p = &mut self.prepared[idx];
-        let mut chunk = match p.manual_chunk(Slice::single(slot), self.old_tick, self.new_tick) {
+        let mut chunk = match p.manual_chunk(Slice::single(slot)) {
             Some(v) => v,
             None => return Err(Error::MismatchedFilter(id)),
         };

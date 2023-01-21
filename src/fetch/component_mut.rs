@@ -7,12 +7,13 @@ use crate::{
     Access, AccessKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
-use super::{peek::PeekableFetch, FetchPrepareData, PreparedFetch};
+use super::{peek::PeekableFetch, FetchAccessData, FetchPrepareData, PreparedFetch};
 
 #[doc(hidden)]
 pub struct WriteComponent<'a, T> {
     borrow: AtomicRefMut<'a, [T]>,
     changes: AtomicRefMut<'a, Changes>,
+    new_tick: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +33,11 @@ where
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let (borrow, changes) = data.arch.borrow_mut(self.0)?;
 
-        Some(WriteComponent { borrow, changes })
+        Some(WriteComponent {
+            borrow,
+            changes,
+            new_tick: data.new_tick,
+        })
     }
 
     #[inline]
@@ -41,7 +46,7 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         if data.arch.has(self.0.key()) {
             vec![
                 Access {
@@ -90,9 +95,9 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
     }
 
     #[inline]
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {
+    fn set_visited(&mut self, slots: Slice) {
         self.changes
-            .set_modified_if_tracking(Change::new(slots, change_tick));
+            .set_modified_if_tracking(Change::new(slots, self.new_tick));
     }
 }
 

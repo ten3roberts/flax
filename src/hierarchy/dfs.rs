@@ -79,11 +79,7 @@ where
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
         let p = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
-        let chunk = match p.manual_chunk(
-            Slice::single(loc.slot),
-            self.state.old_tick,
-            self.state.new_tick,
-        ) {
+        let chunk = match p.manual_chunk(Slice::single(loc.slot)) {
             Some(v) => smallvec![v],
             None => smallvec![],
         };
@@ -112,11 +108,7 @@ where
         // Fetch will never change and all calls are disjoint
         let arch = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
 
-        let root = arch.manual_chunk(
-            Slice::single(loc.slot),
-            self.state.old_tick,
-            self.state.new_tick,
-        );
+        let root = arch.manual_chunk(Slice::single(loc.slot));
 
         if let Some(root) = root {
             Self::cascade_inner(
