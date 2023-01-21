@@ -79,7 +79,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 
     /// Returns which components and how will be accessed for an archetype.
     #[inline]
-    fn access(&self, data: FetchPrepareData) -> Vec<Access> {
+    fn access(&self, _: FetchPrepareData) -> Vec<Access> {
         Vec::new()
     }
 
@@ -90,7 +90,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     ///
     /// This is used for the query to determine which archetypes to visit
     #[inline]
-    fn searcher(&self, searcher: &mut ArchetypeSearcher) {}
+    fn searcher(&self, _: &mut ArchetypeSearcher) {}
 
     /// Convert the fetch to a reference type which works with `HRTB`
     #[inline]
@@ -112,7 +112,7 @@ pub trait PreparedFetch<'q> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    fn fetch(&'q mut self, slot: usize) -> Self::Item;
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item;
 
     /// Filter the slots to visit
     #[inline]
@@ -124,7 +124,7 @@ pub trait PreparedFetch<'q> {
     /// as updating change tracking for mutable queries. The current change tick
     /// is passed.
     #[inline]
-    fn set_visited(&mut self, slots: Slice, change_tick: u32) {}
+    fn set_visited(&mut self, _slots: Slice, _change_tick: u32) {}
 }
 
 impl<'q, F> PreparedFetch<'q> for &'q mut F
@@ -133,7 +133,7 @@ where
 {
     type Item = F::Item;
 
-    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         (*self).fetch(slot)
     }
 
@@ -159,7 +159,7 @@ impl<'w> Fetch<'w> for () {
         Some(())
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, _arch: &Archetype) -> bool {
         true
     }
 
@@ -171,7 +171,7 @@ impl<'w> Fetch<'w> for () {
 impl<'q> PreparedFetch<'q> for () {
     type Item = ();
 
-    fn fetch(&'q mut self, _: Slot) -> Self::Item {}
+    unsafe fn fetch(&'q mut self, _: Slot) -> Self::Item {}
 }
 
 impl<'q, F> PreparedFetch<'q> for Option<F>
@@ -180,7 +180,7 @@ where
 {
     type Item = Option<F::Item>;
 
-    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.as_mut().map(|fetch| fetch.fetch(slot))
     }
 
@@ -222,7 +222,7 @@ impl<'w> Fetch<'w> for EntityIds {
         })
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
@@ -235,7 +235,7 @@ impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
     type Item = Entity;
 
     #[inline]
-    fn fetch(&mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch(&mut self, slot: usize) -> Self::Item {
         self.entities[slot]
     }
 }
@@ -256,7 +256,7 @@ macro_rules! tuple_impl {
 
             type Item           = ($($ty::Item,)*);
             #[inline]
-            fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+            unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)

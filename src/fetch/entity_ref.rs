@@ -59,7 +59,7 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
 
     #[inline]
-    fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         EntityRef {
             arch: self.arch,
             slot,

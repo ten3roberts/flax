@@ -155,8 +155,8 @@ impl Dfs {
         fn inner<F: Fn(&Archetype) -> bool>(
             state: &mut SearchState<F>,
             loc: EntityLocation,
-            arch: &Archetype,
-            arch_index: usize,
+            _: &Archetype,
+            _: usize,
             id: Entity,
         ) {
             eprintln!("Visiting {id} {loc:?}");

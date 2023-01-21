@@ -182,9 +182,7 @@ where
         match &mut self.prepared {
             State::Complete { loc, prepared } => {
                 // self is a mutable reference, so this is the only reference to the slot
-                unsafe {
-                    prepared.set_visited(Slice::single(loc.slot), self.new_tick);
-                }
+                prepared.set_visited(Slice::single(loc.slot), self.new_tick);
                 unsafe { Ok(prepared.fetch(loc.slot)) }
             }
             State::NoSuchEntity(id) => Err(Error::NoSuchEntity(*id)),

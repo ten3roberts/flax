@@ -12,14 +12,13 @@ use core::{
     fmt::{self, Debug, Display},
 };
 
-use alloc::vec;
 use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Slice, Slot},
     fetch::{FetchPrepareData, PreparedFetch},
-    Access, Component, ComponentValue, Entity, EntityIds, Fetch, FetchItem,
+    Access, Component, ComponentValue, Fetch, FetchItem,
 };
 
 /// A filter which compare a component before yielding an item from the query
@@ -180,7 +179,7 @@ where
     type Item = &'q T;
 
     #[inline]
-    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         &self.borrow[slot]
     }
 
@@ -293,7 +292,7 @@ where
 {
     type Item = &'q T;
 
-    fn fetch(&mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch(&mut self, slot: usize) -> Self::Item {
         todo!()
     }
 

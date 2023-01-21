@@ -12,6 +12,7 @@ fn main() -> color_eyre::Result<()> {
         position: Vec3 => [Debug],
         velocity: Vec3 => [Debug],
     }
+
     tracing_subscriber::fmt().init();
 
     use flax::serialize::{SerdeBuilder, SerializeFormat};

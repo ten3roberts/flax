@@ -163,7 +163,8 @@ where
 {
     type Item = Q::Item;
 
-    fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    #[inline]
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.fetch.fetch(slot)
     }
 
@@ -227,7 +228,7 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
         Some(PreparedKindFilter::new((), changes, data.old_tick))
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, _: &Archetype) -> bool {
         true
     }
 
