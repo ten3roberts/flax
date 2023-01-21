@@ -1,4 +1,4 @@
-use flax::{component, CmpExt, EntityBuilder, FetchExt, Query, World};
+use flax::{component, EntityBuilder, FetchExt, Query, World};
 use itertools::Itertools;
 
 use flax::components::name;

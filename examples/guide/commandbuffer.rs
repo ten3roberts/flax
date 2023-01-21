@@ -24,7 +24,7 @@ fn main() -> color_eyre::Result<()> {
     cmd.apply(&mut world)?;
 
     let id = Query::new(entity_ids())
-        .filter(name().eq("a".into()))
+        .filter(name().eq("a"))
         .borrow(&world)
         .iter()
         .next()

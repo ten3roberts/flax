@@ -226,7 +226,7 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{child_of, entity_ids, name, CmpExt, CommandBuffer, FetchExt, Query};
+    use crate::{child_of, entity_ids, name, CommandBuffer, FetchExt, Query};
 
     use super::*;
 

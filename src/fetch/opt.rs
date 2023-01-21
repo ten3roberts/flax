@@ -23,10 +23,10 @@ where
 {
     const MUTABLE: bool = F::MUTABLE;
 
-    type Prepared = Opt<Option<F::Prepared>>;
+    type Prepared = Option<F::Prepared>;
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(Opt(self.0.prepare(data)))
+        Some(self.0.prepare(data))
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -45,11 +45,6 @@ where
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
     type Item = Option<F::Item>;
-}
-
-#[doc(hidden)]
-pub struct PreparedOpt<F> {
-    inner: Option<F>,
 }
 
 impl<'q, F> PreparedFetch<'q> for Opt<Option<F>>
@@ -124,12 +119,6 @@ where
 
 impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {
     type Item = &'q V;
-}
-
-#[doc(hidden)]
-pub struct PreparedOptOr<'w, F, V> {
-    inner: Option<F>,
-    or: &'w V,
 }
 
 impl<'q, 'w, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>

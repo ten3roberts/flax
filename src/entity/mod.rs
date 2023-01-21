@@ -253,6 +253,7 @@ impl fmt::Display for Entity {
 }
 
 /// Access the entity ids in a query
+#[inline]
 pub fn entity_ids() -> EntityIds {
     EntityIds
 }

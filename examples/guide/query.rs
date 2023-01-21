@@ -1,12 +1,10 @@
 use flax::{
-    component, entity_ids, CmpExt, CommandBuffer, Component, Debug, Entity, EntityBorrow, Mutable,
-    Query, QueryBorrow, Schedule, System, World,
+    component, entity_ids, CommandBuffer, Component, Debug, Entity, EntityBorrow, FetchExt,
+    Mutable, Query, QueryBorrow, Schedule, System, World,
 };
 use glam::{vec2, Vec2};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use tracing_subscriber::{
-    prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, EnvFilter,
-};
+use tracing_subscriber::{prelude::*, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 
 fn main() -> color_eyre::Result<()> {

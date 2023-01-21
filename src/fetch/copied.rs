@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use crate::{archetype::Archetype, Access, Fetch, FetchItem};
 
-use super::{FetchPrepareData, PreparedFetch};
+use super::{FetchPrepareData, PeekableFetch, PreparedFetch};
 
 #[derive(Debug, Clone)]
 /// Component which copied the value.
@@ -79,5 +79,16 @@ where
     #[inline]
     fn set_visited(&mut self, slots: crate::archetype::Slice, change_tick: u32) {
         self.0.set_visited(slots, change_tick)
+    }
+}
+
+impl<'p, F> PeekableFetch<'p> for Copied<F>
+where
+    F: PeekableFetch<'p>,
+{
+    type Peek = F::Peek;
+
+    unsafe fn peek(&'p self, slot: crate::archetype::Slot) -> Self::Peek {
+        self.0.peek(slot)
     }
 }
