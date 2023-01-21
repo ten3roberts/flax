@@ -1,8 +1,32 @@
-use crate::{fetch::PreparedFetch, ArchetypeChunks, Batch, Entity};
+use crate::{
+    archetype::Archetype,
+    fetch::{FetchPrepareData, PreparedFetch},
+    ArchetypeChunks, ArchetypeId, Batch, Entity, Fetch, World,
+};
 
-pub(crate) struct QueryBorrowState {
+#[doc(hidden)]
+pub struct QueryBorrowState<'w, Q> {
+    pub(crate) world: &'w World,
+    pub(crate) fetch: &'w Q,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
+}
+
+impl<'w, Q> QueryBorrowState<'w, Q>
+where
+    Q: Fetch<'w>,
+{
+    pub fn prepare_fetch(&self, arch: &'w Archetype, arch_id: ArchetypeId) -> Option<Q::Prepared> {
+        let data = FetchPrepareData {
+            arch,
+            arch_id,
+            world: self.world,
+            old_tick: self.old_tick,
+            new_tick: self.new_tick,
+        };
+
+        self.fetch.prepare(data)
+    }
 }
 
 struct BatchesWithId<'q, Q> {

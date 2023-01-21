@@ -1,34 +1,56 @@
 mod borrow;
 mod dfs;
+mod planar;
 
-use alloc::collections::{btree_map, BTreeMap, BTreeSet};
+use alloc::collections::BTreeMap;
 use smallvec::SmallVec;
 
 use crate::filter::Filtered;
 use crate::{
-    archetype::Archetype, component_info, entity::EntityLocation, All, ArchetypeId,
-    ArchetypeSearcher, Archetypes, ComponentKey, ComponentValue, Entity, Fetch, RelationExt, World,
+    archetype::Archetype, component_info, All, ArchetypeId, ArchetypeSearcher, Entity, Fetch, World,
 };
 
 use self::borrow::QueryBorrowState;
-use self::dfs::*;
+pub use dfs::*;
+pub use planar::*;
+
+pub trait QueryStrategy<Q> {
+    type State: for<'x> QueryState<'x, Q>;
+    /// Prepare a state when the world changes shape
+    fn state<F: Fn(&Archetype) -> bool>(
+        &self,
+        world: &World,
+        searcher: ArchetypeSearcher,
+        filter: F,
+    ) -> Self::State;
+}
+
+pub trait QueryState<'w, Q> {
+    type Borrow;
+    /// Prepare a kind of borrow for the current state
+    fn borrow(&'w self, query_state: QueryBorrowState<'w, Q>) -> Self::Borrow;
+}
 
 /// Provides utilities for working with and manipulating hierarchies and graphs
-
-/// Allows traversing an entity graph following `relation`
-pub struct GraphQuery<Q, F> {
+pub struct GraphQuery<Q, F, S = Planar>
+where
+    S: QueryStrategy<Filtered<Q, F>>,
+{
     fetch: Filtered<Q, F>,
 
     change_tick: u32,
     archetype_gen: u32,
     include_components: bool,
 
-    strategy: Dfs,
-    state: Option<DfsState>,
+    strategy: S,
+    state: Option<S::State>,
 }
 
-impl<Q> GraphQuery<Q, All> {
-    pub fn with_strategy(fetch: Q, strategy: Dfs) -> Self {
+impl<Q, S> GraphQuery<Q, All, S>
+where
+    S: QueryStrategy<Filtered<Q, All>>,
+{
+    pub fn with_strategy(fetch: Q, strategy: S) -> Self {
         Self {
             fetch: Filtered::new(fetch, All),
             change_tick: 0,
@@ -40,12 +62,11 @@ impl<Q> GraphQuery<Q, All> {
     }
 }
 
-type AdjMap<'a> = BTreeMap<Entity, SmallVec<[(ArchetypeId, &'a Archetype); 8]>>;
-
-impl<Q, F> GraphQuery<Q, F>
+impl<Q, F, S> GraphQuery<Q, F, S>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Fetch<'x>,
+    S: QueryStrategy<Filtered<Q, F>>,
 {
     /// Prepare the next change tick and return the old one for the last time
     /// the query ran
@@ -74,7 +95,13 @@ where
         (old_tick, new_tick)
     }
 
-    pub fn borrow<'w>(&'w mut self, world: &'w World) -> DfsBorrow<'w, Q, F> {
+    pub fn borrow<'w>(
+        &'w mut self,
+        world: &'w World,
+    ) -> <S::State as QueryState<'w, Filtered<Q, F>>>::Borrow
+    where
+        S::State: QueryState<'w, Filtered<Q, F>>,
+    {
         let (old_tick, new_tick) = self.prepare_tick(world);
         // Make sure the archetypes to visit are up to date
         let archetype_gen = world.archetype_gen();
@@ -92,132 +119,17 @@ where
 
             let filter = |arch: &Archetype| self.fetch.filter_arch(arch);
 
-            self.strategy.get_state(world, searcher, filter)
+            self.strategy.state(world, searcher, filter)
         });
 
-        let query_state = QueryBorrowState { old_tick, new_tick };
-
-        DfsBorrow::new(world, &self.fetch, query_state, state)
-    }
-}
-
-#[derive(Debug, Clone)]
-struct DfsState {
-    archetypes: Vec<ArchetypeId>,
-    archetypes_index: BTreeMap<ArchetypeId, usize>,
-    adj: BTreeMap<Entity, Vec<usize>>,
-    root: Entity,
-}
-
-impl DfsState {
-    pub fn insert_arch(&mut self, arch_id: ArchetypeId) -> usize {
-        match self.archetypes_index.entry(arch_id) {
-            btree_map::Entry::Vacant(slot) => {
-                let idx = self.archetypes.len();
-                self.archetypes.push(arch_id);
-                *slot.insert(idx)
-            }
-            btree_map::Entry::Occupied(mut slot) => *slot.get_mut(),
-        }
-    }
-}
-
-pub struct Dfs {
-    root: Entity,
-    relation: Entity,
-}
-
-impl Dfs {
-    pub fn new<T: ComponentValue>(relation: impl RelationExt<T>, root: Entity) -> Self {
-        Self {
-            relation: relation.id(),
-            root,
-        }
-    }
-
-    fn get_state<F: Fn(&Archetype) -> bool>(
-        &self,
-        world: &World,
-        searcher: ArchetypeSearcher,
-        filter: F,
-    ) -> DfsState {
-        let archetypes = &world.archetypes;
-
-        struct SearchState<'a, F> {
-            archetypes: &'a Archetypes,
-            searcher: &'a ArchetypeSearcher,
-            filter: &'a F,
-            relation: Entity,
-            result: DfsState,
-            visited: BTreeSet<ArchetypeId>,
-        }
-
-        fn inner<F: Fn(&Archetype) -> bool>(
-            state: &mut SearchState<F>,
-            loc: EntityLocation,
-            _: &Archetype,
-            _: usize,
-            id: Entity,
-        ) {
-            eprintln!("Visiting {id} {loc:?}");
-
-            dbg!(&state.visited);
-
-            // Find all archetypes for the children of parent
-            let key = ComponentKey::new(state.relation, Some(id));
-
-            let mut searcher = state.searcher.clone();
-            searcher.add_required(key);
-
-            let mut children = Vec::new();
-            searcher.find_archetypes(state.archetypes, |arch_id, arch| {
-                if !(state.filter)(arch) {
-                    return;
-                }
-
-                let arch_index = match state.result.archetypes_index.entry(arch_id) {
-                    btree_map::Entry::Vacant(slot) => {
-                        let idx = state.result.archetypes.len();
-                        state.result.archetypes.push(arch_id);
-                        *slot.insert(idx)
-                    }
-                    btree_map::Entry::Occupied(_) => panic!("Cycle"),
-                };
-
-                for (slot, &id) in arch.entities().iter().enumerate() {
-                    let loc = EntityLocation { slot, arch_id };
-                    inner(state, loc, arch, arch_index, id);
-                }
-
-                children.push(arch_index);
-            });
-
-            assert!(state.result.adj.insert(id, children).is_none());
-        }
-
-        let loc = world.location(self.root).unwrap();
-
-        let mut state = SearchState {
-            archetypes,
-            searcher: &searcher,
-            filter: &filter,
-            relation: self.relation,
-            result: DfsState {
-                archetypes: Default::default(),
-                adj: Default::default(),
-                archetypes_index: Default::default(),
-                root: self.root,
-            },
-            visited: Default::default(),
+        let query_state = QueryBorrowState {
+            old_tick,
+            new_tick,
+            world,
+            fetch: &self.fetch,
         };
 
-        let arch = archetypes.get(loc.arch_id);
-        let arch_index = state.result.insert_arch(loc.arch_id);
-
-        inner(&mut state, loc, arch, arch_index, self.root);
-
-        dbg!(&state.result);
-        state.result
+        state.borrow(query_state)
     }
 }
 
