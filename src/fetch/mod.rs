@@ -299,7 +299,6 @@ macro_rules! tuple_impl {
                 ( $(
                     {
                         let v = self.$idx.filter_slots(slots);
-                        eprintln!("{:?}: {:?} {:?}", std::any::type_name::<$ty>(), stringify!($idx), v);
                         start = start.max(v.start);
                         v
                     },
@@ -309,7 +308,6 @@ macro_rules! tuple_impl {
 
                 // Clamp to end bound
                 start = start.min(slots.end);
-                eprintln!("Found common start: {slots:?} => {start}");
                 slots.start = start;
 
                 $(
@@ -401,18 +399,14 @@ macro_rules! tuple_impl {
             type Item = ();
 
             unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-                eprintln!("\n\nOr{slots:?}");
                 let mut u = Slice::empty();
                 let inner = &mut self.0;
 
                 $(
                     let v = inner.$idx.filter_slots(slots);
-                    dbg!(u, v);
                     match u.union(&v) {
                         Some(v) => { u = v }
-                        None => {
-                        eprintln!("No union: {u:?} {v:?}");
-                        return u }
+                        None => { return u }
                     }
                 )*
                 u

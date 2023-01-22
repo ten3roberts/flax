@@ -1,5 +1,7 @@
 use core::fmt::{self, Formatter};
 
+use alloc::vec;
+use alloc::vec::Vec;
 use atomic_refcell::AtomicRefMut;
 
 use crate::{

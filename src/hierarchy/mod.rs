@@ -1,20 +1,23 @@
 mod borrow;
 mod dfs;
+mod difference;
+mod iter;
 mod planar;
 
-use alloc::collections::BTreeMap;
-use smallvec::SmallVec;
+pub use planar::{Planar, QueryBorrow};
 
 use crate::filter::Filtered;
-use crate::{
-    archetype::Archetype, component_info, All, ArchetypeId, ArchetypeSearcher, Entity, Fetch, World,
-};
+use crate::{archetype::Archetype, component_info, All, ArchetypeSearcher, Fetch, World};
 
 use self::borrow::QueryBorrowState;
+pub(crate) use borrow::*;
 pub use dfs::*;
+pub(crate) use iter::*;
 pub use planar::*;
 
+/// Describes how the query behaves and iterates.
 pub trait QueryStrategy<Q> {
+    /// Cached state
     type State: for<'x> QueryState<'x, Q>;
     /// Prepare a state when the world changes shape
     fn state<F: Fn(&Archetype) -> bool>(
@@ -25,6 +28,7 @@ pub trait QueryStrategy<Q> {
     ) -> Self::State;
 }
 
+#[doc(hidden)]
 pub trait QueryState<'w, Q> {
     type Borrow;
     /// Prepare a kind of borrow for the current state
@@ -46,10 +50,56 @@ where
     state: Option<S::State>,
 }
 
+impl<Q> GraphQuery<Q, All, Planar>
+where
+    Planar: QueryStrategy<Filtered<Q, All>>,
+{
+    /// Construct a new query which will fetch all items in the given query.
+
+    /// The query can be either a singular component, a tuple of components, or
+    /// any other type which implements [crate::Fetch].
+    ///
+    /// **Note**: The query will not yield components, as it may not be intended
+    /// behaviour since the most common intent is the entities. See
+    /// [`Query::with_components`]
+    ///
+    /// A fetch may also contain filters
+    /// Construct a new query which will fetch all items in the given query.
+
+    /// The query can be either a singular component, a tuple of components, or
+    /// any other type which implements [crate::Fetch].
+    ///
+    /// **Note**: The query will not yield components, as it may not be intended
+    /// behaviour since the most common intent is the entities. See
+    /// [`Query::with_components`]
+    ///
+    /// A fetch may also contain filters
+    /// Construct a new query which will fetch all items in the given query.
+
+    /// The query can be either a singular component, a tuple of components, or
+    /// any other type which implements [crate::Fetch].
+    ///
+    /// **Note**: The query will not yield components, as it may not be intended
+    /// behaviour since the most common intent is the entities. See
+    /// [`Query::with_components`]
+    ///
+    /// A fetch may also contain filters
+    pub fn new(fetch: Q) -> Self {
+        Self {
+            fetch: Filtered::new(fetch, All),
+            change_tick: 0,
+            archetype_gen: 0,
+            include_components: false,
+            strategy: Planar,
+            state: None,
+        }
+    }
+}
 impl<Q, S> GraphQuery<Q, All, S>
 where
     S: QueryStrategy<Filtered<Q, All>>,
 {
+    /// Query with the given [`QueryStrategy`]
     pub fn with_strategy(fetch: Q, strategy: S) -> Self {
         Self {
             fetch: Filtered::new(fetch, All),
@@ -95,6 +145,17 @@ where
         (old_tick, new_tick)
     }
 
+    /// Borrow the world for the query.
+    ///
+    /// The returned value holds the borrows of the query fetch. As such, all
+    /// references from iteration or using [QueryBorrow::get`] will have a
+    /// lifetime of the [`QueryBorrow`].
+    ///
+    /// This is because iterators can not yield references to internal state as
+    /// all items returned by the iterator need to coexist.
+    ///
+    /// It is safe to use the same prepared query for both iteration and random
+    /// access, Rust's borrow rules will ensure aliasing rules.
     pub fn borrow<'w>(
         &'w mut self,
         world: &'w World,
@@ -138,7 +199,7 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{child_of, entity_ids, name, CommandBuffer, FetchExt, Query};
+    use crate::{child_of, entity_ids, name, CommandBuffer, Entity, FetchExt, Query};
 
     use super::*;
 
