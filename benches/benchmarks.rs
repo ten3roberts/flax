@@ -18,9 +18,17 @@ fn benchmarks(c: &mut Criterion) {
             let mut bench = frag_iter::Benchmark::new();
             b.iter(|| bench.run())
         })
+        .bench_function("for2", |b| {
+            let mut bench = frag_iter::Benchmark::new();
+            b.iter(|| bench.run2())
+        })
         .bench_function("for_each", |b| {
             let mut bench = frag_iter::Benchmark::new();
             b.iter(|| bench.run_for_each())
+        })
+        .bench_function("for_each2", |b| {
+            let mut bench = frag_iter::Benchmark::new();
+            b.iter(|| bench.run_for_each2())
         });
 
     c.benchmark_group("simple_iter")

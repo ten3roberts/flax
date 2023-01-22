@@ -136,7 +136,6 @@ where
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.fetch.filter_slots(slots);
         let r = self.filter.filter_slots(slots);
-        dbg!(l, r);
 
         let i = l.intersect(&r);
         if i.is_empty() {

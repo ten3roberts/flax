@@ -152,7 +152,6 @@ where
     fn prepare_tick(&mut self, world: &World) -> (u32, u32) {
         // The tick of the last iteration
         let mut old_tick = self.change_tick;
-        eprintln!("Got old tick: {old_tick}");
 
         // Set the change_tick for self to that of the query, to make all
         // changes before this invocation too old
@@ -244,11 +243,7 @@ where
 
         let archetypes = &world.archetypes;
 
-        let filter = |arch: &Archetype| {
-            let res = self.fetch.filter_arch(arch);
-            eprintln!("Filtering arch: {res}");
-            res
-        };
+        let filter = |arch: &Archetype| self.fetch.filter_arch(arch);
 
         let mut result = Vec::new();
         searcher.find_archetypes(archetypes, |arch_id, arch| {

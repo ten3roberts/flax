@@ -1,5 +1,8 @@
 use crate::{ArchetypeId, ComponentValue};
-use alloc::collections::{btree_map, BTreeMap, BTreeSet};
+use alloc::{
+    collections::{btree_map, BTreeMap, BTreeSet},
+    vec::Vec,
+};
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
@@ -7,20 +10,21 @@ use crate::{
     entity::EntityLocation,
     fetch::PreparedFetch,
     query::ArchetypeSearcher,
-    Archetypes, Batch, ComponentKey, Entity, Fetch, FetchItem, PreparedArchetype, RelationExt,
-    World,
+    Archetypes, ComponentKey, Entity, Fetch, FetchItem, RelationExt, World,
 };
 
 type AdjMap<'a> = BTreeMap<Entity, SmallVec<[(ArchetypeId, &'a Archetype); 8]>>;
 
-use super::{borrow::QueryBorrowState, QueryState, QueryStrategy};
+use super::{borrow::QueryBorrowState, Batch, PreparedArchetype, QueryState, QueryStrategy};
 
+/// Iterate a hierarchy in depth-first order
 pub struct Dfs {
     root: Entity,
     relation: Entity,
 }
 
 impl Dfs {
+    /// Iterate a hierarchy in depth-first order from `root`
     pub fn new<T: ComponentValue>(relation: impl RelationExt<T>, root: Entity) -> Self {
         Self {
             relation: relation.id(),
@@ -59,10 +63,6 @@ where
             _: usize,
             id: Entity,
         ) {
-            eprintln!("Visiting {id} {loc:?}");
-
-            dbg!(&state.visited);
-
             // Find all archetypes for the children of parent
             let key = ComponentKey::new(state.relation, Some(id));
 
@@ -116,12 +116,12 @@ where
 
         inner(&mut state, loc, arch, arch_index, self.root);
 
-        dbg!(&state.result);
         state.result
     }
 }
 
 #[derive(Debug, Clone)]
+#[doc(hidden)]
 pub struct DfsState {
     archetypes: Vec<ArchetypeId>,
     archetypes_index: BTreeMap<ArchetypeId, usize>,
@@ -130,7 +130,7 @@ pub struct DfsState {
 }
 
 impl DfsState {
-    pub fn insert_arch(&mut self, arch_id: ArchetypeId) -> usize {
+    fn insert_arch(&mut self, arch_id: ArchetypeId) -> usize {
         match self.archetypes_index.entry(arch_id) {
             btree_map::Entry::Vacant(slot) => {
                 let idx = self.archetypes.len();
@@ -153,6 +153,7 @@ where
     }
 }
 
+/// Borrowed state for [`Dfs`] strategy
 pub struct DfsBorrow<'w, Q>
 where
     Q: Fetch<'w>,
@@ -172,13 +173,7 @@ where
             .iter()
             .map(|&arch_id| {
                 let arch = query_state.world.archetypes.get(arch_id);
-                let fetch = query_state.prepare_fetch(arch, arch_id).unwrap();
-
-                PreparedArchetype {
-                    arch_id,
-                    arch,
-                    fetch,
-                }
+                query_state.prepare_fetch(arch, arch_id).unwrap()
             })
             .collect();
 
@@ -207,13 +202,13 @@ where
         };
 
         DfsIter {
-            state: &self.state,
             archetypes: &mut self.prepared[..],
             stack: chunk,
             adj: &self.dfs_state.adj,
         }
     }
 
+    /// Cascade recursively, visiting each entity with the return value for the parent
     pub fn cascade<'q, T, Fn: FnMut(<Q as FetchItem<'q>>::Item, &T) -> T>(
         &'q mut self,
         value: &T,
@@ -235,7 +230,6 @@ where
             Self::cascade_inner(
                 &mut self.prepared,
                 &self.dfs_state.adj,
-                &self.state,
                 root,
                 value,
                 &mut func,
@@ -246,7 +240,6 @@ where
     fn cascade_inner<'q, T, Fn>(
         archetypes: &mut [PreparedArchetype<'w, Q::Prepared>],
         adj: &BTreeMap<Entity, Vec<usize>>,
-        state: &'q QueryBorrowState<Q>,
         mut batch: Batch<'q, Q::Prepared>,
         value: &T,
         func: &mut Fn,
@@ -265,21 +258,21 @@ where
                 // This is safe because each borrow is disjoint
                 let p = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
 
-                for batch in p.chunks(state.old_tick, state.new_tick) {
-                    Self::cascade_inner(archetypes, adj, state, batch, &value, func)
+                for batch in p.chunks() {
+                    Self::cascade_inner(archetypes, adj, batch, &value, func)
                 }
             }
         }
     }
 }
 
+/// Iterate a hierarchy in depth-first order
 pub struct DfsIter<'w, 'q, Q>
 where
     Q: Fetch<'w>,
     'w: 'q,
 {
     adj: &'q BTreeMap<Entity, Vec<usize>>,
-    state: &'q QueryBorrowState<'w, Q>,
 
     archetypes: &'q mut [PreparedArchetype<'w, Q::Prepared>],
     stack: SmallVec<[Batch<'q, Q::Prepared>; 8]>,
@@ -304,7 +297,7 @@ where
                     // This is safe because each borrow is disjoint
                     let p = unsafe { &mut *(p as *mut PreparedArchetype<_>) };
 
-                    let chunks = p.chunks(self.state.old_tick, self.state.new_tick);
+                    let chunks = p.chunks();
 
                     self.stack.extend(chunks);
                 }

@@ -1289,12 +1289,10 @@ impl World {
                 }
             });
 
-        let v = match v {
+        match v {
             Ok(v) => ((v + 1) >> 1) + 1,
             Err(v) => (v >> 1) + 1,
-        };
-        eprintln!("Advancing change tick to: {v}");
-        v
+        }
     }
 
     /// Formats the world using the debug visitor.

@@ -10,12 +10,11 @@ use smallvec::SmallVec;
 use crate::{
     archetype::{unknown_component, Slice},
     filter::Filtered,
-    ArchetypeChunks, Batch,
+    hierarchy::PreparedArchetype,
 };
 use crate::{
     component_info, entity::EntityLocation, error::Result, fetch::FetchPrepareData,
-    fetch::PreparedFetch, filter::All, Archetype, ArchetypeId, Entity, Error, Fetch, FetchItem,
-    World,
+    fetch::PreparedFetch, filter::All, ArchetypeId, Entity, Error, Fetch, FetchItem, World,
 };
 use crate::{dummy, ComponentInfo};
 
@@ -38,41 +37,6 @@ where
         searcher.required.into_iter(),
     )
     .map(|v| *world.get(v.id, component_info()).unwrap())
-}
-
-pub(crate) struct PreparedArchetype<'w, Q> {
-    pub(crate) arch_id: ArchetypeId,
-    pub(crate) arch: &'w Archetype,
-    pub(crate) fetch: Q,
-}
-
-impl<'w, Q> PreparedArchetype<'w, Q> {
-    pub fn manual_chunk<'q>(&'q mut self, slots: Slice) -> Option<Batch<'q, Q>>
-    where
-        Q: PreparedFetch<'q>,
-    {
-        let chunk = unsafe { self.fetch.filter_slots(slots) };
-        if chunk.is_empty() {
-            return None;
-        }
-
-        // Fetch will never change and all calls are disjoint
-        let fetch = unsafe { &mut *(&mut self.fetch as *mut Q) };
-
-        // Set the chunk as visited
-        fetch.set_visited(chunk);
-        let chunk = Batch::new(self.arch, fetch, chunk);
-        Some(chunk)
-    }
-
-    pub fn chunks(&mut self, _: u32, new_tick: u32) -> ArchetypeChunks<Q> {
-        ArchetypeChunks {
-            slots: self.arch.slots(),
-            arch: self.arch,
-            fetch: &mut self.fetch,
-            new_tick,
-        }
-    }
 }
 
 /// A lazily prepared query which borrows and hands out chunk iterators for
@@ -271,7 +235,7 @@ where
                 fetch: self.fetch.prepare(data).unwrap(),
             };
 
-            let chunk = p.chunks(self.old_tick, self.new_tick);
+            let chunk = p.chunks();
             // let filter = FilterIter::new(arch.slots(), self.filter.prepare(arch, self.old_tick));
 
             // let chunk = ArchetypeChunks {

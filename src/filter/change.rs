@@ -124,7 +124,6 @@ where
         // Short circuit
         if let Some(cur) = self.cur {
             if cur.overlaps(slots) {
-                eprintln!("Found current {cur:?}");
                 return Some(cur);
             }
         }
@@ -135,7 +134,6 @@ where
             .find_position(|change| change.slice.overlaps(slots));
 
         if let Some((idx, change)) = change {
-            eprintln!("Found slice: {change:?} containing {slots:?}");
             self.cur = Some(change.slice);
             self.cursor = idx;
             return Some(change.slice);
@@ -147,7 +145,6 @@ where
             .find_position(|change| change.slice.overlaps(slots));
 
         if let Some((_, change)) = change {
-            eprintln!("Found slice before: {change:?} containing {slots:?}");
             return Some(change.slice);
         }
 

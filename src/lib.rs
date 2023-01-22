@@ -252,11 +252,10 @@ pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
 pub use filter::{All, And, Cmp, Nothing, Or, With, Without};
+pub use hierarchy::*;
 pub use meta::*;
 pub use paste::paste;
-pub(crate) use query::{
-    find_missing_components, ArchetypeChunks, ArchetypeSearcher, Batch, PreparedArchetype,
-};
+pub(crate) use query::{find_missing_components, ArchetypeSearcher};
 pub use query::{
     BatchedIter, EntityBorrow, EntityQuery, EntityQueryData, Query, QueryBorrow, QueryData,
     QueryIter,
