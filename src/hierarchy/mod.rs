@@ -1,6 +1,7 @@
 mod borrow;
 mod dfs;
 mod difference;
+mod entity;
 mod iter;
 mod planar;
 
@@ -9,25 +10,23 @@ pub use planar::{Planar, QueryBorrow};
 use crate::archetype::Slot;
 use crate::filter::{BatchSize, Filtered, WithRelation, WithoutRelation};
 use crate::{archetype::Archetype, component_info, All, ArchetypeSearcher, Fetch, World};
-use crate::{And, Component, ComponentValue, RelationExt, With, Without};
+use crate::{And, Component, ComponentValue, Entity, RelationExt, With, Without};
 
 use self::borrow::QueryBorrowState;
 pub(crate) use borrow::*;
 pub use dfs::*;
+pub use entity::EntityBorrow;
 pub(crate) use iter::*;
 pub use planar::*;
+
+pub type EntityQuery<Q, F> = GraphQuery<Q, F, Entity>;
 
 /// Describes how the query behaves and iterates.
 pub trait QueryStrategy<Q> {
     /// Cached state
     type State: for<'x> QueryState<'x, Q>;
     /// Prepare a state when the world changes shape
-    fn state<F: Fn(&Archetype) -> bool>(
-        &self,
-        world: &World,
-        searcher: ArchetypeSearcher,
-        filter: F,
-    ) -> Self::State;
+    fn state(&self, world: &World, fetch: &Q) -> Self::State;
 }
 
 #[doc(hidden)]
@@ -97,6 +96,7 @@ where
         }
     }
 }
+
 impl<Q, F> GraphQuery<Q, F, Planar>
 where
     Planar: QueryStrategy<Filtered<Q, F>>,
@@ -114,6 +114,14 @@ where
             strategy,
             state: None,
         }
+    }
+
+    /// Transform the query into a query for a single entity
+    pub fn entity(self, id: Entity) -> EntityQuery<Q, F>
+    where
+        Entity: QueryStrategy<Filtered<Q, F>>,
+    {
+        self.with_strategy(id)
     }
 }
 
@@ -252,15 +260,13 @@ where
         }
 
         let state = self.state.get_or_insert_with(|| {
-            let mut searcher = ArchetypeSearcher::default();
-            self.fetch.searcher(&mut searcher);
-            if !self.include_components {
-                searcher.add_excluded(component_info().key());
-            }
+            // if !self.include_components {
+            //     searcher.add_excluded(component_info().key());
+            // }
 
             let filter = |arch: &Archetype| self.fetch.filter_arch(arch);
 
-            self.strategy.state(world, searcher, filter)
+            self.strategy.state(world, &self.fetch)
         });
 
         let query_state = QueryBorrowState {

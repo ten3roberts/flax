@@ -39,24 +39,22 @@ where
 {
     type State = DfsState;
 
-    fn state<F: Fn(&Archetype) -> bool>(
-        &self,
-        world: &World,
-        searcher: ArchetypeSearcher,
-        filter: F,
-    ) -> Self::State {
+    fn state(&self, world: &World, fetch: &Q) -> Self::State {
+        let mut searcher = ArchetypeSearcher::default();
+        fetch.searcher(&mut searcher);
+
         let archetypes = &world.archetypes;
 
         struct SearchState<'a, F> {
             archetypes: &'a Archetypes,
             searcher: &'a ArchetypeSearcher,
-            filter: &'a F,
+            fetch: &'a F,
             relation: Entity,
             result: DfsState,
             visited: BTreeSet<ArchetypeId>,
         }
 
-        fn inner<F: Fn(&Archetype) -> bool>(
+        fn inner<F: for<'x> Fetch<'x>>(
             state: &mut SearchState<F>,
             loc: EntityLocation,
             _: &Archetype,
@@ -71,7 +69,7 @@ where
 
             let mut children = Vec::new();
             searcher.find_archetypes(state.archetypes, |arch_id, arch| {
-                if !(state.filter)(arch) {
+                if !state.fetch.filter_arch(arch) {
                     return;
                 }
 
@@ -100,7 +98,7 @@ where
         let mut state = SearchState {
             archetypes,
             searcher: &searcher,
-            filter: &filter,
+            fetch,
             relation: self.relation,
             result: DfsState {
                 archetypes: Default::default(),

@@ -12,6 +12,7 @@ use crate::{
     entity::EntityLocation,
     error::Result,
     fetch::PreparedFetch,
+    query::ArchetypeSearcher,
     ArchetypeId, Entity, Error, Fetch, FetchItem,
 };
 
@@ -28,15 +29,13 @@ pub struct Planar;
 impl<Q: 'static + for<'x> Fetch<'x>> QueryStrategy<Q> for Planar {
     type State = PlanarState;
 
-    fn state<F: Fn(&crate::archetype::Archetype) -> bool>(
-        &self,
-        world: &crate::World,
-        mut searcher: crate::query::ArchetypeSearcher,
-        filter: F,
-    ) -> Self::State {
+    fn state(&self, world: &crate::World, fetch: &Q) -> Self::State {
+        let mut searcher = ArchetypeSearcher::default();
+        fetch.searcher(&mut searcher);
+
         let mut archetypes = Vec::new();
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
-            if !filter(arch) {
+            if !fetch.filter_arch(arch) {
                 return;
             }
             archetypes.push(arch_id)
