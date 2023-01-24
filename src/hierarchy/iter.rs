@@ -132,6 +132,7 @@ where
 {
     type Item = Batch<'q, Q>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         // Get the next chunk
         let chunk = self.next_chunk()?;
