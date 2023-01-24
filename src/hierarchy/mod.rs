@@ -6,8 +6,10 @@ mod planar;
 
 pub use planar::{Planar, QueryBorrow};
 
-use crate::filter::Filtered;
+use crate::archetype::Slot;
+use crate::filter::{BatchSize, Filtered, WithRelation, WithoutRelation};
 use crate::{archetype::Archetype, component_info, All, ArchetypeSearcher, Fetch, World};
+use crate::{And, Component, ComponentValue, RelationExt, With, Without};
 
 use self::borrow::QueryBorrowState;
 pub(crate) use borrow::*;
@@ -95,17 +97,20 @@ where
         }
     }
 }
-impl<Q, S> GraphQuery<Q, All, S>
+impl<Q, F> GraphQuery<Q, F, Planar>
 where
-    S: QueryStrategy<Filtered<Q, All>>,
+    Planar: QueryStrategy<Filtered<Q, F>>,
 {
-    /// Query with the given [`QueryStrategy`]
-    pub fn with_strategy(fetch: Q, strategy: S) -> Self {
-        Self {
-            fetch: Filtered::new(fetch, All),
-            change_tick: 0,
-            archetype_gen: 0,
-            include_components: false,
+    /// Use the given [`QueryStrategy`]
+    pub fn with_strategy<S>(self, strategy: S) -> GraphQuery<Q, F, S>
+    where
+        S: QueryStrategy<Filtered<Q, F>>,
+    {
+        GraphQuery {
+            fetch: self.fetch,
+            change_tick: self.change_tick,
+            archetype_gen: self.archetype_gen,
+            include_components: self.include_components,
             strategy,
             state: None,
         }
@@ -118,6 +123,81 @@ where
     F: for<'x> Fetch<'x>,
     S: QueryStrategy<Filtered<Q, F>>,
 {
+    /// Include component entities for the query.
+    /// The default is to hide components as they are usually not desired during
+    /// iteration.
+    pub fn with_components(self) -> Self {
+        Self {
+            include_components: true,
+            ..self
+        }
+    }
+
+    /// Adds a new filter to the query.
+    /// This filter is and:ed with the existing filters.
+    pub fn filter<G>(self, filter: G) -> GraphQuery<Q, And<F, G>, S>
+    where
+        S: QueryStrategy<Filtered<Q, And<F, G>>>,
+    {
+        GraphQuery {
+            fetch: Filtered::new(self.fetch.fetch, And::new(self.fetch.filter, filter)),
+            change_tick: self.change_tick,
+            archetype_gen: self.archetype_gen,
+            include_components: self.include_components,
+            strategy: self.strategy,
+            state: None,
+        }
+    }
+
+    /// Limits the size of each batch using [`QueryBorrow::iter_batched`]
+    pub fn batch_size(self, size: Slot) -> GraphQuery<Q, And<F, BatchSize>, S>
+    where
+        S: QueryStrategy<Filtered<Q, And<F, BatchSize>>>,
+    {
+        self.filter(BatchSize(size))
+    }
+
+    /// Shortcut for filter(with_relation)
+    pub fn with_relation<T: ComponentValue>(
+        self,
+        rel: impl RelationExt<T>,
+    ) -> GraphQuery<Q, And<F, WithRelation>, S>
+    where
+        S: QueryStrategy<Filtered<Q, And<F, WithRelation>>>,
+    {
+        self.filter(rel.with_relation())
+    }
+
+    /// Shortcut for filter(without_relation)
+    pub fn without_relation<T: ComponentValue>(
+        self,
+        rel: impl RelationExt<T>,
+    ) -> GraphQuery<Q, And<F, WithoutRelation>, S>
+    where
+        S: QueryStrategy<Filtered<Q, And<F, WithoutRelation>>>,
+    {
+        self.filter(rel.without_relation())
+    }
+
+    /// Shortcut for filter(without)
+    pub fn without<T: ComponentValue>(
+        self,
+        component: Component<T>,
+    ) -> GraphQuery<Q, And<F, Without>, S>
+    where
+        S: QueryStrategy<Filtered<Q, And<F, Without>>>,
+    {
+        self.filter(component.without())
+    }
+
+    /// Shortcut for filter(with)
+    pub fn with<T: ComponentValue>(self, component: Component<T>) -> GraphQuery<Q, And<F, With>, S>
+    where
+        S: QueryStrategy<Filtered<Q, And<F, With>>>,
+    {
+        self.filter(component.with())
+    }
+
     /// Prepare the next change tick and return the old one for the last time
     /// the query ran
     fn prepare_tick(&mut self, world: &World) -> (u32, u32) {
@@ -242,8 +322,8 @@ mod test {
             .spawn(&mut world);
 
         // let mut query = crate::Query::new((name().cloned(), a().copied()));
-        let mut query =
-            GraphQuery::with_strategy((name().cloned(), a().copied()), Dfs::new(child_of, root));
+        let mut query = GraphQuery::new((name().cloned(), a().copied()))
+            .with_strategy(Dfs::new(child_of, root));
 
         let items = query.borrow(&world).iter().collect_vec();
 
@@ -260,7 +340,8 @@ mod test {
 
         let mut cmd = CommandBuffer::new();
 
-        GraphQuery::with_strategy((entity_ids(), name()), Dfs::new(child_of, root))
+        GraphQuery::new((entity_ids(), name()))
+            .with_strategy(Dfs::new(child_of, root))
             .borrow(&world)
             .cascade(&Vec::new(), |(id, name), prefix| {
                 let mut p = prefix.clone();
@@ -301,10 +382,8 @@ mod test {
 
         // Change detection
 
-        let mut query = GraphQuery::with_strategy(
-            (name().cloned(), a().modified().copied()),
-            Dfs::new(child_of, root),
-        );
+        let mut query = GraphQuery::new((name().cloned(), a().modified().copied()))
+            .with_strategy(Dfs::new(child_of, root));
 
         let items = query.borrow(&world).iter().collect_vec();
 

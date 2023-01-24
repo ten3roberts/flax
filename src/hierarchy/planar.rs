@@ -105,7 +105,9 @@ where
     where
         'w: 'q,
     {
-        QueryIter::new(self.iter_batched())
+        QueryIter {
+            iter: self.iter_batched().flatten(),
+        }
     }
 
     /// Returns the first item
@@ -326,18 +328,6 @@ where
     Q: Fetch<'w>,
 {
     iter: Flatten<BatchedIter<'q, 'w, Q>>,
-}
-
-impl<'q, 'w, Q> QueryIter<'q, 'w, Q>
-where
-    Q: Fetch<'w>,
-{
-    #[inline(always)]
-    pub(crate) fn new(iter: BatchedIter<'q, 'w, Q>) -> Self {
-        Self {
-            iter: iter.flatten(),
-        }
-    }
 }
 
 impl<'w, 'q, Q> Iterator for QueryIter<'q, 'w, Q>
