@@ -9,7 +9,7 @@ pub use planar::{Planar, QueryBorrow};
 
 use crate::archetype::Slot;
 use crate::filter::{BatchSize, Filtered, WithRelation, WithoutRelation};
-use crate::{archetype::Archetype, component_info, All, ArchetypeSearcher, Fetch, World};
+use crate::{archetype::Archetype, All, ArchetypeSearcher, Fetch, World};
 use crate::{And, Component, ComponentValue, Entity, RelationExt, With, Without};
 
 use self::borrow::QueryBorrowState;
@@ -91,9 +91,19 @@ where
             change_tick: 0,
             archetype_gen: 0,
             include_components: false,
-            strategy: Planar,
+            strategy: Planar {
+                include_components: false,
+            },
             state: None,
         }
+    }
+
+    /// Include components in a planar query.
+    ///
+    /// **Note**: only relevant for the `planar` strategy
+    pub fn with_components(mut self) -> Self {
+        self.strategy.include_components = true;
+        self
     }
 }
 
@@ -101,7 +111,9 @@ impl<Q, F> GraphQuery<Q, F, Planar>
 where
     Planar: QueryStrategy<Filtered<Q, F>>,
 {
-    /// Use the given [`QueryStrategy`]
+    /// Use the given [`QueryStrategy`].
+    ///
+    /// This replaces the previous strategy
     pub fn with_strategy<S>(self, strategy: S) -> GraphQuery<Q, F, S>
     where
         S: QueryStrategy<Filtered<Q, F>>,
@@ -131,16 +143,6 @@ where
     F: for<'x> Fetch<'x>,
     S: QueryStrategy<Filtered<Q, F>>,
 {
-    /// Include component entities for the query.
-    /// The default is to hide components as they are usually not desired during
-    /// iteration.
-    pub fn with_components(self) -> Self {
-        Self {
-            include_components: true,
-            ..self
-        }
-    }
-
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
     pub fn filter<G>(self, filter: G) -> GraphQuery<Q, And<F, G>, S>
