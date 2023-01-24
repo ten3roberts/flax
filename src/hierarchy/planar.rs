@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 
 use crate::{
     archetype::{unknown_component, Slice},
-    dummy,
+    component_info, dummy,
     entity::EntityLocation,
     error::Result,
     fetch::PreparedFetch,
@@ -24,7 +24,9 @@ use super::{
 };
 
 /// The default linear iteration strategy
-pub struct Planar;
+pub struct Planar {
+    pub(crate) include_components: bool,
+}
 
 impl<Q: 'static + for<'x> Fetch<'x>> QueryStrategy<Q> for Planar {
     type State = PlanarState;
@@ -35,7 +37,10 @@ impl<Q: 'static + for<'x> Fetch<'x>> QueryStrategy<Q> for Planar {
 
         let mut archetypes = Vec::new();
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
-            if !fetch.filter_arch(arch) {
+            if !fetch.filter_arch(arch)
+            //FIXME
+                || (self.include_components && arch.has(component_info().key()))
+            {
                 return;
             }
             archetypes.push(arch_id)
