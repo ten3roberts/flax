@@ -56,8 +56,8 @@ where
     world: &'w World,
     pub(crate) old_tick: u32,
     pub(crate) new_tick: u32,
-    pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>>,
-    pub(crate) current: Option<ArchetypeChunks<'q, Filtered<Q::Prepared, F::Prepared>>>,
+    pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared, F::Prepared>>,
+    pub(crate) current: Option<ArchetypeChunks<'q, Q::Prepared, F::Prepared>>,
 }
 
 impl<'q, 'w, Q, F> BatchedIter<'q, 'w, Q, F>
@@ -69,7 +69,7 @@ where
         world: &'w World,
         old_tick: u32,
         new_tick: u32,
-        archetypes: IterMut<'q, PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>>,
+        archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared, F::Prepared>>,
     ) -> Self {
         Self {
             world,
@@ -87,7 +87,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = Batch<'q, Filtered<Q::Prepared, F::Prepared>>;
+    type Item = Batch<'q, Q::Prepared, F::Prepared>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {

@@ -44,13 +44,13 @@ impl Benchmark {
     }
 
     pub fn run2(&mut self) {
-        for data in &mut GraphQuery::new(data().as_mut()).borrow(&self.0) {
+        for data in &mut Query::new(data().as_mut()).borrow(&self.0) {
             *data *= 2.0;
         }
     }
 
     pub fn run_for_each2(&mut self) {
-        GraphQuery::new(data().as_mut())
+        Query::new(data().as_mut())
             .borrow(&self.0)
             .for_each(|data| {
                 *data *= 2.0;

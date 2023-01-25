@@ -1,5 +1,5 @@
 use flax::components::{child_of, name};
-use flax::{component, debug_visitor, EntityBuilder, Query, World};
+use flax::{component, debug_visitor, EntityBuilder, FetchExt, Query, World};
 use flax::{entity_ids, relations_like, Debug, Entity};
 use itertools::Itertools;
 
@@ -261,8 +261,12 @@ fn hierarchy_manipulation() {
 
     assert_eq!(roots, ["a", "b", "b.a", "b.b"]);
 
-    let children_of_a = Query::new(name()).with(child_of(a)).as_vec(&world);
-    let children_of_b = Query::new(name()).with(child_of(b)).as_vec(&world);
+    let children_of_a = Query::new(name().cloned())
+        .with(child_of(a))
+        .collect_vec(&world);
+    let children_of_b = Query::new(name().cloned())
+        .with(child_of(b))
+        .collect_vec(&world);
 
     assert_eq!(children_of_a, ["a.a"]);
     assert_eq!(children_of_b, [""; 0]);

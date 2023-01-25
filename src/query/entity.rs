@@ -334,7 +334,7 @@ mod test {
         assert_eq!(world.get(id, position()).as_deref(), Ok(&Vec3::X));
 
         let mut system = System::builder().with(Query::new(name()).entity(id)).build(
-            |mut q: EntityBorrow<_, _>| {
+            |mut q: crate::hierarchy::EntityBorrow<_, _>| {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             },
         );

@@ -46,7 +46,7 @@ where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    pub(crate) prepared: SmallVec<[PreparedArchetype<'w, Filtered<Q::Prepared, F::Prepared>>; 8]>,
+    pub(crate) prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 8]>,
     pub(crate) world: &'w World,
     pub(crate) archetypes: &'w [ArchetypeId],
     pub(crate) fetch: &'w Filtered<Q, F>,
@@ -379,7 +379,7 @@ where
             let prepared = &mut self.prepared[idx];
 
             // All entities are disjoint at this point
-            let prepared = unsafe { &mut *(prepared as *mut PreparedArchetype<_>) };
+            let prepared = unsafe { &mut *(prepared as *mut PreparedArchetype<_, _>) };
 
             let mut chunk = match prepared.manual_chunk(Slice::single(slot)) {
                 Some(v) => v,

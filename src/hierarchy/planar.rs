@@ -1,7 +1,7 @@
 use core::{
-    iter::Flatten,
+    iter::{Copied, Flatten},
     mem::{self, MaybeUninit},
-    slice::IterMut,
+    slice::{self, IterMut},
 };
 
 use smallvec::SmallVec;
@@ -11,31 +11,62 @@ use crate::{
     component_info, dummy,
     entity::EntityLocation,
     error::Result,
-    fetch::PreparedFetch,
+    fetch::{FetchAccessData, PreparedFetch},
+    filter::Filtered,
     query::ArchetypeSearcher,
-    ArchetypeId, Entity, Error, Fetch, FetchItem,
+    Access, AccessKind, All, ArchetypeId, Entity, Error, Fetch, FetchItem, World,
 };
 
 use super::{
     borrow::{PreparedArchetype, QueryBorrowState},
     difference::find_missing_components,
     iter::{ArchetypeChunks, Batch},
-    QueryState, QueryStrategy,
+    QueryStrategy,
 };
 
 /// The default linear iteration strategy
+#[derive(Clone)]
 pub struct Planar {
     pub(crate) include_components: bool,
+    archetype_gen: u32,
+    archetypes: Vec<ArchetypeId>,
 }
 
-impl<Q: 'static + for<'x> Fetch<'x>> QueryStrategy<Q> for Planar {
-    type State = PlanarState;
+impl core::fmt::Debug for Planar {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Planar")
+            .field("include_components", &self.include_components)
+            .finish()
+    }
+}
 
-    fn state(&self, world: &crate::World, fetch: &Q) -> Self::State {
+impl Planar {
+    pub(super) fn new(include_components: bool) -> Self {
+        Self {
+            include_components,
+            archetypes: Vec::new(),
+            archetype_gen: 0,
+        }
+    }
+
+    // Make sure the archetypes to visit are up to date
+    fn update_state<'w, Q: Fetch<'w>, F: Fetch<'w>>(
+        &mut self,
+        world: &crate::World,
+        fetch: &Filtered<Q, F>,
+    ) {
+        // Make sure the archetypes to visit are up to date
+        let archetype_gen = world.archetype_gen();
+        if archetype_gen <= self.archetype_gen {
+            return;
+        }
+
+        self.archetype_gen = archetype_gen;
+
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
-        let mut archetypes = Vec::new();
+        self.archetypes.clear();
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
             if !fetch.filter_arch(arch)
             //FIXME
@@ -43,31 +74,44 @@ impl<Q: 'static + for<'x> Fetch<'x>> QueryStrategy<Q> for Planar {
             {
                 return;
             }
-            archetypes.push(arch_id)
+            self.archetypes.push(arch_id)
         });
-
-        PlanarState { archetypes }
     }
 }
 
-#[derive(Debug, Clone)]
-#[doc(hidden)]
-pub struct PlanarState {
-    archetypes: Vec<ArchetypeId>,
-}
-
-impl<'w, Q> QueryState<'w, Q> for PlanarState
+impl<'w, Q, F> QueryStrategy<'w, Q, F> for Planar
 where
     Q: 'w + Fetch<'w>,
+    F: 'w + Fetch<'w>,
 {
-    type Borrow = QueryBorrow<'w, Q>;
+    type Borrow = QueryBorrow<'w, Q, F>;
 
-    fn borrow(&'w self, query_state: super::borrow::QueryBorrowState<'w, Q>) -> Self::Borrow {
+    fn borrow(&'w mut self, state: QueryBorrowState<'w, Q, F>) -> Self::Borrow {
         QueryBorrow {
             prepared: SmallVec::new(),
             archetypes: &self.archetypes,
-            state: query_state,
+            state,
         }
+    }
+
+    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<crate::Access> {
+        self.archetypes
+            .iter()
+            .flat_map(|&arch_id| {
+                let arch = world.archetypes.get(arch_id);
+                let data = FetchAccessData {
+                    world,
+                    arch,
+                    arch_id,
+                };
+
+                fetch.access(data)
+            })
+            .chain([Access {
+                kind: AccessKind::World,
+                mutable: false,
+            }])
+            .collect()
     }
 }
 
@@ -77,35 +121,38 @@ where
 /// The borrowing is lazy, as such, calling [`QueryBorrow::get`] will only borrow the one required archetype.
 /// [`QueryBorrow::iter`] will borrow the components from all archetypes and release them once the prepared query drops.
 /// Subsequent calls to iter will use the same borrow.
-pub struct QueryBorrow<'w, Q>
+pub struct QueryBorrow<'w, Q, F = All>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
-    prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared>; 8]>,
+    prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 8]>,
     archetypes: &'w [ArchetypeId],
-    state: QueryBorrowState<'w, Q>,
+    state: QueryBorrowState<'w, Q, F>,
 }
 
-impl<'w, 'q, Q> IntoIterator for &'q mut QueryBorrow<'w, Q>
+impl<'w, 'q, Q, F> IntoIterator for &'q mut QueryBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
-    type IntoIter = QueryIter<'q, 'w, Q>;
+    type IntoIter = QueryIter<'q, 'w, Q, F>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl<'w, Q> QueryBorrow<'w, Q>
+impl<'w, Q, F> QueryBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
     /// Iterate all items matched by query and filter.
-    pub fn iter<'q>(&'q mut self) -> QueryIter<'q, 'w, Q>
+    pub fn iter<'q>(&'q mut self) -> QueryIter<'q, 'w, Q, F>
     where
         'w: 'q,
     {
@@ -120,7 +167,7 @@ where
     }
 
     /// Iterate all items matched by query and filter.
-    pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'q, 'w, Q>
+    pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'q, 'w, Q, F>
     where
         'w: 'q,
     {
@@ -181,6 +228,8 @@ where
     where
         Q: Sync,
         Q::Prepared: Send,
+        F: Sync,
+        F::Prepared: Send,
         // BatchedIter<'q, 'w, Q>: Send,
     {
         use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
@@ -283,7 +332,7 @@ where
             let prepared = &mut self.prepared[idx];
 
             // All entities are disjoint at this point
-            let prepared = unsafe { &mut *(prepared as *mut PreparedArchetype<_>) };
+            let prepared = unsafe { &mut *(prepared as *mut PreparedArchetype<_, _>) };
 
             let mut chunk = match prepared.manual_chunk(Slice::single(slot)) {
                 Some(v) => v,
@@ -324,19 +373,25 @@ where
 
         Ok(item)
     }
+
+    pub(crate) fn archetypes(&self) -> &[ArchetypeId] {
+        self.archetypes
+    }
 }
 
 /// The query iterator
-pub struct QueryIter<'q, 'w, Q>
+pub struct QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
-    iter: Flatten<BatchedIter<'q, 'w, Q>>,
+    iter: Flatten<BatchedIter<'q, 'w, Q, F>>,
 }
 
-impl<'w, 'q, Q> Iterator for QueryIter<'q, 'w, Q>
+impl<'w, 'q, Q, F> Iterator for QueryIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -349,21 +404,23 @@ where
 
 /// An iterator which yields disjoint continuous slices for each matched archetype
 /// and filter predicate.
-pub struct BatchedIter<'q, 'w, Q>
+pub struct BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
     'w: 'q,
 {
-    pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared>>,
-    pub(crate) current: Option<ArchetypeChunks<'q, Q::Prepared>>,
+    pub(crate) archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared, F::Prepared>>,
+    pub(crate) current: Option<ArchetypeChunks<'q, Q::Prepared, F::Prepared>>,
 }
 
-impl<'w, 'q, Q> Iterator for BatchedIter<'q, 'w, Q>
+impl<'w, 'q, Q, F> Iterator for BatchedIter<'q, 'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = Batch<'q, Q::Prepared>;
+    type Item = Batch<'q, Q::Prepared, F::Prepared>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
