@@ -1,4 +1,6 @@
-use crate::{ArchetypeId, ComponentValue};
+use crate::{
+    fetch::FetchAccessData, filter::Filtered, Access, AccessKind, ArchetypeId, ComponentValue,
+};
 use alloc::{
     collections::{btree_map, BTreeMap, BTreeSet},
     vec::Vec,
@@ -15,12 +17,17 @@ use crate::{
 
 type AdjMap<'a> = BTreeMap<Entity, SmallVec<[(ArchetypeId, &'a Archetype); 8]>>;
 
-use super::{borrow::QueryBorrowState, Batch, PreparedArchetype, QueryState, QueryStrategy};
+use super::{borrow::QueryBorrowState, Batch, PreparedArchetype, QueryStrategy};
 
 /// Iterate a hierarchy in depth-first order
 pub struct Dfs {
     root: Entity,
     relation: Entity,
+
+    archetype_gen: u32,
+    archetypes: Vec<ArchetypeId>,
+    archetypes_index: BTreeMap<ArchetypeId, usize>,
+    adj: BTreeMap<Entity, Vec<usize>>,
 }
 
 impl Dfs {
@@ -29,34 +36,54 @@ impl Dfs {
         Self {
             relation: relation.id(),
             root,
+
+            archetype_gen: 0,
+            archetypes: Vec::new(),
+            archetypes_index: BTreeMap::new(),
+            adj: BTreeMap::new(),
         }
     }
-}
 
-impl<Q> QueryStrategy<Q> for Dfs
-where
-    Q: 'static + for<'x> Fetch<'x>,
-{
-    type State = DfsState;
+    fn insert_arch(&mut self, arch_id: ArchetypeId) -> usize {
+        match self.archetypes_index.entry(arch_id) {
+            btree_map::Entry::Vacant(slot) => {
+                let idx = self.archetypes.len();
+                self.archetypes.push(arch_id);
+                *slot.insert(idx)
+            }
+            btree_map::Entry::Occupied(mut slot) => *slot.get_mut(),
+        }
+    }
 
-    fn state(&self, world: &World, fetch: &Q) -> Self::State {
+    fn update_state<'w, Q: Fetch<'w>, F: Fetch<'w>>(
+        &mut self,
+        world: &crate::World,
+        fetch: &'w Filtered<Q, F>,
+    ) {
+        // Make sure the archetypes to visit are up to date
+        let archetype_gen = world.archetype_gen();
+        if archetype_gen <= self.archetype_gen {
+            return;
+        }
+
+        self.archetype_gen = archetype_gen;
+
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
         let archetypes = &world.archetypes;
 
-        struct SearchState<'a, F> {
+        struct SearchState<'a> {
             archetypes: &'a Archetypes,
             searcher: &'a ArchetypeSearcher,
-            fetch: &'a F,
             relation: Entity,
-            result: DfsState,
+            result: &'a mut Dfs,
             visited: BTreeSet<ArchetypeId>,
         }
 
-        fn inner<F: for<'x> Fetch<'x>>(
-            state: &mut SearchState<F>,
-            loc: EntityLocation,
+        fn inner<'w, F: Fetch<'w>>(
+            state: &mut SearchState,
+            fetch: &'w F,
             _: &Archetype,
             _: usize,
             id: Entity,
@@ -69,7 +96,7 @@ where
 
             let mut children = Vec::new();
             searcher.find_archetypes(state.archetypes, |arch_id, arch| {
-                if !state.fetch.filter_arch(arch) {
+                if !fetch.filter_arch(arch) {
                     return;
                 }
 
@@ -84,7 +111,7 @@ where
 
                 for (slot, &id) in arch.entities().iter().enumerate() {
                     let loc = EntityLocation { slot, arch_id };
-                    inner(state, loc, arch, arch_index, id);
+                    inner(state, fetch, arch, arch_index, id);
                 }
 
                 children.push(arch_index);
@@ -94,78 +121,74 @@ where
         }
 
         let loc = world.location(self.root).unwrap();
+        let root = self.root;
 
         let mut state = SearchState {
             archetypes,
             searcher: &searcher,
-            fetch,
             relation: self.relation,
-            result: DfsState {
-                archetypes: Default::default(),
-                adj: Default::default(),
-                archetypes_index: Default::default(),
-                root: self.root,
-            },
+            result: self,
             visited: Default::default(),
         };
 
         let arch = archetypes.get(loc.arch_id);
         let arch_index = state.result.insert_arch(loc.arch_id);
 
-        inner(&mut state, loc, arch, arch_index, self.root);
-
-        state.result
+        inner(&mut state, fetch, arch, arch_index, root);
     }
 }
 
-#[derive(Debug, Clone)]
-#[doc(hidden)]
-pub struct DfsState {
-    archetypes: Vec<ArchetypeId>,
-    archetypes_index: BTreeMap<ArchetypeId, usize>,
-    adj: BTreeMap<Entity, Vec<usize>>,
-    root: Entity,
-}
-
-impl DfsState {
-    fn insert_arch(&mut self, arch_id: ArchetypeId) -> usize {
-        match self.archetypes_index.entry(arch_id) {
-            btree_map::Entry::Vacant(slot) => {
-                let idx = self.archetypes.len();
-                self.archetypes.push(arch_id);
-                *slot.insert(idx)
-            }
-            btree_map::Entry::Occupied(mut slot) => *slot.get_mut(),
-        }
-    }
-}
-
-impl<'w, Q> QueryState<'w, Q> for DfsState
+impl<'w, Q, F> QueryStrategy<'w, Q, F> for Dfs
 where
-    Q: Fetch<'w> + 'w,
+    Q: 'w + Fetch<'w>,
+    F: 'w + Fetch<'w>,
 {
-    type Borrow = DfsBorrow<'w, Q>;
+    type Borrow = DfsBorrow<'w, Q, F>;
 
-    fn borrow(&'w self, query_state: QueryBorrowState<'w, Q>) -> Self::Borrow {
+    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>) -> Self::Borrow {
+        self.update_state(query_state.world, query_state.fetch);
+
         DfsBorrow::new(query_state, self)
+    }
+
+    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<crate::Access> {
+        self.archetypes
+            .iter()
+            .flat_map(|&arch_id| {
+                let arch = world.archetypes.get(arch_id);
+                let data = FetchAccessData {
+                    world,
+                    arch,
+                    arch_id,
+                };
+
+                fetch.access(data)
+            })
+            .chain([Access {
+                kind: AccessKind::World,
+                mutable: false,
+            }])
+            .collect()
     }
 }
 
 /// Borrowed state for [`Dfs`] strategy
-pub struct DfsBorrow<'w, Q>
+pub struct DfsBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
-    prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared>; 8]>,
-    state: QueryBorrowState<'w, Q>,
-    dfs_state: &'w DfsState,
+    prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 8]>,
+    state: QueryBorrowState<'w, Q, F>,
+    dfs_state: &'w Dfs,
 }
 
-impl<'w, Q> DfsBorrow<'w, Q>
+impl<'w, Q, F> DfsBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
-    fn new(query_state: QueryBorrowState<'w, Q>, dfs_state: &'w DfsState) -> Self {
+    fn new(query_state: QueryBorrowState<'w, Q, F>, dfs_state: &'w Dfs) -> Self {
         let prepared = dfs_state
             .archetypes
             .iter()
@@ -183,7 +206,7 @@ where
     }
 
     /// Iterate all items matched by query and filter.
-    pub fn iter<'q>(&'q mut self) -> DfsIter<'w, 'q, Q>
+    pub fn iter<'q>(&'q mut self) -> DfsIter<'w, 'q, Q, F>
     where
         'w: 'q,
     {
@@ -193,7 +216,7 @@ where
 
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
-        let p = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
+        let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
         let chunk = match p.manual_chunk(Slice::single(loc.slot)) {
             Some(v) => smallvec![v],
             None => smallvec![],
@@ -220,7 +243,7 @@ where
 
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
-        let arch = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
+        let arch = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
 
         let root = arch.manual_chunk(Slice::single(loc.slot));
 
@@ -236,13 +259,14 @@ where
     }
 
     fn cascade_inner<'q, T, Fn>(
-        archetypes: &mut [PreparedArchetype<'w, Q::Prepared>],
+        archetypes: &mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
         adj: &BTreeMap<Entity, Vec<usize>>,
-        mut batch: Batch<'q, Q::Prepared>,
+        mut batch: Batch<'q, Q::Prepared, F::Prepared>,
         value: &T,
         func: &mut Fn,
     ) where
         Q: 'w,
+        F: 'w,
         Fn: FnMut(<Q as FetchItem<'q>>::Item, &T) -> T,
         'w: 'q,
     {
@@ -254,7 +278,7 @@ where
 
                 // Promote the borrow of the fetch to 'q
                 // This is safe because each borrow is disjoint
-                let p = unsafe { &mut *(arch as *mut PreparedArchetype<_>) };
+                let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
 
                 for batch in p.chunks() {
                     Self::cascade_inner(archetypes, adj, batch, &value, func)
@@ -265,20 +289,22 @@ where
 }
 
 /// Iterate a hierarchy in depth-first order
-pub struct DfsIter<'w, 'q, Q>
+pub struct DfsIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     adj: &'q BTreeMap<Entity, Vec<usize>>,
 
-    archetypes: &'q mut [PreparedArchetype<'w, Q::Prepared>],
-    stack: SmallVec<[Batch<'q, Q::Prepared>; 8]>,
+    archetypes: &'q mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
+    stack: SmallVec<[Batch<'q, Q::Prepared, F::Prepared>; 8]>,
 }
 
-impl<'w, 'q, Q> Iterator for DfsIter<'w, 'q, Q>
+impl<'w, 'q, Q, F> Iterator for DfsIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
     'w: 'q,
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
@@ -293,7 +319,7 @@ where
 
                     // Promote the borrow of the fetch to 'q
                     // This is safe because each borrow is disjoint
-                    let p = unsafe { &mut *(p as *mut PreparedArchetype<_>) };
+                    let p = unsafe { &mut *(p as *mut PreparedArchetype<_, _>) };
 
                     let chunks = p.chunks();
 

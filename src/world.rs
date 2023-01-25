@@ -863,18 +863,9 @@ impl World {
                 arch.components()
                     .any(|v| v.key().id == id || v.key().object == Some(id))
             }))
-            .get_archetypes(self);
-
-        // The archetypes to remove
-        // let archetypes = self
-        //     .archetypes()
-        //     .filter(|(_, v)| {
-        //         let remove = v.components().any(|v| {});
-
-        //         remove
-        //     })
-        //     .map(|v| v.0)
-        //     .collect_vec();
+            .borrow(self)
+            .archetypes()
+            .to_owned();
 
         for src in archetypes.into_iter().rev() {
             let mut src = self.archetypes.despawn(src);

@@ -2,24 +2,18 @@ use crate::{
     archetype::{unknown_component, Slice},
     entity::EntityLocation,
     error::Result,
-    fetch::PreparedFetch,
-    Entity, Error, Fetch, PreparedArchetype, QueryState, QueryStrategy,
+    fetch::{FetchAccessData, PreparedFetch},
+    filter::Filtered,
+    query::ArchetypeSearcher,
+    Access, AccessKind, All, Entity, Error, Fetch, PreparedArchetype, QueryStrategy, World,
 };
 
 use super::{borrow::QueryBorrowState, difference::find_missing_components};
 
-impl<Q: 'static + for<'x> Fetch<'x>> QueryStrategy<Q> for Entity {
-    type State = Entity;
-
-    fn state(&self, _: &crate::World, _fetch: &Q) -> Self::State {
-        *self
-    }
-}
-
-fn state<'w, 'a, Q: Fetch<'w>>(
+fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
     id: Entity,
-    state: &'a QueryBorrowState<'w, Q>,
-) -> EntityState<'w, Q::Prepared> {
+    state: &'a QueryBorrowState<'w, Q, F>,
+) -> EntityState<'w, Q::Prepared, F::Prepared> {
     let loc = match state.world.location(id) {
         Ok(v) => v,
         Err(_) => return EntityState::NoSuchEntity(id),
@@ -45,28 +39,56 @@ fn state<'w, 'a, Q: Fetch<'w>>(
     EntityState::Complete { loc, p }
 }
 
-enum EntityState<'w, Q> {
+enum EntityState<'w, Q, F> {
     NoSuchEntity(Entity),
     MismatchedFilter(Entity),
     MismatchedFetch(Entity, EntityLocation),
 
     Complete {
         loc: EntityLocation,
-        p: PreparedArchetype<'w, Q>,
+        p: PreparedArchetype<'w, Q, F>,
     },
 }
 
-impl<'w, Q> QueryState<'w, Q> for Entity
+impl<'w, Q, F> QueryStrategy<'w, Q, F> for Entity
 where
     Q: 'w + Fetch<'w>,
+    F: 'w + Fetch<'w>,
 {
-    type Borrow = EntityBorrow<'w, Q>;
+    type Borrow = EntityBorrow<'w, Q, F>;
 
-    fn borrow(&'w self, query_state: QueryBorrowState<'w, Q>) -> Self::Borrow {
+    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>) -> Self::Borrow {
         EntityBorrow {
             prepared: state(*self, &query_state),
             state: query_state,
         }
+    }
+
+    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<crate::Access> {
+        let mut searcher = ArchetypeSearcher::default();
+        fetch.searcher(&mut searcher);
+
+        let mut result = Vec::new();
+        searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
+            if !fetch.filter_arch(arch) {
+                return;
+            }
+
+            let data = FetchAccessData {
+                world,
+                arch,
+                arch_id,
+            };
+
+            result.append(&mut fetch.access(data))
+        });
+
+        result.push(Access {
+            kind: AccessKind::World,
+            mutable: false,
+        });
+
+        result
     }
 }
 
@@ -74,17 +96,19 @@ where
 ///
 /// A prepared query for a single entity. Holds the locks for the affected archetype and
 /// components.
-pub struct EntityBorrow<'w, Q>
+pub struct EntityBorrow<'w, Q, F = All>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
-    state: QueryBorrowState<'w, Q>,
-    prepared: EntityState<'w, Q::Prepared>,
+    state: QueryBorrowState<'w, Q, F>,
+    prepared: EntityState<'w, Q::Prepared, F::Prepared>,
 }
 
-impl<'w, Q> EntityBorrow<'w, Q>
+impl<'w, Q, F> EntityBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
+    F: Fetch<'w>,
 {
     /// Returns the results of the fetch.
     ///
@@ -116,7 +140,7 @@ mod test {
 
     use glam::{vec3, Vec3};
 
-    use crate::{component, name, FetchExt, GraphQuery, Or, Query, System, World};
+    use crate::{component, name, FetchExt, Or, Query, System, World};
 
     use super::*;
 
@@ -134,7 +158,7 @@ mod test {
             .set(a(), 5)
             .spawn(&mut world);
 
-        let mut query = GraphQuery::new((name(), a().opt())).entity(id);
+        let mut query = Query::new((name(), a().opt())).entity(id);
         {
             let mut borrow = query.borrow(&world);
             assert_eq!(borrow.get(), Ok((&"Foo".to_string(), Some(&5))));
@@ -177,7 +201,7 @@ mod test {
             .set(name(), "Baz".into())
             .spawn(&mut world);
 
-        let mut query = GraphQuery::new((name(), position().as_mut())).entity(id);
+        let mut query = Query::new((name(), position().as_mut())).entity(id);
         assert!(query.borrow(&world).get().is_err());
 
         world.set(id, position(), vec3(4.8, 4.2, 9.1)).unwrap();
@@ -191,13 +215,13 @@ mod test {
 
         assert_eq!(world.get(id, position()).as_deref(), Ok(&Vec3::X));
 
-        //         let mut system = System::builder()
-        //             .with(GraphQuery::new(name()).entity(id))
-        //             .build(|mut q: EntityBorrow<_>| {
-        //                 assert_eq!(q.get(), Ok(&"Bar".into()));
-        //             });
+        let mut system = System::builder().with(Query::new(name()).entity(id)).build(
+            |mut q: EntityBorrow<_, _>| {
+                assert_eq!(q.get(), Ok(&"Bar".into()));
+            },
+        );
 
-        //         system.run_on(&mut world);
+        system.run_on(&mut world);
     }
 
     #[test]

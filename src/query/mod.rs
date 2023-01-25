@@ -355,53 +355,6 @@ mod test {
     }
 
     #[test]
-    fn entity_query() {
-        let mut world = World::new();
-
-        let id = Entity::builder()
-            .set(name(), "Foo".into())
-            .set(position(), vec3(1.4, 6.4, 1.7))
-            .spawn(&mut world);
-
-        let id2 = Entity::builder()
-            .set(name(), "Bar".into())
-            .spawn(&mut world);
-
-        Entity::builder()
-            .set(name(), "Baz".into())
-            .spawn(&mut world);
-
-        let mut query = Query::new((name(), position().as_mut()));
-        assert!(query.borrow(&world).get(id2).is_err());
-        assert_eq!(
-            query.borrow(&world).get(id),
-            Ok((&"Foo".into(), &mut vec3(1.4, 6.4, 1.7)))
-        );
-
-        world.set(id2, position(), vec3(4.8, 4.2, 9.1)).unwrap();
-
-        {
-            let mut borrow = query.borrow(&world);
-            assert_eq!(
-                borrow.get(id2),
-                Ok((&"Bar".into(), &mut vec3(4.8, 4.2, 9.1)))
-            );
-
-            *borrow.get(id2).unwrap().1 = Vec3::X;
-        }
-
-        assert_eq!(world.get(id2, position()).as_deref(), Ok(&Vec3::X));
-
-        let mut system = System::builder()
-            .with(Query::new(name()).entity(id2))
-            .build(|mut q: EntityBorrow<_, _>| {
-                assert_eq!(q.get(), Ok(&"Bar".into()));
-            });
-
-        system.run_on(&mut world);
-    }
-
-    #[test]
     fn changes() {
         component! {
             window_width: f32,

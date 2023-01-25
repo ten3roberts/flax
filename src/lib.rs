@@ -256,10 +256,6 @@ pub use hierarchy::*;
 pub use meta::*;
 pub use paste::paste;
 pub(crate) use query::{find_missing_components, ArchetypeSearcher};
-pub use query::{
-    BatchedIter, EntityBorrow, EntityQuery, EntityQueryData, Query, QueryBorrow, QueryData,
-    QueryIter,
-};
 pub use relation::*;
 pub use schedule::*;
 pub use system::*;

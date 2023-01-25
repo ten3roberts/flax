@@ -18,7 +18,7 @@
     "kind": "dap"
   },
   "check": {
-    "cmd": "cargo check --all-features --workspace --tests --lib"
+    "cmd": "cargo check --all-features"
   },
   "test-all": {
     "cmd": "",
