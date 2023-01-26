@@ -51,30 +51,22 @@ impl Planar {
 
     // Make sure the archetypes to visit are up to date
     fn update_state<'w, Q: Fetch<'w>, F: Fetch<'w>>(
-        &mut self,
+        include_components: bool,
         world: &crate::World,
         fetch: &Filtered<Q, F>,
+        result: &mut Vec<ArchetypeId>,
     ) {
-        // Make sure the archetypes to visit are up to date
-        let archetype_gen = world.archetype_gen();
-        if archetype_gen <= self.archetype_gen {
-            return;
-        }
-
-        self.archetype_gen = archetype_gen;
+        result.clear();
 
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
-        self.archetypes.clear();
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
-            if !fetch.filter_arch(arch)
-            //FIXME
-                || (self.include_components && arch.has(component_info().key()))
+            if !fetch.filter_arch(arch) || (!include_components && arch.has(component_info().key()))
             {
                 return;
             }
-            self.archetypes.push(arch_id)
+            result.push(arch_id)
         });
     }
 }
@@ -87,15 +79,30 @@ where
     type Borrow = QueryBorrow<'w, Q, F>;
 
     fn borrow(&'w mut self, state: QueryBorrowState<'w, Q, F>) -> Self::Borrow {
+        // Make sure the archetypes to visit are up to date
+        let archetype_gen = state.world.archetype_gen();
+        if archetype_gen > self.archetype_gen {
+            self.archetype_gen = archetype_gen;
+            Self::update_state(
+                self.include_components,
+                state.world,
+                state.fetch,
+                &mut self.archetypes,
+            );
+        }
+
         QueryBorrow {
             prepared: SmallVec::new(),
             archetypes: &self.archetypes,
             state,
+            include_components: self.include_components,
         }
     }
 
     fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<crate::Access> {
-        self.archetypes
+        let mut result = Vec::new();
+        Self::update_state(self.include_components, world, fetch, &mut result);
+        result
             .iter()
             .flat_map(|&arch_id| {
                 let arch = world.archetypes.get(arch_id);
@@ -126,6 +133,7 @@ where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
+    include_components: bool,
     prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 8]>,
     archetypes: &'w [ArchetypeId],
     state: QueryBorrowState<'w, Q, F>,
@@ -266,6 +274,7 @@ where
     }
 
     fn prepare_archetype(&mut self, arch_id: ArchetypeId) -> Option<usize> {
+        eprintln!("Preparing archetypes");
         let prepared = &mut self.prepared;
 
         if let Some(idx) = prepared.iter().position(|v| v.arch_id == arch_id) {
@@ -273,7 +282,9 @@ where
         } else {
             let arch = self.state.world.archetypes.get(arch_id);
 
-            if self.state.fetch.filter_arch(arch) {
+            if !self.state.fetch.filter_arch(arch)
+                || (!self.include_components && arch.has(component_info().key()))
+            {
                 return None;
             }
 

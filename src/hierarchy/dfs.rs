@@ -25,25 +25,17 @@ pub struct Dfs {
     relation: Entity,
 
     archetype_gen: u32,
+    state: DfsState,
+}
+
+#[derive(Default, Debug, Clone)]
+struct DfsState {
     archetypes: Vec<ArchetypeId>,
     archetypes_index: BTreeMap<ArchetypeId, usize>,
     adj: BTreeMap<Entity, Vec<usize>>,
 }
 
-impl Dfs {
-    /// Iterate a hierarchy in depth-first order from `root`
-    pub fn new<T: ComponentValue>(relation: impl RelationExt<T>, root: Entity) -> Self {
-        Self {
-            relation: relation.id(),
-            root,
-
-            archetype_gen: 0,
-            archetypes: Vec::new(),
-            archetypes_index: BTreeMap::new(),
-            adj: BTreeMap::new(),
-        }
-    }
-
+impl DfsState {
     fn insert_arch(&mut self, arch_id: ArchetypeId) -> usize {
         match self.archetypes_index.entry(arch_id) {
             btree_map::Entry::Vacant(slot) => {
@@ -55,19 +47,33 @@ impl Dfs {
         }
     }
 
+    fn clear(&mut self) {
+        self.archetypes.clear();
+        self.archetypes_index.clear();
+        self.adj.clear();
+    }
+}
+
+impl Dfs {
+    /// Iterate a hierarchy in depth-first order from `root`
+    pub fn new<T: ComponentValue>(relation: impl RelationExt<T>, root: Entity) -> Self {
+        Self {
+            relation: relation.id(),
+            root,
+
+            archetype_gen: 0,
+            state: DfsState::default(),
+        }
+    }
+
     fn update_state<'w, Q: Fetch<'w>, F: Fetch<'w>>(
-        &mut self,
+        relation: Entity,
+        root: Entity,
+        result: &mut DfsState,
         world: &crate::World,
         fetch: &'w Filtered<Q, F>,
     ) {
-        // Make sure the archetypes to visit are up to date
-        let archetype_gen = world.archetype_gen();
-        if archetype_gen <= self.archetype_gen {
-            return;
-        }
-
-        self.archetype_gen = archetype_gen;
-
+        result.clear();
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
@@ -77,15 +83,13 @@ impl Dfs {
             archetypes: &'a Archetypes,
             searcher: &'a ArchetypeSearcher,
             relation: Entity,
-            result: &'a mut Dfs,
             visited: BTreeSet<ArchetypeId>,
         }
 
         fn inner<'w, F: Fetch<'w>>(
             state: &mut SearchState,
+            result: &mut DfsState,
             fetch: &'w F,
-            _: &Archetype,
-            _: usize,
             id: Entity,
         ) {
             // Find all archetypes for the children of parent
@@ -100,10 +104,10 @@ impl Dfs {
                     return;
                 }
 
-                let arch_index = match state.result.archetypes_index.entry(arch_id) {
+                let arch_index = match result.archetypes_index.entry(arch_id) {
                     btree_map::Entry::Vacant(slot) => {
-                        let idx = state.result.archetypes.len();
-                        state.result.archetypes.push(arch_id);
+                        let idx = result.archetypes.len();
+                        result.archetypes.push(arch_id);
                         *slot.insert(idx)
                     }
                     btree_map::Entry::Occupied(_) => panic!("Cycle"),
@@ -111,30 +115,28 @@ impl Dfs {
 
                 for (slot, &id) in arch.entities().iter().enumerate() {
                     let loc = EntityLocation { slot, arch_id };
-                    inner(state, fetch, arch, arch_index, id);
+                    inner(state, result, fetch, id);
                 }
 
                 children.push(arch_index);
             });
 
-            assert!(state.result.adj.insert(id, children).is_none());
+            assert!(result.adj.insert(id, children).is_none());
         }
 
-        let loc = world.location(self.root).unwrap();
-        let root = self.root;
+        let loc = world.location(root).unwrap();
 
         let mut state = SearchState {
             archetypes,
             searcher: &searcher,
-            relation: self.relation,
-            result: self,
+            relation,
             visited: Default::default(),
         };
 
-        let arch = archetypes.get(loc.arch_id);
-        let arch_index = state.result.insert_arch(loc.arch_id);
+        archetypes.get(loc.arch_id);
+        result.insert_arch(loc.arch_id);
 
-        inner(&mut state, fetch, arch, arch_index, root);
+        inner(&mut state, result, fetch, root);
     }
 }
 
@@ -146,13 +148,23 @@ where
     type Borrow = DfsBorrow<'w, Q, F>;
 
     fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>) -> Self::Borrow {
-        self.update_state(query_state.world, query_state.fetch);
+        Self::update_state(
+            self.relation,
+            self.root,
+            &mut self.state,
+            query_state.world,
+            query_state.fetch,
+        );
 
         DfsBorrow::new(query_state, self)
     }
 
-    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<crate::Access> {
-        self.archetypes
+    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<crate::Access> {
+        let mut state = DfsState::default();
+        Self::update_state(self.relation, self.root, &mut state, world, fetch);
+
+        state
+            .archetypes
             .iter()
             .flat_map(|&arch_id| {
                 let arch = world.archetypes.get(arch_id);
@@ -180,7 +192,7 @@ where
 {
     prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 8]>,
     state: QueryBorrowState<'w, Q, F>,
-    dfs_state: &'w Dfs,
+    dfs: &'w Dfs,
 }
 
 impl<'w, Q, F> DfsBorrow<'w, Q, F>
@@ -188,8 +200,9 @@ where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    fn new(query_state: QueryBorrowState<'w, Q, F>, dfs_state: &'w Dfs) -> Self {
-        let prepared = dfs_state
+    fn new(query_state: QueryBorrowState<'w, Q, F>, dfs: &'w Dfs) -> Self {
+        let prepared = dfs
+            .state
             .archetypes
             .iter()
             .map(|&arch_id| {
@@ -201,7 +214,7 @@ where
         Self {
             prepared,
             state: query_state,
-            dfs_state,
+            dfs,
         }
     }
 
@@ -211,8 +224,8 @@ where
         'w: 'q,
     {
         // Safety: the iterator will not borrow this archetype again
-        let loc = self.state.world.location(self.dfs_state.root).unwrap();
-        let arch_index = *self.dfs_state.archetypes_index.get(&loc.arch_id).unwrap();
+        let loc = self.state.world.location(self.dfs.root).unwrap();
+        let arch_index = *self.dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
 
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
@@ -225,12 +238,12 @@ where
         DfsIter {
             archetypes: &mut self.prepared[..],
             stack: chunk,
-            adj: &self.dfs_state.adj,
+            adj: &self.dfs.state.adj,
         }
     }
 
-    /// Cascade recursively, visiting each entity with the return value for the parent
-    pub fn cascade<'q, T, Fn: FnMut(<Q as FetchItem<'q>>::Item, &T) -> T>(
+    /// Traverse the hierarchy recursively, visiting each entity with the return value for the parent
+    pub fn traverse<'q, T, Fn: FnMut(<Q as FetchItem<'q>>::Item, &T) -> T>(
         &'q mut self,
         value: &T,
         mut func: Fn,
@@ -238,8 +251,8 @@ where
         'w: 'q,
     {
         // Safety: the iterator will not borrow this archetype again
-        let loc = self.state.world.location(self.dfs_state.root).unwrap();
-        let arch_index = *self.dfs_state.archetypes_index.get(&loc.arch_id).unwrap();
+        let loc = self.state.world.location(self.dfs.root).unwrap();
+        let arch_index = *self.dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
 
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
@@ -248,9 +261,9 @@ where
         let root = arch.manual_chunk(Slice::single(loc.slot));
 
         if let Some(root) = root {
-            Self::cascade_inner(
+            Self::traverse_inner(
                 &mut self.prepared,
-                &self.dfs_state.adj,
+                &self.dfs.state.adj,
                 root,
                 value,
                 &mut func,
@@ -258,7 +271,7 @@ where
         }
     }
 
-    fn cascade_inner<'q, T, Fn>(
+    fn traverse_inner<'q, T, Fn>(
         archetypes: &mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
         adj: &BTreeMap<Entity, Vec<usize>>,
         mut batch: Batch<'q, Q::Prepared, F::Prepared>,
@@ -281,7 +294,7 @@ where
                 let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
 
                 for batch in p.chunks() {
-                    Self::cascade_inner(archetypes, adj, batch, &value, func)
+                    Self::traverse_inner(archetypes, adj, batch, &value, func)
                 }
             }
         }
