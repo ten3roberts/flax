@@ -216,7 +216,7 @@ mod test {
         }
 
         batch.set(a(), (0..10).cycle()).unwrap();
-        batch.set(name(), (0..).map(|v| v.to_string())).unwrap();
+        batch.set(name(), (0i32..).map(|v| v.to_string())).unwrap();
 
         let mut world = World::new();
         let ids = batch.spawn(&mut world);
