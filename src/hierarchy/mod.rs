@@ -47,7 +47,7 @@ pub trait QueryStrategy<'w, Q, F> {
     fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>) -> Self::Borrow;
 
     /// Returns the system access
-    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<Access>;
+    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<Access>;
 }
 
 // /// Describes how the query behaves and iterates.
@@ -386,7 +386,7 @@ mod test {
         Query::new((entity_ids(), name()))
             .with_strategy(Dfs::new(child_of, root))
             .borrow(&world)
-            .cascade(&Vec::new(), |(id, name), prefix| {
+            .traverse(&Vec::new(), |(id, name), prefix| {
                 let mut p = prefix.clone();
                 p.push(name.clone());
 
