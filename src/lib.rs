@@ -207,8 +207,6 @@ mod component;
 pub mod entity;
 /// Filter items yielded queries
 pub mod filter;
-/// Query the world
-pub mod query;
 mod system;
 mod world;
 
@@ -232,7 +230,8 @@ pub mod visitors;
 // mod cascade;
 /// Subscribe to changes in the world
 pub mod events;
-mod hierarchy;
+/// Query the world
+pub mod query;
 mod relation;
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein
@@ -252,10 +251,10 @@ pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
 pub use filter::{All, And, Cmp, Nothing, Or, With, Without};
-pub use hierarchy::*;
 pub use meta::*;
 pub use paste::paste;
-pub(crate) use query::{find_missing_components, ArchetypeSearcher};
+pub(crate) use query::ArchetypeSearcher;
+pub use query::*;
 pub use relation::*;
 pub use schedule::*;
 pub use system::*;

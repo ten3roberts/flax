@@ -1,29 +1,57 @@
 mod borrow;
+mod data;
+mod dfs;
+mod difference;
 mod entity;
-pub(crate) mod searcher;
-use alloc::vec::Vec;
 mod iter;
-use core::fmt::{self, Debug};
+mod planar;
+mod searcher;
 
-use atomic_refcell::AtomicRef;
-use itertools::Itertools;
+use core::fmt::Debug;
 
+pub use planar::{Planar, QueryBorrow};
+
+use crate::archetype::Slot;
+use crate::fetch::FmtQuery;
+use crate::filter::{BatchSize, Filtered, WithRelation, WithoutRelation};
 use crate::{
-    archetype::{Archetype, ArchetypeId, Slot},
-    component_info,
-    fetch::*,
-    filter::*,
-    system::{SystemAccess, SystemContext, SystemData},
-    util::TupleCloned,
-    Access, AccessKind, Component, ComponentValue, FetchItem, World,
+    Access, And, Component, ComponentValue, Entity, FetchItem, RelationExt, With, Without,
 };
-use crate::{AsBorrow, Entity, RelationExt};
+use crate::{All, Fetch, World};
 
-pub use borrow::*;
-pub use entity::*;
-pub use iter::*;
+use self::borrow::QueryBorrowState;
+pub(crate) use borrow::*;
+pub use data::*;
+pub use dfs::*;
+pub use entity::EntityBorrow;
+pub(crate) use iter::*;
+pub use planar::*;
+pub use searcher::ArchetypeSearcher;
 
-pub use self::searcher::ArchetypeSearcher;
+/// Similar to [`Query`](crate::Query), except optimized to only fetch a single entity.
+///
+/// This has the advantage of locking fewer archetypes, and allowing for better multithreading
+/// scheduling.
+///
+/// This replicates the behaviour of [`QueryBorrow::get`](crate::QueryBorrow::get)
+///
+/// The difference between this and [`EntityRef`](crate::EntityRef) is that the entity ref allows access to any
+/// component, wheras the query predeclares a group of components to retrieve. This increases
+/// ergonomics in situations such as borrowing resources from a static resource entity.
+///
+/// Create an entity query using [`Query::entity`](crate::Query::entity).
+pub type EntityQuery<Q, F> = Query<Q, F, Entity>;
+
+#[doc(hidden)]
+/// Describes how the query behaves and iterates.
+pub trait QueryStrategy<'w, Q, F> {
+    type Borrow;
+    /// Prepare a kind of borrow for the current state
+    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow;
+
+    /// Returns the system access
+    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<Access>;
+}
 
 /// Represents a query and state for a given world.
 /// The archetypes to visit is cached in the query which means it is more
@@ -33,31 +61,35 @@ pub use self::searcher::ArchetypeSearcher;
 /// Two of the same queries can be run at the same time as long as they don't
 /// borrow an archetype's component mutably at the same time.
 #[derive(Clone)]
-pub struct Query<Q, F = All> {
-    // The archetypes to visit
-    archetypes: Vec<ArchetypeId>,
+pub struct Query<Q, F = All, S = Planar> {
     fetch: Filtered<Q, F>,
-    include_components: bool,
+
     change_tick: u32,
+    include_components: bool,
     archetype_gen: u32,
+
+    strategy: S,
 }
 
-impl<Q, F> Debug for Query<Q, F>
+impl<Q: Debug, F: Debug, S: Debug> Debug for Query<Q, F, S>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Fetch<'x>,
 {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Query")
             .field("fetch", &FmtQuery(&self.fetch.fetch))
             .field("filter", &FmtQuery(&self.fetch.filter))
+            .field("change_tick", &self.change_tick)
+            .field("include_components", &self.include_components)
+            .field("strategy", &self.strategy)
             .finish()
     }
 }
 
-impl<Q> Query<Q, All>
+impl<Q> Query<Q, All, Planar>
 where
-    Q: for<'x> Fetch<'x>,
+    Planar: for<'x> QueryStrategy<'x, Q, All>,
 {
     /// Construct a new query which will fetch all items in the given query.
 
@@ -69,55 +101,105 @@ where
     /// [`Query::with_components`]
     ///
     /// A fetch may also contain filters
-    pub fn new(query: Q) -> Self {
+    /// Construct a new query which will fetch all items in the given query.
+
+    /// The query can be either a singular component, a tuple of components, or
+    /// any other type which implements [crate::Fetch].
+    ///
+    /// **Note**: The query will not yield components, as it may not be intended
+    /// behaviour since the most common intent is the entities. See
+    /// [`Query::with_components`]
+    ///
+    /// A fetch may also contain filters
+    /// Construct a new query which will fetch all items in the given query.
+
+    /// The query can be either a singular component, a tuple of components, or
+    /// any other type which implements [crate::Fetch].
+    ///
+    /// **Note**: The query will not yield components, as it may not be intended
+    /// behaviour since the most common intent is the entities. See
+    /// [`Query::with_components`]
+    ///
+    /// A fetch may also contain filters
+    pub fn new(fetch: Q) -> Self {
         Self {
-            archetypes: Vec::new(),
-            fetch: Filtered::new(query, All),
+            fetch: Filtered::new(fetch, All),
             change_tick: 0,
-            archetype_gen: 0,
             include_components: false,
+            strategy: Planar::new(false),
+            archetype_gen: 0,
         }
     }
 
-    /// Include component entities for the query.
-    /// The default is to hide components as they are usually not desired during
-    /// iteration.
-    pub fn with_components(self) -> Self {
-        Self {
-            include_components: true,
-            ..self
-        }
+    /// Include components in a planar query.
+    ///
+    /// **Note**: only relevant for the `planar` strategy
+    pub fn with_components(mut self) -> Self {
+        self.strategy.include_components = true;
+        self.archetype_gen = 0;
+        self
     }
 }
 
-impl<Q, F> Query<Q, F>
+impl<Q, F> Query<Q, F, Planar>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Fetch<'x>,
 {
-    /// Transform the query into a query for a single entity
-    pub fn entity(self, id: Entity) -> EntityQuery<Q, F> {
-        EntityQuery {
+    /// Use the given [`QueryStrategy`].
+    ///
+    /// This replaces the previous strategy
+    pub fn with_strategy<S>(self, strategy: S) -> Query<Q, F, S>
+    where
+        S: for<'w> QueryStrategy<'w, Q, F>,
+    {
+        Query {
             fetch: self.fetch,
-            id,
             change_tick: self.change_tick,
+            include_components: self.include_components,
+            strategy,
+            archetype_gen: 0,
         }
     }
 
+    /// Transform the query into a query for a single entity
+    pub fn entity(self, id: Entity) -> EntityQuery<Q, F>
+    where
+        Entity: for<'w> QueryStrategy<'w, Q, F>,
+    {
+        self.with_strategy(id)
+    }
+
+    /// Collect all elements in the query into a vector
+    pub fn collect_vec<'w, T>(&'w mut self, world: &'w World) -> Vec<T>
+    where
+        T: 'static,
+        Q: for<'q> FetchItem<'q, Item = T>,
+    {
+        let mut borrow = self.borrow(world);
+        borrow.iter().collect()
+    }
+}
+
+impl<Q, F, S> Query<Q, F, S>
+where
+    Q: for<'x> Fetch<'x>,
+    F: for<'x> Fetch<'x>,
+{
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<G>(self, filter: G) -> Query<Q, And<F, G>> {
+    pub fn filter<G>(self, filter: G) -> Query<Q, And<F, G>, S> {
         Query {
             fetch: Filtered::new(self.fetch.fetch, And::new(self.fetch.filter, filter)),
-            archetypes: Vec::new(),
             change_tick: self.change_tick,
-            archetype_gen: self.archetype_gen,
             include_components: self.include_components,
+            strategy: self.strategy,
+            archetype_gen: 0,
         }
     }
 
     /// Limits the size of each batch using [`QueryBorrow::iter_batched`]
-    pub fn batch_size(self, size: Slot) -> Query<Q, And<F, BatchSize>> {
+    pub fn batch_size(self, size: Slot) -> Query<Q, And<F, BatchSize>, S> {
         self.filter(BatchSize(size))
     }
 
@@ -125,7 +207,7 @@ where
     pub fn with_relation<T: ComponentValue>(
         self,
         rel: impl RelationExt<T>,
-    ) -> Query<Q, And<F, WithRelation>> {
+    ) -> Query<Q, And<F, WithRelation>, S> {
         self.filter(rel.with_relation())
     }
 
@@ -133,17 +215,20 @@ where
     pub fn without_relation<T: ComponentValue>(
         self,
         rel: impl RelationExt<T>,
-    ) -> Query<Q, And<F, WithoutRelation>> {
+    ) -> Query<Q, And<F, WithoutRelation>, S> {
         self.filter(rel.without_relation())
     }
 
     /// Shortcut for filter(without)
-    pub fn without<T: ComponentValue>(self, component: Component<T>) -> Query<Q, And<F, Without>> {
+    pub fn without<T: ComponentValue>(
+        self,
+        component: Component<T>,
+    ) -> Query<Q, And<F, Without>, S> {
         self.filter(component.without())
     }
 
     /// Shortcut for filter(with)
-    pub fn with<T: ComponentValue>(self, component: Component<T>) -> Query<Q, And<F, With>> {
+    pub fn with<T: ComponentValue>(self, component: Component<T>) -> Query<Q, And<F, With>, S> {
         self.filter(component.with())
     }
 
@@ -174,21 +259,7 @@ where
         (old_tick, new_tick)
     }
 
-    /// Returns the last change tick the query was run on.
-    /// Any changes > change_tick will be yielded in a query iteration.
-    pub fn change_tick(&self) -> u32 {
-        self.change_tick
-    }
-
-    /// Returns true if the query will mutate any components
-    pub fn is_mut(&self) -> bool {
-        Q::MUTABLE
-    }
-
     /// Borrow the world for the query.
-    ///
-    /// Allows for both random access and efficient iteration.
-    /// See: [`QueryBorrow::get`] and [`QueryBorrow::iter`]
     ///
     /// The returned value holds the borrows of the query fetch. As such, all
     /// references from iteration or using [QueryBorrow::get`] will have a
@@ -199,160 +270,52 @@ where
     ///
     /// It is safe to use the same prepared query for both iteration and random
     /// access, Rust's borrow rules will ensure aliasing rules.
-    pub fn borrow<'w>(&'w mut self, world: &'w World) -> QueryBorrow<'w, Q, F> {
+    pub fn borrow<'w>(&'w mut self, world: &'w World) -> S::Borrow
+    where
+        S: QueryStrategy<'w, Q, F>,
+    {
         let (old_tick, new_tick) = self.prepare_tick(world);
 
-        // Make sure the archetypes to visit are up to date
+        let query_state = QueryBorrowState {
+            old_tick,
+            new_tick,
+            world,
+            fetch: &self.fetch,
+        };
+
         let archetype_gen = world.archetype_gen();
-        if archetype_gen > self.archetype_gen {
-            self.archetypes = self.get_archetypes(world);
-            self.archetype_gen = archetype_gen;
-        }
+        let dirty = archetype_gen > self.archetype_gen;
 
-        QueryBorrow::new(world, &self.archetypes, &self.fetch, old_tick, new_tick)
+        self.archetype_gen = archetype_gen;
+
+        self.strategy.borrow(query_state, dirty)
     }
 
-    /// Gathers all elements in the query as a Vec of owned values.
-    pub fn as_vec<'w, C>(&'w mut self, world: &'w World) -> Vec<C>
-    where
-        for<'q> <Q as FetchItem<'q>>::Item: TupleCloned<Cloned = C>,
-    {
-        let mut prepared = self.borrow(world);
-        prepared
-            .iter()
-            .map(|v| v.clone_tuple_contents())
-            .collect_vec()
-    }
+    // pub fn state(&mut self, world: &World) -> &mut S {
+    //     let archetype_gen = world.archetype_gen();
+    //     if archetype_gen > self.archetype_gen {
+    //         self.state = None;
+    //         self.archetype_gen = archetype_gen;
+    //     }
 
-    /// Collect all elements in the query into a vector
-    pub fn collect_vec<'w, T>(&'w mut self, world: &'w World) -> Vec<T>
-    where
-        T: 'static,
-        Q: for<'q> FetchItem<'q, Item = T>,
-    {
-        self.borrow(world).iter().collect()
-    }
+    //     self.state.get_or_insert_with(|| {
+    //         // if !self.include_components {
+    //         //     searcher.add_excluded(component_info().key());
+    //         // }
 
-    pub(crate) fn get_archetypes<'a>(&'a self, world: &'a World) -> Vec<ArchetypeId> {
-        let mut searcher = ArchetypeSearcher::default();
-        self.fetch.searcher(&mut searcher);
-
-        if !self.include_components {
-            searcher.add_excluded(component_info().key());
-        }
-
-        let archetypes = &world.archetypes;
-
-        let filter = |arch: &Archetype| self.fetch.filter_arch(arch);
-
-        let mut result = Vec::new();
-        searcher.find_archetypes(archetypes, |arch_id, arch| {
-            if filter(arch) {
-                result.push(arch_id)
-            }
-        });
-
-        result
-    }
-}
-
-impl<Q, F> SystemAccess for Query<Q, F>
-where
-    Q: for<'x> Fetch<'x>,
-    F: for<'x> Fetch<'x>,
-{
-    fn access(&self, world: &World) -> Vec<crate::system::Access> {
-        self.get_archetypes(world)
-            .into_iter()
-            .flat_map(|arch_id| {
-                let arch = world.archetypes.get(arch_id);
-                let data = FetchAccessData {
-                    world,
-                    arch,
-                    arch_id,
-                };
-
-                self.fetch.access(data)
-            })
-            .chain([Access {
-                kind: AccessKind::World,
-                mutable: false,
-            }])
-            .collect_vec()
-    }
-}
-
-/// Provides a query and a borrow of the world during system execution
-pub struct QueryData<'a, Q, F = All>
-where
-    Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Fetch<'x> + 'static,
-{
-    world: AtomicRef<'a, World>,
-    query: &'a mut Query<Q, F>,
-}
-
-impl<'a, Q, F> SystemData<'a> for Query<Q, F>
-where
-    Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Fetch<'x> + 'static,
-{
-    type Value = QueryData<'a, Q, F>;
-
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
-        let world = ctx.world().map_err(|_| {
-            eyre::eyre!(alloc::format!(
-                "Failed to borrow world for query: {:?}",
-                self
-            ))
-        })?;
-
-        Ok(QueryData { world, query: self })
-    }
-}
-
-impl<'a, Q, F> QueryData<'a, Q, F>
-where
-    for<'x> Q: Fetch<'x>,
-    for<'x> F: Fetch<'x>,
-{
-    /// Prepare the query.
-    ///
-    /// This will borrow all required archetypes for the duration of the
-    /// `PreparedQuery`.
-    ///
-    /// The same query can be prepared multiple times, though not
-    /// simultaneously.
-    pub fn borrow(&mut self) -> QueryBorrow<Q, F> {
-        self.query.borrow(&self.world)
-    }
-}
-
-impl<'a, 'w, Q, F> AsBorrow<'a> for QueryData<'w, Q, F>
-where
-    Q: for<'x> Fetch<'x> + 'static,
-    F: for<'x> Fetch<'x> + 'static,
-{
-    type Borrowed = QueryBorrow<'a, Q, F>;
-
-    fn as_borrow(&'a mut self) -> Self::Borrowed {
-        self.borrow()
-    }
+    //         self.strategy.state(world, &self.fetch)
+    //     })
+    // }
 }
 
 #[cfg(test)]
 mod test {
-
-    use glam::{vec3, Vec3};
+    use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{component, name, Error, Query, System};
+    use crate::{child_of, entity_ids, name, CommandBuffer, Entity, Error, FetchExt, Or, Query};
 
     use super::*;
-
-    component! {
-        position: Vec3,
-    }
 
     #[test]
     fn changes() {
@@ -438,5 +401,189 @@ mod test {
             borrow.get(id4),
             Err(Error::MissingComponent(id4, b().info()))
         );
+    }
+
+    #[test]
+    fn traverse_dfs() {
+        let mut world = World::new();
+
+        component! {
+            a: i32,
+            path: String,
+            b: &'static str,
+        }
+
+        let root = Entity::builder()
+            .set(name(), "root".into())
+            .set(a(), 0)
+            .attach(
+                child_of,
+                Entity::builder()
+                    .set(name(), "child.1".into())
+                    .set(a(), 1)
+                    .attach(
+                        child_of,
+                        Entity::builder()
+                            .set(name(), "child.1.1".into())
+                            .set(a(), 2),
+                    ),
+            )
+            .attach(
+                child_of,
+                Entity::builder()
+                    .set(name(), "child.2".into())
+                    .set(a(), 3)
+                    .set(b(), "Foo"),
+            )
+            .attach(
+                child_of,
+                Entity::builder().set(name(), "child.3".into()).set(a(), 4),
+            )
+            .spawn(&mut world);
+
+        // let mut query = crate::Query::new((name().cloned(), a().copied()));
+        let mut query =
+            Query::new((name().cloned(), a().copied())).with_strategy(Dfs::new(child_of, root));
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 0),
+                ("child.2".to_string(), 3),
+                ("child.1".to_string(), 1),
+                ("child.1.1".to_string(), 2),
+                ("child.3".to_string(), 4)
+            ]
+        );
+
+        let mut cmd = CommandBuffer::new();
+
+        Query::new((entity_ids(), name()))
+            .with_strategy(Dfs::new(child_of, root))
+            .borrow(&world)
+            .traverse(&Vec::new(), |(id, name), prefix| {
+                let mut p = prefix.clone();
+                p.push(name.clone());
+
+                cmd.set(id, path(), p.join("::"));
+                p
+            });
+
+        cmd.apply(&mut world).unwrap();
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 0),
+                ("child.1".to_string(), 1),
+                ("child.1.1".to_string(), 2),
+                ("child.3".to_string(), 4),
+                ("child.2".to_string(), 3),
+            ]
+        );
+
+        let mut paths = Query::new(path().cloned()).collect_vec(&world);
+        paths.sort();
+
+        assert_eq!(
+            paths,
+            [
+                "root",
+                "root::child.1",
+                "root::child.1::child.1.1",
+                "root::child.2",
+                "root::child.3",
+            ]
+        );
+
+        // Change detection
+
+        let mut query = Query::new((name().cloned(), a().modified().copied()))
+            .with_strategy(Dfs::new(child_of, root));
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 0),
+                ("child.1".to_string(), 1),
+                ("child.1.1".to_string(), 2),
+                ("child.3".to_string(), 4),
+                ("child.2".to_string(), 3),
+            ]
+        );
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, []);
+        *world.get_mut(root, a()).unwrap() -= 1;
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, [("root".to_string(), -1)]);
+
+        Query::new((child_of(root), a().as_mut()))
+            .borrow(&world)
+            .for_each(|(_, a)| {
+                *a *= -1;
+            });
+
+        // No changes, since the root is not modified
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, []);
+
+        Query::new((name(), a().as_mut()))
+            .filter(child_of(root).with() | name().eq("root".to_string()))
+            .borrow(&world)
+            .for_each(|(id, a)| {
+                eprintln!("Writing to: {id}");
+                *a *= -10;
+            });
+
+        let items = query.borrow(&world).iter().collect_vec();
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 10),
+                ("child.1".to_string(), 10),
+                ("child.3".to_string(), 40),
+                ("child.2".to_string(), 30),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_planar() {
+        let mut world = World::new();
+
+        component! {
+            a: i32,
+        }
+
+        let id = Entity::builder()
+            .set(name(), "id".into())
+            .set(a(), 5)
+            .spawn(&mut world);
+        let id2 = Entity::builder()
+            .set(name(), "id2".into())
+            .set(a(), 7)
+            .spawn(&mut world);
+
+        let mut query = Query::new(name());
+
+        assert_eq!(query.borrow(&world).get(id), Ok(&"id".to_string()));
+        assert_eq!(query.borrow(&world).get(id2), Ok(&"id2".to_string()));
+        assert_eq!(
+            query.borrow(&world).get(a().id()),
+            Err(Error::DoesNotMatch(a().id()))
+        );
+
+        let mut query = query.with_components();
+        assert_eq!(query.borrow(&world).get(a().id()), Ok(&"a".to_string()));
     }
 }

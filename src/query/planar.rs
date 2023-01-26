@@ -13,8 +13,8 @@ use crate::{
     error::Result,
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
-    query::ArchetypeSearcher,
-    Access, AccessKind, All, ArchetypeId, Entity, Error, Fetch, FetchItem, World,
+    Access, AccessKind, All, ArchetypeId, ArchetypeSearcher, Entity, Error, Fetch, FetchItem,
+    World,
 };
 
 use super::{
