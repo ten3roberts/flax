@@ -4,6 +4,7 @@ use core::{
     slice::{self, IterMut},
 };
 
+use alloc::vec::Vec;
 use smallvec::SmallVec;
 
 use crate::{
@@ -78,7 +79,6 @@ where
 
     fn borrow(&'w mut self, state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow {
         // Make sure the archetypes to visit are up to date
-        dbg!(dirty);
         if dirty {
             Self::update_state(
                 self.include_components,
@@ -271,7 +271,6 @@ where
     }
 
     fn prepare_archetype(&mut self, arch_id: ArchetypeId) -> Option<usize> {
-        eprintln!("Preparing archetypes");
         let prepared = &mut self.prepared;
 
         if let Some(idx) = prepared.iter().position(|v| v.arch_id == arch_id) {

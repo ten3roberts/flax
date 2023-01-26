@@ -8,7 +8,7 @@ pub trait PeekableFetch<'p> {
     /// Peek a slot
     /// # Safety
     /// A peek of the same slot should not alias with a reference returned by
-    /// [`PreparedFetch::fetch`].
+    /// [`PreparedFetch::fetch`](crate::fetch::PreparedFetch::fetch).
     unsafe fn peek(&'p self, slot: Slot) -> Self::Peek;
 }
 

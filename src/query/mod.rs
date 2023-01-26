@@ -9,6 +9,7 @@ mod searcher;
 
 use core::fmt::Debug;
 
+use alloc::vec::Vec;
 pub use planar::{Planar, QueryBorrow};
 
 use crate::archetype::Slot;
