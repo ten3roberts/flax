@@ -5,6 +5,9 @@ mod difference;
 mod entity;
 mod iter;
 mod planar;
+mod searcher;
+
+use core::fmt::Debug;
 
 pub use planar::{Planar, QueryBorrow};
 
@@ -12,8 +15,7 @@ use crate::archetype::Slot;
 use crate::fetch::FmtQuery;
 use crate::filter::{BatchSize, Filtered, WithRelation, WithoutRelation};
 use crate::{
-    Access, And, ArchetypeId, Component, ComponentValue, Entity, FetchItem, RelationExt, With,
-    Without,
+    Access, And, Component, ComponentValue, Entity, FetchItem, RelationExt, With, Without,
 };
 use crate::{All, Fetch, World};
 
@@ -24,6 +26,7 @@ pub use dfs::*;
 pub use entity::EntityBorrow;
 pub(crate) use iter::*;
 pub use planar::*;
+pub use searcher::ArchetypeSearcher;
 
 /// Similar to [`Query`](crate::Query), except optimized to only fetch a single entity.
 ///
@@ -50,34 +53,13 @@ pub trait QueryStrategy<'w, Q, F> {
     fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<Access>;
 }
 
-// /// Describes how the query behaves and iterates.
-// pub trait QueryStrategy {
-//     /// Cached state
-//     type State<'w>: QueryState<'w>;
-//     /// Prepare a state when the world changes shape
-//     fn state<'w, Q: Fetch<'w>, F: Fetch<'w>>(
-//         &'w self,
-//         world: &'w World,
-//         fetch: &Filtered<Q, F>,
-//     ) -> Self::State<'w>;
-// }
-
-// #[doc(hidden)]
-// pub trait QueryState<'w> {
-//     type Borrow<Q, F>;
-//     /// Prepare a kind of borrow for the current state
-//     fn borrow<Q: Fetch<'w>, F: Fetch<'w>>(
-//         &'w self,
-//         query_state: QueryBorrowState<'w, Filtered<Q, F>>,
-//     ) -> Self::Borrow<Q, F>;
-//     /// Returns the system access
-//     fn access<Q: Fetch<'w>, F: Fetch<'w>>(
-//         &self,
-//         world: &World,
-//         fetch: &Filtered<Q, F>,
-//     ) -> Vec<Access>;
-// }
-/// Provides utilities for working with and manipulating hierarchies and graphs
+/// Represents a query and state for a given world.
+/// The archetypes to visit is cached in the query which means it is more
+/// performant to reuse the query than creating a new one.
+///
+/// The archetype borrowing assures aliasing.
+/// Two of the same queries can be run at the same time as long as they don't
+/// borrow an archetype's component mutably at the same time.
 #[derive(Clone)]
 pub struct Query<Q, F = All, S = Planar> {
     fetch: Filtered<Q, F>,
@@ -89,8 +71,7 @@ pub struct Query<Q, F = All, S = Planar> {
     strategy: S,
 }
 
-impl<Q: core::fmt::Debug, F: core::fmt::Debug, S: core::fmt::Debug> core::fmt::Debug
-    for Query<Q, F, S>
+impl<Q: Debug, F: Debug, S: Debug> Debug for Query<Q, F, S>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Fetch<'x>,

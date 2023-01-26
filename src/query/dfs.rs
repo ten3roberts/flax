@@ -11,8 +11,7 @@ use crate::{
     archetype::{Archetype, Slice},
     entity::EntityLocation,
     fetch::PreparedFetch,
-    query::ArchetypeSearcher,
-    Archetypes, ComponentKey, Entity, Fetch, FetchItem, RelationExt, World,
+    ArchetypeSearcher, Archetypes, ComponentKey, Entity, Fetch, FetchItem, RelationExt, World,
 };
 
 type AdjMap<'a> = BTreeMap<Entity, SmallVec<[(ArchetypeId, &'a Archetype); 8]>>;
