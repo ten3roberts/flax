@@ -314,8 +314,9 @@ where
     }
 
     /// Access any number of entites which are disjoint.
-    /// Return None if any `id` is not disjoint.
     /// See: [`Self::get`]
+    /// # Panics
+    /// If the entities are not disjoint
     pub fn get_disjoint<'q, const C: usize>(
         &'q mut self,
         ids: [Entity; C],
@@ -326,8 +327,7 @@ where
         let mut sorted = ids;
         sorted.sort();
         if sorted.windows(C).any(|v| v[0] == v[1]) {
-            // Not disjoint
-            return Err(Error::Disjoint(ids.to_vec()));
+            panic!("{ids:?} are not disjoint");
         }
 
         // Prepare all
@@ -383,7 +383,7 @@ where
 
             let mut chunk = match prepared.manual_chunk(Slice::single(slot)) {
                 Some(v) => v,
-                None => return Err(Error::MismatchedFilter(id)),
+                None => return Err(Error::Filtered(id)),
             };
             // It is now guaranteed that the filter also matches since the archetype would not be
             // included otherwise.
@@ -432,7 +432,7 @@ where
         let p = &mut self.prepared[idx];
         let mut chunk = match p.manual_chunk(Slice::single(slot)) {
             Some(v) => v,
-            None => return Err(Error::MismatchedFilter(id)),
+            None => return Err(Error::Filtered(id)),
         };
 
         // It is now guaranteed that the filter also matches since the archetype would not be

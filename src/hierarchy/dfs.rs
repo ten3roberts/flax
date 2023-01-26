@@ -147,14 +147,16 @@ where
 {
     type Borrow = DfsBorrow<'w, Q, F>;
 
-    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>) -> Self::Borrow {
-        Self::update_state(
-            self.relation,
-            self.root,
-            &mut self.state,
-            query_state.world,
-            query_state.fetch,
-        );
+    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow {
+        if dirty {
+            Self::update_state(
+                self.relation,
+                self.root,
+                &mut self.state,
+                query_state.world,
+                query_state.fetch,
+            );
+        }
 
         DfsBorrow::new(query_state, self)
     }
