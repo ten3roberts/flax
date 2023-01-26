@@ -1,5 +1,5 @@
 use crate::{
-    archetype::{unknown_component, Slice},
+    archetype::Slice,
     entity::EntityLocation,
     error::Result,
     fetch::{FetchAccessData, PreparedFetch},
@@ -13,30 +13,39 @@ use super::{borrow::QueryBorrowState, difference::find_missing_components};
 fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
     id: Entity,
     state: &'a QueryBorrowState<'w, Q, F>,
-) -> EntityState<'w, Q::Prepared, F::Prepared> {
+) -> Result<(
+    EntityLocation,
+    PreparedArchetype<'w, Q::Prepared, F::Prepared>,
+)> {
     let loc = match state.world.location(id) {
         Ok(v) => v,
-        Err(_) => return EntityState::NoSuchEntity(id),
+        Err(_) => return Err(Error::NoSuchEntity(id)),
     };
 
     let arch = state.world.archetypes.get(loc.arch_id);
 
     // Check static filtering
     if !state.fetch.filter_arch(arch) {
-        return EntityState::MismatchedFetch(id, loc);
+        return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
+            Some(missing) => Err(Error::MissingComponent(id, missing)),
+            None => Err(Error::DoesNotMatch(id)),
+        };
     }
 
     let Some(mut p) = state.prepare_fetch(arch, loc.arch_id) else {
-        return EntityState::MismatchedFetch(id, loc);
+        return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
+            Some(missing) => Err(Error::MissingComponent(id, missing)),
+            None => Err(Error::DoesNotMatch(id)),
+        }
     };
 
     // Safety
     // Exclusive access
     if unsafe { p.fetch.filter_slots(Slice::single(loc.slot)) }.is_empty() {
-        return EntityState::MismatchedFilter(id);
+        return Err(Error::Filtered(id));
     }
 
-    EntityState::Complete { loc, p }
+    Ok((loc, p))
 }
 
 enum EntityState<'w, Q, F> {
@@ -57,7 +66,7 @@ where
 {
     type Borrow = EntityBorrow<'w, Q, F>;
 
-    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>) -> Self::Borrow {
+    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, _dirty: bool) -> Self::Borrow {
         EntityBorrow {
             prepared: state(*self, &query_state),
             state: query_state,
@@ -102,7 +111,10 @@ where
     F: Fetch<'w>,
 {
     state: QueryBorrowState<'w, Q, F>,
-    prepared: EntityState<'w, Q::Prepared, F::Prepared>,
+    prepared: Result<(
+        EntityLocation,
+        PreparedArchetype<'w, Q::Prepared, F::Prepared>,
+    )>,
 }
 
 impl<'w, Q, F> EntityBorrow<'w, Q, F>
@@ -118,19 +130,12 @@ where
         'w: 'q,
     {
         match &mut self.prepared {
-            EntityState::Complete { loc, p } => {
+            Ok((loc, p)) => {
                 // self is a mutable reference, so this is the only reference to the slot
                 p.fetch.set_visited(Slice::single(loc.slot));
                 unsafe { Ok(p.fetch.fetch(loc.slot)) }
             }
-            EntityState::NoSuchEntity(id) => Err(Error::NoSuchEntity(*id)),
-            EntityState::MismatchedFilter(id) => Err(Error::MismatchedFilter(*id)),
-            EntityState::MismatchedFetch(id, loc) => Err(Error::MissingComponent(
-                *id,
-                find_missing_components(self.state.fetch, loc.arch_id, self.state.world)
-                    .next()
-                    .unwrap_or_else(|| unknown_component().info()),
-            )),
+            Err(e) => Err(e.clone()),
         }
     }
 }

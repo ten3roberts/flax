@@ -186,7 +186,7 @@ where
                 unsafe { Ok(prepared.fetch(loc.slot)) }
             }
             State::NoSuchEntity(id) => Err(Error::NoSuchEntity(*id)),
-            State::MismatchedFilter(id, _) => Err(Error::MismatchedFilter(*id)),
+            State::MismatchedFilter(id, _) => Err(Error::Filtered(*id)),
             State::MismatchedFetch(id, loc) => Err(Error::MissingComponent(
                 *id,
                 find_missing_components(self.fetch, loc.arch_id, self.world)

@@ -432,7 +432,7 @@ mod test {
 
         drop(borrow);
         let mut borrow = query.borrow(&world);
-        assert_eq!(borrow.get_disjoint(ids), Err(Error::MismatchedFilter(id)));
+        assert_eq!(borrow.get_disjoint(ids), Err(Error::Filtered(id)));
 
         assert_eq!(
             borrow.get(id4),

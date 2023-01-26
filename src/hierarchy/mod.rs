@@ -44,7 +44,7 @@ pub type EntityQuery<Q, F> = Query<Q, F, Entity>;
 pub trait QueryStrategy<'w, Q, F> {
     type Borrow;
     /// Prepare a kind of borrow for the current state
-    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>) -> Self::Borrow;
+    fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow;
 
     /// Returns the system access
     fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<Access>;
@@ -84,6 +84,7 @@ pub struct Query<Q, F = All, S = Planar> {
 
     change_tick: u32,
     include_components: bool,
+    archetype_gen: u32,
 
     strategy: S,
 }
@@ -145,6 +146,7 @@ where
             change_tick: 0,
             include_components: false,
             strategy: Planar::new(false),
+            archetype_gen: 0,
         }
     }
 
@@ -153,6 +155,7 @@ where
     /// **Note**: only relevant for the `planar` strategy
     pub fn with_components(mut self) -> Self {
         self.strategy.include_components = true;
+        self.archetype_gen = 0;
         self
     }
 }
@@ -174,6 +177,7 @@ where
             change_tick: self.change_tick,
             include_components: self.include_components,
             strategy,
+            archetype_gen: 0,
         }
     }
 
@@ -209,6 +213,7 @@ where
             change_tick: self.change_tick,
             include_components: self.include_components,
             strategy: self.strategy,
+            archetype_gen: 0,
         }
     }
 
@@ -297,7 +302,12 @@ where
             fetch: &self.fetch,
         };
 
-        self.strategy.borrow(query_state)
+        let archetype_gen = world.archetype_gen();
+        let dirty = archetype_gen > self.archetype_gen;
+
+        self.archetype_gen = archetype_gen;
+
+        self.strategy.borrow(query_state, dirty)
     }
 
     // pub fn state(&mut self, world: &World) -> &mut S {
@@ -322,7 +332,7 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{child_of, entity_ids, name, CommandBuffer, Entity, FetchExt, Query};
+    use crate::{child_of, entity_ids, name, CommandBuffer, Entity, Error, FetchExt, Query};
 
     use super::*;
 
@@ -478,5 +488,35 @@ mod test {
                 ("child.2".to_string(), 30),
             ]
         );
+    }
+
+    #[test]
+    fn test_planar() {
+        let mut world = World::new();
+
+        component! {
+            a: i32,
+        }
+
+        let id = Entity::builder()
+            .set(name(), "id".into())
+            .set(a(), 5)
+            .spawn(&mut world);
+        let id2 = Entity::builder()
+            .set(name(), "id2".into())
+            .set(a(), 7)
+            .spawn(&mut world);
+
+        let mut query = Query::new(name());
+
+        assert_eq!(query.borrow(&world).get(id), Ok(&"id".to_string()));
+        assert_eq!(query.borrow(&world).get(id2), Ok(&"id2".to_string()));
+        assert_eq!(
+            query.borrow(&world).get(a().id()),
+            Err(Error::DoesNotMatch(a().id()))
+        );
+
+        let mut query = query.with_components();
+        assert_eq!(query.borrow(&world).get(a().id()), Ok(&"a".to_string()));
     }
 }

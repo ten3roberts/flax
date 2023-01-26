@@ -191,9 +191,31 @@ fn query_view() {
         prepared.get_disjoint([entities[2], entities[8], entities[4]]),
         Ok([(&mut 0.2, &0.2), (&mut 0.8, &0.8), (&mut 0.4, &0.4)])
     );
+}
 
-    assert_eq!(
-        prepared.get_disjoint([entities[2], entities[8], entities[2]]),
-        Err(Error::Disjoint(vec![entities[2], entities[8], entities[2]]))
-    );
+#[test]
+#[should_panic]
+fn not_disjoint() {
+    component! {
+        vel: f32,
+        pos: f32,
+    }
+    let mut world = World::new();
+    let mut builder = EntityBuilder::new();
+    let entities = (0..10)
+        .map(|i| {
+            builder
+                .set(name(), format!("entity_{i}"))
+                .set(vel(), (i as f32) * 0.1)
+                .set_default(pos())
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let mut query = Query::new((pos().as_mut(), vel()));
+    let mut prepared = query.borrow(&world);
+
+    prepared
+        .get_disjoint([entities[2], entities[8], entities[2]])
+        .unwrap();
 }
