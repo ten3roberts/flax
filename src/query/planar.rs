@@ -436,15 +436,8 @@ where
                 }
             }
 
-            let PreparedArchetype { arch, fetch, .. } = self.archetypes.next()?;
-
-            let chunk = ArchetypeChunks {
-                slots: arch.slots(),
-                arch,
-                fetch,
-            };
-
-            self.current = Some(chunk);
+            let p = self.archetypes.next()?;
+            self.current = Some(p.chunks());
         }
     }
 }

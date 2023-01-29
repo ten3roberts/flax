@@ -6,8 +6,10 @@ use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
-use crate::archetype::{Archetype, Change};
-use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadComponent};
+use crate::archetype::{Archetype, Change, Slot};
+use crate::fetch::{
+    FetchAccessData, FetchPrepareData, PeekableFetch, PreparedFetch, ReadComponent,
+};
 use crate::{
     archetype::{ChangeList, Slice},
     Access, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
@@ -43,6 +45,14 @@ where
     T: ComponentValue,
 {
     type Item = &'q T;
+}
+
+impl<'p, Q: PeekableFetch<'p>, A> PeekableFetch<'p> for PreparedKindFilter<Q, A> {
+    type Peek = Q::Peek;
+
+    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
+        self.fetch.peek(slot)
+    }
 }
 
 impl<'w, T> Fetch<'w> for ChangeFilter<T>
@@ -168,10 +178,12 @@ where
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let cur = match self.find_slice(slots) {
             Some(v) => v,
-            None => return Slice::empty(),
+            None => return Slice::new(slots.end, slots.end),
         };
 
-        cur.intersect(&slots)
+        let slots = cur.intersect(&slots);
+        eprintln!("Got changed slots: {slots:?}");
+        slots
     }
 
     fn set_visited(&mut self, slots: Slice) {
@@ -257,12 +269,12 @@ mod test {
         let mut filter = PreparedKindFilter::new((), &changes[..], 2);
 
         unsafe {
-            assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::empty());
+            assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::new(10, 10));
             assert_eq!(filter.filter_slots(Slice::new(0, 50)), Slice::new(10, 20));
             assert_eq!(filter.filter_slots(Slice::new(20, 50)), Slice::new(20, 22));
             assert_eq!(filter.filter_slots(Slice::new(22, 50)), Slice::new(30, 50));
 
-            assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::empty());
+            assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::new(10, 10));
             // Due to modified state
             assert_eq!(filter.filter_slots(Slice::new(0, 50)), Slice::new(30, 50));
 

@@ -1,7 +1,7 @@
 use crate::{
     archetype::{Archetype, Slice, Slot},
     fetch::PreparedFetch,
-    filter::Filtered,
+    filter::{FilterIter, Filtered},
     Entity,
 };
 
@@ -97,37 +97,7 @@ where
 /// filters.
 pub struct ArchetypeChunks<'q, Q, F> {
     pub(crate) arch: &'q Archetype,
-    pub(crate) fetch: &'q mut Filtered<Q, F>,
-    /// The slots which remain to iterate over
-    pub(crate) slots: Slice,
-}
-
-impl<'q, Q, F> ArchetypeChunks<'q, Q, F>
-where
-    Q: PreparedFetch<'q>,
-    F: PreparedFetch<'q>,
-{
-    pub(crate) fn next_chunk(&mut self) -> Option<Slice> {
-        if self.slots.is_empty() {
-            return None;
-        }
-
-        // Safety
-        // The yielded slots are split off of `self.slots`
-        let cur = unsafe { self.fetch.filter_slots(self.slots) };
-
-        if cur.is_empty() {
-            None
-        } else {
-            let (_l, m, r) = self
-                .slots
-                .split_with(&cur)
-                .expect("Return value of filter must be a subset of `slots");
-
-            self.slots = r;
-            Some(m)
-        }
-    }
+    pub(crate) iter: FilterIter<&'q mut Filtered<Q, F>>,
 }
 
 impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
@@ -140,10 +110,10 @@ where
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         // Get the next chunk
-        let chunk = self.next_chunk()?;
+        let chunk = self.iter.next()?;
 
         // Fetch will never change and all calls are disjoint
-        let fetch = unsafe { &mut *(self.fetch as *mut Filtered<Q, F>) };
+        let fetch = unsafe { &mut *(self.iter.fetch as *mut Filtered<Q, F>) };
 
         // Set the chunk as visited
         fetch.set_visited(chunk);

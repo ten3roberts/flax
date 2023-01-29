@@ -294,27 +294,45 @@ macro_rules! tuple_impl {
 
             #[inline]
             unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
-                let mut start = slots.start;
+                // let mut start = slots.start;
 
-                ( $(
-                    {
-                        let v = self.$idx.filter_slots(slots);
-                        start = start.max(v.start);
-                        v
-                    },
-                )*);
+                while !slots.is_empty() {
+                        let v = slots;
 
-                let mut u = slots;
+                    $( let v = self.$idx.filter_slots(v);)*
 
-                // Clamp to end bound
-                start = start.min(slots.end);
-                slots.start = start;
+                    if !v.is_empty() || v.start == slots.end {
+                        return v;
+                    }
 
-                $(
-                    u = u.intersect(&self.$idx.filter_slots(slots));
-                )*
+                    slots.start = v.start;
+                }
+                slots
+                // $(
 
-                u
+                //     slots = self.$idx.filter_slots(slots);
+                // )*
+
+                // slots
+                // ( $(
+                //     {
+                //         let v = self.$idx.filter_slots(slots);
+                //         start = start.max(v.start);
+                //         v
+                //     },
+                // )*);
+
+                // let mut u = slots;
+
+                // // Clamp to end bound
+                // start = start.min(slots.end);
+                // slots.start = start;
+
+                // $(
+                //     u = u.intersect(&self.$idx.filter_slots(slots));
+                // )*
+
+                // u
             }
         }
 

@@ -12,7 +12,7 @@ use core::{
 use crate::{
     archetype::{Archetype, Slice, Slot},
     fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch},
-    Access, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
+    Access, ArchetypeChunks, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
 };
 
 pub use change::*;
@@ -135,23 +135,26 @@ where
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.fetch.filter_slots(slots);
-        let r = self.filter.filter_slots(slots);
+        eprintln!("l: {l:?}");
+        let r = self.filter.filter_slots(l);
+        dbg!(type_name::<F>(), r);
+        r
 
-        let i = l.intersect(&r);
-        if i.is_empty() {
-            // Go again but start with the highest bound
-            // This is caused by one of the sides being past the end of the
-            // other slice. As such, force the slice lagging behind to catch up
-            // to the upper floor
-            let common_start = l.start.max(r.start).clamp(slots.start, slots.end);
+        // let i = l.intersect(&r);
+        // if i.is_empty() {
+        //     // Go again but start with the highest bound
+        //     // This is caused by one of the sides being past the end of the
+        //     // other slice. As such, force the slice lagging behind to catch up
+        //     // to the upper floor
+        //     let common_start = l.start.max(r.start).clamp(slots.start, slots.end);
 
-            let slots = Slice::new(common_start, slots.end);
-            let l = self.fetch.filter_slots(slots);
-            let r = self.filter.filter_slots(slots);
-            l.intersect(&r)
-        } else {
-            i
-        }
+        //     let slots = Slice::new(common_start, slots.end);
+        //     let l = self.fetch.filter_slots(slots);
+        //     let r = self.filter.filter_slots(slots);
+        //     l.intersect(&r)
+        // } else {
+        //     i
+        // }
     }
 
     #[inline]
@@ -258,25 +261,39 @@ where
     }
 
     #[inline]
-    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        let l = self.left.filter_slots(slots);
-        let r = self.right.filter_slots(slots);
-
-        let i = l.intersect(&r);
-        if i.is_empty() {
-            // Go again but start with the highest bound
-            // This is caused by one of the sides being past the end of the
-            // other slice. As such, force the slice lagging behind to catch up
-            // to the upper floor
-            let common_start = l.start.max(r.start).clamp(slots.start, slots.end);
-
-            let slots = Slice::new(common_start, slots.end);
+    unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
+        eprintln!("and");
+        while !slots.is_empty() {
             let l = self.left.filter_slots(slots);
-            let r = self.right.filter_slots(slots);
-            l.intersect(&r)
-        } else {
-            i
+
+            let v = self.right.filter_slots(l);
+            eprintln!("v: {v:?}");
+
+            if !v.is_empty() {
+                return v;
+            }
+
+            slots.start = v.start;
         }
+
+        slots
+        // r
+
+        // let i = l.intersect(&r);
+        // if i.is_empty() {
+        //     // Go again but start with the highest bound
+        //     // This is caused by one of the sides being past the end of the
+        //     // other slice. As such, force the slice lagging behind to catch up
+        //     // to the upper floor
+        //     let common_start = l.start.max(r.start).clamp(slots.start, slots.end);
+
+        //     let slots = Slice::new(common_start, slots.end);
+        //     let l = self.left.filter_slots(slots);
+        //     let r = self.right.filter_slots(slots);
+        //     l.intersect(&r)
+        // } else {
+        //     i
+        // }
     }
 }
 
@@ -449,22 +466,23 @@ impl<'q> PreparedFetch<'q> for Slice {
 
 #[derive(Debug, Clone)]
 /// Iterator which yields slices which match the underlying filter
-pub struct FilterIter<F> {
+pub struct FilterIter<Q> {
+    pub(crate) fetch: Q,
+    // Remaining slots
     slots: Slice,
-    filter: F,
 }
 
-impl<F> FilterIter<F> {
+impl<Q> FilterIter<Q> {
     /// Creates a new filter iterator visiting the `slot` of the same archetype
     /// as `F`
-    pub fn new(slots: Slice, filter: F) -> Self {
-        Self { slots, filter }
+    pub fn new(slots: Slice, fetch: Q) -> Self {
+        Self { slots, fetch }
     }
 }
 
-impl<'q, F> Iterator for FilterIter<F>
+impl<'q, Q> Iterator for FilterIter<Q>
 where
-    F: PreparedFetch<'q>,
+    Q: PreparedFetch<'q>,
 {
     type Item = Slice;
 
@@ -472,21 +490,21 @@ where
         if self.slots.is_empty() {
             return None;
         }
-
+        eprintln!("Filtering {:?}", self.slots);
         // Safety
         // The yielded slots are split off of `self.slots`
-        let cur = unsafe { self.filter.filter_slots(self.slots) };
-
+        let cur = unsafe { self.fetch.filter_slots(self.slots) };
+        dbg!(cur);
         if cur.is_empty() {
             None
         } else {
-            let (_l, m, r) = {
-                match self.slots.split_with(&cur) {
-                    Some(val) => val,
-                    None => panic!("Return value of filter must be a subset of slots. Got: slots: {:?} cur: {cur:?}" ,self.slots),
-                }
-            };
+            let (_l, m, r) = self
+                .slots
+                .split_with(&cur)
+                .expect("Return value of filter must be a subset of `slots");
+            assert_eq!(cur, m);
 
+            dbg!(_l, m, r);
             self.slots = r;
             Some(m)
         }
@@ -740,6 +758,7 @@ impl<'q> PreparedFetch<'q> for bool {
         if *self {
             slots
         } else {
+            eprintln!("False");
             Slice::empty()
         }
     }
@@ -996,8 +1015,8 @@ mod tests {
 
         let archetype = Archetype::new([a().info(), b().info(), c().info()]);
 
-        let filter = ChangeFilter::new(a(), ChangeKind::Modified)
-            & (ChangeFilter::new(b(), ChangeKind::Modified))
+        let filter = (ChangeFilter::new(a(), ChangeKind::Modified)
+            & ChangeFilter::new(b(), ChangeKind::Modified))
             | (ChangeFilter::new(c(), ChangeKind::Modified));
 
         // Mock changes
@@ -1023,6 +1042,7 @@ mod tests {
             .set_modified(Change::new(Slice::new(96, 123), 3))
             .get(ChangeKind::Modified)
             .as_changed_set(1);
+        dbg!(&a_map, &b_map, &c_map);
 
         // Brute force
         let slots = Slice::new(0, 1000);

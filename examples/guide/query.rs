@@ -93,7 +93,7 @@ fn main() -> color_eyre::Result<()> {
         // ANCHOR: shorthand
         // Instead of this:
         let query = Query::new((position(), health(), distance()))
-            .filter(position().modified() | health().modified());
+            .filter(position().modified() & health().modified());
 
         // Do this:
         let query = Query::new((position().modified(), health().modified(), distance()));
@@ -228,7 +228,6 @@ fn main() -> color_eyre::Result<()> {
         tracing::info!("Frame: {i}");
         tracing::info!("Batches: {:#?}", schedule.batch_info(&mut world));
         schedule.execute_par(&mut world)?;
-        // sleep(Duration::from_secs_f32(0.1));
     }
 
     // ANCHOR_END: schedule_basic
@@ -250,12 +249,7 @@ fn main() -> color_eyre::Result<()> {
         .append_to(&mut world, resources())
         .unwrap();
 
-    let query = Query::new((
-        window_width().modified(),
-        window_height().modified(),
-        allow_vsync().modified(),
-    ))
-    .entity(resources());
+    let query = Query::new((window_width(), window_height(), allow_vsync())).entity(resources());
 
     let mut window_system = System::builder()
         .with(query)
