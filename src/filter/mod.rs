@@ -177,7 +177,6 @@ gen_bitops! {
     WithoutRelation[];
     Without[];
     Cmp[A,B];
-    Slice[];
 }
 
 #[derive(Debug, Clone)]
@@ -262,21 +261,26 @@ where
 
     #[inline]
     unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
-        eprintln!("and");
-        while !slots.is_empty() {
-            let l = self.left.filter_slots(slots);
+        let l = self.left.filter_slots(slots);
 
-            let v = self.right.filter_slots(l);
-            eprintln!("v: {v:?}");
+        let v = self.right.filter_slots(l);
+        eprintln!("v: {v:?}");
+        v
+        // eprintln!("and");
+        // while !slots.is_empty() {
+        //     let l = self.left.filter_slots(slots);
 
-            if !v.is_empty() {
-                return v;
-            }
+        //     let v = self.right.filter_slots(l);
+        //     eprintln!("v: {v:?}");
 
-            slots.start = v.start;
-        }
+        //     if !v.is_empty() {
+        //         return v;
+        //     }
 
-        slots
+        //     slots.start = v.start;
+        // }
+
+        // slots
         // r
 
         // let i = l.intersect(&r);
@@ -490,24 +494,29 @@ where
         if self.slots.is_empty() {
             return None;
         }
-        eprintln!("Filtering {:?}", self.slots);
-        // Safety
-        // The yielded slots are split off of `self.slots`
-        let cur = unsafe { self.fetch.filter_slots(self.slots) };
-        dbg!(cur);
-        if cur.is_empty() {
-            None
-        } else {
+        while !self.slots.is_empty() {
+            eprintln!("Filtering {:?}", self.slots);
+            // Safety
+            // The yielded slots are split off of `self.slots`
+            let cur = unsafe { self.fetch.filter_slots(self.slots) };
+
             let (_l, m, r) = self
                 .slots
                 .split_with(&cur)
                 .expect("Return value of filter must be a subset of `slots");
+
             assert_eq!(cur, m);
 
             dbg!(_l, m, r);
             self.slots = r;
-            Some(m)
+
+            if !m.is_empty() {
+                eprintln!("Got m: {m:?}");
+                return Some(m);
+            }
         }
+
+        None
     }
 }
 
@@ -758,8 +767,7 @@ impl<'q> PreparedFetch<'q> for bool {
         if *self {
             slots
         } else {
-            eprintln!("False");
-            Slice::empty()
+            Slice::new(slots.end, slots.end)
         }
     }
 }

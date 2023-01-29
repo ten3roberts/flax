@@ -244,9 +244,10 @@ fn sparse_or() {
         let mut batches = query.borrow(&world);
         let mut batches = batches.iter_batched();
 
-        assert_eq!(batches.next().unwrap().collect_vec(), ids[0..=4]);
-        assert_eq!(batches.next().unwrap().collect_vec(), ids[8..=9]);
-        assert!(batches.next().is_none());
+        let slots = batches.map(|v| v.collect_vec()).collect_vec();
+        assert_eq!(slots, &[&ids[0..=2], &ids[3..=4], &ids[8..=9]]);
+        // assert_eq!(batches.next().unwrap().collect_vec(), ids[8..=9]);
+        // assert!(batches.next().is_none());
     }
 
     // Check access compatability
