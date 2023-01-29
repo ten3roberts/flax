@@ -1,7 +1,7 @@
 use crate::{
     archetype::{Archetype, Slice},
     fetch::{FetchPrepareData, PreparedFetch},
-    filter::Filtered,
+    filter::{FilterIter, Filtered},
     ArchetypeId, Entity, Fetch, World,
 };
 
@@ -35,9 +35,8 @@ impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
 
     pub fn chunks(&mut self) -> ArchetypeChunks<Q, F> {
         ArchetypeChunks {
-            slots: self.arch.slots(),
+            iter: FilterIter::new(self.arch.slots(), &mut self.fetch),
             arch: self.arch,
-            fetch: &mut self.fetch,
         }
     }
 }

@@ -157,6 +157,17 @@ pub struct PreparedCmp<'w, F, M> {
     method: &'w M,
 }
 
+impl<'p, 'w, F, M> PeekableFetch<'p> for PreparedCmp<'w, F, M>
+where
+    F: PeekableFetch<'p>,
+{
+    type Peek = F::Peek;
+
+    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
+        self.fetch.peek(slot)
+    }
+}
+
 impl<'q, 'w, F, M> PreparedFetch<'q> for PreparedCmp<'w, F, M>
 where
     F: PreparedFetch<'q> + for<'x> PeekableFetch<'x>,
@@ -171,16 +182,16 @@ where
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        eprintln!("cmp slots: {slots:?}");
+        let slots = self.fetch.filter_slots(slots);
+
         let mut cmp = |slot: Slot| {
             let lhs = unsafe { self.fetch.peek(slot) };
             self.method.compare(lhs)
         };
 
         // Find the first slot which yield true
-        let first = match slots.iter().position(&mut cmp) {
-            Some(v) => v,
-            None => return Slice::empty(),
-        };
+        let first = slots.iter().position(&mut cmp).unwrap_or(slots.len());
 
         let count = slots
             .iter()
@@ -188,10 +199,12 @@ where
             .take_while(|&slot| cmp(slot))
             .count();
 
-        Slice {
+        let final_slots = Slice {
             start: slots.start + first,
             end: slots.start + first + count,
-        }
+        };
+        eprintln!("Filtered {} {slots:?} => {final_slots:?}", type_name::<M>());
+        final_slots
     }
 
     #[inline]
@@ -234,6 +247,39 @@ mod test {
             .iter()
             .enumerate()
             .filter(|&v| v.0 % 10 > 3)
+            .map(|v| *v.1)
+            .collect_vec();
+
+        assert_eq!(changed.collect_vec(&world), changed_ids);
+    }
+
+    #[test]
+    fn cmp_nested() {
+        let mut batch = BatchSpawn::new(128);
+
+        component! {
+            a: i32,
+        }
+
+        batch.set(a(), (0..10).cycle()).unwrap();
+        batch.set(name(), (0i32..).map(|v| v.to_string())).unwrap();
+
+        let mut world = World::new();
+        let ids = batch.spawn(&mut world);
+
+        let mut changed = Query::new(entity_ids()).filter(a().modified());
+
+        assert_eq!(changed.collect_vec(&world), ids);
+
+        let mut query = Query::new(a().as_mut().gt(3).lt(7));
+        for item in query.borrow(&world).iter() {
+            *item *= -1;
+        }
+
+        let changed_ids = ids
+            .iter()
+            .enumerate()
+            .filter(|&v| v.0 % 10 > 3 && v.0 % 10 < 7)
             .map(|v| *v.1)
             .collect_vec();
 

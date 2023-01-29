@@ -1,4 +1,9 @@
-use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};
+use alloc::{
+    borrow::ToOwned,
+    collections::BTreeMap,
+    sync::Arc,
+    vec::{self, Vec},
+};
 use core::{
     fmt,
     fmt::Formatter,
@@ -832,7 +837,7 @@ impl World {
         relation: impl RelationExt<T>,
     ) -> Result<()> {
         self.flush_reserved();
-        let mut stack = vec![id];
+        let mut stack = alloc::vec![id];
 
         while let Some(id) = stack.pop() {
             for (_, arch) in self

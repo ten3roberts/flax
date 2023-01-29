@@ -103,6 +103,11 @@ name = "serialize"
 path = "./examples/guide/serialize.rs"
 required-features = ["std"]
 
+[[example]]
+name = "change_detection"
+path = "./examples/guide/change_detection.rs"
+required-features = ["std"]
+
 [[bench]]
 name = "benchmarks"
 harness = false
