@@ -141,8 +141,7 @@ pub trait PreparedFetch<'q> {
     }
 
     /// Do something for a a slice of entity slots which have been visited, such
-    /// as updating change tracking for mutable queries. The current change tick
-    /// is passed.
+    /// as updating change tracking for mutable queries.
     #[inline]
     fn set_visited(&mut self, _slots: Slice) {}
 }
@@ -296,24 +295,24 @@ macro_rules! tuple_impl {
             unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
                 // let mut start = slots.start;
 
-                while !slots.is_empty() {
-                        let v = slots;
+                // while !slots.is_empty() {
+                //         let v = slots;
 
-                    $( let v = self.$idx.filter_slots(v);)*
+                //     $( let v = self.$idx.filter_slots(v);)*
 
-                    if !v.is_empty() || v.start == slots.end {
-                        return v;
-                    }
+                //     if !v.is_empty() || v.start == slots.end {
+                //         return v;
+                //     }
 
-                    slots.start = v.start;
-                }
-                slots
-                // $(
-
-                //     slots = self.$idx.filter_slots(slots);
-                // )*
-
+                //     slots.start = v.start;
+                // }
                 // slots
+                $(
+
+                    slots = self.$idx.filter_slots(slots);
+                )*
+
+                slots
                 // ( $(
                 //     {
                 //         let v = self.$idx.filter_slots(slots);
@@ -417,17 +416,13 @@ macro_rules! tuple_impl {
             type Item = ();
 
             unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-                let mut u = Slice::empty();
                 let inner = &mut self.0;
 
-                $(
-                    let v = inner.$idx.filter_slots(slots);
-                    match u.union(&v) {
-                        Some(v) => { u = v }
-                        None => { return u }
-                    }
-                )*
-                u
+                let min = [$(
+                    dbg!(inner.$idx.filter_slots(slots))
+                ),*].into_iter().min().unwrap_or_default();
+                dbg!(min);
+                min
             }
 
             #[inline]

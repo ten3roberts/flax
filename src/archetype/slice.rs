@@ -1,4 +1,4 @@
-use core::ops::Range;
+use core::ops::{BitOr, Range};
 
 use alloc::collections::BTreeSet;
 
@@ -74,9 +74,11 @@ impl Slice {
         if self.end >= other.start && self.start <= other.end {
             Some(Self::new(start, end))
         } else if self.is_empty() {
-            Some(*other)
+            // Some(*other)
+            None
         } else if other.is_empty() {
-            Some(*self)
+            // Some(*self)
+            None
         } else {
             None
         }
@@ -236,5 +238,16 @@ mod tests {
         overlaps(Slice::new(0, 20), Slice::new(0, 10));
 
         n_overlaps(Slice::new(68, 85), Slice::new(123, 1000));
+    }
+
+    #[test]
+    fn union() {
+        use Slice as S;
+        assert_eq!(S::new(0, 20).union(&S::new(20, 24)), Some(S::new(0, 24)));
+        assert_eq!(S::new(0, 20).union(&S::new(19, 24)), Some(S::new(0, 24)));
+        assert_eq!(S::new(19, 20).union(&S::new(4, 19)), Some(S::new(4, 20)));
+        assert_eq!(S::new(19, 20).union(&S::new(21, 27)), None);
+        assert_eq!(S::new(19, 20).union(&S::new(20, 20)), Some(S::new(19, 20)));
+        assert_eq!(S::new(19, 20).union(&S::new(0, 0)), None);
     }
 }
