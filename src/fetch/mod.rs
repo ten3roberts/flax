@@ -6,6 +6,7 @@ mod entity_ref;
 mod ext;
 mod opt;
 mod peek;
+mod satisfied;
 
 use core::fmt::Debug;
 use core::fmt::{self, Formatter};
@@ -17,9 +18,10 @@ pub use cloned::*;
 pub use component::*;
 pub use component_mut::*;
 pub use entity_ref::*;
-pub use ext::*;
+pub use ext::FetchExt;
 pub use opt::*;
 pub use peek::*;
+pub use satisfied::Satisfied;
 
 use crate::filter::RefFetch;
 use crate::{
@@ -86,8 +88,19 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// The prepared version of the fetch
     type Prepared: for<'x> PreparedFetch<'x, Item = <Self as FetchItem<'x>>::Item> + 'w;
 
-    /// Prepares the fetch for an archetype
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared>;
+    /// Prepares the fetch for an archetype.
+    ///
+    /// Must only be called if [`Fetch::filter_arch`] returns true
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared;
+
+    /// Combines [`Fetch::filter_arch]` and [`Fetch::prepare`]
+    fn try_prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        if self.filter_arch(data.arch) {
+            Some(self.prepare(data))
+        } else {
+            None
+        }
+    }
 
     /// Rough filter to exclude or include archetypes.
     fn filter_arch(&self, arch: &Archetype) -> bool;
@@ -174,9 +187,7 @@ impl<'w> Fetch<'w> for () {
 
     type Prepared = ();
 
-    fn prepare(&self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(())
-    }
+    fn prepare(&self, _: FetchPrepareData<'w>) -> Self::Prepared {}
 
     fn filter_arch(&self, _arch: &Archetype) -> bool {
         true
@@ -185,6 +196,12 @@ impl<'w> Fetch<'w> for () {
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "()")
     }
+}
+
+impl<'p> PeekableFetch<'p> for () {
+    type Peek = ();
+
+    unsafe fn peek(&'p self, _: Slot) -> Self::Peek {}
 }
 
 impl<'q> PreparedFetch<'q> for () {
@@ -209,7 +226,7 @@ where
         if let Some(fetch) = self {
             fetch.filter_slots(slots)
         } else {
-            slots
+            Slice::new(slots.end, slots.end)
         }
     }
 
@@ -238,10 +255,10 @@ impl<'w> Fetch<'w> for EntityIds {
 
     type Prepared = ReadEntities<'w>;
 
-    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(ReadEntities {
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        ReadEntities {
             entities: data.arch.entities(),
-        })
+        }
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -273,6 +290,20 @@ macro_rules! tuple_impl {
             type Item = ($($ty::Item,)*);
 
         }
+
+        impl<'p, $($ty, )*> PeekableFetch<'p> for ($($ty,)*)
+        where $($ty: PeekableFetch<'p>,)*
+        {
+
+            type Peek = ($($ty::Peek,)*);
+            #[inline]
+            unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
+                ($(
+                    (self.$idx).peek(slot),
+                )*)
+            }
+        }
+
 
         impl<'q, $($ty, )*> PreparedFetch<'q> for ($($ty,)*)
             where $($ty: PreparedFetch<'q>,)*
@@ -342,10 +373,8 @@ macro_rules! tuple_impl {
             type Prepared       = ($($ty::Prepared,)*);
 
             #[inline]
-            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-                Some(($(
-                    (self.$idx).prepare(data)?,
-                )*))
+            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+                ($( (self.$idx).prepare(data),)*)
             }
 
             #[inline]
@@ -385,9 +414,9 @@ macro_rules! tuple_impl {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
             type Prepared       = Or<($(Option<$ty::Prepared>,)*)>;
 
-            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
                 let inner = &self.0;
-                Some(Or(($(inner.$idx.prepare(data),)*)))
+                Or(($(inner.$idx.try_prepare(data),)*))
             }
 
             fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -419,7 +448,7 @@ macro_rules! tuple_impl {
                 let inner = &mut self.0;
 
                 let min = [$(
-                    dbg!(inner.$idx.filter_slots(slots))
+                    inner.$idx.filter_slots(slots)
                 ),*].into_iter().min().unwrap_or_default();
                 dbg!(min);
                 min

@@ -24,11 +24,11 @@ impl<'w> Fetch<'w> for EntityRefs {
 
     type Prepared = PreparedEntityRef<'w>;
 
-    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(PreparedEntityRef {
+    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Self::Prepared {
+        PreparedEntityRef {
             arch: data.arch,
             world: data.world,
-        })
+        }
     }
 
     fn filter_arch(&self, _: &crate::archetype::Archetype) -> bool {

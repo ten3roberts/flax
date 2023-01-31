@@ -1,14 +1,14 @@
 use core::{
-    iter::{Copied, Flatten},
+    iter::Flatten,
     mem::{self, MaybeUninit},
-    slice::{self, IterMut},
+    slice::IterMut,
 };
 
 use alloc::vec::Vec;
 use smallvec::SmallVec;
 
 use crate::{
-    archetype::{unknown_component, Slice},
+    archetype::Slice,
     component_info, dummy,
     entity::EntityLocation,
     error::Result,

@@ -128,11 +128,11 @@ where
 
     type Prepared = PreparedCmp<'w, F::Prepared, M>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(PreparedCmp {
-            fetch: self.fetch.prepare(data)?,
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        PreparedCmp {
+            fetch: self.fetch.prepare(data),
             method: &self.method,
-        })
+        }
     }
 
     fn filter_arch(&self, arch: &crate::Archetype) -> bool {
@@ -140,7 +140,7 @@ where
     }
 
     fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        self.fetch.access(data)
+        dbg!(self.fetch.access(data))
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -182,7 +182,6 @@ where
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        eprintln!("cmp slots: {slots:?}");
         let slots = self.fetch.filter_slots(slots);
 
         let mut cmp = |slot: Slot| {
@@ -203,7 +202,7 @@ where
             start: slots.start + first,
             end: slots.start + first + count,
         };
-        eprintln!("Filtered {} {slots:?} => {final_slots:?}", type_name::<M>());
+
         final_slots
     }
 

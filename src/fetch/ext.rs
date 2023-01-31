@@ -7,6 +7,7 @@ use super::{
     cloned::Cloned,
     copied::Copied,
     opt::{Opt, OptOr},
+    Satisfied,
 };
 
 /// Extension trait for [crate::Fetch]
@@ -25,6 +26,11 @@ pub trait FetchExt: Sized {
         for<'q> Self: FetchItem<'q, Item = &'q V>,
     {
         OptOr::new(self, default)
+    }
+
+    /// Returns true if the query is satisfied, without borrowing
+    fn satisfied(self) -> Satisfied<Self> {
+        Satisfied(self)
     }
 
     /// Transform the fetch into a fetch which yields the default impl if the

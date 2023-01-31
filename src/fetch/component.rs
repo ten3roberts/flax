@@ -40,9 +40,9 @@ where
     type Prepared = ReadComponent<'w, T>;
 
     #[inline]
-    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let borrow = data.arch.borrow(self.key())?;
-        Some(ReadComponent { borrow })
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        let borrow = data.arch.borrow(self.key()).unwrap();
+        ReadComponent { borrow }
     }
 
     #[inline]
@@ -99,7 +99,7 @@ where
 
     type Prepared = PreparedRelations<'w, T>;
 
-    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Self::Prepared {
         let borrows: SmallVec<[(Entity, AtomicRef<[T]>); 4]> = {
             data.arch
                 .relations_like(self.component.id())
@@ -112,7 +112,7 @@ where
                 .collect()
         };
 
-        Some(PreparedRelations { borrows })
+        PreparedRelations { borrows }
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {

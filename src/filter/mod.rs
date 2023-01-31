@@ -11,8 +11,8 @@ use core::{
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch},
-    Access, ArchetypeChunks, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, PreparedOpt},
+    Access, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
 };
 
 pub use change::*;
@@ -87,11 +87,11 @@ where
     type Prepared = Filtered<Q::Prepared, F::Prepared>;
 
     #[inline]
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(Filtered {
-            fetch: self.fetch.prepare(data)?,
-            filter: self.filter.prepare(data)?,
-        })
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        Filtered {
+            fetch: self.fetch.prepare(data),
+            filter: self.filter.prepare(data),
+        }
     }
 
     #[inline]
@@ -135,9 +135,7 @@ where
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.fetch.filter_slots(slots);
-        eprintln!("l: {l:?}");
         let r = self.filter.filter_slots(l);
-        dbg!(type_name::<F>(), r);
         r
 
         // let i = l.intersect(&r);
@@ -211,11 +209,11 @@ where
     type Prepared = And<L::Prepared, R::Prepared>;
 
     #[inline]
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(And {
-            left: self.left.prepare(data)?,
-            right: self.right.prepare(data)?,
-        })
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        And {
+            left: self.left.prepare(data),
+            right: self.right.prepare(data),
+        }
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -263,9 +261,7 @@ where
     unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
         let l = self.left.filter_slots(slots);
 
-        let v = self.right.filter_slots(l);
-        eprintln!("v: {v:?}");
-        v
+        self.right.filter_slots(l)
         // eprintln!("and");
         // while !slots.is_empty() {
         //     let l = self.left.filter_slots(slots);
@@ -321,8 +317,8 @@ where
 
     type Prepared = Not<Option<T::Prepared>>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(Not(self.0.prepare(data)))
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        Not(self.0.try_prepare(data))
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -350,9 +346,13 @@ where
     unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        let v = self.0.filter_slots(slots);
+        if let Some(fetch) = &mut self.0 {
+            let v = fetch.filter_slots(slots);
 
-        slots.difference(v).unwrap()
+            slots.difference(v).unwrap()
+        } else {
+            slots
+        }
     }
 }
 
@@ -395,11 +395,11 @@ impl<'q> FetchItem<'q> for All {
 impl<'a> Fetch<'a> for Nothing {
     const MUTABLE: bool = false;
 
-    type Prepared = bool;
+    type Prepared = Nothing;
 
     #[inline(always)]
-    fn prepare(&self, _: FetchPrepareData) -> Option<Self::Prepared> {
-        Some(false)
+    fn prepare(&self, _: FetchPrepareData) -> Self::Prepared {
+        Nothing
     }
 
     #[inline(always)]
@@ -419,10 +419,10 @@ pub struct All;
 impl<'w> Fetch<'w> for All {
     const MUTABLE: bool = false;
 
-    type Prepared = bool;
+    type Prepared = All;
 
-    fn prepare(&'w self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(true)
+    fn prepare(&'w self, _: FetchPrepareData<'w>) -> Self::Prepared {
+        All
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -434,6 +434,18 @@ impl<'w> Fetch<'w> for All {
     }
 }
 
+impl<'q> PreparedFetch<'q> for All {
+    type Item = ();
+
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {}
+}
+
+impl<'q> PreparedFetch<'q> for Nothing {
+    type Item = ();
+
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {}
+}
+
 impl<'q> FetchItem<'q> for Slice {
     type Item = ();
 }
@@ -443,8 +455,8 @@ impl<'w> Fetch<'w> for Slice {
 
     type Prepared = Self;
 
-    fn prepare(&'w self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(*self)
+    fn prepare(&'w self, _: FetchPrepareData<'w>) -> Self::Prepared {
+        *self
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -495,7 +507,6 @@ where
             return None;
         }
         while !self.slots.is_empty() {
-            eprintln!("Filtering {:?}", self.slots);
             // Safety
             // The yielded slots are split off of `self.slots`
             let cur = unsafe { self.fetch.filter_slots(self.slots) };
@@ -507,11 +518,9 @@ where
 
             assert_eq!(cur, m);
 
-            dbg!(_l, m, r);
             self.slots = r;
 
             if !m.is_empty() {
-                eprintln!("Got m: {m:?}");
                 return Some(m);
             }
         }
@@ -536,14 +545,10 @@ impl<'q> FetchItem<'q> for With {
 impl<'a> Fetch<'a> for With {
     const MUTABLE: bool = false;
 
-    type Prepared = bool;
+    type Prepared = All;
 
-    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
-            Some(true)
-        } else {
-            Some(false)
-        }
+    fn prepare(&self, _: FetchPrepareData) -> Self::Prepared {
+        All
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -569,14 +574,10 @@ impl<'q> FetchItem<'q> for Without {
 impl<'w> Fetch<'w> for Without {
     const MUTABLE: bool = false;
 
-    type Prepared = bool;
+    type Prepared = All;
 
-    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
-            Some(true)
-        } else {
-            Some(false)
-        }
+    fn prepare(&self, _: FetchPrepareData) -> Self::Prepared {
+        All
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -601,14 +602,10 @@ impl<'q> FetchItem<'q> for WithObject {
 impl<'w> Fetch<'w> for WithObject {
     const MUTABLE: bool = false;
 
-    type Prepared = bool;
+    type Prepared = All;
 
-    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
-            Some(true)
-        } else {
-            Some(false)
-        }
+    fn prepare(&self, data: FetchPrepareData) -> Self::Prepared {
+        All
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -644,14 +641,10 @@ impl<'q, F> FetchItem<'q> for ArchetypeFilter<F> {
 
 impl<'w, F: Fn(&Archetype) -> bool> Fetch<'w> for ArchetypeFilter<F> {
     const MUTABLE: bool = false;
-    type Prepared = bool;
+    type Prepared = All;
 
-    fn prepare(&'w self, data: FetchPrepareData) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
-            Some(true)
-        } else {
-            Some(false)
-        }
+    fn prepare(&'w self, data: FetchPrepareData) -> Self::Prepared {
+        All
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -676,14 +669,10 @@ impl<'q> FetchItem<'q> for WithRelation {
 
 impl<'w> Fetch<'w> for WithRelation {
     const MUTABLE: bool = false;
-    type Prepared = bool;
+    type Prepared = All;
 
-    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
-            Some(true)
-        } else {
-            Some(false)
-        }
+    fn prepare(&self, data: FetchPrepareData) -> Self::Prepared {
+        All
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -709,14 +698,10 @@ impl<'q> FetchItem<'q> for WithoutRelation {
 impl<'a> Fetch<'a> for WithoutRelation {
     const MUTABLE: bool = false;
 
-    type Prepared = bool;
+    type Prepared = All;
 
-    fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
-            Some(true)
-        } else {
-            Some(false)
-        }
+    fn prepare(&self, data: FetchPrepareData) -> Self::Prepared {
+        All
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -729,7 +714,7 @@ impl<'a> Fetch<'a> for WithoutRelation {
 }
 
 impl<'q> FetchItem<'q> for bool {
-    type Item = ();
+    type Item = bool;
 }
 
 impl<'w> Fetch<'w> for bool {
@@ -738,8 +723,8 @@ impl<'w> Fetch<'w> for bool {
     type Prepared = Self;
 
     #[inline(always)]
-    fn prepare(&'w self, _: FetchPrepareData) -> Option<Self::Prepared> {
-        Some(*self)
+    fn prepare(&'w self, _: FetchPrepareData) -> Self::Prepared {
+        *self
     }
 
     #[inline(always)]
@@ -758,17 +743,11 @@ impl<'w> Fetch<'w> for bool {
 }
 
 impl<'q> PreparedFetch<'q> for bool {
-    type Item = ();
+    type Item = bool;
 
     #[inline]
-    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
-
-    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        if *self {
-            slots
-        } else {
-            Slice::new(slots.end, slots.end)
-        }
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {
+        *self
     }
 }
 
@@ -798,7 +777,7 @@ where
     type Prepared = F::Prepared;
 
     #[inline]
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
         (*self.0).prepare(data)
     }
 
@@ -840,7 +819,7 @@ where
     type Prepared = F::Prepared;
 
     #[inline]
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
         (*self).prepare(data)
     }
 
@@ -889,11 +868,11 @@ impl<'w> Fetch<'w> for BatchSize {
 
     type Prepared = Self;
 
-    fn prepare(&'w self, _: FetchPrepareData) -> Option<Self::Prepared> {
+    fn prepare(&'w self, _: FetchPrepareData) -> Self::Prepared {
         if self.0 == 0 {
             panic!("Batch size of 0 will never yield");
         }
-        Some(*self)
+        *self
     }
 
     #[inline]
