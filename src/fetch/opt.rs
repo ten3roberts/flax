@@ -3,13 +3,13 @@ use core::fmt::{self, Formatter};
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::{Archetype, Slice},
+    archetype::{Archetype, Slice, Slot},
     fetch::FetchPrepareData,
     fetch::PreparedFetch,
     ComponentValue, Fetch,
 };
 
-use super::{FetchAccessData, FetchItem};
+use super::{FetchAccessData, FetchItem, PeekableFetch};
 
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
@@ -25,10 +25,10 @@ where
 {
     const MUTABLE: bool = F::MUTABLE;
 
-    type Prepared = Option<F::Prepared>;
+    type Prepared = PreparedOpt<F::Prepared>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(self.0.prepare(data))
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        PreparedOpt(self.0.try_prepare(data))
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -42,6 +42,48 @@ where
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("opt ")?;
         self.0.describe(f)
+    }
+}
+
+#[doc(hidden)]
+pub struct PreparedOpt<F>(Option<F>);
+
+impl<'p, F> PeekableFetch<'p> for PreparedOpt<F>
+where
+    F: PeekableFetch<'p>,
+{
+    type Peek = Option<F::Peek>;
+
+    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
+        self.0.as_ref().map(|fetch| fetch.peek(slot))
+    }
+}
+
+impl<'q, F> PreparedFetch<'q> for PreparedOpt<F>
+where
+    F: PreparedFetch<'q>,
+{
+    type Item = Option<F::Item>;
+
+    #[inline]
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+        self.0.as_mut().map(|fetch| fetch.fetch(slot))
+    }
+
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        if let Some(fetch) = &mut self.0 {
+            fetch.filter_slots(slots)
+        } else {
+            slots
+        }
+    }
+
+    #[inline]
+    fn set_visited(&mut self, slots: Slice) {
+        if let Some(fetch) = &mut self.0 {
+            fetch.set_visited(slots)
+        }
     }
 }
 
@@ -68,11 +110,11 @@ where
 
     type Prepared = OptOr<Option<F::Prepared>, &'w V>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(OptOr {
-            fetch: self.fetch.prepare(data),
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        OptOr {
+            fetch: self.fetch.try_prepare(data),
             or: &self.or,
-        })
+        }
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -110,7 +152,11 @@ where
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        self.fetch.filter_slots(slots)
+        if let Some(fetch) = &mut self.fetch {
+            fetch.filter_slots(slots)
+        } else {
+            slots
+        }
     }
 
     fn set_visited(&mut self, slots: Slice) {

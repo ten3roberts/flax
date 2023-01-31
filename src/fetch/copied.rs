@@ -38,8 +38,8 @@ where
     type Prepared = Copied<F::Prepared>;
 
     #[inline(always)]
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(Copied(self.0.prepare(data)?))
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        Copied(self.0.prepare(data))
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {

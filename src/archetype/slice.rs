@@ -1,4 +1,4 @@
-use core::ops::{BitOr, Range};
+use core::ops::Range;
 
 use alloc::collections::BTreeSet;
 
@@ -16,11 +16,6 @@ impl Slice {
     #[inline]
     pub fn new(start: Slot, end: Slot) -> Self {
         Self { start, end }
-    }
-
-    #[inline]
-    pub(crate) fn empty() -> Self {
-        Self { start: 0, end: 0 }
     }
 
     pub(crate) fn single(slot: Slot) -> Slice {
@@ -73,12 +68,6 @@ impl Slice {
         // 1..2 u 2..3
         if self.end >= other.start && self.start <= other.end {
             Some(Self::new(start, end))
-        } else if self.is_empty() {
-            // Some(*other)
-            None
-        } else if other.is_empty() {
-            // Some(*self)
-            None
         } else {
             None
         }

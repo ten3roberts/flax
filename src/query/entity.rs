@@ -26,14 +26,6 @@ fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
 
     let arch = state.world.archetypes.get(loc.arch_id);
 
-    // Check static filtering
-    if !state.fetch.filter_arch(arch) {
-        return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
-            Some(missing) => Err(Error::MissingComponent(id, missing)),
-            None => Err(Error::DoesNotMatch(id)),
-        };
-    }
-
     let Some(mut p) = state.prepare_fetch(arch, loc.arch_id) else {
         return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
             Some(missing) => Err(Error::MissingComponent(id, missing)),

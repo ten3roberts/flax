@@ -38,8 +38,8 @@ where
     type Prepared = Cloned<F::Prepared>;
 
     #[inline(always)]
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(Cloned(self.0.prepare(data)?))
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+        Cloned(self.0.prepare(data))
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
