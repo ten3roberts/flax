@@ -140,7 +140,7 @@ where
     }
 
     fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        dbg!(self.fetch.access(data))
+        self.fetch.access(data)
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -198,12 +198,10 @@ where
             .take_while(|&slot| cmp(slot))
             .count();
 
-        let final_slots = Slice {
+        Slice {
             start: slots.start + first,
             end: slots.start + first + count,
-        };
-
-        final_slots
+        }
     }
 
     #[inline]
@@ -214,6 +212,7 @@ where
 
 #[cfg(test)]
 mod test {
+    use alloc::string::ToString;
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 

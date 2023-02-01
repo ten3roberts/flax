@@ -12,13 +12,15 @@ use crate::{
 
 use super::{borrow::QueryBorrowState, difference::find_missing_components};
 
+type State<'w, Q, F> = (
+    EntityLocation,
+    PreparedArchetype<'w, <Q as Fetch<'w>>::Prepared, <F as Fetch<'w>>::Prepared>,
+);
+
 fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
     id: Entity,
     state: &'a QueryBorrowState<'w, Q, F>,
-) -> Result<(
-    EntityLocation,
-    PreparedArchetype<'w, Q::Prepared, F::Prepared>,
-)> {
+) -> Result<State<'w, Q, F>> {
     let loc = match state.world.location(id) {
         Ok(v) => v,
         Err(_) => return Err(Error::NoSuchEntity(id)),
@@ -42,17 +44,6 @@ fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
     Ok((loc, p))
 }
 
-enum EntityState<'w, Q, F> {
-    NoSuchEntity(Entity),
-    MismatchedFilter(Entity),
-    MismatchedFetch(Entity, EntityLocation),
-
-    Complete {
-        loc: EntityLocation,
-        p: PreparedArchetype<'w, Q, F>,
-    },
-}
-
 impl<'w, Q, F> QueryStrategy<'w, Q, F> for Entity
 where
     Q: 'w + Fetch<'w>,
@@ -63,7 +54,6 @@ where
     fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, _dirty: bool) -> Self::Borrow {
         EntityBorrow {
             prepared: state(*self, &query_state),
-            state: query_state,
         }
     }
 
@@ -104,11 +94,7 @@ where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    state: QueryBorrowState<'w, Q, F>,
-    prepared: Result<(
-        EntityLocation,
-        PreparedArchetype<'w, Q::Prepared, F::Prepared>,
-    )>,
+    prepared: Result<State<'w, Q, F>>,
 }
 
 impl<'w, Q, F> EntityBorrow<'w, Q, F>
@@ -160,13 +146,13 @@ mod test {
         let mut query = Query::new((name(), a().opt())).entity(id);
         {
             let mut borrow = query.borrow(&world);
-            assert_eq!(borrow.get(), Ok((&"Foo".to_string(), Some(&5))));
-            assert_eq!(borrow.get(), Ok((&"Foo".to_string(), Some(&5))));
+            assert_eq!(borrow.get(), Ok((&"Foo".into(), Some(&5))));
+            assert_eq!(borrow.get(), Ok((&"Foo".into(), Some(&5))));
         }
 
         world.remove(id, a()).unwrap();
 
-        assert_eq!(query.borrow(&world).get(), Ok((&"Foo".to_string(), None)));
+        assert_eq!(query.borrow(&world).get(), Ok((&"Foo".into(), None)));
 
         world.remove(id, name()).unwrap();
         assert_eq!(
@@ -176,8 +162,8 @@ mod test {
         world.set(id, name(), "Bar".into()).unwrap();
         {
             let mut borrow = query.borrow(&world);
-            assert_eq!(borrow.get(), Ok((&"Bar".to_string(), None)));
-            assert_eq!(borrow.get(), Ok((&"Bar".to_string(), None)));
+            assert_eq!(borrow.get(), Ok((&"Bar".into(), None)));
+            assert_eq!(borrow.get(), Ok((&"Bar".into(), None)));
         }
         world.despawn(id).unwrap();
         assert_eq!(query.borrow(&world).get(), Err(Error::NoSuchEntity(id)));

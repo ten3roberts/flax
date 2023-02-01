@@ -407,6 +407,8 @@ mod test {
     #[test]
     fn traverse_dfs() {
         let mut world = World::new();
+        use alloc::string::String;
+        use alloc::string::ToString;
 
         component! {
             a: i32,
@@ -542,7 +544,6 @@ mod test {
             .filter(child_of(root).with() | name().eq("root".to_string()))
             .borrow(&world)
             .for_each(|(id, a)| {
-                eprintln!("Writing to: {id}");
                 *a *= -10;
             });
 
@@ -577,14 +578,14 @@ mod test {
 
         let mut query = Query::new(name());
 
-        assert_eq!(query.borrow(&world).get(id), Ok(&"id".to_string()));
-        assert_eq!(query.borrow(&world).get(id2), Ok(&"id2".to_string()));
+        assert_eq!(query.borrow(&world).get(id), Ok(&"id".into()));
+        assert_eq!(query.borrow(&world).get(id2), Ok(&"id2".into()));
         assert_eq!(
             query.borrow(&world).get(a().id()),
             Err(Error::DoesNotMatch(a().id()))
         );
 
         let mut query = query.with_components();
-        assert_eq!(query.borrow(&world).get(a().id()), Ok(&"a".to_string()));
+        assert_eq!(query.borrow(&world).get(a().id()), Ok(&"a".into()));
     }
 }

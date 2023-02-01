@@ -1,7 +1,6 @@
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
-use bincode::{DefaultOptions, Options};
 use flax::*;
 use glam::{vec3, Quat, Vec3};
 use itertools::Itertools;
@@ -72,6 +71,7 @@ fn merge() {
 #[cfg(feature = "serde")]
 /// Merge into an empty world
 fn merge_empty() -> color_eyre::Result<()> {
+    use bincode::Options;
     use flax::{filter::All, serialize::*};
 
     let mut world = World::new();
@@ -98,7 +98,7 @@ fn merge_empty() -> color_eyre::Result<()> {
 
     let mut new_world = deserializer.deserialize(&mut bincode::de::Deserializer::from_slice(
         &bytes,
-        DefaultOptions::new()
+        bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .allow_trailing_bytes(),
     ))?;

@@ -15,8 +15,8 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    buffer::ComponentBuffer, component, events::Subscriber, Component, ComponentKey,
-    ComponentValue, Entity, Verbatim,
+    buffer::ComponentBuffer, events::Subscriber, Component, ComponentKey, ComponentValue, Entity,
+    Verbatim,
 };
 
 /// Unique archetype id
@@ -885,6 +885,7 @@ impl Archetype {
         self.cells.values().map(|v| v.info)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn component_names(&self) -> impl Iterator<Item = &str> {
         self.cells.values().map(|v| v.info.name())
     }
@@ -1073,10 +1074,6 @@ impl ComponentInfo {
     fn align(&self) -> usize {
         self.layout.align()
     }
-}
-
-component! {
-    pub(crate) unknown_component: (),
 }
 
 #[cfg(test)]

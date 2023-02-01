@@ -1,8 +1,6 @@
-use itertools::Itertools;
-
 use crate::{Fetch, FetchItem};
 
-use super::{FmtQuery, PeekableFetch};
+use super::FmtQuery;
 
 /// Yields true iff `F` would match the query
 pub struct Satisfied<F>(pub(crate) F);
@@ -20,7 +18,7 @@ impl<'w, F: Fetch<'w>> Fetch<'w> for Satisfied<F> {
         self.0.filter_arch(data.arch)
     }
 
-    fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
+    fn filter_arch(&self, _: &crate::archetype::Archetype) -> bool {
         true
     }
 

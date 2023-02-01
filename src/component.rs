@@ -16,7 +16,7 @@ use crate::{
     buffer::ComponentBuffer,
     entity::EntityKind,
     filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
-    ChangeKind, Entity, MetaData, Mutable, Or, RelationExt,
+    ChangeKind, Entity, MetaData, Mutable, RelationExt,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a

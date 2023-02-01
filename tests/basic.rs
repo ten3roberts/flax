@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use flax::{
-    component, components::name, debug_visitor, entity_ids, EntityBuilder, Error, Query, World,
-};
+use flax::{component, components::name, debug_visitor, entity_ids, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 #[test]
