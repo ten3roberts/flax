@@ -447,11 +447,13 @@ macro_rules! tuple_impl {
             unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
                 let inner = &mut self.0;
 
-                let min = [$(
-                    inner.$idx.filter_slots(slots)
-                ),*].into_iter().min().unwrap_or_default();
-                dbg!(min);
-                min
+                [
+                    $( inner.$idx.filter_slots(slots)),*
+                ]
+                .into_iter()
+                .min()
+                .unwrap_or_default()
+
             }
 
             #[inline]

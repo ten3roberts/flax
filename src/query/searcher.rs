@@ -1,6 +1,5 @@
 use alloc::vec::Vec;
 use core::cmp;
-use itertools::Itertools;
 
 use crate::{archetype::Archetype, ArchetypeId, Archetypes, ComponentKey, Entity};
 

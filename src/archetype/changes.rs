@@ -294,11 +294,6 @@ impl ChangeList {
         })
     }
 
-    /// Returns the changes in the change list at a particular index.
-    pub(crate) fn get(&self, index: usize) -> Option<&Change> {
-        self.inner.get(index)
-    }
-
     #[cfg(test)]
     pub(crate) fn as_changed_set(&self, tick: u32) -> alloc::collections::BTreeSet<Slot> {
         self.as_set(|v| v.tick > tick)

@@ -1,9 +1,4 @@
-use alloc::{
-    borrow::ToOwned,
-    collections::BTreeMap,
-    sync::Arc,
-    vec::{self, Vec},
-};
+use alloc::{borrow::ToOwned, collections::BTreeMap, sync::Arc, vec::Vec};
 use core::{
     fmt,
     fmt::Formatter,

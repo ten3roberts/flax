@@ -11,7 +11,7 @@ use core::{
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, PreparedOpt},
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch},
     Access, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
 };
 
@@ -135,24 +135,7 @@ where
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.fetch.filter_slots(slots);
-        let r = self.filter.filter_slots(l);
-        r
-
-        // let i = l.intersect(&r);
-        // if i.is_empty() {
-        //     // Go again but start with the highest bound
-        //     // This is caused by one of the sides being past the end of the
-        //     // other slice. As such, force the slice lagging behind to catch up
-        //     // to the upper floor
-        //     let common_start = l.start.max(r.start).clamp(slots.start, slots.end);
-
-        //     let slots = Slice::new(common_start, slots.end);
-        //     let l = self.fetch.filter_slots(slots);
-        //     let r = self.filter.filter_slots(slots);
-        //     l.intersect(&r)
-        // } else {
-        //     i
-        // }
+        self.filter.filter_slots(l)
     }
 
     #[inline]
@@ -258,42 +241,10 @@ where
     }
 
     #[inline]
-    unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.left.filter_slots(slots);
 
         self.right.filter_slots(l)
-        // eprintln!("and");
-        // while !slots.is_empty() {
-        //     let l = self.left.filter_slots(slots);
-
-        //     let v = self.right.filter_slots(l);
-        //     eprintln!("v: {v:?}");
-
-        //     if !v.is_empty() {
-        //         return v;
-        //     }
-
-        //     slots.start = v.start;
-        // }
-
-        // slots
-        // r
-
-        // let i = l.intersect(&r);
-        // if i.is_empty() {
-        //     // Go again but start with the highest bound
-        //     // This is caused by one of the sides being past the end of the
-        //     // other slice. As such, force the slice lagging behind to catch up
-        //     // to the upper floor
-        //     let common_start = l.start.max(r.start).clamp(slots.start, slots.end);
-
-        //     let slots = Slice::new(common_start, slots.end);
-        //     let l = self.left.filter_slots(slots);
-        //     let r = self.right.filter_slots(slots);
-        //     l.intersect(&r)
-        // } else {
-        //     i
-        // }
     }
 }
 
@@ -437,13 +388,13 @@ impl<'w> Fetch<'w> for All {
 impl<'q> PreparedFetch<'q> for All {
     type Item = ();
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {}
+    unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
 }
 
 impl<'q> PreparedFetch<'q> for Nothing {
     type Item = ();
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {}
+    unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for Slice {
@@ -604,7 +555,7 @@ impl<'w> Fetch<'w> for WithObject {
 
     type Prepared = All;
 
-    fn prepare(&self, data: FetchPrepareData) -> Self::Prepared {
+    fn prepare(&self, _: FetchPrepareData) -> Self::Prepared {
         All
     }
 
@@ -643,7 +594,7 @@ impl<'w, F: Fn(&Archetype) -> bool> Fetch<'w> for ArchetypeFilter<F> {
     const MUTABLE: bool = false;
     type Prepared = All;
 
-    fn prepare(&'w self, data: FetchPrepareData) -> Self::Prepared {
+    fn prepare(&'w self, _: FetchPrepareData) -> Self::Prepared {
         All
     }
 
@@ -671,7 +622,7 @@ impl<'w> Fetch<'w> for WithRelation {
     const MUTABLE: bool = false;
     type Prepared = All;
 
-    fn prepare(&self, data: FetchPrepareData) -> Self::Prepared {
+    fn prepare(&self, _: FetchPrepareData) -> Self::Prepared {
         All
     }
 
@@ -700,7 +651,7 @@ impl<'a> Fetch<'a> for WithoutRelation {
 
     type Prepared = All;
 
-    fn prepare(&self, data: FetchPrepareData) -> Self::Prepared {
+    fn prepare(&self, _: FetchPrepareData) -> Self::Prepared {
         All
     }
 
@@ -1029,7 +980,6 @@ mod tests {
             .set_modified(Change::new(Slice::new(96, 123), 3))
             .get(ChangeKind::Modified)
             .as_changed_set(1);
-        dbg!(&a_map, &b_map, &c_map);
 
         // Brute force
         let slots = Slice::new(0, 1000);

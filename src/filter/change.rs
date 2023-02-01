@@ -181,8 +181,7 @@ where
             None => return Slice::new(slots.end, slots.end),
         };
 
-        let slots = cur.intersect(&slots);
-        slots
+        cur.intersect(&slots)
     }
 
     fn set_visited(&mut self, slots: Slice) {

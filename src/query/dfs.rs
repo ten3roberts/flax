@@ -2,19 +2,17 @@ use crate::{
     fetch::FetchAccessData, filter::Filtered, Access, AccessKind, ArchetypeId, ComponentValue,
 };
 use alloc::{
-    collections::{btree_map, BTreeMap, BTreeSet},
+    collections::{btree_map, BTreeMap},
     vec::Vec,
 };
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
-    archetype::{Archetype, Slice},
-    entity::EntityLocation,
-    fetch::PreparedFetch,
-    ArchetypeSearcher, Archetypes, ComponentKey, Entity, Fetch, FetchItem, RelationExt, World,
+    archetype::Slice, fetch::PreparedFetch, ArchetypeSearcher, Archetypes, ComponentKey, Entity,
+    Fetch, FetchItem, RelationExt, World,
 };
 
-type AdjMap<'a> = BTreeMap<Entity, SmallVec<[(ArchetypeId, &'a Archetype); 8]>>;
+type AdjMap = BTreeMap<Entity, SmallVec<[usize; 8]>>;
 
 use super::{borrow::QueryBorrowState, Batch, PreparedArchetype, QueryStrategy};
 
@@ -23,7 +21,6 @@ pub struct Dfs {
     root: Entity,
     relation: Entity,
 
-    archetype_gen: u32,
     state: DfsState,
 }
 
@@ -31,7 +28,7 @@ pub struct Dfs {
 struct DfsState {
     archetypes: Vec<ArchetypeId>,
     archetypes_index: BTreeMap<ArchetypeId, usize>,
-    adj: BTreeMap<Entity, Vec<usize>>,
+    adj: AdjMap,
 }
 
 impl DfsState {
@@ -60,7 +57,6 @@ impl Dfs {
             relation: relation.id(),
             root,
 
-            archetype_gen: 0,
             state: DfsState::default(),
         }
     }
@@ -82,7 +78,6 @@ impl Dfs {
             archetypes: &'a Archetypes,
             searcher: &'a ArchetypeSearcher,
             relation: Entity,
-            visited: BTreeSet<ArchetypeId>,
         }
 
         fn inner<'w, F: Fetch<'w>>(
@@ -97,7 +92,7 @@ impl Dfs {
             let mut searcher = state.searcher.clone();
             searcher.add_required(key);
 
-            let mut children = Vec::new();
+            let mut children = SmallVec::new();
             searcher.find_archetypes(state.archetypes, |arch_id, arch| {
                 if !fetch.filter_arch(arch) {
                     return;
@@ -112,8 +107,7 @@ impl Dfs {
                     btree_map::Entry::Occupied(_) => panic!("Cycle"),
                 };
 
-                for (slot, &id) in arch.entities().iter().enumerate() {
-                    let loc = EntityLocation { slot, arch_id };
+                for &id in arch.entities().iter() {
                     inner(state, result, fetch, id);
                 }
 
@@ -129,7 +123,6 @@ impl Dfs {
             archetypes,
             searcher: &searcher,
             relation,
-            visited: Default::default(),
         };
 
         archetypes.get(loc.arch_id);
@@ -274,7 +267,7 @@ where
 
     fn traverse_inner<'q, T, Fn>(
         archetypes: &mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
-        adj: &BTreeMap<Entity, Vec<usize>>,
+        adj: &AdjMap,
         mut batch: Batch<'q, Q::Prepared, F::Prepared>,
         value: &T,
         func: &mut Fn,
@@ -309,10 +302,10 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    adj: &'q BTreeMap<Entity, Vec<usize>>,
-
     archetypes: &'q mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
     stack: SmallVec<[Batch<'q, Q::Prepared, F::Prepared>; 8]>,
+
+    adj: &'q AdjMap,
 }
 
 impl<'w, 'q, Q, F> Iterator for DfsIter<'w, 'q, Q, F>

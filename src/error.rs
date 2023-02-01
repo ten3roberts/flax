@@ -1,7 +1,5 @@
 use core::fmt::Display;
 
-use alloc::vec::Vec;
-
 use crate::{ComponentInfo, Entity};
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -6,7 +6,6 @@ use core::any::{type_name, TypeId};
 use core::fmt;
 use core::{fmt::Formatter, marker::PhantomData};
 
-use crate::filter::BatchSize;
 use crate::{
     archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer,
     ComponentKey, Fetch, FetchItem, Query, QueryData, World,
