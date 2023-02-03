@@ -20,9 +20,29 @@ fn main() {
 
     component! {
         health: f32,
+        poison: f32,
         armor: f32,
         player: (),
     }
+
+    // ANCHOR_END: setup
+    //
+    // ANCHOR: health_changes
+
+    let query = Query::new((name(), health().modified()));
+
+    let mut health_changes = System::builder()
+        .with(query)
+        .build(|mut query: QueryBorrow<_>| {
+            info_span!("health_changes");
+            for (name, health) in &mut query {
+                tracing::info!("{name:?}: is now at {health} health");
+            }
+        });
+
+    // ANCHOR_END: health_changes
+
+    // ANCHOR: damage
 
     let player_id = Entity::builder()
         .set(name(), "player".into())
@@ -41,40 +61,36 @@ fn main() {
 
     let all = enemies.iter().copied().chain([player_id]).collect_vec();
 
-    // ANCHOR_END: setup
-
     let mut rng = StdRng::from_entropy();
 
-    let mut damage_random = System::builder()
+    all.choose_multiple(&mut rng, all.len() / 5)
+        .for_each(|&id| {
+            world.set(id, poison(), 10.0).unwrap();
+        });
+
+    let damage_random = System::builder()
         .write::<World>()
         .build(move |world: &mut World| {
             let count = rng.gen_range(0..enemies.len());
             let targets = all.choose_multiple(&mut rng, count);
             for &enemy in targets {
                 if let Ok(mut health) = world.get_mut(enemy, health()) {
-                    *health -= 10.0;
+                    *health -= 1.0;
                 }
             }
         });
 
-    // ANCHOR: health_changes
-
-    let query = Query::new((name(), health().modified()));
-
-    let mut health_changes = System::builder()
-        .with(query)
-        .build(|mut query: QueryBorrow<_>| {
-            info_span!("health_changes");
-            for (name, health) in &mut query {
-                tracing::info!("{name:?}: is now at {health} health");
-            }
+    let update_poison = System::builder()
+        .with(Query::new((name().opt(), health().as_mut(), poison())))
+        .for_each(|(name, health, poison)| {
+            *health -= poison;
+            tracing::info!("{name:?} suffered {poison} in poison damage");
         });
 
-    // ANCHOR_END: health_changes
+    // ANCHOR_END: damage
 
     // ANCHOR: cleanup_system
 
-    dbg!(Query::new(player().satisfied()).collect_vec(&world));
     let query = Query::new((entity_ids(), player().satisfied())).filter(health().le(0.0));
 
     let cleanup = System::builder()
@@ -93,22 +109,21 @@ fn main() {
 
     // ANCHOR_END: cleanup_system
 
-    health_changes.run_on(&mut world);
-    health_changes.run_on(&mut world);
-    damage_random.run_on(&mut world);
-    health_changes.run_on(&mut world);
+    // ANCHOR: schedule
 
     let mut schedule = Schedule::new()
         .with_system(damage_random)
+        .with_system(update_poison)
         .with_system(health_changes)
         .with_system(cleanup)
         .flush();
 
     while world.is_alive(player_id) {
-        tracing::info!("Batches: {:#?}", schedule.batch_info(&mut world).to_names());
         schedule
             .execute_par(&mut world)
             .expect("Failed to run schedule");
         sleep(Duration::from_millis(1000));
     }
+
+    // ANCHOR_END: schedule
 }
