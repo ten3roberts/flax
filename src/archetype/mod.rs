@@ -4,19 +4,14 @@ use alloc::{
     sync::Arc,
     vec::Vec,
 };
-use core::{
-    alloc::Layout,
-    any::{type_name, TypeId},
-    fmt::Debug,
-    mem,
-};
+use core::{fmt::Debug, mem};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    buffer::ComponentBuffer, events::Subscriber, Component, ComponentKey, ComponentValue, Entity,
-    Verbatim,
+    buffer::ComponentBuffer, events::Subscriber, Component, ComponentInfo, ComponentKey,
+    ComponentValue, Entity, Verbatim,
 };
 
 /// Unique archetype id
@@ -976,104 +971,6 @@ impl Drop for Archetype {
 pub(crate) struct ArchetypeDrain {
     pub(crate) entities: Vec<Entity>,
     pub(crate) cells: BTreeMap<ComponentKey, Cell>,
-}
-
-#[derive(Clone, PartialEq, Eq, Copy)]
-/// Represents a type erased component along with its memory layout and drop fn.
-/// Is essentially a v-table
-pub struct ComponentInfo {
-    pub(crate) key: ComponentKey,
-    pub(crate) layout: Layout,
-    pub(crate) name: &'static str,
-    pub(crate) drop: unsafe fn(*mut u8),
-    pub(crate) type_id: TypeId,
-    pub(crate) type_name: &'static str,
-    meta: fn(Self) -> ComponentBuffer,
-}
-
-impl core::fmt::Debug for ComponentInfo {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ComponentInfo")
-            .field("key", &self.key)
-            .field("name", &self.name)
-            .finish()
-    }
-}
-
-impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
-    fn from(v: Component<T>) -> Self {
-        ComponentInfo::of(v)
-    }
-}
-
-impl PartialOrd for ComponentInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.key.partial_cmp(&other.key)
-    }
-}
-
-impl Ord for ComponentInfo {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.key.cmp(&other.key)
-    }
-}
-
-impl ComponentInfo {
-    /// Convert back to a typed form
-    ///
-    /// # Panics
-    /// If the types do not match
-    pub fn downcast<T: ComponentValue>(self) -> Component<T> {
-        if self.type_id != TypeId::of::<T>() {
-            panic!("Mismatched type");
-        }
-
-        Component::from_raw_parts(self.key, self.name, self.meta)
-    }
-
-    /// Returns the component info of a types component
-    pub fn of<T: ComponentValue>(component: Component<T>) -> Self {
-        unsafe fn drop_ptr<T>(x: *mut u8) {
-            x.cast::<T>().drop_in_place()
-        }
-        Self {
-            drop: drop_ptr::<T>,
-            layout: Layout::new::<T>(),
-            key: component.key(),
-            name: component.name(),
-            meta: component.meta(),
-            type_id: TypeId::of::<T>(),
-            type_name: type_name::<T>(),
-        }
-    }
-
-    pub(crate) fn is<T: ComponentValue>(&self) -> bool {
-        self.type_id == TypeId::of::<T>()
-    }
-
-    pub(crate) fn size(&self) -> usize {
-        self.layout.size()
-    }
-
-    /// Returns the component name
-    pub fn name(&self) -> &'static str {
-        self.name
-    }
-
-    /// Returns the component id
-    #[inline]
-    pub fn key(&self) -> ComponentKey {
-        self.key
-    }
-
-    /// Returns the component metadata fn
-    pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
-        self.meta
-    }
-
-    fn align(&self) -> usize {
-        self.layout.align()
-    }
 }
 
 #[cfg(test)]

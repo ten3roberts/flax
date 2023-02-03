@@ -211,7 +211,7 @@ impl CommandBuffer {
                 Command::Set { id, info, offset } => unsafe {
                     let value = self.inserts.take_dyn(offset);
                     world
-                        .set_dyn(id, info, value, |v| (info.drop)(v.cast()))
+                        .set_dyn(id, info, value, |v| info.drop(v.cast()))
                         .map_err(|v| v.into_eyre())
                         .wrap_err_with(|| format!("Failed to set component {}", info.name()))?;
                 },
@@ -222,7 +222,7 @@ impl CommandBuffer {
                 Command::Remove { id, info } => world
                     .remove_dyn(id, info)
                     .map_err(|v| v.into_eyre())
-                    .wrap_err_with(|| format!("Failed to remove component {}", info.name))?,
+                    .wrap_err_with(|| format!("Failed to remove component {}", info.name()))?,
                 Command::Defer(func) => {
                     func(world).wrap_err("Failed to execute deferred function")?
                 }

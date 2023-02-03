@@ -421,14 +421,13 @@ impl World {
     /// The given name does not need to be unique.
     pub fn spawn_component<T: ComponentValue>(
         &mut self,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
+        vtable: &'static ComponentVTable,
     ) -> Component<T> {
         let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
 
         // Safety
         // The id is not used by anything else
-        let component = Component::from_key(ComponentKey::new(id, None), name, meta);
+        let component = Component::from_key(ComponentKey::new(id, None), vtable);
 
         let info = component.info();
 
@@ -445,12 +444,11 @@ impl World {
     /// The given name does not need to be unique.
     pub fn spawn_relation<T: ComponentValue>(
         &mut self,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
+        vtable: &'static ComponentVTable,
     ) -> Relation<T> {
         let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
 
-        Relation::from_id(id, name, meta)
+        Relation::from_id(id, vtable)
     }
 
     #[inline(always)]
@@ -572,8 +570,7 @@ impl World {
             .get_disjoint(arch_id, self.archetypes.root)
             .unwrap();
 
-        let (dst_slot, swapped) =
-            unsafe { src.move_to(dst, slot, |c, p| (c.drop)(p), change_tick) };
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, slot, |c, p| c.drop(p), change_tick) };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -611,7 +608,7 @@ impl World {
         let (src, dst) = self.archetypes.get_disjoint(loc.arch_id, dst_id).unwrap();
 
         let (dst_slot, swapped) =
-            unsafe { src.move_to(dst, loc.slot, |c, p| (c.drop)(p), change_tick) };
+            unsafe { src.move_to(dst, loc.slot, |c, p| c.drop(p), change_tick) };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -647,21 +644,21 @@ impl World {
 
         let src_id = arch;
 
-        for (component, data) in components.take_all() {
+        for (info, data) in components.take_all() {
             let src = self.archetypes.get_mut(arch);
 
-            if let Some(old) = src.get_dyn_mut(slot, component.key, change_tick) {
+            if let Some(old) = src.get_dyn_mut(slot, info.key, change_tick) {
                 // Drop old and copy the new value in
                 unsafe {
-                    (component.drop)(old);
-                    ptr::copy_nonoverlapping(data, old, component.size());
+                    info.drop(old);
+                    ptr::copy_nonoverlapping(data, old, info.size());
                 }
             } else {
                 // Component does not exist yet, so defer a move
 
                 // Data will have a lifetime of `components`.
-                new_data.push((component, data));
-                new_components.push(component);
+                new_data.push((info, data));
+                new_components.push(info);
             }
         }
 
@@ -779,7 +776,7 @@ impl World {
 
         let swapped = unsafe {
             src.take(slot, |c, p| {
-                (c.drop)(p);
+                c.drop(p);
             })
         };
 
@@ -1032,7 +1029,7 @@ impl World {
     #[inline]
     pub(crate) fn remove_dyn(&mut self, id: Entity, component: ComponentInfo) -> Result<()> {
         unsafe {
-            self.remove_inner(id, component, |ptr| (component.drop)(ptr))
+            self.remove_inner(id, component, |ptr| component.drop(ptr))
                 .map(|_| {})
         }
     }
@@ -1325,7 +1322,7 @@ impl World {
         }
         // Safety: the type
 
-        Some(Component::from_key(id, info.name(), info.meta()))
+        Some(Component::from_key(id, info.vtable))
     }
 
     /// Access, insert, and remove all components of an entity
@@ -1551,11 +1548,7 @@ impl Migrated {
             panic!("Mismatched component types {component:?} for {info:#?}");
         }
 
-        Component::from_key(
-            ComponentKey::new(id, object),
-            component.name(),
-            component.meta(),
-        )
+        Component::from_key(ComponentKey::new(id, object), component.vtable)
     }
 
     /// Returns the migrated relation

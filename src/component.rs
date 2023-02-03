@@ -1,4 +1,6 @@
 use core::{
+    alloc::Layout,
+    any::TypeId,
     fmt::{self, Debug, Display, Formatter},
     marker::PhantomData,
     sync::atomic::AtomicU32,
@@ -12,7 +14,6 @@ use serde::{
 };
 
 use crate::{
-    archetype::ComponentInfo,
     buffer::ComponentBuffer,
     entity::EntityKind,
     filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
@@ -139,12 +140,9 @@ crate::component! {
 /// Defines a strongly typed component
 pub struct Component<T> {
     key: ComponentKey,
-    name: &'static str,
     marker: PhantomData<T>,
 
-    /// A metadata is a component which is attached to the component, such as
-    /// metadata or name
-    meta: fn(ComponentInfo) -> ComponentBuffer,
+    pub(crate) vtable: &'static ComponentVTable,
 }
 
 impl<T> Eq for Component<T> {}
@@ -161,9 +159,8 @@ impl<T> Clone for Component<T> {
     fn clone(&self) -> Self {
         Self {
             key: self.key,
-            name: self.name,
+            vtable: self.vtable,
             marker: PhantomData,
-            meta: self.meta,
         }
     }
 }
@@ -176,21 +173,16 @@ impl<T> fmt::Debug for Component<T> {
 
 impl<T> Display for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", self.name, self.key)
+        write!(f, "{}({})", self.vtable.name, self.key)
     }
 }
 
 impl<T: ComponentValue> Component<T> {
-    pub(crate) fn from_raw_parts(
-        key: ComponentKey,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
-    ) -> Self {
+    pub(crate) fn from_raw_parts(key: ComponentKey, vtable: &'static ComponentVTable) -> Self {
         Self {
             key,
-            name,
             marker: PhantomData,
-            meta,
+            vtable,
         }
     }
 
@@ -199,34 +191,23 @@ impl<T: ComponentValue> Component<T> {
     /// # Safety
     /// The constructed component can not be of a different type, name or meta
     /// than any existing component of the same id
-    pub(crate) fn from_key(
-        key: ComponentKey,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
-    ) -> Self {
+    pub(crate) fn from_key(key: ComponentKey, vtable: &'static ComponentVTable) -> Self {
         Self {
             key,
-            name,
             marker: PhantomData,
-            meta,
+            vtable,
         }
     }
 
     #[doc(hidden)]
-    pub fn static_init(
-        id: &AtomicU32,
-        kind: EntityKind,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
-    ) -> Self {
+    pub fn static_init(id: &AtomicU32, kind: EntityKind, vtable: &'static ComponentVTable) -> Self {
         let id = Entity::static_init(id, kind);
 
         // Safety
         // The id is new
         Self {
             key: ComponentKey::new(id, None),
-            name,
-            meta,
+            vtable,
             marker: PhantomData,
         }
     }
@@ -289,17 +270,17 @@ impl<T: ComponentValue> Component<T> {
     #[must_use]
     #[inline(always)]
     pub fn name(&self) -> &'static str {
-        self.name
+        self.vtable.name
     }
 
     /// Returns all metadata components
     pub fn get_meta(&self) -> ComponentBuffer {
-        (self.meta)(self.info())
+        (self.vtable.meta)(self.info())
     }
 
     /// Returns the component metadata fn
     pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
-        self.meta
+        self.vtable.meta
     }
 }
 
@@ -341,6 +322,159 @@ impl<T: ComponentValue> RelationExt<T> for Component<T> {
             relation: self.id(),
             name: self.name(),
         }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+/// Describes a components dynamic functionality, such as name, metadata, and type layout.
+pub struct ComponentVTable {
+    pub(crate) name: &'static str,
+    pub(crate) drop: unsafe fn(*mut u8),
+    pub(crate) layout: Layout,
+    pub(crate) type_id: fn() -> TypeId,
+    pub(crate) type_name: fn() -> &'static str,
+    /// A metadata is a component which is attached to the component, such as
+    /// metadata or name
+    meta: fn(ComponentInfo) -> ComponentBuffer,
+}
+
+impl ComponentVTable {
+    /// Creates a new vtable of type `T`
+    pub const fn new<T: ComponentValue>(
+        name: &'static str,
+        meta: fn(ComponentInfo) -> ComponentBuffer,
+    ) -> Self {
+        unsafe fn drop_ptr<T>(x: *mut u8) {
+            x.cast::<T>().drop_in_place()
+        }
+
+        ComponentVTable {
+            name,
+            meta,
+            drop: drop_ptr::<T>,
+            layout: Layout::new::<T>(),
+            type_id: || TypeId::of::<T>(),
+            type_name: || core::any::type_name::<T>(),
+        }
+    }
+}
+
+/// Represents a type erased component along with its memory layout and drop fn.
+#[derive(Clone, PartialEq, Eq, Copy)]
+pub struct ComponentInfo {
+    pub(crate) key: ComponentKey,
+    pub(crate) vtable: &'static ComponentVTable,
+}
+
+impl core::fmt::Debug for ComponentInfo {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ComponentInfo")
+            .field("key", &self.key)
+            .field("name", &self.vtable.name)
+            .finish()
+    }
+}
+
+impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
+    fn from(v: Component<T>) -> Self {
+        ComponentInfo::of(v)
+    }
+}
+
+impl PartialOrd for ComponentInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        self.key.partial_cmp(&other.key)
+    }
+}
+
+impl Ord for ComponentInfo {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.key.cmp(&other.key)
+    }
+}
+
+impl ComponentInfo {
+    /// Convert back to a typed form
+    ///
+    /// # Panics
+    /// If the types do not match
+    #[inline]
+    pub fn downcast<T: ComponentValue>(self) -> Component<T> {
+        if !self.is::<T>() {
+            panic!("Mismatched type");
+        }
+
+        Component::from_raw_parts(self.key, self.vtable)
+    }
+
+    /// Returns the component info of a types component
+    pub fn of<T: ComponentValue>(component: Component<T>) -> Self {
+        unsafe fn drop_ptr<T>(x: *mut u8) {
+            x.cast::<T>().drop_in_place()
+        }
+
+        Self {
+            key: component.key(),
+            vtable: component.vtable,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn is<T: ComponentValue>(&self) -> bool {
+        (self.vtable.type_id)() == TypeId::of::<T>()
+    }
+
+    #[inline]
+    pub(crate) fn size(&self) -> usize {
+        self.vtable.layout.size()
+    }
+
+    /// Returns the component name
+    #[inline]
+    pub fn name(&self) -> &'static str {
+        self.vtable.name
+    }
+
+    /// Returns the component id
+    #[inline]
+    pub fn key(&self) -> ComponentKey {
+        self.key
+    }
+
+    /// Returns the component metadata fn
+    #[inline]
+    pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
+        self.vtable.meta
+    }
+
+    #[inline]
+    pub(crate) fn align(&self) -> usize {
+        self.vtable.layout.align()
+    }
+
+    #[inline]
+    pub(crate) unsafe fn drop(&self, ptr: *mut u8) {
+        (self.vtable.drop)(ptr)
+    }
+
+    #[inline]
+    pub(crate) fn layout(&self) -> Layout {
+        self.vtable.layout
+    }
+
+    #[inline]
+    pub(crate) fn type_id(&self) -> TypeId {
+        (self.vtable.type_id)()
+    }
+
+    #[inline]
+    pub(crate) fn type_name(&self) -> &'static str {
+        (self.vtable.type_name)()
+    }
+
+    #[inline]
+    pub(crate) fn drop_fn(&self) -> unsafe fn(*mut u8) {
+        self.vtable.drop
     }
 }
 
