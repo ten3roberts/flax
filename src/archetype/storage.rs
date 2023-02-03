@@ -42,7 +42,7 @@ impl Storage {
             };
         }
 
-        let layout = Layout::from_size_align(info.size() * cap, info.layout.align()).unwrap();
+        let layout = Layout::from_size_align(info.size() * cap, info.align()).unwrap();
 
         unsafe {
             let data = alloc(layout);
@@ -139,7 +139,7 @@ impl Storage {
     }
 
     pub(crate) unsafe fn get<T: ComponentValue>(&self, slot: Slot) -> Option<&T> {
-        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
+        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
         if slot >= self.len {
             None
         } else {
@@ -150,7 +150,7 @@ impl Storage {
     }
 
     pub(crate) unsafe fn get_mut<T: ComponentValue>(&self, slot: Slot) -> Option<&mut T> {
-        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
+        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
         if slot >= self.len {
             None
         } else {
@@ -178,7 +178,11 @@ impl Storage {
     /// # Safety
     /// Other must be of the same type as self
     pub(crate) unsafe fn append(&mut self, other: &mut Self) {
-        debug_assert_eq!(self.info.type_id, other.info.type_id, "Mismatched types");
+        debug_assert_eq!(
+            self.info.type_id(),
+            other.info.type_id(),
+            "Mismatched types"
+        );
 
         // This is faster than copying everything over if there is no elements
         // in self
@@ -203,7 +207,7 @@ impl Storage {
     /// # Safety
     /// The types must match
     pub unsafe fn borrow_mut<T: ComponentValue>(&mut self) -> &mut [T] {
-        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
+        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
 
         core::slice::from_raw_parts_mut(self.data.as_ptr().cast::<T>(), self.len)
     }
@@ -212,7 +216,7 @@ impl Storage {
     /// # Safety
     /// The types must match
     pub unsafe fn borrow<T: ComponentValue>(&self) -> &[T] {
-        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
+        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
 
         core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
     }
@@ -222,7 +226,7 @@ impl Storage {
         for slot in 0..self.len {
             unsafe {
                 let value = self.at_mut(slot).unwrap();
-                (self.info.drop)(value);
+                self.info.drop(value);
             }
         }
 
@@ -244,7 +248,7 @@ impl Storage {
     /// # Safety
     /// `item` must be of the same type.
     pub(crate) unsafe fn push<T: ComponentValue>(&mut self, item: T) {
-        debug_assert_eq!(self.info.type_id, TypeId::of::<T>(), "Mismatched types");
+        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
 
         self.reserve(1);
 

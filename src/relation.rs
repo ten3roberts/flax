@@ -9,11 +9,10 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 
 use crate::{
     archetype::{Archetype, Cell, Slot},
-    buffer::ComponentBuffer,
     dummy,
     entity::EntityKind,
     filter::{WithRelation, WithoutRelation},
-    Component, ComponentInfo, ComponentKey, ComponentValue, Entity,
+    Component, ComponentKey, ComponentVTable, ComponentValue, Entity,
 };
 
 /// Relation helper trait
@@ -64,8 +63,7 @@ where
 /// Represents a relation which can connect to entities
 pub struct Relation<T> {
     id: Entity,
-    name: &'static str,
-    meta: fn(ComponentInfo) -> ComponentBuffer,
+    vtable: &'static ComponentVTable,
     marker: PhantomData<T>,
 }
 
@@ -83,8 +81,7 @@ impl<T> Clone for Relation<T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
-            name: self.name,
-            meta: self.meta,
+            vtable: self.vtable,
             marker: PhantomData,
         }
     }
@@ -98,7 +95,7 @@ impl<T> fmt::Debug for Relation<T> {
 
 impl<T> Display for Relation<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", self.name, self.id)
+        write!(f, "{}({})", self.vtable.name, self.id)
     }
 }
 
@@ -106,41 +103,30 @@ impl<T> Relation<T>
 where
     T: ComponentValue,
 {
-    pub(crate) fn from_id(
-        id: Entity,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
-    ) -> Self {
+    pub(crate) fn from_id(id: Entity, vtable: &'static ComponentVTable) -> Self {
         Self {
             id,
-            name,
-            meta,
+            vtable,
             marker: PhantomData,
         }
     }
 
     #[doc(hidden)]
-    pub fn static_init(
-        id: &AtomicU32,
-        kind: EntityKind,
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
-    ) -> Self {
+    pub fn static_init(id: &AtomicU32, kind: EntityKind, vtable: &'static ComponentVTable) -> Self {
         let id = Entity::static_init(id, kind);
 
         // Safety
         // The id is new
         Self {
             id,
-            name,
-            meta,
+            vtable,
             marker: PhantomData,
         }
     }
 
     /// Returns the relation name
     pub fn name(&self) -> &'static str {
-        self.name
+        self.vtable.name
     }
 }
 
@@ -150,11 +136,7 @@ impl<T: ComponentValue> RelationExt<T> for Relation<T> {
     }
 
     fn of(&self, object: Entity) -> Component<T> {
-        Component::from_raw_parts(
-            ComponentKey::new(self.id, Some(object)),
-            self.name,
-            self.meta,
-        )
+        Component::from_raw_parts(ComponentKey::new(self.id, Some(object)), self.vtable)
     }
 
     #[inline]

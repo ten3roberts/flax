@@ -5,11 +5,13 @@ use glam::{vec2, Vec2};
 fn custom_component() {
     let mut world = World::new();
 
-    let position: Component<Vec2> = world.spawn_component("position", |info| {
+    static VTABLE: &ComponentVTable = &ComponentVTable::new::<Vec2>("position", |info| {
         let mut buf = ComponentBuffer::new();
         <Debug as MetaData<Vec2>>::attach(info, &mut buf);
         buf
     });
+
+    let position: Component<Vec2> = world.spawn_component(VTABLE);
 
     let id = Entity::builder()
         .set(position, vec2(1.0, 6.4))

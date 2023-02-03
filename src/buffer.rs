@@ -6,7 +6,7 @@ use alloc::collections::{btree_map, BTreeMap};
 use itertools::Itertools;
 
 use crate::ComponentKey;
-use crate::{archetype::ComponentInfo, Component, ComponentValue};
+use crate::{Component, ComponentInfo, ComponentValue};
 
 type Offset = usize;
 
@@ -304,14 +304,14 @@ impl ComponentBuffer {
             assert_eq!(old_info, info);
             let old_ptr = self.storage.at(offset);
 
-            (info.drop)(old_ptr);
+            info.drop(old_ptr);
 
             ptr::copy_nonoverlapping(value, old_ptr, info.size());
         } else {
-            let offset = self.storage.allocate(info.layout);
+            let offset = self.storage.allocate(info.layout());
 
             self.storage
-                .write_dyn(offset, info.layout, value, info.drop);
+                .write_dyn(offset, info.layout(), value, info.drop_fn());
 
             self.components.insert(info.key(), (offset, info));
         }

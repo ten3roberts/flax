@@ -121,9 +121,10 @@ macro_rules! component {
                     _buffer
                 }
 
+                static VTABLE: &$crate::ComponentVTable = &$crate::ComponentVTable::new::<$ty>(stringify!($name), meta);
                 use $crate::entity::EntityKind;
                 use $crate::RelationExt;
-                $crate::Component::static_init(&COMPONENT_ID, EntityKind::COMPONENT, stringify!($name), meta).of($obj)
+                $crate::Component::static_init(&COMPONENT_ID, EntityKind::COMPONENT, VTABLE).of($obj)
             }
         }
 
@@ -152,8 +153,10 @@ macro_rules! component {
 
                     _buffer
                 }
+
+                static VTABLE: &$crate::ComponentVTable = &$crate::ComponentVTable::new::<$ty>(stringify!($name), meta);
                 use $crate::entity::EntityKind;
-                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT, stringify!($name), meta)
+                $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT, VTABLE)
             }
         }
 

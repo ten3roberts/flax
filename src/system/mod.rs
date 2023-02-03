@@ -266,7 +266,7 @@ where
 {
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
         #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("execute", name = self.name).entered();
+        let _span = tracing::info_span!("system", name = self.name).entered();
 
         let data = self
             .data
@@ -304,7 +304,7 @@ where
 {
     fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
         #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("execute", name = self.name).entered();
+        let _span = tracing::info_span!("system", name = self.name).entered();
 
         let data = self
             .data

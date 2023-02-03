@@ -196,12 +196,18 @@ fn merge_custom() {
         .set(resources(), name(), "resources".into())
         .unwrap();
 
-    let custom_component =
-        src_world.spawn_component::<Arc<String>>("custom", |_| Default::default());
+    static CUSTOM_VTABLE: &ComponentVTable =
+        &ComponentVTable::new::<Arc<String>>("custom", |_| Default::default());
+    let custom_component = src_world.spawn_component::<Arc<String>>(CUSTOM_VTABLE);
 
-    let unused_component = src_world.spawn_component::<f32>("unused", |_| Default::default());
+    static UNUSED_VTABLE: &ComponentVTable =
+        &ComponentVTable::new::<f32>("unused", |_| Default::default());
+    let unused_component = src_world.spawn_component::<f32>(UNUSED_VTABLE);
 
-    let custom_relation = src_world.spawn_relation::<String>("relation", |_| Default::default());
+    static RELATION_VTABLE: &ComponentVTable =
+        &ComponentVTable::new::<String>("relation", |_| Default::default());
+
+    let custom_relation = src_world.spawn_relation::<String>(RELATION_VTABLE);
 
     let shared: Arc<String> = Arc::new("Very important data".into());
 
@@ -237,7 +243,10 @@ fn merge_custom() {
 
     let mut world = World::new();
 
-    let custom2 = world.spawn_component::<Arc<String>>("custom2", |_| Default::default());
+    static CUSTOM2_VTABLE: &ComponentVTable =
+        &ComponentVTable::new::<Arc<String>>("custom2", |_| Default::default());
+
+    let custom2 = world.spawn_component::<Arc<String>>(CUSTOM2_VTABLE);
 
     world
         .set(resources(), custom2, Arc::new("String".into()))
