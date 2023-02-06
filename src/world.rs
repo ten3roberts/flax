@@ -421,13 +421,13 @@ impl World {
     /// The given name does not need to be unique.
     pub fn spawn_component<T: ComponentValue>(
         &mut self,
-        vtable: &'static ComponentVTable,
+        vtable: &'static ComponentVTable<T>,
     ) -> Component<T> {
         let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
 
         // Safety
         // The id is not used by anything else
-        let component = Component::from_key(ComponentKey::new(id, None), vtable);
+        let component = Component::new(ComponentKey::new(id, None), vtable);
 
         let info = component.info();
 
@@ -444,11 +444,11 @@ impl World {
     /// The given name does not need to be unique.
     pub fn spawn_relation<T: ComponentValue>(
         &mut self,
-        vtable: &'static ComponentVTable,
+        vtable: &'static ComponentVTable<T>,
     ) -> Relation<T> {
         let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
 
-        Relation::from_id(id, vtable)
+        Relation::new(id, vtable)
     }
 
     #[inline(always)]
@@ -1322,7 +1322,7 @@ impl World {
         }
         // Safety: the type
 
-        Some(Component::from_key(id, info.vtable))
+        Some(Component::from_raw_parts(id, info.vtable))
     }
 
     /// Access, insert, and remove all components of an entity
@@ -1513,10 +1513,7 @@ impl World {
                 }
             }
         }
-        Migrated {
-            ids: new_ids,
-            components,
-        }
+        Migrated { ids: new_ids }
     }
 }
 
@@ -1524,7 +1521,6 @@ impl World {
 #[derive(Debug, Clone)]
 pub struct Migrated {
     ids: BTreeMap<Entity, Entity>,
-    components: BTreeMap<Entity, ComponentInfo>,
 }
 
 impl Migrated {
@@ -1540,15 +1536,7 @@ impl Migrated {
         let id = self.get(component.key().id);
         let object = component.key().object.map(|v| self.get(v));
 
-        let info = *self
-            .components
-            .get(&id)
-            .expect("{component} is not a component or not present in the world");
-        if !info.is::<T>() {
-            panic!("Mismatched component types {component:?} for {info:#?}");
-        }
-
-        Component::from_key(ComponentKey::new(id, object), component.vtable)
+        Component::from_raw_parts(ComponentKey::new(id, object), component.vtable)
     }
 
     /// Returns the migrated relation

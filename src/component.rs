@@ -17,6 +17,7 @@ use crate::{
     buffer::ComponentBuffer,
     entity::EntityKind,
     filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
+    vtable::{ComponentVTable, UntypedVTable},
     ChangeKind, Entity, MetaData, Mutable, RelationExt,
 };
 
@@ -142,7 +143,7 @@ pub struct Component<T> {
     key: ComponentKey,
     marker: PhantomData<T>,
 
-    pub(crate) vtable: &'static ComponentVTable,
+    pub(crate) vtable: &'static UntypedVTable,
 }
 
 impl<T> Eq for Component<T> {}
@@ -178,20 +179,22 @@ impl<T> Display for Component<T> {
 }
 
 impl<T: ComponentValue> Component<T> {
-    pub(crate) fn from_raw_parts(key: ComponentKey, vtable: &'static ComponentVTable) -> Self {
+    pub(crate) fn new(key: ComponentKey, vtable: &'static ComponentVTable<T>) -> Self {
         Self {
             key,
             marker: PhantomData,
-            vtable,
+            vtable: vtable.erase(),
         }
     }
-
-    /// Create a new component given a unique id and name.
+    /// Creates a new component from the given untyped vtable
     ///
-    /// # Safety
-    /// The constructed component can not be of a different type, name or meta
-    /// than any existing component of the same id
-    pub(crate) fn from_key(key: ComponentKey, vtable: &'static ComponentVTable) -> Self {
+    /// # Panics
+    /// If the types do not match
+    pub(crate) fn from_raw_parts(key: ComponentKey, vtable: &'static UntypedVTable) -> Self {
+        if !vtable.is::<T>() {
+            panic!("Mismatched type");
+        }
+
         Self {
             key,
             marker: PhantomData,
@@ -200,14 +203,16 @@ impl<T: ComponentValue> Component<T> {
     }
 
     #[doc(hidden)]
-    pub fn static_init(id: &AtomicU32, kind: EntityKind, vtable: &'static ComponentVTable) -> Self {
+    pub fn static_init(
+        id: &AtomicU32,
+        kind: EntityKind,
+        vtable: &'static ComponentVTable<T>,
+    ) -> Self {
         let id = Entity::static_init(id, kind);
 
-        // Safety
-        // The id is new
         Self {
             key: ComponentKey::new(id, None),
-            vtable,
+            vtable: vtable.erase(),
             marker: PhantomData,
         }
     }
@@ -325,45 +330,11 @@ impl<T: ComponentValue> RelationExt<T> for Component<T> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-/// Describes a components dynamic functionality, such as name, metadata, and type layout.
-pub struct ComponentVTable {
-    pub(crate) name: &'static str,
-    pub(crate) drop: unsafe fn(*mut u8),
-    pub(crate) layout: Layout,
-    pub(crate) type_id: fn() -> TypeId,
-    pub(crate) type_name: fn() -> &'static str,
-    /// A metadata is a component which is attached to the component, such as
-    /// metadata or name
-    meta: fn(ComponentInfo) -> ComponentBuffer,
-}
-
-impl ComponentVTable {
-    /// Creates a new vtable of type `T`
-    pub const fn new<T: ComponentValue>(
-        name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
-    ) -> Self {
-        unsafe fn drop_ptr<T>(x: *mut u8) {
-            x.cast::<T>().drop_in_place()
-        }
-
-        ComponentVTable {
-            name,
-            meta,
-            drop: drop_ptr::<T>,
-            layout: Layout::new::<T>(),
-            type_id: || TypeId::of::<T>(),
-            type_name: || core::any::type_name::<T>(),
-        }
-    }
-}
-
 /// Represents a type erased component along with its memory layout and drop fn.
 #[derive(Clone, PartialEq, Eq, Copy)]
 pub struct ComponentInfo {
     pub(crate) key: ComponentKey,
-    pub(crate) vtable: &'static ComponentVTable,
+    pub(crate) vtable: &'static UntypedVTable,
 }
 
 impl core::fmt::Debug for ComponentInfo {
@@ -400,19 +371,11 @@ impl ComponentInfo {
     /// If the types do not match
     #[inline]
     pub fn downcast<T: ComponentValue>(self) -> Component<T> {
-        if !self.is::<T>() {
-            panic!("Mismatched type");
-        }
-
         Component::from_raw_parts(self.key, self.vtable)
     }
 
     /// Returns the component info of a types component
     pub fn of<T: ComponentValue>(component: Component<T>) -> Self {
-        unsafe fn drop_ptr<T>(x: *mut u8) {
-            x.cast::<T>().drop_in_place()
-        }
-
         Self {
             key: component.key(),
             vtable: component.vtable,
@@ -463,12 +426,14 @@ impl ComponentInfo {
     }
 
     #[inline]
-    pub(crate) fn type_id(&self) -> TypeId {
+    /// Returns the type id of the component
+    pub fn type_id(&self) -> TypeId {
         (self.vtable.type_id)()
     }
 
     #[inline]
-    pub(crate) fn type_name(&self) -> &'static str {
+    /// Returns the type name of the component
+    pub fn type_name(&self) -> &'static str {
         (self.vtable.type_name)()
     }
 

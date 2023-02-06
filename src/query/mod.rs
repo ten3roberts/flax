@@ -543,7 +543,7 @@ mod test {
         Query::new((name(), a().as_mut()))
             .filter(child_of(root).with() | name().eq("root".to_string()))
             .borrow(&world)
-            .for_each(|(id, a)| {
+            .for_each(|(_, a)| {
                 *a *= -10;
             });
 

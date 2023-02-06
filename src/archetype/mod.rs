@@ -10,8 +10,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    buffer::ComponentBuffer, events::Subscriber, Component, ComponentInfo, ComponentKey,
-    ComponentValue, Entity, Verbatim,
+    events::Subscriber, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Verbatim,
 };
 
 /// Unique archetype id
@@ -512,7 +511,11 @@ impl Archetype {
     /// Returns the index of the entity
     /// Entity must not exist in archetype
     #[cfg(test)]
-    pub(crate) fn insert(&mut self, id: Entity, components: &mut ComponentBuffer) -> Slot {
+    pub(crate) fn insert(
+        &mut self,
+        id: Entity,
+        components: &mut crate::buffer::ComponentBuffer,
+    ) -> Slot {
         let slot = self.allocate(id);
         unsafe {
             for (component, src) in components.take_all() {
@@ -976,6 +979,7 @@ pub(crate) struct ArchetypeDrain {
 #[cfg(test)]
 mod tests {
 
+    use crate::buffer::ComponentBuffer;
     use crate::entity::DEFAULT_GEN;
     use crate::{component, entity::EntityKind};
     use alloc::string::{String, ToString};
