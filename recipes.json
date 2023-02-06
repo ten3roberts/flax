@@ -18,11 +18,15 @@
     "kind": "dap"
   },
   "check": {
-    "cmd": "cargo check --all-features"
+    "cmd": "cargo check --all-features --tests --examples"
   },
   "test-all": {
     "cmd": "",
-    "depends_on": ["test", "doc", "test-nostd"]
+    "depends_on": [
+      "test",
+      "doc",
+      "test-nostd"
+    ]
   },
   "test": {
     "cmd": "cargo nextest run --all-features",

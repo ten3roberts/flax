@@ -31,7 +31,7 @@ fn main() {
 
     let query = Query::new((name(), health().modified()));
 
-    let mut health_changes = System::builder()
+    let health_changes = System::builder()
         .with(query)
         .build(|mut query: QueryBorrow<_>| {
             info_span!("health_changes");

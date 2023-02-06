@@ -237,6 +237,8 @@ mod relation;
 /// entities therein
 #[cfg(feature = "serde")]
 pub mod serialize;
+/// vtable implementation for dynamic dispatching
+pub mod vtable;
 
 // Required due to macro
 pub(crate) use archetype::*;
@@ -259,6 +261,7 @@ pub use relation::*;
 pub use schedule::*;
 pub use system::*;
 pub use visitors::*;
+pub(crate) use vtable::*;
 pub use world::*;
 
 pub use flax_derive::*;

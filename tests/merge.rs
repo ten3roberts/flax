@@ -196,22 +196,18 @@ fn merge_custom() {
         .set(resources(), name(), "resources".into())
         .unwrap();
 
-    static CUSTOM_VTABLE: &ComponentVTable =
-        &ComponentVTable::new::<Arc<String>>("custom", |_| Default::default());
-    let custom_component = src_world.spawn_component::<Arc<String>>(CUSTOM_VTABLE);
+    let custom_component =
+        src_world.spawn_component(component_vtable!(custom: Arc<String> => [ Debug ]));
 
-    static UNUSED_VTABLE: &ComponentVTable =
-        &ComponentVTable::new::<f32>("unused", |_| Default::default());
-    let unused_component = src_world.spawn_component::<f32>(UNUSED_VTABLE);
+    let unused_component = src_world.spawn_component(component_vtable!(unused: f32));
 
-    static RELATION_VTABLE: &ComponentVTable =
-        &ComponentVTable::new::<String>("relation", |_| Default::default());
-
-    let custom_relation = src_world.spawn_relation::<String>(RELATION_VTABLE);
+    let custom_relation = src_world.spawn_relation(component_vtable!(relation: String));
 
     let shared: Arc<String> = Arc::new("Very important data".into());
 
     let mut rng = StdRng::seed_from_u64(62);
+
+    assert!(src_world.has(custom_component.id(), debug_visitor()));
 
     let root = Entity::builder()
         .set(name(), "root".into())
@@ -241,12 +237,14 @@ fn merge_custom() {
         )
         .unwrap();
 
+    assert!(src_world.has(custom_component.id(), debug_visitor()));
+
     let mut world = World::new();
 
-    static CUSTOM2_VTABLE: &ComponentVTable =
-        &ComponentVTable::new::<Arc<String>>("custom2", |_| Default::default());
+    let custom2 =
+        world.spawn_component::<Arc<String>>(flax::component_vtable!(custom2: Arc<String>));
 
-    let custom2 = world.spawn_component::<Arc<String>>(CUSTOM2_VTABLE);
+    assert_eq!(custom2.name(), "custom2");
 
     world
         .set(resources(), custom2, Arc::new("String".into()))
@@ -268,6 +266,8 @@ fn merge_custom() {
         .expect("Missing component");
 
     let _ = migrated.get_component::<f32>(unused_component);
+
+    assert!(world.has(new_custom_component.id(), debug_visitor()));
 
     let new_custom_relation = migrated.get_relation(custom_relation);
 

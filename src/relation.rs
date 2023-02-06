@@ -12,7 +12,8 @@ use crate::{
     dummy,
     entity::EntityKind,
     filter::{WithRelation, WithoutRelation},
-    Component, ComponentKey, ComponentVTable, ComponentValue, Entity,
+    vtable::ComponentVTable,
+    Component, ComponentKey, ComponentValue, Entity, UntypedVTable,
 };
 
 /// Relation helper trait
@@ -63,7 +64,7 @@ where
 /// Represents a relation which can connect to entities
 pub struct Relation<T> {
     id: Entity,
-    vtable: &'static ComponentVTable,
+    vtable: &'static UntypedVTable,
     marker: PhantomData<T>,
 }
 
@@ -103,23 +104,25 @@ impl<T> Relation<T>
 where
     T: ComponentValue,
 {
-    pub(crate) fn from_id(id: Entity, vtable: &'static ComponentVTable) -> Self {
+    pub(crate) fn new(id: Entity, vtable: &'static ComponentVTable<T>) -> Self {
         Self {
             id,
-            vtable,
+            vtable: vtable.erase(),
             marker: PhantomData,
         }
     }
 
     #[doc(hidden)]
-    pub fn static_init(id: &AtomicU32, kind: EntityKind, vtable: &'static ComponentVTable) -> Self {
+    pub fn static_init(
+        id: &AtomicU32,
+        kind: EntityKind,
+        vtable: &'static ComponentVTable<T>,
+    ) -> Self {
         let id = Entity::static_init(id, kind);
 
-        // Safety
-        // The id is new
         Self {
             id,
-            vtable,
+            vtable: vtable.erase(),
             marker: PhantomData,
         }
     }
