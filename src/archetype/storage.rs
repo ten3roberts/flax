@@ -216,7 +216,7 @@ impl Storage {
     /// # Safety
     /// The types must match
     pub unsafe fn borrow<T: ComponentValue>(&self) -> &[T] {
-        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
+        debug_assert!(self.info.is::<T>(), "Mismatched types");
 
         core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
     }
