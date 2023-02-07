@@ -1,11 +1,24 @@
+use core::iter::Flatten;
+
 use alloc::collections::{btree_map, BTreeMap, BTreeSet};
-use itertools::sorted;
+use smallvec::SmallVec;
 
-use crate::{ArchetypeId, ComponentValue, Entity, Fetch, RelationExt};
+use crate::{
+    fetch::{FetchAccessData, PreparedFetch},
+    Access, AccessKind, ArchetypeId, BatchedIter, ComponentValue, Entity, Fetch, PreparedArchetype,
+    QueryStrategy, RelationExt,
+};
 
-use super::ArchetypeSearcher;
+use super::{borrow::QueryBorrowState, ArchetypeSearcher};
 
+/// Visit entities in topological order following `relation`.
+///
+/// Cycles are not visited.
+///
+/// Links where the fetch is not satisfied, e.g; missing components, will "fall-through" and
+/// affect the ordering, but not be returned by the iteration.
 pub struct Topo {
+    state: State,
     relation: Entity,
 }
 
@@ -22,19 +35,18 @@ impl State {
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
         // Maps each entity to all archetypes of its children
-        let mut adj: BTreeMap<Entity, Vec<usize>> = BTreeMap::new();
-        let mut deps: BTreeMap<usize, _> = BTreeMap::new();
+        let mut deps: BTreeMap<_, _> = BTreeMap::new();
 
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
             if !fetch.filter_arch(arch) {
                 return;
             }
 
-            let arch_index = match self.archetypes_index.entry(arch_id) {
+            match self.archetypes_index.entry(arch_id) {
                 btree_map::Entry::Vacant(slot) => {
                     let idx = self.archetypes.len();
                     self.archetypes.push(arch_id);
-                    *slot.insert(idx)
+                    slot.insert(idx);
                 }
                 btree_map::Entry::Occupied(_) => panic!("Duplicate archetype"),
             };
@@ -51,86 +63,183 @@ impl State {
                 .collect();
 
             if !arch_deps.is_empty() {
-                deps.insert(arch_index, arch_deps);
+                deps.insert(arch_id, arch_deps);
             }
         });
 
-        enum VisitedState {
-            Pending,
-            Visited,
-        }
-
         fn sort(
             order: &mut Vec<usize>,
-            visited: &mut BTreeSet<usize>,
+            visited: &mut BTreeSet<ArchetypeId>,
             index: &BTreeMap<ArchetypeId, usize>,
-            deps: &BTreeMap<usize, Vec<ArchetypeId>>,
+            deps: &BTreeMap<ArchetypeId, Vec<ArchetypeId>>,
             arch_id: ArchetypeId,
-            arch_index: usize,
         ) {
-            if !visited.insert(arch_index) {
-                eprintln!("Archetype {arch_index} {arch_id} already visited");
+            if !visited.insert(arch_id) {
                 return;
             }
 
             // Make sure all dependencies i.e; parents, are visited first
-            for dep in deps.get(&arch_index).into_iter().flatten() {
-                if let Some(&arch_index) = index.get(dep) {
-                    sort(order, visited, index, deps, arch_id, arch_index);
-                } else {
-                    eprintln!("Parent is not part of the fetch")
-                }
+            for &dep in deps.get(&arch_id).into_iter().flatten() {
+                sort(order, visited, index, deps, dep);
             }
 
-            eprintln!("=> {arch_index} {arch_id}");
-            order.push(arch_index);
+            if let Some(&arch_index) = index.get(&arch_id) {
+                order.push(arch_index);
+            }
         }
         eprintln!("Sorting topo");
 
         let mut visited = BTreeSet::new();
-        for (arch_index, &arch_id) in self.archetypes.iter().enumerate() {
-            dbg!(arch_index, arch_id);
+        for &arch_id in self.archetypes.iter() {
             sort(
                 &mut self.order,
                 &mut visited,
                 &self.archetypes_index,
                 &deps,
                 arch_id,
-                arch_index,
             )
-        }
-    }
-
-    fn insert_arch(&mut self, arch_id: ArchetypeId) -> usize {
-        match self.archetypes_index.entry(arch_id) {
-            btree_map::Entry::Vacant(slot) => {
-                let idx = self.archetypes.len();
-                self.archetypes.push(arch_id);
-                *slot.insert(idx)
-            }
-            btree_map::Entry::Occupied(mut slot) => *slot.get_mut(),
         }
     }
 
     fn clear(&mut self) {
         self.archetypes.clear();
         self.archetypes_index.clear();
+        self.order.clear();
     }
 }
 
 impl Topo {
+    /// Iterate a hierarchy in topological order from `root`
     pub fn new<T: ComponentValue>(relation: impl RelationExt<T>) -> Self {
         Self {
             relation: relation.id(),
+            state: Default::default(),
         }
+    }
+}
+
+impl<'w, Q, F> QueryStrategy<'w, Q, F> for Topo
+where
+    Q: 'w + Fetch<'w>,
+    F: 'w + Fetch<'w>,
+{
+    type Borrow = TopoBorrow<'w, Q, F>;
+
+    fn borrow(
+        &'w mut self,
+        query_state: super::borrow::QueryBorrowState<'w, Q, F>,
+        dirty: bool,
+    ) -> Self::Borrow {
+        if dirty {
+            self.state
+                .update(self.relation, query_state.world, query_state.fetch);
+        }
+
+        TopoBorrow {
+            topo: &self.state,
+            state: query_state,
+            prepared: Default::default(),
+        }
+    }
+
+    fn access(
+        &self,
+        world: &'w crate::World,
+        fetch: &'w crate::filter::Filtered<Q, F>,
+    ) -> Vec<crate::Access> {
+        let mut state = State::default();
+        state.update(self.relation, world, fetch);
+
+        state
+            .archetypes
+            .iter()
+            .flat_map(|&arch_id| {
+                let arch = world.archetypes.get(arch_id);
+                let data = FetchAccessData {
+                    world,
+                    arch,
+                    arch_id,
+                };
+
+                fetch.access(data)
+            })
+            .chain([Access {
+                kind: AccessKind::World,
+                mutable: false,
+            }])
+            .collect()
+    }
+}
+
+/// Borrowed state for [`Topo`] strategy
+pub struct TopoBorrow<'w, Q, F>
+where
+    Q: Fetch<'w>,
+    F: Fetch<'w>,
+{
+    topo: &'w State,
+    state: QueryBorrowState<'w, Q, F>,
+    /// Archetypes are in topological order
+    prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 8]>,
+}
+
+impl<'w, Q, F> TopoBorrow<'w, Q, F>
+where
+    Q: Fetch<'w>,
+    F: Fetch<'w>,
+{
+    /// Iterate all items matched by query and filter.
+    pub fn iter<'q>(&'q mut self) -> TopoIter<'w, 'q, Q, F> {
+        if self.prepared.is_empty() {
+            self.prepared = self
+                .topo
+                .order
+                .iter()
+                .flat_map(|&idx| {
+                    let arch_id = self.topo.archetypes[idx];
+                    let arch = self.state.world.archetypes.get(arch_id);
+
+                    self.state.prepare_fetch(arch_id, arch)
+                })
+                .collect();
+        }
+
+        TopoIter {
+            iter: BatchedIter::new(self.prepared.iter_mut()).flatten(),
+        }
+    }
+}
+
+/// Iterates a hierarchy in topological order.
+pub struct TopoIter<'w, 'q, Q, F>
+where
+    Q: Fetch<'w>,
+    F: Fetch<'w>,
+    'w: 'q,
+{
+    iter: Flatten<BatchedIter<'w, 'q, Q, F>>,
+}
+
+impl<'w, 'q, Q, F> Iterator for TopoIter<'w, 'q, Q, F>
+where
+    Q: Fetch<'w>,
+    F: Fetch<'w>,
+    'w: 'q,
+{
+    type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
     }
 }
 
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
+    use pretty_assertions::assert_eq;
 
-    use crate::{child_of, component_info, name, World};
+    use crate::{child_of, component_info, name, FetchExt, Query, World};
     use alloc::string::ToString;
 
     use super::*;
@@ -202,5 +311,75 @@ mod test {
             visited,
             [vec![a, d], vec![g], vec![f], vec![c], vec![], vec![e, b]]
         );
+    }
+
+    #[test]
+    fn topo_query() {
+        component! {
+            tree: (),
+        }
+
+        let mut world = World::new();
+
+        let [_a, b, c, d, e, f, g] = *('a'..='g')
+            .map(|i| {
+                Entity::builder()
+                    .set(name(), i.to_string())
+                    .tag(tree())
+                    .spawn(&mut world)
+            })
+            .collect_vec() else {unreachable!()};
+
+        //   d ----*     a
+        //   |     |
+        //   |     b-----c
+        //   |    / \    |
+        //   |   /   *---f
+        //   e -*
+        //   |
+        //   g
+
+        world.set(b, child_of(d), ()).unwrap();
+
+        world.set(e, child_of(d), ()).unwrap();
+        world.set(e, child_of(b), ()).unwrap();
+
+        world.set(c, child_of(b), ()).unwrap();
+
+        world.set(f, child_of(b), ()).unwrap();
+        world.set(f, child_of(c), ()).unwrap();
+
+        world.set(g, child_of(e), ()).unwrap();
+
+        let mut query = Query::new(name().cloned())
+            .without(component_info())
+            .with(tree())
+            .with_strategy(Topo::new(child_of));
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, ["a", "d", "b", "c", "f", "e", "g"]);
+
+        // Detaching `b` creates a separate tree
+        //   d ----*     a
+        //   |     |
+        //   |     b     c
+        //   |           |
+        //   |           f
+        //   e
+        //   |
+        //   g
+        world.detach(b);
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, ["a", "d", "c", "f", "b", "e", "g"]);
+
+        // Removing the `tree` from `e` is equivalent to removing the dependency
+        world.remove(e, tree()).unwrap();
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, ["a", "d", "c", "f", "b", "g"]);
     }
 }

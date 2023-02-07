@@ -201,7 +201,7 @@ where
             .iter()
             .map(|&arch_id| {
                 let arch = query_state.world.archetypes.get(arch_id);
-                query_state.prepare_fetch(arch, arch_id).unwrap()
+                query_state.prepare_fetch(arch_id, arch).unwrap()
             })
             .collect();
 

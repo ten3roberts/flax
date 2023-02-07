@@ -28,7 +28,7 @@ fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
 
     let arch = state.world.archetypes.get(loc.arch_id);
 
-    let Some(mut p) = state.prepare_fetch(arch, loc.arch_id) else {
+    let Some(mut p) = state.prepare_fetch(loc.arch_id, arch) else {
         return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
             Some(missing) => Err(Error::MissingComponent(id, missing)),
             None => Err(Error::DoesNotMatch(id)),
