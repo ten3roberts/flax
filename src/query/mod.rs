@@ -6,6 +6,7 @@ mod entity;
 mod iter;
 mod planar;
 mod searcher;
+mod topo;
 
 use core::fmt::Debug;
 
