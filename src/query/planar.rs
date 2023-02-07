@@ -144,7 +144,7 @@ where
 {
     type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
-    type IntoIter = QueryIter<'q, 'w, Q, F>;
+    type IntoIter = QueryIter<'w, 'q, Q, F>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -157,7 +157,8 @@ where
     F: Fetch<'w>,
 {
     /// Iterate all items matched by query and filter.
-    pub fn iter<'q>(&'q mut self) -> QueryIter<'q, 'w, Q, F>
+    #[inline]
+    pub fn iter<'q>(&'q mut self) -> QueryIter<'w, 'q, Q, F>
     where
         'w: 'q,
     {
@@ -172,7 +173,7 @@ where
     }
 
     /// Iterate all items matched by query and filter.
-    pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'q, 'w, Q, F>
+    pub fn iter_batched<'q>(&'q mut self) -> BatchedIter<'w, 'q, Q, F>
     where
         'w: 'q,
     {
@@ -189,7 +190,7 @@ where
                         return None;
                     }
 
-                    self.state.prepare_fetch(arch, arch_id)
+                    self.state.prepare_fetch(arch_id, arch)
                 })
                 .collect();
         }
@@ -212,7 +213,7 @@ where
                 continue;
             }
 
-            let Some(mut p) = self.state.prepare_fetch(arch, arch_id) else { continue };
+            let Some(mut p) = self.state.prepare_fetch(arch_id, arch) else { continue };
 
             let chunk = p.chunks();
 
@@ -246,7 +247,7 @@ where
                 return;
             }
 
-            let Some(mut p) = self.state.prepare_fetch(arch, arch_id) else { return };
+            let Some(mut p) = self.state.prepare_fetch(arch_id, arch) else { return };
 
             let chunk = p.chunks();
 
@@ -284,7 +285,7 @@ where
                 return None;
             }
 
-            let fetch = self.state.prepare_fetch(arch, arch_id)?;
+            let fetch = self.state.prepare_fetch(arch_id, arch)?;
 
             // let arch_id = *self.archetypes.iter().find(|&&v| v == arch_id)?;
 
@@ -386,15 +387,15 @@ where
 }
 
 /// The query iterator
-pub struct QueryIter<'q, 'w, Q, F>
+pub struct QueryIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    iter: Flatten<BatchedIter<'q, 'w, Q, F>>,
+    iter: Flatten<BatchedIter<'w, 'q, Q, F>>,
 }
 
-impl<'w, 'q, Q, F> Iterator for QueryIter<'q, 'w, Q, F>
+impl<'w, 'q, Q, F> Iterator for QueryIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
@@ -410,7 +411,7 @@ where
 
 /// An iterator which yields disjoint continuous slices for each matched archetype
 /// and filter predicate.
-pub struct BatchedIter<'q, 'w, Q, F>
+pub struct BatchedIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
@@ -420,7 +421,23 @@ where
     pub(crate) current: Option<ArchetypeChunks<'q, Q::Prepared, F::Prepared>>,
 }
 
-impl<'w, 'q, Q, F> Iterator for BatchedIter<'q, 'w, Q, F>
+impl<'q, 'w, Q, F> BatchedIter<'w, 'q, Q, F>
+where
+    Q: Fetch<'w>,
+    F: Fetch<'w>,
+    'w: 'q,
+{
+    pub(crate) fn new(
+        archetypes: IterMut<'q, PreparedArchetype<'w, Q::Prepared, F::Prepared>>,
+    ) -> Self {
+        Self {
+            archetypes,
+            current: None,
+        }
+    }
+}
+
+impl<'w, 'q, Q, F> Iterator for BatchedIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
@@ -428,6 +445,7 @@ where
 {
     type Item = Batch<'q, Q::Prepared, F::Prepared>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(chunk) = self.current.as_mut() {

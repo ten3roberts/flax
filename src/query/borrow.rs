@@ -57,8 +57,8 @@ where
     #[inline]
     pub(crate) fn prepare_fetch(
         &self,
-        arch: &'w Archetype,
         arch_id: ArchetypeId,
+        arch: &'w Archetype,
     ) -> Option<PreparedArchetype<'w, Q::Prepared, F::Prepared>> {
         let data = FetchPrepareData {
             arch,

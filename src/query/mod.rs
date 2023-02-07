@@ -29,6 +29,7 @@ pub use entity::EntityBorrow;
 pub(crate) use iter::*;
 pub use planar::*;
 pub use searcher::ArchetypeSearcher;
+pub use topo::{Topo, TopoBorrow, TopoIter};
 
 /// Similar to [`Query`](crate::Query), except optimized to only fetch a single entity.
 ///
