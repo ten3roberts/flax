@@ -90,6 +90,20 @@ where
             Some((id, item))
         }
     }
+
+    pub(crate) fn next_full(&mut self) -> Option<(Slot, Entity, Q::Item)> {
+        if self.pos == self.end {
+            None
+        } else {
+            let fetch = unsafe { &mut *(self.fetch as *mut Filtered<Q, F>) };
+            let slot = self.pos;
+            let item = unsafe { fetch.fetch(slot) };
+            let id = self.arch.entities[slot];
+            self.pos += 1;
+
+            Some((slot, id, item))
+        }
+    }
 }
 
 /// An iterator over a single archetype which returns chunks.
