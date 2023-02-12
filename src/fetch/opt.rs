@@ -46,7 +46,7 @@ where
 }
 
 #[doc(hidden)]
-pub struct PreparedOpt<F>(Option<F>);
+pub struct PreparedOpt<F>(pub(crate) Option<F>);
 
 impl<'p, F> PeekableFetch<'p> for PreparedOpt<F>
 where

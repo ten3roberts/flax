@@ -6,6 +6,7 @@ mod entity_ref;
 mod ext;
 mod opt;
 mod peek;
+mod relations;
 mod satisfied;
 
 use core::fmt::Debug;
@@ -21,6 +22,7 @@ pub use entity_ref::*;
 pub use ext::FetchExt;
 pub use opt::*;
 pub use peek::*;
+pub use relations::{relations_like, Relations, RelationsIter};
 pub use satisfied::Satisfied;
 
 use crate::filter::RefFetch;

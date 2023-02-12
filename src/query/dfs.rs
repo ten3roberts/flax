@@ -1,3 +1,5 @@
+use core::marker::PhantomData;
+
 use crate::{
     fetch::FetchAccessData, filter::Filtered, Access, AccessKind, ArchetypeId, ComponentValue,
 };
@@ -17,11 +19,13 @@ type AdjMap = BTreeMap<Entity, SmallVec<[usize; 8]>>;
 use super::{borrow::QueryBorrowState, Batch, PreparedArchetype, QueryStrategy};
 
 /// Iterate a hierarchy in depth-first order
-pub struct Dfs {
+pub struct Dfs<T> {
     root: Entity,
     relation: Entity,
 
     state: DfsState,
+
+    marker: PhantomData<T>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -43,32 +47,15 @@ impl DfsState {
         }
     }
 
-    fn clear(&mut self) {
-        self.archetypes.clear();
-        self.archetypes_index.clear();
-        self.adj.clear();
-    }
-}
-
-impl Dfs {
-    /// Iterate a hierarchy in depth-first order from `root`
-    pub fn new<T: ComponentValue>(relation: impl RelationExt<T>, root: Entity) -> Self {
-        Self {
-            relation: relation.id(),
-            root,
-
-            state: DfsState::default(),
-        }
-    }
-
-    fn update_state<'w, Q: Fetch<'w>, F: Fetch<'w>>(
+    fn update<'w, Q: Fetch<'w>, F: Fetch<'w>>(
+        &mut self,
         relation: Entity,
         root: Entity,
-        result: &mut DfsState,
         world: &crate::World,
         fetch: &'w Filtered<Q, F>,
     ) {
-        result.clear();
+        self.clear();
+
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
@@ -126,28 +113,46 @@ impl Dfs {
         };
 
         archetypes.get(loc.arch_id);
-        result.insert_arch(loc.arch_id);
+        self.insert_arch(loc.arch_id);
 
-        inner(&mut state, result, fetch, root);
+        inner(&mut state, self, fetch, root);
+    }
+
+    fn clear(&mut self) {
+        self.archetypes.clear();
+        self.archetypes_index.clear();
+        self.adj.clear();
     }
 }
 
-impl<'w, Q, F> QueryStrategy<'w, Q, F> for Dfs
+impl<T: ComponentValue> Dfs<T> {
+    /// Iterate a hierarchy in depth-first order from `root`
+    pub fn new(relation: impl RelationExt<T>, root: Entity) -> Self {
+        Self {
+            relation: relation.id(),
+            root,
+
+            state: DfsState::default(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'w, Q, F, T: ComponentValue> QueryStrategy<'w, Q, F> for Dfs<T>
 where
     Q: 'w + Fetch<'w>,
     F: 'w + Fetch<'w>,
 {
-    type Borrow = DfsBorrow<'w, Q, F>;
+    type Borrow = DfsBorrow<'w, T, Q, F>;
 
     fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow {
         if dirty {
-            Self::update_state(
+            self.state.update(
                 self.relation,
                 self.root,
-                &mut self.state,
                 query_state.world,
                 query_state.fetch,
-            );
+            )
         }
 
         DfsBorrow::new(query_state, self)
@@ -155,7 +160,7 @@ where
 
     fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<crate::Access> {
         let mut state = DfsState::default();
-        Self::update_state(self.relation, self.root, &mut state, world, fetch);
+        state.update(self.relation, self.root, world, fetch);
 
         state
             .archetypes
@@ -179,22 +184,23 @@ where
 }
 
 /// Borrowed state for [`Dfs`] strategy
-pub struct DfsBorrow<'w, Q, F>
+pub struct DfsBorrow<'w, T, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
     prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 8]>,
     state: QueryBorrowState<'w, Q, F>,
-    dfs: &'w Dfs,
+    dfs: &'w Dfs<T>,
 }
 
-impl<'w, Q, F> DfsBorrow<'w, Q, F>
+impl<'w, T, Q, F> DfsBorrow<'w, T, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
+    T: ComponentValue,
 {
-    fn new(query_state: QueryBorrowState<'w, Q, F>, dfs: &'w Dfs) -> Self {
+    fn new(query_state: QueryBorrowState<'w, Q, F>, dfs: &'w Dfs<T>) -> Self {
         let prepared = dfs
             .state
             .archetypes
@@ -237,58 +243,57 @@ where
     }
 
     /// Traverse the hierarchy recursively, visiting each entity with the return value for the parent
-    pub fn traverse<'q, T, Fn: FnMut(<Q as FetchItem<'q>>::Item, &T) -> T>(
-        &'q mut self,
-        value: &T,
-        mut func: Fn,
-    ) where
-        'w: 'q,
+    ///
+    /// The passed function is invoked for each visited entity.
+    ///
+    /// The relation edge is supplied for visited children.
+    pub fn traverse<V, Fn>(&mut self, value: &V, mut func: Fn)
+    where
+        Fn: for<'q> FnMut(<Q as FetchItem<'q>>::Item, Option<&T>, &V) -> V,
     {
+        self.prepared.clear();
         // Safety: the iterator will not borrow this archetype again
         let loc = self.state.world.location(self.dfs.root).unwrap();
-        let arch_index = *self.dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
+        let _arch_index = *self.dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
+        let arch = self.state.world.archetypes.get(loc.arch_id);
 
-        let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
-        let arch = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
+        let mut p = self.state.prepare_fetch(loc.arch_id, arch).unwrap();
 
-        let root = arch.manual_chunk(Slice::single(loc.slot));
+        let root = p.manual_chunk(Slice::single(loc.slot));
 
         if let Some(root) = root {
-            Self::traverse_inner(
-                &mut self.prepared,
-                &self.dfs.state.adj,
-                root,
-                value,
-                &mut func,
-            );
+            self.traverse_inner(root, None, value, &mut func);
         }
     }
 
-    fn traverse_inner<'q, T, Fn>(
-        archetypes: &mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
-        adj: &AdjMap,
-        mut batch: Batch<'q, Q::Prepared, F::Prepared>,
-        value: &T,
+    fn traverse_inner<V, Fn>(
+        &self,
+        mut batch: Batch<Q::Prepared, F::Prepared>,
+        parent: Option<&[T]>,
+        value: &V,
         func: &mut Fn,
     ) where
         Q: 'w,
         F: 'w,
-        Fn: FnMut(<Q as FetchItem<'q>>::Item, &T) -> T,
-        'w: 'q,
+        Fn: for<'q> FnMut(<Q as FetchItem<'q>>::Item, Option<&T>, &V) -> V,
     {
-        while let Some((id, item)) = batch.next_with_id() {
-            let value = (func)(item, value);
+        let d_state = &self.dfs.state;
+        while let Some((slot, id, item)) = batch.next_full() {
+            let value = (func)(item, parent.map(|v| &v[slot]), value);
+
             // Iterate the archetypes which contain all references to `id`
-            for &arch_index in adj.get(&id).into_iter().flatten() {
-                let arch = &mut archetypes[arch_index];
+            for &arch_index in d_state.adj.get(&id).into_iter().flatten() {
+                let arch_id = d_state.archetypes[arch_index];
+                let arch = self.state.world.archetypes.get(arch_id);
 
-                // Promote the borrow of the fetch to 'q
-                // This is safe because each borrow is disjoint
-                let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
+                let parent = arch.borrow::<T>(ComponentKey::new(id, Some(self.dfs.relation)));
 
-                for batch in p.chunks() {
-                    Self::traverse_inner(archetypes, adj, batch, &value, func)
+                let mut p = self.state.prepare_fetch(arch_id, arch).unwrap();
+
+                let chunks = p.chunks();
+                for batch in chunks {
+                    self.traverse_inner(batch, parent.as_deref(), &value, func);
                 }
             }
         }
@@ -339,5 +344,169 @@ where
                 self.stack.pop();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use itertools::Itertools;
+
+    use crate::{child_of, entity_ids, name, CommandBuffer, FetchExt, Query};
+
+    use super::*;
+
+    #[test]
+    fn traverse_dfs() {
+        let mut world = World::new();
+        use alloc::string::String;
+        use alloc::string::ToString;
+
+        component! {
+            a: i32,
+            path: String,
+            b: &'static str,
+        }
+
+        let root = Entity::builder()
+            .set(name(), "root".into())
+            .set(a(), 0)
+            .attach(
+                child_of,
+                Entity::builder()
+                    .set(name(), "child.1".into())
+                    .set(a(), 1)
+                    .attach(
+                        child_of,
+                        Entity::builder()
+                            .set(name(), "child.1.1".into())
+                            .set(a(), 2),
+                    ),
+            )
+            .attach(
+                child_of,
+                Entity::builder()
+                    .set(name(), "child.2".into())
+                    .set(a(), 3)
+                    .set(b(), "Foo"),
+            )
+            .attach(
+                child_of,
+                Entity::builder().set(name(), "child.3".into()).set(a(), 4),
+            )
+            .spawn(&mut world);
+
+        // let mut query = crate::Query::new((name().cloned(), a().copied()));
+        let mut query =
+            Query::new((name().cloned(), a().copied())).with_strategy(Dfs::new(child_of, root));
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 0),
+                ("child.2".to_string(), 3),
+                ("child.1".to_string(), 1),
+                ("child.1.1".to_string(), 2),
+                ("child.3".to_string(), 4)
+            ]
+        );
+
+        let mut cmd = CommandBuffer::new();
+
+        Query::new((entity_ids(), name()))
+            .with_strategy(Dfs::new(child_of, root))
+            .borrow(&world)
+            .traverse(&Vec::new(), |(id, name), _, prefix| {
+                let mut p = prefix.clone();
+                p.push(name.clone());
+
+                cmd.set(id, path(), p.join("::"));
+                p
+            });
+
+        cmd.apply(&mut world).unwrap();
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 0),
+                ("child.1".to_string(), 1),
+                ("child.1.1".to_string(), 2),
+                ("child.3".to_string(), 4),
+                ("child.2".to_string(), 3),
+            ]
+        );
+
+        let mut paths = Query::new(path().cloned()).collect_vec(&world);
+        paths.sort();
+
+        assert_eq!(
+            paths,
+            [
+                "root",
+                "root::child.1",
+                "root::child.1::child.1.1",
+                "root::child.2",
+                "root::child.3",
+            ]
+        );
+
+        // Change detection
+
+        let mut query = Query::new((name().cloned(), a().modified().copied()))
+            .with_strategy(Dfs::new(child_of, root));
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 0),
+                ("child.1".to_string(), 1),
+                ("child.1.1".to_string(), 2),
+                ("child.3".to_string(), 4),
+                ("child.2".to_string(), 3),
+            ]
+        );
+
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, []);
+        *world.get_mut(root, a()).unwrap() -= 1;
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, [("root".to_string(), -1)]);
+
+        Query::new((child_of(root), a().as_mut()))
+            .borrow(&world)
+            .for_each(|(_, a)| {
+                *a *= -1;
+            });
+
+        // No changes, since the root is not modified
+        let items = query.borrow(&world).iter().collect_vec();
+
+        assert_eq!(items, []);
+
+        Query::new((name(), a().as_mut()))
+            .filter(child_of(root).with() | name().eq("root".to_string()))
+            .borrow(&world)
+            .for_each(|(_, a)| {
+                *a *= -10;
+            });
+
+        let items = query.borrow(&world).iter().collect_vec();
+        assert_eq!(
+            items,
+            [
+                ("root".to_string(), 10),
+                ("child.1".to_string(), 10),
+                ("child.3".to_string(), 40),
+                ("child.2".to_string(), 30),
+            ]
+        );
     }
 }
