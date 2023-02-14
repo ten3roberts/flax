@@ -314,7 +314,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
     use crate::{child_of, entity_ids, name, CommandBuffer, Entity, Error, FetchExt, Or, Query};

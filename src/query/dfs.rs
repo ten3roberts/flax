@@ -1,7 +1,8 @@
 use core::marker::PhantomData;
 
 use crate::{
-    fetch::FetchAccessData, filter::Filtered, Access, AccessKind, ArchetypeId, ComponentValue,
+    archetypes::Archetypes, fetch::FetchAccessData, filter::Filtered, Access, AccessKind,
+    ArchetypeId, ComponentValue,
 };
 use alloc::{
     collections::{btree_map, BTreeMap},
@@ -10,8 +11,8 @@ use alloc::{
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
-    archetype::Slice, fetch::PreparedFetch, ArchetypeSearcher, Archetypes, ComponentKey, Entity,
-    Fetch, FetchItem, RelationExt, World,
+    archetype::Slice, fetch::PreparedFetch, ArchetypeSearcher, ComponentKey, Entity, Fetch,
+    FetchItem, RelationExt, World,
 };
 
 type AdjMap = BTreeMap<Entity, SmallVec<[usize; 8]>>;
