@@ -14,6 +14,7 @@ use atomic_refcell::{AtomicRef, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
+    archetypes::Archetypes,
     buffer::ComponentBuffer,
     components::{component_info, name},
     entity::*,
@@ -46,159 +47,6 @@ impl EntityStores {
 
     fn get(&self, kind: EntityKind) -> Option<&EntityStore> {
         self.inner.get(&kind)
-    }
-}
-
-pub(crate) struct Archetypes {
-    root: ArchetypeId,
-    reserved: ArchetypeId,
-    gen: u32,
-    inner: EntityStore<Archetype>,
-
-    // These trickle down to the archetypes
-    subscribers: Vec<Arc<dyn Subscriber>>,
-}
-
-impl Archetypes {
-    pub fn new() -> Self {
-        let mut archetypes = EntityStore::new(EntityKind::empty());
-        let root = archetypes.spawn(Archetype::empty());
-        let reserved = archetypes.spawn(Archetype::empty());
-
-        Self {
-            root,
-            inner: archetypes,
-            gen: 2,
-            reserved,
-            subscribers: Vec::new(),
-        }
-    }
-
-    pub fn get(&self, arch_id: ArchetypeId) -> &Archetype {
-        match self.inner.get(arch_id) {
-            Some(v) => v,
-            None => {
-                panic!("Invalid archetype: {arch_id}");
-            }
-        }
-    }
-
-    pub fn get_mut(&mut self, arch_id: ArchetypeId) -> &mut Archetype {
-        let arch = self.inner.get_mut(arch_id).expect("Invalid archetype");
-
-        arch
-    }
-
-    /// Prunes a leaf and its ancestors from empty archetypes
-    fn prune_arch(&mut self, arch_id: ArchetypeId) -> bool {
-        let arch = self.get(arch_id);
-        if arch_id == self.root || !arch.is_empty() || !arch.outgoing.is_empty() {
-            return false;
-        }
-
-        let arch = self.inner.despawn(arch_id).unwrap();
-
-        for (&key, &dst_id) in &arch.incoming {
-            let dst = self.get_mut(dst_id);
-            dst.remove_link(key);
-
-            self.prune_arch(dst_id);
-        }
-
-        self.gen = self.gen.wrapping_add(1);
-
-        true
-    }
-
-    /// Get the archetype which has `components`.
-    /// `components` must be sorted.
-    fn init(
-        &mut self,
-        components: impl IntoIterator<Item = ComponentInfo>,
-    ) -> (ArchetypeId, &mut Archetype) {
-        let mut cursor = self.root;
-
-        for head in components {
-            let cur = &mut self.inner.get(cursor).expect("Invalid archetype id");
-
-            cursor = match cur.outgoing.get(&head.key) {
-                Some(&id) => id,
-                None => {
-                    let mut new = Archetype::new(cur.components().chain(once(head)));
-
-                    // Insert the appropriate subscribers
-                    for s in &self.subscribers {
-                        if s.is_interested(&new) {
-                            new.push_subscriber(s.clone())
-                        }
-                    }
-
-                    // Increase gen
-                    self.gen = self.gen.wrapping_add(1);
-                    let new_id = self.inner.spawn(new);
-
-                    let (cur, new) = self.inner.get_disjoint(cursor, new_id).unwrap();
-                    cur.add_child(head.key, new_id);
-                    new.add_incoming(head.key, cursor);
-
-                    new_id
-                }
-            };
-        }
-
-        (cursor, self.inner.get_mut(cursor).unwrap())
-    }
-
-    pub fn root(&self) -> ArchetypeId {
-        self.root
-    }
-
-    pub fn get_disjoint(
-        &mut self,
-        a: Entity,
-        b: Entity,
-    ) -> Option<(&mut Archetype, &mut Archetype)> {
-        let (a, b) = self.inner.get_disjoint(a, b)?;
-
-        Some((a, b))
-    }
-
-    pub fn iter(&self) -> EntityStoreIter<Archetype> {
-        self.inner.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> EntityStoreIterMut<Archetype> {
-        self.inner.iter_mut()
-    }
-
-    /// Despawn an archetype, leaving a hole in the tree.
-    ///
-    /// It is the callers responibility to cleanup child nodes if the node is internal
-    /// Children are detached from the tree, but still accessible by id
-    fn despawn(&mut self, id: Entity) -> Archetype {
-        let arch = self.inner.despawn(id).expect("Despawn invalid archetype");
-
-        // Remove outgoing edges
-        for (&component, &dst_id) in &arch.incoming {
-            let dst = self.get_mut(dst_id);
-            dst.remove_link(component);
-        }
-        self.gen = self.gen.wrapping_add(1);
-
-        arch
-    }
-
-    fn subscribe(&mut self, subscriber: Arc<dyn Subscriber>) {
-        // Prune subscribers
-        self.subscribers.retain(|v| v.is_connected());
-
-        for (_, arch) in self.inner.iter_mut() {
-            if subscriber.is_interested(arch) {
-                arch.push_subscriber(subscriber.clone());
-            }
-        }
-
-        self.subscribers.push(subscriber)
     }
 }
 
@@ -1253,7 +1101,7 @@ impl World {
     /// Get a reference to the world's archetype generation
     #[must_use]
     pub fn archetype_gen(&self) -> u32 {
-        self.archetypes.gen
+        self.archetypes.gen()
     }
 
     #[must_use]
@@ -1395,7 +1243,7 @@ impl World {
     where
         S: Subscriber,
     {
-        self.archetypes.subscribe(Arc::new(subscriber))
+        self.archetypes.add_subscriber(Arc::new(subscriber))
     }
 
     /// Merges `other` into `self`.
@@ -1422,7 +1270,7 @@ impl World {
 
         let mut buffer = Entity::builder();
 
-        for (arch_id, arch) in &mut archetypes.inner {
+        for (arch_id, arch) in archetypes.iter_mut() {
             if !arch.has(is_static().key()) {
                 for id in arch.entities_mut() {
                     let old_id = *id;
@@ -1456,7 +1304,7 @@ impl World {
             }
         }
 
-        for (_, arch) in &mut archetypes.inner {
+        for (_, arch) in archetypes.iter_mut() {
             // Don't migrate static components
             if !arch.has(is_static().key()) {
                 let mut batch = BatchSpawn::new(arch.len());
@@ -1491,7 +1339,7 @@ impl World {
 
         // Append all static ids
         // This happens after non-static components have been initialized
-        for (_, arch) in &mut archetypes.inner {
+        for (_, arch) in archetypes.iter_mut() {
             // Take each entity one by one and append them to the world
             if arch.has(is_static().key()) {
                 while let Some(id) = unsafe {

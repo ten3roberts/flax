@@ -228,6 +228,7 @@ mod util;
 pub mod visitors;
 
 // mod cascade;
+mod archetypes;
 /// Subscribe to changes in the world
 pub mod events;
 /// Query the world
