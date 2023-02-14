@@ -356,6 +356,45 @@ mod test {
     use super::*;
 
     #[test]
+    fn dfs() {
+        component! {
+            tree: (),
+        }
+
+        let mut world = World::new();
+
+        let [a, b, c, d, e, f, g] = *('a'..='g')
+            .map(|i| {
+                Entity::builder()
+                    .set(name(), i.to_string())
+                    .tag(tree())
+                    .spawn(&mut world)
+            })
+            .collect_vec() else { unreachable!() };
+
+        //       c
+        //       |
+        // *-----*-----*
+        // |     |     |
+        // b     d     e
+        // |
+        // *-----*
+        // |     |
+        // a     g
+        // |
+        // f
+
+        world.set(a, child_of(b), ()).unwrap();
+        world.set(b, child_of(c), ()).unwrap();
+        world.set(d, child_of(c), ()).unwrap();
+        world.set(e, child_of(c), ()).unwrap();
+        world.set(f, child_of(a), ()).unwrap();
+        world.set(g, child_of(b), ()).unwrap();
+
+        // world.remove(tree, b());
+    }
+
+    #[test]
     fn traverse_dfs() {
         let mut world = World::new();
         use alloc::string::String;
