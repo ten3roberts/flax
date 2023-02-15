@@ -4,10 +4,12 @@ mod component_mut;
 mod copied;
 mod entity_ref;
 mod ext;
+mod maybe_mut;
 mod opt;
 mod read_only;
 mod relations;
 mod satisfied;
+mod source;
 
 use core::fmt::Debug;
 use core::fmt::{self, Formatter};
@@ -20,6 +22,7 @@ pub use component::*;
 pub use component_mut::*;
 pub use entity_ref::*;
 pub use ext::FetchExt;
+pub use maybe_mut::{MaybeMut, MutGuard};
 pub use opt::*;
 pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
@@ -268,6 +271,13 @@ impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
 
     #[inline]
     unsafe fn fetch(&mut self, slot: usize) -> Self::Item {
+        self.entities[slot]
+    }
+}
+
+impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
+    #[inline]
+    unsafe fn fetch_shared(&self, slot: usize) -> Self::Item {
         self.entities[slot]
     }
 }

@@ -6,7 +6,7 @@ use core::num::NonZeroU16;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 pub use builder::*;
-pub(super) use store::*;
+pub(crate) use store::*;
 
 use crate::EntityIds;
 

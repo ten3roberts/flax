@@ -16,6 +16,7 @@ use serde::{
 use crate::{
     buffer::ComponentBuffer,
     entity::EntityKind,
+    fetch::MaybeMut,
     filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
     vtable::{ComponentVTable, UntypedVTable},
     ChangeKind, Entity, MetaData, Mutable, RelationExt,
@@ -238,6 +239,11 @@ impl<T: ComponentValue> Component<T> {
     /// Transform this into a mutable fetch
     pub fn as_mut(self) -> Mutable<T> {
         Mutable(self)
+    }
+
+    /// Transform this into a (maybe) mutable fetch
+    pub fn maybe_mut(self) -> MaybeMut<T> {
+        MaybeMut(self)
     }
 
     /// Construct a fine grained change detection filter.

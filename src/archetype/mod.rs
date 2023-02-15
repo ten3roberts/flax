@@ -945,7 +945,7 @@ impl Archetype {
     }
 
     #[inline(always)]
-    fn cell(&self, key: ComponentKey) -> Option<&Cell> {
+    pub(crate) fn cell(&self, key: ComponentKey) -> Option<&Cell> {
         self.cells.get(&key)
     }
 
