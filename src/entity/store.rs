@@ -65,7 +65,7 @@ fn from_slot_gen(gen: u32) -> EntityGen {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// An entity's location within an archetype
-pub(crate) struct EntityLocation {
+pub struct EntityLocation {
     pub(crate) slot: usize,
     pub(crate) arch_id: ArchetypeId,
 }
