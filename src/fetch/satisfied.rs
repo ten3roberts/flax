@@ -14,8 +14,8 @@ impl<'w, F: Fetch<'w>> Fetch<'w> for Satisfied<F> {
 
     type Prepared = bool;
 
-    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Self::Prepared {
-        self.0.filter_arch(data.arch)
+    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(self.0.filter_arch(data.arch))
     }
 
     fn filter_arch(&self, _: &crate::archetype::Archetype) -> bool {

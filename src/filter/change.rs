@@ -63,7 +63,7 @@ where
 
     type Prepared = PreparedKindFilter<ReadComponent<'w, T>, AtomicRef<'w, [Change]>>;
 
-    fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Self::Prepared {
+    fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let changes = data.arch.changes(self.component.key()).unwrap();
 
         // Make sure to enable modification tracking if it is actively used
@@ -73,8 +73,8 @@ where
 
         let changes = AtomicRef::map(changes, |changes| changes.get(self.kind).as_slice());
 
-        let fetch = self.component.prepare(data);
-        PreparedKindFilter::new(fetch, changes, data.old_tick)
+        let fetch = self.component.prepare(data)?;
+        Some(PreparedKindFilter::new(fetch, changes, data.old_tick))
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -219,13 +219,13 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
 
     type Prepared = PreparedKindFilter<(), &'a [Change]>;
 
-    fn prepare(&self, data: FetchPrepareData<'a>) -> Self::Prepared {
+    fn prepare(&self, data: FetchPrepareData<'a>) -> Option<Self::Prepared> {
         let changes = data
             .arch
             .removals(self.component.key())
             .unwrap_or(&EMPTY_CHANGELIST);
 
-        PreparedKindFilter::new((), changes, data.old_tick)
+        Some(PreparedKindFilter::new((), changes, data.old_tick))
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {

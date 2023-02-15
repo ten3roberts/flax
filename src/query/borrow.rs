@@ -71,7 +71,7 @@ where
         Some(PreparedArchetype {
             arch_id,
             arch,
-            fetch: self.fetch.try_prepare(data)?,
+            fetch: self.fetch.prepare(data)?,
         })
     }
 }
