@@ -2,7 +2,7 @@ use atomic_refcell::AtomicRef;
 
 use crate::{archetype::Slot, AccessKind, Component, ComponentValue};
 
-use super::{peek::PeekableFetch, *};
+use super::{read_only::ReadOnlyFetch, *};
 
 #[doc(hidden)]
 pub struct ReadComponent<'a, T> {
@@ -19,10 +19,8 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     }
 }
 
-impl<'w, 'p, T: ComponentValue> PeekableFetch<'p> for ReadComponent<'w, T> {
-    type Peek = &'p T;
-
-    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
+impl<'w, 'p, T: ComponentValue> ReadOnlyFetch<'p> for ReadComponent<'w, T> {
+    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
         self.borrow.get_unchecked(slot)
     }
 }

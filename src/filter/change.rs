@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use crate::archetype::{Archetype, Change, Slot};
 use crate::fetch::{
-    FetchAccessData, FetchPrepareData, PeekableFetch, PreparedFetch, ReadComponent,
+    FetchAccessData, FetchPrepareData, PreparedFetch, ReadComponent, ReadOnlyFetch,
 };
 use crate::{
     archetype::{ChangeList, Slice},
@@ -47,11 +47,13 @@ where
     type Item = &'q T;
 }
 
-impl<'p, Q: PeekableFetch<'p>, A> PeekableFetch<'p> for PreparedKindFilter<Q, A> {
-    type Peek = Q::Peek;
-
-    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
-        self.fetch.peek(slot)
+impl<'q, Q: ReadOnlyFetch<'q>, A> ReadOnlyFetch<'q> for PreparedKindFilter<Q, A>
+where
+    Q: PreparedFetch<'q>,
+    A: Deref<Target = [Change]>,
+{
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
+        self.fetch.fetch_shared(slot)
     }
 }
 

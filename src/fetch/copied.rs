@@ -10,7 +10,7 @@ use crate::{
     Access, Fetch, FetchItem,
 };
 
-use super::{FetchAccessData, FetchPrepareData, PeekableFetch, PreparedFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 
 #[derive(Debug, Clone)]
 /// Component which copied the value.
@@ -85,13 +85,13 @@ where
     }
 }
 
-impl<'p, F> PeekableFetch<'p> for Copied<F>
+impl<'p, F, V> ReadOnlyFetch<'p> for Copied<F>
 where
-    F: PeekableFetch<'p>,
+    F: ReadOnlyFetch<'p>,
+    F::Item: Deref<Target = V>,
+    V: 'static + Copy,
 {
-    type Peek = F::Peek;
-
-    unsafe fn peek(&'p self, slot: crate::archetype::Slot) -> Self::Peek {
-        self.0.peek(slot)
+    unsafe fn fetch_shared(&'p self, slot: crate::archetype::Slot) -> Self::Item {
+        *self.0.fetch_shared(slot)
     }
 }

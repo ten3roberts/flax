@@ -9,7 +9,7 @@ use crate::{
     ComponentValue, Fetch,
 };
 
-use super::{FetchAccessData, FetchItem, PeekableFetch};
+use super::{FetchAccessData, FetchItem, ReadOnlyFetch};
 
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
@@ -48,14 +48,12 @@ where
 #[doc(hidden)]
 pub struct PreparedOpt<F>(pub(crate) Option<F>);
 
-impl<'p, F> PeekableFetch<'p> for PreparedOpt<F>
+impl<'p, F> ReadOnlyFetch<'p> for PreparedOpt<F>
 where
-    F: PeekableFetch<'p>,
+    F: ReadOnlyFetch<'p>,
 {
-    type Peek = Option<F::Peek>;
-
-    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
-        self.0.as_ref().map(|fetch| fetch.peek(slot))
+    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+        self.0.as_ref().map(|fetch| fetch.fetch_shared(slot))
     }
 }
 
