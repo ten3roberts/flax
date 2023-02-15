@@ -128,11 +128,11 @@ where
 
     type Prepared = PreparedCmp<'w, F::Prepared, M>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
-        PreparedCmp {
-            fetch: self.fetch.prepare(data),
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(PreparedCmp {
+            fetch: self.fetch.prepare(data)?,
             method: &self.method,
-        }
+        })
     }
 
     fn filter_arch(&self, arch: &crate::Archetype) -> bool {

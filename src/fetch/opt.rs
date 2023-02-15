@@ -27,8 +27,8 @@ where
 
     type Prepared = PreparedOpt<F::Prepared>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
-        PreparedOpt(self.0.try_prepare(data))
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(PreparedOpt(self.0.prepare(data)))
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -110,11 +110,11 @@ where
 
     type Prepared = OptOr<Option<F::Prepared>, &'w V>;
 
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
-        OptOr {
-            fetch: self.fetch.try_prepare(data),
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(OptOr {
+            fetch: self.fetch.prepare(data),
             or: &self.or,
-        }
+        })
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {

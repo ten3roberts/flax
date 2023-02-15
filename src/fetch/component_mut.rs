@@ -32,14 +32,14 @@ where
     type Prepared = WriteComponent<'w, T>;
 
     #[inline]
-    fn prepare(&self, data: FetchPrepareData<'w>) -> Self::Prepared {
-        let (borrow, changes) = data.arch.borrow_mut(self.0).unwrap();
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        let (borrow, changes) = data.arch.borrow_mut(self.0)?;
 
-        WriteComponent {
+        Some(WriteComponent {
             borrow,
             changes,
             new_tick: data.new_tick,
-        }
+        })
     }
 
     #[inline]

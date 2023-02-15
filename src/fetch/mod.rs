@@ -93,16 +93,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// Prepares the fetch for an archetype.
     ///
     /// Must only be called if [`Fetch::filter_arch`] returns true
-    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared;
-
-    /// Combines [`Fetch::filter_arch]` and [`Fetch::prepare`]
-    fn try_prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
-            Some(self.prepare(data))
-        } else {
-            None
-        }
-    }
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared>;
 
     /// Rough filter to exclude or include archetypes.
     fn filter_arch(&self, arch: &Archetype) -> bool;
@@ -189,7 +180,9 @@ impl<'w> Fetch<'w> for () {
 
     type Prepared = ();
 
-    fn prepare(&self, _: FetchPrepareData<'w>) -> Self::Prepared {}
+    fn prepare(&self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(())
+    }
 
     fn filter_arch(&self, _arch: &Archetype) -> bool {
         true
@@ -257,10 +250,10 @@ impl<'w> Fetch<'w> for EntityIds {
 
     type Prepared = ReadEntities<'w>;
 
-    fn prepare(&self, data: FetchPrepareData<'w>) -> Self::Prepared {
-        ReadEntities {
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(ReadEntities {
             entities: data.arch.entities(),
-        }
+        })
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -375,8 +368,8 @@ macro_rules! tuple_impl {
             type Prepared       = ($($ty::Prepared,)*);
 
             #[inline]
-            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
-                ($( (self.$idx).prepare(data),)*)
+            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+                Some( ($( (self.$idx).prepare(data)?,)*) )
             }
 
             #[inline]
@@ -416,9 +409,9 @@ macro_rules! tuple_impl {
             const MUTABLE: bool =  $($ty::MUTABLE )|*;
             type Prepared       = Or<($(Option<$ty::Prepared>,)*)>;
 
-            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Self::Prepared {
+            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
                 let inner = &self.0;
-                Or(($(inner.$idx.try_prepare(data),)*))
+                Some( Or(($(inner.$idx.prepare(data),)*)) )
             }
 
             fn filter_arch(&self, arch: &Archetype) -> bool {

@@ -36,9 +36,9 @@ where
     type Prepared = ReadComponent<'w, T>;
 
     #[inline]
-    fn prepare(&self, data: FetchPrepareData<'w>) -> Self::Prepared {
-        let borrow = data.arch.borrow(self.key()).unwrap();
-        ReadComponent { borrow }
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        let borrow = data.arch.borrow(self.key())?;
+        Some(ReadComponent { borrow })
     }
 
     #[inline]

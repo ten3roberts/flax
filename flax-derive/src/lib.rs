@@ -188,10 +188,10 @@ fn derive_data_struct(
                     fn prepare(
                         &'w self,
                         data: #crate_name::fetch::FetchPrepareData<'w>,
-                    ) -> Self::Prepared {
-                        Self::Prepared {
-                            #(#names: self.#names.prepare(data)),*
-                        }
+                    ) -> Option<Self::Prepared> {
+                        Some(Self::Prepared {
+                            #(#names: self.#names.prepare(data)?),*
+                        })
                     }
 
                     #[inline]
