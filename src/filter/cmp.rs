@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Slice, Slot},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PeekableFetch, PreparedFetch},
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch},
     Access, Fetch, FetchItem,
 };
 
@@ -121,8 +121,8 @@ impl<'q, F: FetchItem<'q>, M> FetchItem<'q> for Cmp<F, M> {
 impl<'w, F, M> Fetch<'w> for Cmp<F, M>
 where
     F: Fetch<'w>,
-    F::Prepared: for<'x> PeekableFetch<'x>,
-    M: for<'x> CmpMethod<<F::Prepared as PeekableFetch<'x>>::Peek> + 'w,
+    F::Prepared: for<'x> ReadOnlyFetch<'x>,
+    M: for<'x> CmpMethod<<F::Prepared as PreparedFetch<'x>>::Item> + 'w,
 {
     const MUTABLE: bool = F::MUTABLE;
 
@@ -157,21 +157,20 @@ pub struct PreparedCmp<'w, F, M> {
     method: &'w M,
 }
 
-impl<'p, 'w, F, M> PeekableFetch<'p> for PreparedCmp<'w, F, M>
+impl<'p, 'w, F, M> ReadOnlyFetch<'p> for PreparedCmp<'w, F, M>
 where
-    F: PeekableFetch<'p>,
+    F: for<'x> ReadOnlyFetch<'x>,
+    M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
 {
-    type Peek = F::Peek;
-
-    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
-        self.fetch.peek(slot)
+    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+        self.fetch.fetch_shared(slot)
     }
 }
 
 impl<'q, 'w, F, M> PreparedFetch<'q> for PreparedCmp<'w, F, M>
 where
-    F: PreparedFetch<'q> + for<'x> PeekableFetch<'x>,
-    M: for<'x> CmpMethod<<F as PeekableFetch<'x>>::Peek> + 'w,
+    F: for<'x> ReadOnlyFetch<'x>,
+    M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
 {
     type Item = <F as PreparedFetch<'q>>::Item;
 
@@ -185,7 +184,7 @@ where
         let slots = self.fetch.filter_slots(slots);
 
         let mut cmp = |slot: Slot| {
-            let lhs = unsafe { self.fetch.peek(slot) };
+            let lhs = unsafe { self.fetch.fetch_shared(slot) };
             self.method.compare(lhs)
         };
 
@@ -216,7 +215,7 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{component, entity_ids, name, BatchSpawn, FetchExt, Query, World};
+    use crate::{component, entity_ids, name, BatchSpawn, CommandBuffer, FetchExt, Query, World};
 
     #[test]
     fn cmp_mut() {
@@ -236,10 +235,15 @@ mod test {
 
         assert_eq!(changed.collect_vec(&world), ids);
 
-        let mut query = Query::new(a().as_mut().opt().cmp(|v: Option<&i32>| v > Some(&3)));
-        for item in query.borrow(&world).iter().flatten() {
-            *item *= -1;
+        let mut cmd = CommandBuffer::new();
+        let mut query = Query::new((entity_ids(), a().opt().cmp(|v: Option<&i32>| v > Some(&3))));
+        for (id, item) in query.borrow(&world).iter() {
+            if let Some(item) = item {
+                cmd.set(id, a(), item * -1);
+            }
         }
+
+        cmd.apply(&mut world).unwrap();
 
         let changed_ids = ids
             .iter()
@@ -269,10 +273,13 @@ mod test {
 
         assert_eq!(changed.collect_vec(&world), ids);
 
-        let mut query = Query::new(a().as_mut().gt(3).lt(7));
-        for item in query.borrow(&world).iter() {
-            *item *= -1;
+        let mut cmd = CommandBuffer::new();
+        let mut query = Query::new((entity_ids(), a().gt(3).lt(7)));
+        for (id, item) in query.borrow(&world).iter() {
+            cmd.set(id, a(), item * -1);
         }
+
+        cmd.apply(&mut world).unwrap();
 
         let changed_ids = ids
             .iter()

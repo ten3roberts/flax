@@ -9,7 +9,7 @@ use crate::{
     Access, AccessKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
-use super::{peek::PeekableFetch, FetchAccessData, FetchPrepareData, PreparedFetch};
+use super::{ReadOnlyFetch, FetchAccessData, FetchPrepareData, PreparedFetch};
 
 #[doc(hidden)]
 pub struct WriteComponent<'a, T> {
@@ -100,13 +100,5 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
     fn set_visited(&mut self, slots: Slice) {
         self.changes
             .set_modified_if_tracking(Change::new(slots, self.new_tick));
-    }
-}
-
-impl<'w, 'p, T: ComponentValue> PeekableFetch<'p> for WriteComponent<'w, T> {
-    type Peek = &'p T;
-
-    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
-        self.borrow.get_unchecked(slot)
     }
 }

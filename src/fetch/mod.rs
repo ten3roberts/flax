@@ -5,7 +5,7 @@ mod copied;
 mod entity_ref;
 mod ext;
 mod opt;
-mod peek;
+mod read_only;
 mod relations;
 mod satisfied;
 
@@ -21,7 +21,7 @@ pub use component_mut::*;
 pub use entity_ref::*;
 pub use ext::FetchExt;
 pub use opt::*;
-pub use peek::*;
+pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
 pub use satisfied::Satisfied;
 
@@ -193,10 +193,8 @@ impl<'w> Fetch<'w> for () {
     }
 }
 
-impl<'p> PeekableFetch<'p> for () {
-    type Peek = ();
-
-    unsafe fn peek(&'p self, _: Slot) -> Self::Peek {}
+impl<'p> ReadOnlyFetch<'p> for () {
+    unsafe fn fetch_shared(&'p self, _: Slot) -> Self::Item {}
 }
 
 impl<'q> PreparedFetch<'q> for () {
@@ -286,15 +284,14 @@ macro_rules! tuple_impl {
 
         }
 
-        impl<'p, $($ty, )*> PeekableFetch<'p> for ($($ty,)*)
-        where $($ty: PeekableFetch<'p>,)*
+        impl<'q, $($ty, )*> ReadOnlyFetch<'q> for ($($ty,)*)
+        where $($ty: ReadOnlyFetch<'q>,)*
         {
 
-            type Peek = ($($ty::Peek,)*);
-            #[inline]
-            unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
+            #[inline(always)]
+            unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
                 ($(
-                    (self.$idx).peek(slot),
+                    (self.$idx).fetch_shared(slot),
                 )*)
             }
         }
@@ -304,7 +301,7 @@ macro_rules! tuple_impl {
             where $($ty: PreparedFetch<'q>,)*
         {
 
-            type Item           = ($($ty::Item,)*);
+            type Item = ($($ty::Item,)*);
             #[inline]
             unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
                 ($(
