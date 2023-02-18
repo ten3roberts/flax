@@ -177,7 +177,7 @@ pub struct PreparedSource<Q> {
 mod test {
     use itertools::Itertools;
 
-    use crate::{child_of, component, entity_ids, name, FetchExt, Query};
+    use crate::{child_of, component, entity_ids, name, FetchExt, Query, Topological};
 
     use super::*;
 
@@ -188,31 +188,42 @@ mod test {
     #[test]
     fn parent_fetch() {
         let mut world = World::new();
-        let _root = Entity::builder()
+
+        let child_1 = Entity::builder()
+            .set(name(), "child.1".into())
+            .set(a(), 8)
+            .spawn(&mut world);
+
+        let root = Entity::builder()
             .set(name(), "root".into())
             .set(a(), 4)
-            .attach(
-                child_of,
-                Entity::builder()
-                    .set(name(), "child.1".into())
-                    .set(a(), 8)
-                    .attach(child_of, Entity::builder().set(name(), "child.1.1".into())),
-            )
-            .attach(child_of, Entity::builder().set(name(), "child.2".into()))
             .spawn(&mut world);
+
+        let child_1_1 = Entity::builder()
+            .set(name(), "child.1.1".into())
+            .spawn(&mut world);
+
+        let child_2 = Entity::builder()
+            .set(name(), "child.2".into())
+            .spawn(&mut world);
+
+        world.set(child_1, child_of(root), ()).unwrap();
+        world.set(child_2, child_of(root), ()).unwrap();
+        world.set(child_1_1, child_of(child_1), ()).unwrap();
 
         let mut query = Query::new((
             name().deref(),
             (name().deref(), a().copied()).relation(child_of).opt(),
-        ));
+        ))
+        .with_order(Topological::new(child_of));
 
         assert_eq!(
-            query.borrow(&world).iter().sorted().collect_vec(),
+            query.borrow(&world).iter().collect_vec(),
             [
+                ("root", None),
                 ("child.1", Some(("root", 4))),
                 ("child.1.1", Some(("child.1", 8))),
                 ("child.2", Some(("root", 4))),
-                ("root", None),
             ]
         );
     }

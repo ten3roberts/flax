@@ -69,7 +69,6 @@ pub struct Query<Q, F = All, S = Planar> {
     fetch: Filtered<Q, F>,
 
     change_tick: u32,
-    include_components: bool,
     archetype_gen: u32,
 
     strategy: S,
@@ -85,7 +84,6 @@ where
             .field("fetch", &FmtQuery(&self.fetch.fetch))
             .field("filter", &FmtQuery(&self.fetch.filter))
             .field("change_tick", &self.change_tick)
-            .field("include_components", &self.include_components)
             .field("strategy", &self.strategy)
             .finish()
     }
@@ -129,7 +127,6 @@ where
         Self {
             fetch: Filtered::new(fetch, All),
             change_tick: 0,
-            include_components: false,
             strategy: Planar::new(false),
             archetype_gen: 0,
         }
@@ -142,6 +139,20 @@ where
         self.strategy.include_components = true;
         self.archetype_gen = 0;
         self
+    }
+
+    /// Specify iteration order of archetypes
+    pub fn with_order<O: ArchetypeOrder>(self, order: O) -> Query<Q, All, Planar<O>> {
+        Query {
+            fetch: self.fetch,
+            change_tick: 0,
+            archetype_gen: 0,
+            strategy: Planar {
+                include_components: self.strategy.include_components,
+                archetypes: Vec::new(),
+                order,
+            },
+        }
     }
 }
 
@@ -160,7 +171,6 @@ where
         Query {
             fetch: self.fetch,
             change_tick: self.change_tick,
-            include_components: self.include_components,
             strategy,
             archetype_gen: 0,
         }
@@ -196,7 +206,6 @@ where
         Query {
             fetch: Filtered::new(self.fetch.fetch, And::new(self.fetch.filter, filter)),
             change_tick: self.change_tick,
-            include_components: self.include_components,
             strategy: self.strategy,
             archetype_gen: 0,
         }
@@ -316,7 +325,7 @@ where
 mod test {
     use pretty_assertions::assert_eq;
 
-    use crate::{child_of, entity_ids, name, CommandBuffer, Entity, Error, FetchExt, Or, Query};
+    use crate::{name, Entity, Error, FetchExt, Or, Query};
 
     use super::*;
 
