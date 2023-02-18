@@ -1,10 +1,16 @@
 use core::{
+    cmp::Reverse,
     iter::Flatten,
     mem::{self, MaybeUninit},
     slice::IterMut,
 };
 
-use alloc::vec::Vec;
+use alloc::{
+    collections::{btree_map, BTreeMap},
+    vec::Vec,
+};
+use itertools::Itertools;
+use serde::de::MapAccess;
 use smallvec::SmallVec;
 
 use crate::{
@@ -14,8 +20,8 @@ use crate::{
     error::Result,
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
-    Access, AccessKind, All, ArchetypeId, ArchetypeSearcher, Entity, Error, Fetch, FetchItem,
-    World,
+    Access, AccessKind, All, ArchetypeId, ArchetypeSearcher, ComponentValue, Entity, Error, Fetch,
+    FetchItem, RelationExt, World,
 };
 
 use super::{
@@ -25,11 +31,107 @@ use super::{
     QueryStrategy,
 };
 
+/// Influences the order in which archetypes are visited
+pub trait ArchetypeOrder {
+    /// Sort the archetypes
+    fn sort_archetypes(&self, world: &World, archetypes: &mut Vec<ArchetypeId>);
+}
+
+/// No specified archetype visit order
+pub struct NoOrder;
+impl ArchetypeOrder for NoOrder {
+    fn sort_archetypes(&self, _: &World, _: &mut Vec<ArchetypeId>) {}
+}
+
+/// Visit in topological order
+pub struct Topological {
+    relation: Entity,
+}
+
+impl Topological {
+    /// Visit archetypes in topological order following `relation`
+    pub fn new<R, T>(relation: R) -> Self
+    where
+        T: ComponentValue,
+        R: RelationExt<T>,
+    {
+        Self {
+            relation: relation.id(),
+        }
+    }
+}
+
+impl ArchetypeOrder for Topological {
+    fn sort_archetypes(&self, world: &World, archetypes: &mut Vec<ArchetypeId>) {
+        // Use relation as dependency
+
+        //         let mut visited = HashSet::new();
+
+        #[derive(Debug)]
+        enum VisitedState {
+            Pending,
+            Visited(u32),
+        }
+
+        fn inner(
+            world: &World,
+            visited: &mut BTreeMap<ArchetypeId, VisitedState>,
+            depth: u32,
+            relation: Entity,
+            arch_id: ArchetypeId,
+        ) {
+            match visited.entry(arch_id) {
+                btree_map::Entry::Vacant(slot) => {
+                    slot.insert(VisitedState::Pending);
+                }
+                btree_map::Entry::Occupied(slot) => match slot.get() {
+                    VisitedState::Pending => panic!("Cycle"),
+                    &VisitedState::Visited(old_depth) => {
+                        if depth <= old_depth {
+                            return;
+                        }
+                    }
+                },
+            }
+
+            let arch = world.archetypes.get(arch_id);
+            eprintln!(
+                "arch: {arch_id}: {:?}",
+                arch.component_names().collect_vec()
+            );
+
+            for (key, _) in arch.relations_like(relation) {
+                let object = key.object().unwrap();
+                let loc = world.location(object).unwrap();
+
+                inner(world, visited, depth + 1, relation, loc.arch_id);
+            }
+
+            visited.insert(arch_id, VisitedState::Visited(depth));
+        }
+
+        let mut visited = BTreeMap::new();
+        for &arch_id in archetypes.iter() {
+            inner(world, &mut visited, 0, self.relation, arch_id);
+        }
+
+        dbg!(&archetypes, &visited);
+
+        archetypes.sort_by_key(|v| match visited.get(v) {
+            Some(VisitedState::Visited(depth)) => Reverse(depth),
+            _ => unreachable!(),
+        });
+
+        dbg!(archetypes);
+    }
+}
+
 /// The default linear iteration strategy
 #[derive(Clone)]
-pub struct Planar {
-    pub(crate) include_components: bool,
-    archetypes: Vec<ArchetypeId>,
+pub struct Planar<O = NoOrder> {
+    pub(super) include_components: bool,
+    pub(super) archetypes: Vec<ArchetypeId>,
+    pub(super) order: O,
 }
 
 impl core::fmt::Debug for Planar {
@@ -45,15 +147,22 @@ impl Planar {
         Self {
             include_components,
             archetypes: Vec::new(),
+            order: NoOrder,
         }
     }
+}
 
+impl<O> Planar<O>
+where
+    O: ArchetypeOrder,
+{
     // Make sure the archetypes to visit are up to date
     fn update_state<'w, Q: Fetch<'w>, F: Fetch<'w>>(
         include_components: bool,
         world: &crate::World,
         fetch: &Filtered<Q, F>,
         result: &mut Vec<ArchetypeId>,
+        order: &O,
     ) {
         result.clear();
 
@@ -67,13 +176,16 @@ impl Planar {
             }
             result.push(arch_id)
         });
+
+        order.sort_archetypes(world, result);
     }
 }
 
-impl<'w, Q, F> QueryStrategy<'w, Q, F> for Planar
+impl<'w, Q, F, O> QueryStrategy<'w, Q, F> for Planar<O>
 where
     Q: 'w + Fetch<'w>,
     F: 'w + Fetch<'w>,
+    O: ArchetypeOrder,
 {
     type Borrow = QueryBorrow<'w, Q, F>;
 
@@ -85,6 +197,7 @@ where
                 state.world,
                 state.fetch,
                 &mut self.archetypes,
+                &self.order,
             );
         }
 
@@ -98,7 +211,14 @@ where
 
     fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<crate::Access> {
         let mut result = Vec::new();
-        Self::update_state(self.include_components, world, fetch, &mut result);
+        Self::update_state(
+            self.include_components,
+            world,
+            fetch,
+            &mut result,
+            &self.order,
+        );
+
         result
             .iter()
             .flat_map(|&arch_id| {
