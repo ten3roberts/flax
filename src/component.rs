@@ -213,7 +213,7 @@ impl<T: ComponentValue> Component<T> {
 
         Self {
             key: ComponentKey::new(id, None),
-            vtable: vtable.erase(),
+            vtable,
             marker: PhantomData,
         }
     }
@@ -333,6 +333,10 @@ impl<T: ComponentValue> RelationExt<T> for Component<T> {
             relation: self.id(),
             name: self.name(),
         }
+    }
+
+    fn vtable(&self) -> &'static UntypedVTable {
+        self.vtable
     }
 }
 

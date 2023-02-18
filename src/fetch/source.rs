@@ -5,18 +5,51 @@ use alloc::vec::Vec;
 use crate::{
     archetype::{Archetype, Slot},
     entity::EntityLocation,
-    ArchetypeId, Entity, Fetch, FetchItem, World,
+    ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 
 use super::{FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 
 pub trait FetchSource {
-    fn resolve(&self, world: &World) -> Option<EntityLocation>;
+    fn resolve(&self, arch: &Archetype, world: &World) -> Option<EntityLocation>;
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result;
 }
 
+/// Selects the fetch value from the first parent/object of the specified relation
+pub struct FromRelation {
+    relation: Entity,
+    name: &'static str,
+}
+
+impl FromRelation {
+    /// Resolves the fetch value from relation
+    pub fn new<T: ComponentValue, R: RelationExt<T>>(relation: R) -> Self {
+        Self {
+            relation: relation.id(),
+            name: relation.vtable().name,
+        }
+    }
+}
+
+impl FetchSource for FromRelation {
+    fn resolve(&self, arch: &Archetype, world: &World) -> Option<EntityLocation> {
+        let (key, _) = arch.relations_like(self.relation).next()?;
+        let object = key.object().unwrap();
+
+        Some(
+            world
+                .location(object)
+                .expect("Relation contains invalid entity"),
+        )
+    }
+
+    fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 impl FetchSource for Entity {
-    fn resolve(&self, world: &World) -> Option<EntityLocation> {
+    fn resolve(&self, _: &Archetype, world: &World) -> Option<EntityLocation> {
         world.location(*self).ok()
     }
 
@@ -38,6 +71,13 @@ pub struct Source<Q, S> {
     source: S,
 }
 
+impl<Q, S> Source<Q, S> {
+    /// Creates a new source fetch
+    pub fn new(fetch: Q, source: S) -> Self {
+        Self { fetch, source }
+    }
+}
+
 impl<'q, Q, S> FetchItem<'q> for Source<Q, S>
 where
     Q: FetchItem<'q>,
@@ -57,7 +97,7 @@ where
     type Prepared = PreparedSource<Q::Prepared>;
 
     fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let loc = self.source.resolve(data.world)?;
+        let loc = self.source.resolve(data.arch, data.world)?;
 
         let arch = data.world.archetypes.get(loc.arch_id);
 
@@ -89,7 +129,7 @@ where
     }
 
     fn access(&self, data: super::FetchAccessData) -> Vec<crate::Access> {
-        let loc = self.source.resolve(data.world);
+        let loc = self.source.resolve(data.arch, data.world);
 
         if let Some(loc) = loc {
             let arch = data.world.archetypes.get(loc.arch_id);
@@ -137,21 +177,54 @@ pub struct PreparedSource<Q> {
 mod test {
     use itertools::Itertools;
 
-    use crate::{component, entity_ids, name, FetchExt, Query};
+    use crate::{child_of, component, entity_ids, name, FetchExt, Query};
 
     use super::*;
 
+    component! {
+        a: u32,
+    }
+
+    #[test]
+    fn parent_fetch() {
+        let mut world = World::new();
+        let _root = Entity::builder()
+            .set(name(), "root".into())
+            .set(a(), 4)
+            .attach(
+                child_of,
+                Entity::builder()
+                    .set(name(), "child.1".into())
+                    .set(a(), 8)
+                    .attach(child_of, Entity::builder().set(name(), "child.1.1".into())),
+            )
+            .attach(child_of, Entity::builder().set(name(), "child.2".into()))
+            .spawn(&mut world);
+
+        let mut query = Query::new((
+            name().deref(),
+            (name().deref(), a().copied()).relation(child_of).opt(),
+        ));
+
+        assert_eq!(
+            query.borrow(&world).iter().sorted().collect_vec(),
+            [
+                ("child.1", Some(("root", 4))),
+                ("child.1.1", Some(("child.1", 8))),
+                ("child.2", Some(("root", 4))),
+                ("root", None),
+            ]
+        );
+    }
+
     #[test]
     fn id_source() {
-        component! {
-            a: u32,
-        }
         let mut world = World::new();
 
-        let id1 = Entity::builder()
+        let _id1 = Entity::builder()
             .set(name(), "id1".to_string())
             .spawn(&mut world);
-        let id2 = Entity::builder()
+        let _id2 = Entity::builder()
             .set(name(), "id2".to_string())
             .spawn(&mut world);
 

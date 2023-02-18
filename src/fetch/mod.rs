@@ -1,3 +1,4 @@
+mod as_deref;
 mod cloned;
 mod component;
 mod component_mut;
@@ -17,6 +18,7 @@ use core::fmt::{self, Formatter};
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub use as_deref::*;
 pub use cloned::*;
 pub use component::*;
 pub use component_mut::*;
@@ -27,7 +29,7 @@ pub use opt::*;
 pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
 pub use satisfied::Satisfied;
-pub use source::Source;
+pub use source::{FromRelation, Source};
 
 use crate::filter::RefFetch;
 use crate::{

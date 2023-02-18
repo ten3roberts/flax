@@ -12,8 +12,8 @@ use crate::{
     dummy,
     entity::EntityKind,
     filter::{WithRelation, WithoutRelation},
-    vtable::ComponentVTable,
-    Component, ComponentKey, ComponentValue, Entity, UntypedVTable,
+    vtable::{ComponentVTable, UntypedVTable},
+    Component, ComponentKey, ComponentValue, Entity,
 };
 
 /// Relation helper trait
@@ -23,6 +23,8 @@ where
 {
     /// Returns the relation id
     fn id(&self) -> Entity;
+    /// Returns the vtable of the relation
+    fn vtable(&self) -> &'static UntypedVTable;
     /// Instantiate the relation
     fn of(&self, object: Entity) -> Component<T>;
     /// Construct a new filter yielding entities with this kind of relation
@@ -38,6 +40,10 @@ where
 {
     fn id(&self) -> Entity {
         (self)(dummy()).id()
+    }
+
+    fn vtable(&self) -> &'static UntypedVTable {
+        (self)(dummy()).vtable()
     }
 
     fn of(&self, object: Entity) -> Component<T> {
@@ -62,9 +68,9 @@ where
 }
 
 /// Represents a relation which can connect to entities
-pub struct Relation<T> {
+pub struct Relation<T: 'static> {
     id: Entity,
-    vtable: &'static UntypedVTable,
+    vtable: &'static ComponentVTable<T>,
     marker: PhantomData<T>,
 }
 
@@ -107,7 +113,7 @@ where
     pub(crate) fn new(id: Entity, vtable: &'static ComponentVTable<T>) -> Self {
         Self {
             id,
-            vtable: vtable.erase(),
+            vtable,
             marker: PhantomData,
         }
     }
@@ -122,7 +128,7 @@ where
 
         Self {
             id,
-            vtable: vtable.erase(),
+            vtable,
             marker: PhantomData,
         }
     }
@@ -138,8 +144,12 @@ impl<T: ComponentValue> RelationExt<T> for Relation<T> {
         self.id
     }
 
+    fn vtable(&self) -> &'static UntypedVTable {
+        self.vtable
+    }
+
     fn of(&self, object: Entity) -> Component<T> {
-        Component::from_raw_parts(ComponentKey::new(self.id, Some(object)), self.vtable)
+        Component::new(ComponentKey::new(self.id, Some(object)), self.vtable)
     }
 
     #[inline]
