@@ -1,13 +1,15 @@
 use crate::{
     filter::{Equal, Greater, GreaterEq, Less, LessEq},
-    Cmp, Fetch, FetchItem,
+    Cmp, ComponentValue, Fetch, FetchItem, RelationExt,
 };
 
 use super::{
+    as_deref::AsDeref,
     cloned::Cloned,
     copied::Copied,
     opt::{Opt, OptOr},
-    Satisfied,
+    source::{FetchSource, FromRelation},
+    Satisfied, Source,
 };
 
 /// Extension trait for [crate::Fetch]
@@ -60,6 +62,14 @@ pub trait FetchExt: Sized {
         Copied(self)
     }
 
+    /// Dereferences the fetch item
+    fn deref(self) -> AsDeref<Self>
+    where
+        AsDeref<Self>: for<'x> Fetch<'x>,
+    {
+        AsDeref(self)
+    }
+
     /// Filter any component by predicate.
     fn cmp<F>(self, func: F) -> Cmp<Self, F>
     where
@@ -102,6 +112,27 @@ pub trait FetchExt: Sized {
         for<'x> Cmp<Self, Equal<T>>: Fetch<'x>,
     {
         Cmp::new(self, Equal(other))
+    }
+
+    /// Set the source entity for the fetch.
+    ///
+    /// This allows fetching or joining queries
+    fn source<S>(self, source: S) -> Source<Self, S>
+    where
+        S: FetchSource,
+    {
+        Source::new(self, source)
+    }
+
+    /// Follows a relation to resolve the fetch.
+    ///
+    /// This effectively allows you to for example fetch from the parent of an entity.
+    fn relation<T, R>(self, relation: R) -> Source<Self, FromRelation>
+    where
+        R: RelationExt<T>,
+        T: ComponentValue,
+    {
+        Source::new(self, FromRelation::new(relation))
     }
 }
 

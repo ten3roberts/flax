@@ -1,10 +1,10 @@
-use core::{alloc::Layout, any::TypeId, marker::PhantomData};
+use core::{alloc::Layout, any::TypeId, marker::PhantomData, mem};
 
 use crate::{buffer::ComponentBuffer, ComponentInfo, ComponentValue};
 
 #[derive(PartialEq, Eq)]
 /// Describes a components dynamic functionality, such as name, metadata, and type layout.
-pub(crate) struct UntypedVTable {
+pub struct UntypedVTable {
     pub(crate) name: &'static str,
     pub(crate) drop: unsafe fn(*mut u8),
     pub(crate) layout: Layout,
@@ -43,9 +43,17 @@ impl UntypedVTable {
 
 /// Represents a strongly typed vtable
 #[repr(transparent)]
-pub struct ComponentVTable<T: ComponentValue> {
+pub struct ComponentVTable<T> {
     inner: UntypedVTable,
     marker: PhantomData<T>,
+}
+
+impl<T> core::ops::Deref for ComponentVTable<T> {
+    type Target = UntypedVTable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 impl<T: ComponentValue + Eq> Eq for ComponentVTable<T> {}
@@ -57,6 +65,14 @@ impl<T: ComponentValue + PartialEq> PartialEq for ComponentVTable<T> {
 }
 
 impl<T: ComponentValue> ComponentVTable<T> {
+    pub(crate) fn from_untyped(vtable: &'static UntypedVTable) -> &'static Self {
+        if !vtable.is::<T>() {
+            panic!("Mismathed type");
+        }
+
+        unsafe { mem::transmute(vtable) }
+    }
+
     /// Creates a new *typed* vtable of `T`
     pub const fn new(name: &'static str, meta: fn(ComponentInfo) -> ComponentBuffer) -> Self {
         Self {
@@ -65,7 +81,7 @@ impl<T: ComponentValue> ComponentVTable<T> {
         }
     }
 
-    pub(crate) fn erase(&self) -> &UntypedVTable {
-        &self.inner
+    pub(crate) fn erase(&self) -> &'static UntypedVTable {
+        unsafe { mem::transmute(self) }
     }
 }
