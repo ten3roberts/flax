@@ -68,9 +68,9 @@ where
 }
 
 /// Represents a relation which can connect to entities
-pub struct Relation<T: 'static> {
+pub struct Relation<T> {
     id: Entity,
-    vtable: &'static ComponentVTable<T>,
+    vtable: &'static UntypedVTable,
     marker: PhantomData<T>,
 }
 
@@ -149,7 +149,7 @@ impl<T: ComponentValue> RelationExt<T> for Relation<T> {
     }
 
     fn of(&self, object: Entity) -> Component<T> {
-        Component::new(ComponentKey::new(self.id, Some(object)), self.vtable)
+        Component::from_raw_parts(ComponentKey::new(self.id, Some(object)), self.vtable)
     }
 
     #[inline]

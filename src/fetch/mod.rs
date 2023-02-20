@@ -29,7 +29,7 @@ pub use opt::*;
 pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
 pub use satisfied::Satisfied;
-pub use source::{FromRelation, Source};
+pub use source::Source;
 
 use crate::filter::RefFetch;
 use crate::{
