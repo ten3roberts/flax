@@ -239,7 +239,7 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{child_of, component_info, name, FetchExt, Query, World};
+    use crate::{child_of, component_info, name, FetchExt, Query, Topological, World};
     use alloc::string::ToString;
 
     use super::*;
@@ -352,13 +352,13 @@ mod test {
         world.set(g, child_of(e), ()).unwrap();
 
         let mut query = Query::new(name().cloned())
+            .with_order(Topological::new(child_of))
             .without(component_info())
-            .with(tree())
-            .with_strategy(Topo::new(child_of));
+            .with(tree());
 
         let items = query.borrow(&world).iter().collect_vec();
 
-        assert_eq!(items, ["a", "d", "b", "c", "f", "e", "g"]);
+        assert_eq!(items, ["a", "d", "b", "c", "e", "f", "g"]);
 
         // Detaching `b` creates a separate tree
         //   d ----*     a
@@ -373,7 +373,7 @@ mod test {
 
         let items = query.borrow(&world).iter().collect_vec();
 
-        assert_eq!(items, ["a", "d", "c", "f", "b", "e", "g"]);
+        assert_eq!(items, ["a", "d", "c", "b", "e", "f", "g"]);
 
         // Removing the `tree` from `e` is equivalent to removing the dependency
         world.remove(e, tree()).unwrap();

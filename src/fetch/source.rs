@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use crate::{
     archetype::{Archetype, Slot},
     entity::EntityLocation,
-    ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
+    Component, ComponentValue, Entity, Fetch, FetchItem, Relation, RelationExt, World,
 };
 
 use super::{FetchPrepareData, PreparedFetch, ReadOnlyFetch};
