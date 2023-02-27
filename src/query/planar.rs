@@ -10,7 +10,6 @@ use alloc::{
     vec::Vec,
 };
 use itertools::Itertools;
-use serde::de::MapAccess;
 use smallvec::SmallVec;
 
 use crate::{
@@ -415,7 +414,7 @@ where
         }
     }
 
-    /// Access any number of entites which are disjoint.
+    /// Access any number of entities which are disjoint.
     /// # Panics
     /// If entities are not disjoint
     /// See: [`Self::get`]

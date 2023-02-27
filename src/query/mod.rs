@@ -8,6 +8,7 @@ mod iter;
 mod planar;
 mod searcher;
 mod topo;
+mod walk;
 
 use core::fmt::Debug;
 
@@ -89,10 +90,7 @@ where
     }
 }
 
-impl<Q> Query<Q, All, Planar>
-where
-    Planar: for<'x> QueryStrategy<'x, Q, All>,
-{
+impl<Q> Query<Q, All, Planar> {
     /// Construct a new query which will fetch all items in the given query.
 
     /// The query can be either a singular component, a tuple of components, or
@@ -303,22 +301,6 @@ where
 
         self.strategy.borrow(query_state, dirty)
     }
-
-    // pub fn state(&mut self, world: &World) -> &mut S {
-    //     let archetype_gen = world.archetype_gen();
-    //     if archetype_gen > self.archetype_gen {
-    //         self.state = None;
-    //         self.archetype_gen = archetype_gen;
-    //     }
-
-    //     self.state.get_or_insert_with(|| {
-    //         // if !self.include_components {
-    //         //     searcher.add_excluded(component_info().key());
-    //         // }
-
-    //         self.strategy.state(world, &self.fetch)
-    //     })
-    // }
 }
 
 #[cfg(test)]
