@@ -60,6 +60,7 @@ where
         arch_id: ArchetypeId,
         arch: &'w Archetype,
     ) -> Option<PreparedArchetype<'w, Q::Prepared, F::Prepared>> {
+        eprintln!("Preparing fetch for {arch_id}");
         let data = FetchPrepareData {
             arch,
             arch_id,

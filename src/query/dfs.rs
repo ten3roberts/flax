@@ -454,16 +454,20 @@ mod test {
 
         let mut cmd = CommandBuffer::new();
 
+        eprintln!("Traversing");
         Query::new((entity_ids(), name()))
             .with_strategy(Dfs::new(child_of, root))
             .borrow(&world)
             .traverse(&Vec::new(), |(id, name), _, prefix| {
+                eprintln!("Visited: {id}");
                 let mut p = prefix.clone();
                 p.push(name.clone());
 
                 cmd.set(id, path(), p.join("::"));
                 p
             });
+
+        eprintln!("------------");
 
         cmd.apply(&mut world).unwrap();
 
