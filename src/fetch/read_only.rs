@@ -1,10 +1,10 @@
-use crate::{archetype::Slot, Fetch};
+use crate::archetype::Slot;
 
 use super::PreparedFetch;
 
 /// A fetch which only yields items which can freely *alias*.
 ///
-/// This makes the `fetch` method saf*er* to implement and can be called with a covariant lifetimes.
+/// This makes the `fetch` method *safer* to implement and can be called with a covariant lifetimes.
 pub trait ReadOnlyFetch<'q>: PreparedFetch<'q> {
     /// Fetch the shared item from the given slot
     ///

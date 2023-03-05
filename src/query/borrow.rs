@@ -1,15 +1,8 @@
-use core::mem::{self, MaybeUninit};
-
-use smallvec::SmallVec;
-
 use crate::{
     archetype::{Archetype, Slice},
-    component_info, dummy,
-    entity::EntityLocation,
-    error::Result,
     fetch::{FetchPrepareData, PreparedFetch},
     filter::{FilterIter, Filtered},
-    All, ArchetypeId, BatchedIter, Entity, Error, Fetch, FetchItem, QueryIter, World,
+    ArchetypeId, Entity, Fetch, World,
 };
 
 use super::{ArchetypeChunks, Batch};

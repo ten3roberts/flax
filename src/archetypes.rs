@@ -1,5 +1,3 @@
-use core::cmp::Ordering;
-
 use alloc::sync::Arc;
 
 use crate::{

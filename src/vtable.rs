@@ -65,14 +65,6 @@ impl<T: ComponentValue + PartialEq> PartialEq for ComponentVTable<T> {
 }
 
 impl<T: ComponentValue> ComponentVTable<T> {
-    pub(crate) fn from_untyped(vtable: &'static UntypedVTable) -> &'static Self {
-        if !vtable.is::<T>() {
-            panic!("Mismathed type");
-        }
-
-        unsafe { mem::transmute(vtable) }
-    }
-
     /// Creates a new *typed* vtable of `T`
     pub const fn new(name: &'static str, meta: fn(ComponentInfo) -> ComponentBuffer) -> Self {
         Self {
