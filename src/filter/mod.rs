@@ -11,6 +11,7 @@ use core::{
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
+    component_info,
     fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch},
     Access, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
 };
@@ -61,11 +62,16 @@ macro_rules! gen_bitops {
 pub struct Filtered<Q, F> {
     pub(crate) fetch: Q,
     pub(crate) filter: F,
+    pub(crate) include_components: bool,
 }
 
 impl<Q, F> Filtered<Q, F> {
-    pub(crate) fn new(fetch: Q, filter: F) -> Self {
-        Self { fetch, filter }
+    pub(crate) fn new(fetch: Q, filter: F, include_components: bool) -> Self {
+        Self {
+            fetch,
+            filter,
+            include_components,
+        }
     }
 }
 
@@ -91,12 +97,15 @@ where
         Some(Filtered {
             fetch: self.fetch.prepare(data)?,
             filter: self.filter.prepare(data)?,
+            include_components: self.include_components,
         })
     }
 
     #[inline]
     fn filter_arch(&self, arch: &Archetype) -> bool {
-        self.fetch.filter_arch(arch) && self.filter.filter_arch(arch)
+        self.fetch.filter_arch(arch)
+            && self.filter.filter_arch(arch)
+            && (!arch.has(component_info().key()) || self.include_components)
     }
 
     #[inline]

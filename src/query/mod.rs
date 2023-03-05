@@ -1,7 +1,6 @@
 mod borrow;
 mod data;
 mod dfs;
-mod dfs_all;
 mod difference;
 mod entity;
 mod iter;
@@ -12,9 +11,6 @@ mod walk;
 
 use core::fmt::Debug;
 
-use alloc::vec::Vec;
-pub use planar::{Planar, QueryBorrow};
-
 use crate::archetype::Slot;
 use crate::fetch::FmtQuery;
 use crate::filter::{BatchSize, Filtered, WithRelation, WithoutRelation};
@@ -22,6 +18,7 @@ use crate::{
     Access, And, Component, ComponentValue, Entity, FetchItem, RelationExt, With, Without,
 };
 use crate::{All, Fetch, World};
+use alloc::vec::Vec;
 
 use self::borrow::QueryBorrowState;
 pub(crate) use borrow::*;
@@ -123,9 +120,9 @@ impl<Q> Query<Q, All, Planar> {
     /// A fetch may also contain filters
     pub fn new(fetch: Q) -> Self {
         Self {
-            fetch: Filtered::new(fetch, All),
+            fetch: Filtered::new(fetch, All, false),
             change_tick: 0,
-            strategy: Planar::new(false),
+            strategy: Planar::new(),
             archetype_gen: 0,
         }
     }
@@ -134,23 +131,9 @@ impl<Q> Query<Q, All, Planar> {
     ///
     /// **Note**: only relevant for the `planar` strategy
     pub fn with_components(mut self) -> Self {
-        self.strategy.include_components = true;
+        self.fetch.include_components = true;
         self.archetype_gen = 0;
         self
-    }
-
-    /// Specify iteration order of archetypes
-    pub fn with_order<O: ArchetypeOrder>(self, order: O) -> Query<Q, All, Planar<O>> {
-        Query {
-            fetch: self.fetch,
-            change_tick: 0,
-            archetype_gen: 0,
-            strategy: Planar {
-                include_components: self.strategy.include_components,
-                archetypes: Vec::new(),
-                order,
-            },
-        }
     }
 }
 
@@ -169,8 +152,8 @@ where
         Query {
             fetch: self.fetch,
             change_tick: self.change_tick,
-            strategy,
             archetype_gen: 0,
+            strategy,
         }
     }
 
@@ -180,6 +163,14 @@ where
         Entity: for<'w> QueryStrategy<'w, Q, F>,
     {
         self.with_strategy(id)
+    }
+
+    /// Transform the query into a topologically ordered query
+    pub fn topo<T: ComponentValue>(self, relation: impl RelationExt<T>) -> Query<Q, F, Topo>
+    where
+        Topo: for<'w> QueryStrategy<'w, Q, F>,
+    {
+        self.with_strategy(Topo::new(relation))
     }
 
     /// Collect all elements in the query into a vector
@@ -202,10 +193,14 @@ where
     /// This filter is and:ed with the existing filters.
     pub fn filter<G>(self, filter: G) -> Query<Q, And<F, G>, S> {
         Query {
-            fetch: Filtered::new(self.fetch.fetch, And::new(self.fetch.filter, filter)),
+            fetch: Filtered::new(
+                self.fetch.fetch,
+                And::new(self.fetch.filter, filter),
+                self.fetch.include_components,
+            ),
             change_tick: self.change_tick,
-            strategy: self.strategy,
             archetype_gen: 0,
+            strategy: self.strategy,
         }
     }
 
@@ -287,7 +282,7 @@ where
     {
         let (old_tick, new_tick) = self.prepare_tick(world);
 
-        let query_state = QueryBorrowState {
+        let borrow_state = QueryBorrowState {
             old_tick,
             new_tick,
             world,
@@ -299,7 +294,7 @@ where
 
         self.archetype_gen = archetype_gen;
 
-        self.strategy.borrow(query_state, dirty)
+        self.strategy.borrow(borrow_state, dirty)
     }
 }
 

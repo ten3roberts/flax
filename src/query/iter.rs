@@ -1,8 +1,10 @@
+use core::{iter::Flatten, slice::IterMut};
+
 use crate::{
     archetype::{Archetype, Slice, Slot},
     fetch::PreparedFetch,
     filter::{FilterIter, Filtered},
-    Entity,
+    Entity, Fetch, PreparedArchetype,
 };
 
 /// Iterates over a chunk of entities, specified by a predicate.
