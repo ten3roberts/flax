@@ -1,19 +1,14 @@
-use alloc::{
-    collections::{btree_map, BTreeMap},
-    vec::Vec,
-};
+use alloc::vec::Vec;
 use core::{
-    cmp::Reverse,
     iter::Flatten,
     mem::{self, MaybeUninit},
     slice::IterMut,
 };
-use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{
     archetype::Slice,
-    component_info, dummy,
+    dummy,
     entity::EntityLocation,
     error::Result,
     fetch::{FetchAccessData, PreparedFetch},

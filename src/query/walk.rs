@@ -1,28 +1,20 @@
-use core::{
-    iter::{Enumerate, Zip},
-    marker::PhantomData,
-    ops::Range,
-    slice::{self, Iter},
-};
+use core::{iter::Zip, marker::PhantomData, ops::Range, slice::Iter};
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use derivative::Derivative;
-use itertools::Itertools;
 use smallvec::SmallVec;
-use tracing::Instrument;
 
 use crate::{
     archetype::{Slice, Slot},
-    fetch::PreparedFetch,
     filter::Filtered,
-    All, And, ArchetypeId, Batch, ComponentValue, Entity, Fetch, FetchItem, PreparedArchetype,
-    Query, RelationExt, World,
+    All, And, ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, PreparedArchetype,
+    RelationExt, World,
 };
 
-use super::{borrow::QueryBorrowState, ArchetypeSearcher};
+use super::borrow::QueryBorrowState;
 
-/// Allows randomly walking a hierarchy formed by a relation
-pub struct TreeWalker<Q, F = All> {
+/// Allows random traversal of a graph formed by a relation
+pub struct GraphQuery<Q, F = All> {
     relation: Entity,
     fetch: Filtered<Q, F>,
 
@@ -31,8 +23,8 @@ pub struct TreeWalker<Q, F = All> {
     state: GraphState,
 }
 
-impl<Q> TreeWalker<Q, All> {
-    /// Creates a new [`TreeWalker`]
+impl<Q> GraphQuery<Q, All> {
+    /// Creates a new [`GraphQuery`]
     pub fn new<T, R>(relation: R, fetch: Q) -> Self
     where
         T: ComponentValue,
@@ -48,15 +40,15 @@ impl<Q> TreeWalker<Q, All> {
     }
 }
 
-impl<Q, F> TreeWalker<Q, F>
+impl<Q, F> GraphQuery<Q, F>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Fetch<'x>,
 {
-    /// Adds a new filter to the walker.
+    /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<G>(self, filter: G) -> TreeWalker<Q, And<F, G>> {
-        TreeWalker {
+    pub fn filter<G>(self, filter: G) -> GraphQuery<Q, And<F, G>> {
+        GraphQuery {
             fetch: Filtered::new(
                 self.fetch.fetch,
                 And::new(self.fetch.filter, filter),
@@ -69,6 +61,7 @@ where
         }
     }
 
+    /// Prepares the query upon the world.
     pub fn borrow<'w>(&'w mut self, world: &'w World) -> GraphBorrow<Q, F> {
         // The tick of the last iteration
         let mut old_tick = self.change_tick;
@@ -158,6 +151,7 @@ impl GraphState {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
+/// The borrowed state for a [`GraphQuery`]
 pub struct GraphBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
@@ -208,10 +202,10 @@ where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    // Returns the fetch item at the current entity, if applicable.
-    //
-    // If the entity doesn't match, `None` is returned.
-    pub fn fetch<'q>(
+    /// Returns the fetch item at the current entity, if applicable.
+    ///
+    /// If the entity doesn't match, `None` is returned.
+    pub fn get<'q>(
         &self,
         borrow: &'q mut GraphBorrow<'w, Q, F>,
     ) -> Option<<Q as FetchItem<'q>>::Item>
@@ -245,14 +239,13 @@ where
         }
     }
 
+    /// Traverse the current subtree including the current node in depth-first order.
     pub fn dfs(&self) -> DfsIter<'w, Q, F> {
         let stack = smallvec::smallvec![*self];
 
         DfsIter {
-            world: self.world,
             stack,
             visited: Default::default(),
-            state: self.state,
         }
     }
 }
@@ -260,6 +253,7 @@ where
 type ArchetypeNodes<'a> = (ArchetypeId, Zip<Range<Slot>, Iter<'a, Entity>>);
 
 #[derive(Debug)]
+/// Iterates the immediate children of a node
 pub struct Children<'w, Q, F> {
     archetypes: core::slice::Iter<'w, ArchetypeId>,
     current: Option<ArchetypeNodes<'w>>,
@@ -305,12 +299,9 @@ where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    world: &'w World,
     stack: SmallVec<[Node<'w, Q, F>; 16]>,
 
     visited: BTreeSet<Entity>,
-
-    state: &'w GraphState,
 }
 
 impl<'w, Q, F> Iterator for DfsIter<'w, Q, F>
@@ -321,16 +312,23 @@ where
     type Item = Node<'w, Q, F>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let node = self.stack.pop()?;
+        loop {
+            let node = self.stack.pop()?;
+            if !self.visited.insert(node.id) {
+                continue;
+            }
 
-        // Add the children
-        self.stack.extend(node.children());
-        Some(node)
+            // Add the children
+            self.stack.extend(node.children());
+            return Some(node);
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use itertools::Itertools;
+
     use crate::{child_of, name, Component, With};
 
     use super::*;
@@ -339,7 +337,6 @@ mod test {
     fn traverse_tree() {
         component! {
             a: i32,
-            path: String,
             b: &'static str,
         }
 
@@ -373,17 +370,17 @@ mod test {
             .spawn(&mut world);
 
         {
-            let mut walker = TreeWalker::new(child_of, name());
+            let mut query = GraphQuery::new(child_of, name());
 
-            let mut borrow = walker.borrow(&world);
+            let mut borrow = query.borrow(&world);
 
-            let mut root = borrow.get(root).unwrap();
+            let root = borrow.get(root).unwrap();
 
-            assert_eq!(root.fetch(&mut borrow), Some(&"root".into()));
+            assert_eq!(root.get(&mut borrow), Some(&"root".into()));
 
             let children = root
                 .children()
-                .flat_map(|v| v.fetch(&mut borrow).cloned())
+                .flat_map(|v| v.get(&mut borrow).cloned())
                 .sorted()
                 .collect_vec();
 
@@ -392,18 +389,18 @@ mod test {
 
         // Test with a filter
         {
-            let mut walker = TreeWalker::new(child_of, name()).filter(a().with());
+            let mut query = GraphQuery::new(child_of, name()).filter(a().with());
 
-            let mut borrow = walker.borrow(&world);
+            let mut borrow = query.borrow(&world);
 
             {
-                let mut root = borrow.get(root).unwrap();
+                let root = borrow.get(root).unwrap();
 
-                assert_eq!(root.fetch(&mut borrow), Some(&"root".into()));
+                assert_eq!(root.get(&mut borrow), Some(&"root".into()));
 
                 let children = root
                     .children()
-                    .map(|v| v.fetch(&mut borrow).cloned())
+                    .map(|v| v.get(&mut borrow).cloned())
                     .sorted()
                     .collect_vec();
 
@@ -421,7 +418,7 @@ mod test {
                     paths: &mut Vec<(Vec<Option<String>>, usize)>,
                     depth: usize,
                 ) {
-                    let name = node.fetch(borrow).cloned();
+                    let name = node.get(borrow).cloned();
                     eprintln!("{depth}: {name:?}");
                     let path = path.iter().cloned().chain([name]).collect_vec();
                     paths.push((path.clone(), depth));
@@ -455,7 +452,7 @@ mod test {
             let root = borrow.get(root).unwrap();
             let items = root
                 .dfs()
-                .flat_map(|v| v.fetch(&mut borrow).cloned())
+                .flat_map(|v| v.get(&mut borrow).cloned())
                 .collect_vec();
 
             pretty_assertions::assert_eq!(items, ["root", "child.3", "child.1", "child.1.1"]);

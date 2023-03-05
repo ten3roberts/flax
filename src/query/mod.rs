@@ -8,6 +8,7 @@ mod planar;
 mod searcher;
 mod topo;
 mod walk;
+pub use walk::{Children, DfsIter, GraphBorrow, GraphQuery, Node};
 
 use core::fmt::Debug;
 

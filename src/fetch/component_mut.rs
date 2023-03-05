@@ -9,7 +9,7 @@ use crate::{
     Access, AccessKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
-use super::{ReadOnlyFetch, FetchAccessData, FetchPrepareData, PreparedFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch};
 
 #[doc(hidden)]
 pub struct WriteComponent<'a, T> {

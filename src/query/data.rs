@@ -2,8 +2,8 @@ use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    fetch::FetchAccessData, Access, AccessKind, All, AsBorrow, Fetch, Planar, Query, QueryBorrow,
-    QueryStrategy, SystemAccess, SystemContext, SystemData, World,
+    All, AsBorrow, Fetch, Planar, Query, QueryStrategy, SystemAccess, SystemContext, SystemData,
+    World,
 };
 
 impl<Q, F, S> SystemAccess for Query<Q, F, S>
