@@ -2,18 +2,21 @@ use core::{
     iter::{Enumerate, Zip},
     marker::PhantomData,
     ops::Range,
-    slice::Iter,
+    slice::{self, Iter},
 };
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
+use derivative::Derivative;
 use itertools::Itertools;
 use smallvec::SmallVec;
+use tracing::Instrument;
 
 use crate::{
     archetype::{Slice, Slot},
+    fetch::PreparedFetch,
     filter::Filtered,
-    All, And, ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, PreparedArchetype, Query,
-    RelationExt, World,
+    All, And, ArchetypeId, Batch, ComponentValue, Entity, Fetch, FetchItem, PreparedArchetype,
+    Query, RelationExt, World,
 };
 
 use super::{borrow::QueryBorrowState, ArchetypeSearcher};
@@ -25,7 +28,7 @@ pub struct TreeWalker<Q, F = All> {
 
     change_tick: u32,
     archetype_gen: u32,
-    adj: GraphState,
+    state: GraphState,
 }
 
 impl<Q> TreeWalker<Q, All> {
@@ -37,10 +40,10 @@ impl<Q> TreeWalker<Q, All> {
     {
         Self {
             relation: relation.id(),
-            fetch: Filtered::new(fetch, All),
+            fetch: Filtered::new(fetch, All, false),
             change_tick: 0,
             archetype_gen: 0,
-            adj: Default::default(),
+            state: Default::default(),
         }
     }
 }
@@ -54,15 +57,19 @@ where
     /// This filter is and:ed with the existing filters.
     pub fn filter<G>(self, filter: G) -> TreeWalker<Q, And<F, G>> {
         TreeWalker {
-            fetch: Filtered::new(self.fetch.fetch, And::new(self.fetch.filter, filter)),
+            fetch: Filtered::new(
+                self.fetch.fetch,
+                And::new(self.fetch.filter, filter),
+                self.fetch.include_components,
+            ),
             relation: self.relation,
             change_tick: 0,
             archetype_gen: 0,
-            adj: Default::default(),
+            state: Default::default(),
         }
     }
 
-    pub fn borrow<'w>(&'w mut self, world: &'w World) -> TreeWalkerBorrow<Q, F> {
+    pub fn borrow<'w>(&'w mut self, world: &'w World) -> GraphBorrow<Q, F> {
         // The tick of the last iteration
         let mut old_tick = self.change_tick;
 
@@ -90,13 +97,13 @@ where
         let dirty = archetype_gen > self.archetype_gen;
 
         if dirty {
-            self.adj.update(world, self.relation, &self.fetch);
+            self.state.update(world, self.relation, &self.fetch);
         }
 
         self.archetype_gen = archetype_gen;
 
         let prepared = self
-            .adj
+            .state
             .archetypes
             .iter()
             .map(|&arch_id| {
@@ -105,11 +112,11 @@ where
             })
             .collect();
 
-        TreeWalkerBorrow {
+        GraphBorrow {
             world,
             relation: self.relation,
             prepared,
-            adj: &self.adj,
+            state: &self.state,
         }
     }
 }
@@ -149,62 +156,54 @@ impl GraphState {
     }
 }
 
-pub struct TreeWalkerBorrow<'w, Q, F>
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct GraphBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
     world: &'w World,
     relation: Entity,
+    #[derivative(Debug = "ignore")]
     prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 16]>,
-    adj: &'w GraphState,
+    #[derivative(Debug = "ignore")]
+    state: &'w GraphState,
 }
 
-impl<'w, Q, F> TreeWalkerBorrow<'w, Q, F>
+impl<'w, Q, F> GraphBorrow<'w, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    /// Traverse the graph starting from `id`.
-    pub fn root(&mut self, id: Entity) -> Option<TreeCursor<'w, '_, Q, F>> {
+    /// Get the node in the graph for the entity.
+    pub fn get(&self, id: Entity) -> Option<Node<'w, Q, F>> {
         let loc = self.world.location(id).ok()?;
 
-        Some(TreeCursor {
+        Some(Node {
             id,
             slot: loc.slot,
             arch_id: loc.arch_id,
-            borrow: self,
+            state: self.state,
+            world: self.world,
+            _marker: PhantomData,
         })
     }
 }
 
-impl<'w, Q: core::fmt::Debug, F: core::fmt::Debug> core::fmt::Debug for TreeWalkerBorrow<'w, Q, F>
-where
-    Q: Fetch<'w>,
-    F: Fetch<'w>,
-{
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("TreeWalkerBorrow")
-            .field("world", &self.world)
-            .field("relation", &self.relation)
-            .field("adj", &self.adj)
-            .finish()
-    }
-}
-
 /// A cursor to a node/entity in the graph
-pub struct TreeCursor<'w, 'q, Q, F = All>
-where
-    Q: Fetch<'w>,
-    F: Fetch<'w>,
-{
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Clone(bound = ""), Copy(bound = ""))]
+pub struct Node<'w, Q, F> {
     id: Entity,
     slot: Slot,
     arch_id: ArchetypeId,
-    borrow: &'q mut TreeWalkerBorrow<'w, Q, F>,
+    state: &'w GraphState,
+    world: &'w World,
+    _marker: PhantomData<(Q, F)>,
 }
 
-impl<'q, 'w, Q, F> TreeCursor<'w, 'q, Q, F>
+impl<'w, Q, F> Node<'w, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
@@ -212,19 +211,25 @@ where
     // Returns the fetch item at the current entity, if applicable.
     //
     // If the entity doesn't match, `None` is returned.
-    fn get(&mut self) -> Option<<Q as FetchItem<'_>>::Item> {
-        let index = *self.borrow.adj.archetypes_index.get(&self.arch_id)?;
+    pub fn fetch<'q>(
+        &self,
+        borrow: &'q mut GraphBorrow<'w, Q, F>,
+    ) -> Option<<Q as FetchItem<'q>>::Item>
+    where
+        Q: Fetch<'w>,
+        F: Fetch<'w>,
+    {
+        let index = *self.state.archetypes_index.get(&self.arch_id)?;
 
-        let p = &mut self.borrow.prepared[index];
+        let p = &mut borrow.prepared[index];
 
         p.manual_chunk(Slice::single(self.slot))?.next()
     }
 
     /// Traverse the immediate children of the current node.
-    fn children(&mut self) -> Children<'w, '_, Q, F> {
+    pub fn children(&self) -> Children<'w, Q, F> {
         let archetypes = self
-            .borrow
-            .adj
+            .state
             .edges
             .get(&self.id)
             .map(|v| v.as_slice())
@@ -234,98 +239,93 @@ where
         Children {
             archetypes,
             current: None,
-            borrow: self.borrow,
+            state: self.state,
+            _marker: PhantomData,
+            world: self.world,
         }
     }
 
-    fn map_children<Func, T>(&mut self, func: Func) -> MapChildren<'w, '_, Q, F, Func>
-    where
-        Func: for<'x> FnMut(Option<<Q as FetchItem<'x>>::Item>) -> T,
-    {
-        MapChildren {
-            children: self.children(),
-            func,
+    pub fn dfs(&self) -> DfsIter<'w, Q, F> {
+        let stack = smallvec::smallvec![*self];
+
+        DfsIter {
+            world: self.world,
+            stack,
+            visited: Default::default(),
+            state: self.state,
         }
     }
 }
 
-type ArchetypeNodes<'a> = (ArchetypeId, Enumerate<Iter<'a, Entity>>);
+type ArchetypeNodes<'a> = (ArchetypeId, Zip<Range<Slot>, Iter<'a, Entity>>);
 
 #[derive(Debug)]
-pub struct Children<'w, 'q, Q, F>
-where
-    Q: Fetch<'w>,
-    F: Fetch<'w>,
-{
+pub struct Children<'w, Q, F> {
     archetypes: core::slice::Iter<'w, ArchetypeId>,
     current: Option<ArchetypeNodes<'w>>,
-
-    borrow: &'q mut TreeWalkerBorrow<'w, Q, F>,
+    state: &'w GraphState,
+    world: &'w World,
+    _marker: PhantomData<(Q, F)>,
 }
 
-impl<'w, 'q, Q, F> Children<'w, 'q, Q, F>
+impl<'w, Q, F> Iterator for Children<'w, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    /// Returns the next child
-    ///
-    /// **Note**: this is not an iterator, as the borrowed state is lent to the returned item.
-    ///
-    /// This is needed as only one node at the time can access the fetch state.
-    fn next_child(&mut self) -> Option<TreeCursor<'w, '_, Q, F>> {
+    type Item = Node<'w, Q, F>;
+    fn next(&mut self) -> Option<Node<'w, Q, F>> {
         loop {
             if let Some((arch_id, v)) = self.current.as_mut() {
                 if let Some((slot, &id)) = v.next() {
-                    return Some(TreeCursor {
+                    return Some(Node {
                         id,
                         slot,
                         arch_id: *arch_id,
-                        borrow: self.borrow,
+                        state: self.state,
+                        world: self.world,
+                        _marker: PhantomData,
                     });
                 }
             }
 
             let arch_id = *self.archetypes.next()?;
-            let arch = self.borrow.world.archetypes.get(arch_id);
+            let arch = self.world.archetypes.get(arch_id);
 
-            let ids = arch.entities().iter().enumerate();
+            let ids = arch.slots().iter().zip(arch.entities());
 
             self.current = Some((arch_id, ids))
         }
     }
 }
 
-/// Adapter for children traversal which exposes an iterator interface.
-///
-/// This is done by a mapping function from the temporary *lending* style iterator to a longer
-/// lifetime.
-///
-///
-/// This is less flexible than manually traversing the hierarchy. Most notably is does not allow
-/// the user to control or stop the iterator.
-#[derive(Debug)]
-pub struct MapChildren<'w, 'q, Q, F, Func>
+/// Iterate a hierarchy in depth-first order
+pub struct DfsIter<'w, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    children: Children<'w, 'q, Q, F>,
-    func: Func,
+    world: &'w World,
+    stack: SmallVec<[Node<'w, Q, F>; 16]>,
+
+    visited: BTreeSet<Entity>,
+
+    state: &'w GraphState,
 }
 
-impl<'w, 'q, Q, F, Func, T> Iterator for MapChildren<'w, 'q, Q, F, Func>
+impl<'w, Q, F> Iterator for DfsIter<'w, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
-    Func: for<'x> FnMut(Option<<Q as FetchItem<'x>>::Item>) -> T,
 {
-    type Item = T;
+    type Item = Node<'w, Q, F>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut node = self.children.next_child()?;
+        let node = self.stack.pop()?;
 
-        Some((self.func)(node.get()))
+        // Add the children
+        self.stack.extend(node.children());
+        Some(node)
     }
 }
 
@@ -377,13 +377,13 @@ mod test {
 
             let mut borrow = walker.borrow(&world);
 
-            let mut root = borrow.root(root).unwrap();
+            let mut root = borrow.get(root).unwrap();
 
-            assert_eq!(root.get(), Some(&"root".into()));
+            assert_eq!(root.fetch(&mut borrow), Some(&"root".into()));
 
             let children = root
-                .map_children(|v| v.cloned())
-                .flatten()
+                .children()
+                .flat_map(|v| v.fetch(&mut borrow).cloned())
                 .sorted()
                 .collect_vec();
 
@@ -396,56 +396,69 @@ mod test {
 
             let mut borrow = walker.borrow(&world);
 
-            let mut root = borrow.root(root).unwrap();
+            {
+                let mut root = borrow.get(root).unwrap();
 
-            assert_eq!(root.get(), Some(&"root".into()));
+                assert_eq!(root.fetch(&mut borrow), Some(&"root".into()));
 
-            let children = root.map_children(|v| v.cloned()).sorted().collect_vec();
+                let children = root
+                    .children()
+                    .map(|v| v.fetch(&mut borrow).cloned())
+                    .sorted()
+                    .collect_vec();
 
-            assert_eq!(
-                children,
-                [None, Some("child.1".into()), Some("child.3".into())]
-            );
+                assert_eq!(
+                    children,
+                    [None, Some("child.1".into()), Some("child.3".into())]
+                );
 
-            let mut paths: Vec<(Vec<Option<String>>, usize)> = Vec::new();
+                let mut paths: Vec<(Vec<Option<String>>, usize)> = Vec::new();
 
-            fn traverse(
-                mut node: TreeCursor<Component<String>, And<All, With>>,
-                path: &[Option<String>],
-                paths: &mut Vec<(Vec<Option<String>>, usize)>,
-                depth: usize,
-            ) {
-                let name = node.get().cloned();
-                eprintln!("{depth}: {name:?}");
-                let path = path.iter().cloned().chain([name]).collect_vec();
-                paths.push((path.clone(), depth));
+                fn traverse<'w>(
+                    borrow: &mut GraphBorrow<'w, Component<String>, And<All, With>>,
+                    node: Node<'w, Component<String>, And<All, With>>,
+                    path: &[Option<String>],
+                    paths: &mut Vec<(Vec<Option<String>>, usize)>,
+                    depth: usize,
+                ) {
+                    let name = node.fetch(borrow).cloned();
+                    eprintln!("{depth}: {name:?}");
+                    let path = path.iter().cloned().chain([name]).collect_vec();
+                    paths.push((path.clone(), depth));
 
-                let mut children = node.children();
-
-                while let Some(node) = children.next_child() {
-                    traverse(node, &path, paths, depth + 1)
+                    for node in node.children() {
+                        traverse(borrow, node, &path, paths, depth + 1)
+                    }
                 }
+
+                traverse(&mut borrow, root, &[], &mut paths, 0);
+
+                pretty_assertions::assert_eq!(
+                    paths,
+                    [
+                        (vec![Some("root".into())], 0),
+                        (vec![Some("root".into()), Some("child.1".into())], 1),
+                        (
+                            vec![
+                                Some("root".into()),
+                                Some("child.1".into()),
+                                Some("child.1.1".into())
+                            ],
+                            2
+                        ),
+                        (vec![Some("root".into()), Some("child.3".into())], 1),
+                        (vec![Some("root".into()), None], 1),
+                    ],
+                );
             }
 
-            traverse(root, &[], &mut paths, 0);
+            let root = borrow.get(root).unwrap();
+            let items = root
+                .dfs()
+                .flat_map(|v| v.fetch(&mut borrow).cloned())
+                .collect_vec();
 
-            pretty_assertions::assert_eq!(
-                paths,
-                [
-                    (vec![Some("root".into())], 0),
-                    (vec![Some("root".into()), Some("child.1".into())], 1),
-                    (
-                        vec![
-                            Some("root".into()),
-                            Some("child.1".into()),
-                            Some("child.1.1".into())
-                        ],
-                        2
-                    ),
-                    (vec![Some("root".into()), Some("child.3".into())], 1),
-                    (vec![Some("root".into()), None], 1),
-                ],
-            );
+            pretty_assertions::assert_eq!(items, ["root", "child.3", "child.1", "child.1.1"]);
         }
     }
 }

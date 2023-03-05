@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use crate::{
     archetype::{Archetype, Slot},
     entity::EntityLocation,
-    Component, ComponentValue, Entity, Fetch, FetchItem, Relation, RelationExt, World,
+    ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 
 use super::{FetchPrepareData, PreparedFetch, ReadOnlyFetch};
@@ -177,7 +177,7 @@ pub struct PreparedSource<Q> {
 mod test {
     use itertools::Itertools;
 
-    use crate::{child_of, component, entity_ids, name, FetchExt, Query, Topological};
+    use crate::{child_of, component, entity_ids, name, FetchExt, Query, Topo};
 
     use super::*;
 
@@ -215,9 +215,9 @@ mod test {
             name().deref(),
             (name().deref(), a().copied()).relation(child_of).opt(),
         ))
-        .with_order(Topological::new(child_of));
+        .with_strategy(Topo::new(child_of));
 
-        assert_eq!(
+        pretty_assertions::assert_eq!(
             query.borrow(&world).iter().collect_vec(),
             [
                 ("root", None),
