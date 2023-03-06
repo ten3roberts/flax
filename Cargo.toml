@@ -109,6 +109,12 @@ name = "change_detection"
 path = "./examples/guide/change_detection.rs"
 required-features = ["std"]
 
+[[example]]
+name = "query_basic"
+path = "./examples/query/basic.rs"
+required-features = ["std"]
+
+
 [[bench]]
 name = "benchmarks"
 harness = false
