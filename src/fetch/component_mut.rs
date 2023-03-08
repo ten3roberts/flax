@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use atomic_refcell::AtomicRefMut;
 
 use crate::{
-    archetype::{Archetype, Change, Changes, Slice, Slot},
+    archetype::{Archetype, CellMutGuard, Change, Changes, Slice, Slot},
     Access, AccessKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
@@ -13,9 +13,7 @@ use super::{FetchAccessData, FetchPrepareData, PreparedFetch};
 
 #[doc(hidden)]
 pub struct WriteComponent<'a, T> {
-    borrow: AtomicRefMut<'a, [T]>,
-    changes: AtomicRefMut<'a, Changes>,
-    new_tick: u32,
+    borrow: CellMutGuard<'a, T>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,13 +31,9 @@ where
 
     #[inline]
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let (borrow, changes) = data.arch.borrow_mut(self.0)?;
+        let borrow = data.arch.borrow_mut(self.0, data.new_tick)?;
 
-        Some(WriteComponent {
-            borrow,
-            changes,
-            new_tick: data.new_tick,
-        })
+        Some(WriteComponent { borrow })
     }
 
     #[inline]
@@ -93,12 +87,11 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint
-        unsafe { &mut *(self.borrow.get_unchecked_mut(slot) as *mut T) }
+        unsafe { &mut *(self.borrow.storage.get_unchecked_mut(slot) as *mut T) }
     }
 
     #[inline]
     fn set_visited(&mut self, slots: Slice) {
-        self.changes
-            .set_modified_if_tracking(Change::new(slots, self.new_tick));
+        self.borrow.set_modified(slots);
     }
 }

@@ -207,6 +207,7 @@ where
 
 /// See: [crate::RelationIter]
 pub struct RelationIterMut<'a, T> {
+    entities: &'a [Entity],
     cells: Range<'a, ComponentKey, Cell>,
     slot: Slot,
     change_tick: u32,
@@ -229,6 +230,7 @@ impl<'a, T: ComponentValue> RelationIterMut<'a, T> {
             slot,
             marker: PhantomData,
             change_tick,
+            entities: arch.entities(),
         }
     }
 }
@@ -243,7 +245,8 @@ where
         let (&key, cell) = self.cells.next()?;
         // Safety: the type matches the relation ext
         Some((key.object().unwrap(), unsafe {
-            cell.get_mut::<T>(self.slot, self.change_tick).unwrap()
+            cell.get_mut::<T>(self.entities, self.slot, self.change_tick)
+                .unwrap()
         }))
     }
 }
