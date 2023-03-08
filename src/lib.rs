@@ -190,7 +190,7 @@
 //! This library makes use of unsafe for type erasure and the allocation in storage
 //! of ComponentBuffers and Archetypes.
 
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(not(feature = "std"), no_std)]
 

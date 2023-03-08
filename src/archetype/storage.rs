@@ -138,14 +138,16 @@ impl Storage {
         }
     }
 
-    pub(crate) unsafe fn get<T: ComponentValue>(&self, slot: Slot) -> Option<&T> {
-        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
+    pub(crate) fn get<T: ComponentValue>(&self, slot: Slot) -> Option<&T> {
         if slot >= self.len {
             None
         } else {
-            let p = self.data.as_ptr().add(self.info.size() * slot).cast::<T>();
-            let v = unsafe { &*p };
-            Some(v)
+            assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
+            unsafe {
+                let p = self.data.as_ptr().add(self.info.size() * slot).cast::<T>();
+                let v = unsafe { &*p };
+                Some(v)
+            }
         }
     }
 

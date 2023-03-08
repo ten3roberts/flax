@@ -130,6 +130,11 @@ impl Slice {
     pub fn is_subset(&self, other: &Self) -> bool {
         self.is_empty() || (self.start >= other.start && self.end <= other.end)
     }
+
+    /// Converts the slice to a range, useful for slice indexing
+    pub fn as_range(&self) -> Range<Slot> {
+        self.start..self.end
+    }
 }
 
 impl core::fmt::Debug for Slice {

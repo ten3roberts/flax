@@ -21,7 +21,7 @@ use crate::{
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    events::{EventHandler, RemoveSubscriber, Subscriber},
+    events::EventHandler,
     filter::{ArchetypeFilter, StaticFilter},
     relation::Relation,
     *,
@@ -1222,26 +1222,14 @@ impl World {
         };
     }
 
-    /// Subscribe for removals of a component.
-    ///
-    /// The affected entity and component will be transmitted when the component is removed,
-    /// or when the entity is despawned.
-    pub fn on_removed<T: ComponentValue + Clone>(
-        &mut self,
-        component: Component<T>,
-        handler: impl EventHandler<(Entity, T)> + 'static + Send + Sync,
-    ) {
-        self.subscribe(RemoveSubscriber::new(component, handler))
-    }
-
-    /// Subscribe to events in the world using the provided subscriber.
+    /// Subscribe to events in the world using the provided event handler.
     ///
     /// **See**: [`ArchetypeSubscriber`](crate::events::ArchetypeSubscriber), [`ChangeSubscriber`](crate::events::ChangeSubscriber).
     ///
     /// This allows reacting to changes in other systems, in async contexts by using channels or [`tokio::sync::Notify`], or on other threads.
     pub fn subscribe<S>(&mut self, subscriber: S)
     where
-        S: Subscriber,
+        S: EventHandler,
     {
         self.archetypes.add_subscriber(Arc::new(subscriber))
     }
