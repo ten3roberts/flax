@@ -207,7 +207,7 @@ impl Cell {
 
     pub(crate) unsafe fn get<T: ComponentValue>(&self, slot: Slot) -> Option<AtomicRef<T>> {
         let storage = self.storage.borrow();
-        AtomicRef::filter_map(storage, |v| v.get(slot))
+        AtomicRef::filter_map(storage, |v| v.downcast_ref::<T>().get(slot))
     }
 
     #[inline]
@@ -220,7 +220,7 @@ impl Cell {
         let changes = self.changes.borrow_mut();
 
         CellMutGuard {
-            storage: AtomicRefMut::map(storage, |v| unsafe { v.downcast_slice_mut() }),
+            storage: AtomicRefMut::map(storage, |v| v.downcast_mut()),
             changes,
             cell: self,
             ids: entities,
@@ -237,9 +237,9 @@ impl Cell {
         RefMut::new(self.borrow_mut(entities, tick), slot)
     }
 
-    pub(crate) fn info(&self) -> ComponentInfo {
-        self.info
-    }
+    // pub(crate) fn info(&self) -> ComponentInfo {
+    //     self.info
+    // }
 }
 
 // #[derive(Debug)]
@@ -257,8 +257,6 @@ pub struct Archetype {
     pub(crate) children: BTreeMap<ComponentKey, ArchetypeId>,
     pub(crate) outgoing: BTreeMap<ComponentKey, ArchetypeId>,
     pub(crate) incoming: BTreeMap<ComponentKey, ArchetypeId>,
-
-    pub(crate) subscribers: Vec<Arc<dyn EventSubscriber>>,
 }
 
 /// Since all components are Send + Sync, the cells are as well
@@ -286,7 +284,6 @@ impl Archetype {
             removals: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
-            subscribers: Vec::new(),
             children: Default::default(),
             outgoing: Default::default(),
         }
@@ -320,7 +317,6 @@ impl Archetype {
             removals: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
-            subscribers: Vec::new(),
             children: Default::default(),
             outgoing: Default::default(),
         }
@@ -528,14 +524,6 @@ impl Archetype {
     /// All components of slot are uninitialized. Must be followed by `push`
     /// all components in archetype.
     pub(crate) fn allocate(&mut self, id: Entity) -> Slot {
-        for subscriber in &self.subscribers {
-            // subscriber.on_spawned(id, self);
-        }
-
-        self.allocate_moved(id)
-    }
-
-    fn allocate_moved(&mut self, id: Entity) -> Slot {
         self.reserve(1);
 
         #[cfg(debug_assertions)]
@@ -558,15 +546,6 @@ impl Archetype {
     /// All components of the new slots are left uninitialized.
     /// Must be followed by `extend`
     pub(crate) fn allocate_n(&mut self, ids: &[Entity]) -> Slice {
-        // for subscriber in &self.subscribers {
-        //     for &id in ids {
-        //         subscriber.on_spawned(id, self);
-        //     }
-        // }
-
-        self.allocate_n_moved(ids)
-    }
-    pub(crate) fn allocate_n_moved(&mut self, ids: &[Entity]) -> Slice {
         self.reserve(ids.len());
 
         let last = self.len();
@@ -653,7 +632,7 @@ impl Archetype {
 
         let last = self.len() - 1;
 
-        let dst_slot = dst.allocate_moved(id);
+        let dst_slot = dst.allocate(id);
 
         // // Before the cells
         // for subscriber in &self.subscribers {
@@ -774,7 +753,7 @@ impl Archetype {
         let slots = self.slots();
         let entities = mem::take(&mut self.entities);
 
-        let dst_slots = dst.allocate_n_moved(&entities);
+        let dst_slots = dst.allocate_n(&entities);
 
         for (key, cell) in &mut self.cells {
             let dst_cell = dst.cells.get_mut(key);
@@ -916,7 +895,7 @@ impl Archetype {
     /// Add a new subscriber. The subscriber must be interested in this archetype
     pub(crate) fn add_handler(&mut self, s: Arc<dyn EventSubscriber>) {
         // For component changes
-        for (&key, cell) in &mut self.cells {
+        for cell in self.cells.values_mut() {
             if s.matches_component(cell.info) {
                 cell.subscribers.push(s.clone());
             }
@@ -928,11 +907,6 @@ impl Archetype {
     #[inline(always)]
     pub(crate) fn cell(&self, key: ComponentKey) -> Option<&Cell> {
         self.cells.get(&key)
-    }
-
-    #[inline(always)]
-    pub(crate) fn cell_mut(&mut self, key: ComponentKey) -> Option<&mut Cell> {
-        self.cells.get_mut(&key)
     }
 
     fn last(&self) -> Option<Entity> {

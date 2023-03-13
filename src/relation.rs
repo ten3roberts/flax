@@ -5,7 +5,7 @@ use core::{
 };
 
 use alloc::collections::btree_map::Range;
-use atomic_refcell::{AtomicRef, AtomicRefMut};
+use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Archetype, Cell, RefMut, Slot},

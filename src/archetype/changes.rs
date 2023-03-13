@@ -324,7 +324,7 @@ impl DerefMut for ChangeList {
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 /// Represents a change for a slice of entities for a specific component
-pub enum ChangeKind {
+pub(crate) enum ChangeKind {
     /// Component was modified
     Modified = 0,
     /// Component was inserted
@@ -344,21 +344,21 @@ impl Display for ChangeKind {
 }
 
 impl ChangeKind {
-    /// Returns `true` if the change kind is [`Remove`].
-    ///
-    /// [`Remove`]: ChangeKind::Removed
-    #[must_use]
-    pub fn is_removed(&self) -> bool {
-        matches!(self, Self::Removed)
-    }
+    ///// Returns `true` if the change kind is [`Remove`].
+    /////
+    ///// [`Remove`]: ChangeKind::Removed
+    //#[must_use]
+    //pub fn is_removed(&self) -> bool {
+    //    matches!(self, Self::Removed)
+    //}
 
-    /// Returns `true` if the change kind is [`Insert`].
-    ///
-    /// [`Insert`]: ChangeKind::Inserted
-    #[must_use]
-    pub fn is_inserted(&self) -> bool {
-        matches!(self, Self::Inserted)
-    }
+    ///// Returns `true` if the change kind is [`Insert`].
+    /////
+    ///// [`Insert`]: ChangeKind::Inserted
+    //#[must_use]
+    //pub fn is_inserted(&self) -> bool {
+    //    matches!(self, Self::Inserted)
+    //}
 
     /// Returns `true` if the change kind is [`ChangeKind::Modified`]
     ///

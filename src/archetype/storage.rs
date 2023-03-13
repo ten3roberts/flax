@@ -12,6 +12,7 @@ use super::Slot;
 #[doc(hidden)]
 pub struct Storage {
     data: NonNull<u8>,
+    /// The number of items
     len: usize,
     cap: usize,
     info: ComponentInfo,
@@ -138,30 +139,6 @@ impl Storage {
         }
     }
 
-    pub(crate) fn get<T: ComponentValue>(&self, slot: Slot) -> Option<&T> {
-        if slot >= self.len {
-            None
-        } else {
-            assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
-            unsafe {
-                let p = self.data.as_ptr().add(self.info.size() * slot).cast::<T>();
-                let v = unsafe { &*p };
-                Some(v)
-            }
-        }
-    }
-
-    pub(crate) unsafe fn get_mut<T: ComponentValue>(&self, slot: Slot) -> Option<&mut T> {
-        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
-        if slot >= self.len {
-            None
-        } else {
-            let p = self.data.as_ptr().add(self.info.size() * slot).cast::<T>();
-            let v = unsafe { &mut *p };
-            Some(v)
-        }
-    }
-
     #[inline(always)]
     pub(crate) unsafe fn extend(&mut self, src: *mut u8, len: usize) {
         self.reserve(len);
@@ -206,12 +183,21 @@ impl Storage {
     }
 
     #[inline(always)]
-    /// # Safety
-    /// The types must match
-    pub unsafe fn downcast_slice_mut<T: ComponentValue>(&mut self) -> &mut [T] {
-        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
+    pub fn downcast_mut<T: ComponentValue>(&mut self) -> &mut [T] {
+        if !self.info.is::<T>() {
+            panic!("Mismatched types");
+        }
 
-        core::slice::from_raw_parts_mut(self.data.as_ptr().cast::<T>(), self.len)
+        unsafe { core::slice::from_raw_parts_mut(self.data.as_ptr().cast::<T>(), self.len) }
+    }
+
+    #[inline(always)]
+    pub fn downcast_ref<T: ComponentValue>(&self) -> &[T] {
+        if !self.info.is::<T>() {
+            panic!("Mismatched types");
+        }
+
+        unsafe { core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len) }
     }
 
     #[inline(always)]
@@ -240,6 +226,7 @@ impl Storage {
     }
 
     #[must_use]
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

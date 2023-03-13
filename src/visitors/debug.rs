@@ -18,7 +18,7 @@ impl DebugVisitor {
         T: ComponentValue + core::fmt::Debug,
     {
         Self {
-            visit: |storage, slot| unsafe { storage.get::<T>(slot).unwrap() },
+            visit: |storage, slot| &storage.downcast_ref::<T>()[slot],
         }
     }
 }

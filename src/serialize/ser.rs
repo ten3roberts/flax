@@ -49,7 +49,7 @@ where
 {
     /// Register a component using the component name.
     ///
-    /// See [`Self::with_name`]
+    /// See u`Self::with_name`u
     pub fn with<T>(&mut self, component: Component<T>) -> &mut Self
     where
         T: ComponentValue + Serialize,
@@ -68,7 +68,7 @@ where
             storage: &Storage,
             slot: usize,
         ) -> &dyn erased_serde::Serialize {
-            unsafe { storage.get::<T>(slot).unwrap() }
+            &storage.downcast_ref::<T>()[slot]
         }
 
         self.slots.insert(
