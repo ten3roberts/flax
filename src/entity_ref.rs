@@ -1,10 +1,10 @@
 use core::{fmt::Debug, mem::MaybeUninit};
 
-use atomic_refcell::{AtomicRef, AtomicRefMut};
+use atomic_refcell::AtomicRef;
 use once_cell::unsync::OnceCell;
 
 use crate::{
-    archetype::{Archetype, Slot},
+    archetype::{Archetype, RefMut, Slot},
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
@@ -38,7 +38,7 @@ impl<'a> EntityRefMut<'a> {
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRefMut<T>> {
+    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<T>> {
         self.world
             .get_mut_at(self.loc(), component)
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
@@ -222,10 +222,7 @@ impl<'a> EntityRef<'a> {
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(
-        &self,
-        component: Component<T>,
-    ) -> Result<AtomicRefMut<'a, T>> {
+    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<'a, T>> {
         self.arch
             .get_mut(self.slot, component, self.world.advance_change_tick())
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))

@@ -2,10 +2,9 @@ use core::fmt::{self, Formatter};
 
 use alloc::vec;
 use alloc::vec::Vec;
-use atomic_refcell::AtomicRefMut;
 
 use crate::{
-    archetype::{Archetype, CellMutGuard, Change, Changes, Slice, Slot},
+    archetype::{Archetype, CellMutGuard, Slice, Slot},
     Access, AccessKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
@@ -13,7 +12,7 @@ use super::{FetchAccessData, FetchPrepareData, PreparedFetch};
 
 #[doc(hidden)]
 pub struct WriteComponent<'a, T> {
-    borrow: CellMutGuard<'a, T>,
+    borrow: CellMutGuard<'a, [T]>,
 }
 
 #[derive(Debug, Clone)]

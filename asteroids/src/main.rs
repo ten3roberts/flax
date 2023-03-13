@@ -6,7 +6,10 @@ use itertools::Itertools;
 use std::f32::consts::TAU;
 use tracing_subscriber::{prelude::*, registry};
 
-use flax::*;
+use flax::{
+    events::{EventKind, EventSubscriber},
+    *,
+};
 use macroquad::{
     color::hsl_to_rgb,
     math::*,
@@ -108,7 +111,11 @@ async fn main() -> Result<()> {
     let dt = 0.02;
 
     let (player_dead_tx, player_dead_rx) = flume::unbounded();
-    world.on_removed(player(), player_dead_tx);
+    world.subscribe(
+        player_dead_tx
+            .filter_components([player().key()])
+            .filter(|v| v.kind == EventKind::Removed),
+    );
 
     // Setup everything required for the game logic and physics
     let mut physics_schedule = Schedule::builder()

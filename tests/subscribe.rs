@@ -1,4 +1,3 @@
-use flax::events::ArchetypeEvent;
 use flax::*;
 
 component! {
@@ -9,9 +8,9 @@ component! {
 #[test]
 #[cfg(feature = "flume")]
 fn subscribe() {
-    use flax::events::{ArchetypeSubscriber, SubscriberFilterExt};
-    use flume::TryRecvError;
+    use flax::events::{Event, EventKind, EventSubscriber};
     use itertools::Itertools;
+    use pretty_assertions::assert_eq;
 
     let mut world = World::new();
 
@@ -20,9 +19,9 @@ fn subscribe() {
         .set(b(), 7)
         .spawn(&mut world);
 
-    let (tx, rx) = flume::unbounded();
+    let (tx, rx) = flume::unbounded::<Event>();
 
-    world.subscribe(ArchetypeSubscriber::new(tx).filter(a().with()));
+    world.subscribe(tx.filter_arch(a().with()));
 
     assert_eq!(rx.try_recv(), Err(flume::TryRecvError::Empty));
 
@@ -30,7 +29,11 @@ fn subscribe() {
 
     assert_eq!(
         rx.drain().collect_vec(),
-        [ArchetypeEvent::Removed(id), ArchetypeEvent::Inserted(id)]
+        [Event {
+            id,
+            key: name().key(),
+            kind: EventKind::Added
+        }],
     );
 
     let id2 = Entity::builder()
@@ -38,28 +41,67 @@ fn subscribe() {
         .set(b(), 4)
         .spawn(&mut world);
 
-    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Inserted(id2)));
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [
+            Event {
+                id: id2,
+                key: a().key(),
+                kind: EventKind::Added
+            },
+            Event {
+                id: id2,
+                key: b().key(),
+                kind: EventKind::Added
+            }
+        ]
+    );
 
     let id3 = Entity::builder().set(b(), 7).spawn(&mut world);
 
-    assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
+    assert_eq!(rx.drain().collect_vec(), []);
 
     world.set(id3, a(), -4.1).unwrap();
-    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Inserted(id3)));
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [Event {
+            id: id3,
+            key: a().key(),
+            kind: EventKind::Added
+        }]
+    );
+
+    *world.get_mut(id3, a()).unwrap() = 4.0;
 
     world.remove(id, a()).unwrap();
-    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Removed(id)));
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [
+            Event {
+                id: id3,
+                key: a().key(),
+                kind: EventKind::Modified
+            },
+            Event {
+                id,
+                key: a().key(),
+                kind: EventKind::Removed
+            }
+        ]
+    );
 }
 
 #[test]
 #[cfg(feature = "flume")]
 fn subscribe_inverted() {
-    use flax::events::{ArchetypeSubscriber, SubscriberFilterExt};
+    use flax::events::{Event, EventKind, EventSubscriber};
     use flume::TryRecvError;
+    use itertools::Itertools;
+    use pretty_assertions::assert_eq;
 
     let mut world = World::new();
     let (tx, rx) = flume::unbounded();
-    world.subscribe(ArchetypeSubscriber::new(tx).filter(a().with() & b().without()));
+    world.subscribe(tx.filter_arch(a().with() & b().without()));
 
     let id = Entity::builder()
         .set(a(), 1.5)
@@ -68,29 +110,58 @@ fn subscribe_inverted() {
 
     assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
     world.remove(id, b()).unwrap();
+    world.set(id, name(), "id".into()).unwrap();
 
-    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Inserted(id)));
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [Event {
+            id,
+            key: name().key(),
+            kind: EventKind::Added
+        }]
+    );
 
     world.set(id, b(), 5).unwrap();
-    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Removed(id)));
+
+    // Not detected since the event is generated *from* the archetype containing `b`
+    assert_eq!(rx.drain().collect_vec(), []);
+
+    // `id` is now in a blocked archetype
+    world.set(id, name(), "id".into()).unwrap();
+
+    assert_eq!(rx.drain().collect_vec(), []);
 
     world.remove(id, b()).unwrap();
-    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Inserted(id)));
 
     world.remove(id, a()).unwrap();
 
-    assert_eq!(rx.try_recv(), Ok(ArchetypeEvent::Removed(id)));
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [Event {
+            id,
+            key: a().key(),
+            kind: EventKind::Removed
+        }]
+    );
+
+    assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
+    drop(world);
+    assert_eq!(rx.try_recv(), Err(TryRecvError::Disconnected));
 }
 
 #[test]
 #[cfg(feature = "flume")]
 fn subscribe_filter() {
-    use flax::events::{ChangeEvent, ChangeSubscriber, SubscriberFilterExt};
+    use flax::events::{Event, EventKind, EventSubscriber};
     use itertools::Itertools;
+    use pretty_assertions::assert_eq;
 
     let mut world = World::new();
     let (tx, rx) = flume::unbounded();
-    world.subscribe(ChangeSubscriber::new(&[a().key()], tx).filter(b().with()));
+    world.subscribe(
+        tx.filter_components([a().key(), b().key()])
+            .filter_arch(b().with()),
+    );
 
     let id = Entity::builder()
         .set(a(), 1.5)
@@ -99,28 +170,67 @@ fn subscribe_filter() {
 
     assert_eq!(
         rx.drain().collect_vec(),
-        [ChangeEvent {
-            kind: ChangeKind::Inserted,
-            component: a().key()
-        }]
+        [
+            Event {
+                id,
+                key: a().key(),
+                kind: EventKind::Added,
+            },
+            Event {
+                id,
+                key: b().key(),
+                kind: EventKind::Added,
+            }
+        ]
     );
 
     world.set(id, a(), 7.0).unwrap();
     assert_eq!(
         rx.drain().collect_vec(),
-        [ChangeEvent {
-            kind: ChangeKind::Modified,
-            component: a().key()
+        [Event {
+            id,
+            key: a().key(),
+            kind: EventKind::Modified,
         }]
     );
+
+    // Events are not generated if `b` is removed
+    // The event for removing b is still generated since the event is generated before the
+    // entity is moved to another archetype
+    world.remove(id, b()).unwrap();
+
+    world.set(id, a(), 7.0).unwrap();
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [Event {
+            id,
+            key: b().key(),
+            kind: EventKind::Removed
+        }]
+    );
+
+    world.set(id, b(), 0).unwrap();
 
     world.despawn(id).unwrap();
 
     assert_eq!(
         rx.drain().collect_vec(),
-        [ChangeEvent {
-            kind: ChangeKind::Removed,
-            component: a().key()
-        }]
+        [
+            Event {
+                id,
+                key: b().key(),
+                kind: EventKind::Added,
+            },
+            Event {
+                id,
+                key: a().key(),
+                kind: EventKind::Removed,
+            },
+            Event {
+                id,
+                key: b().key(),
+                kind: EventKind::Removed,
+            }
+        ]
     );
 }

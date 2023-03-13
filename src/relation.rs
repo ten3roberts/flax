@@ -8,7 +8,7 @@ use alloc::collections::btree_map::Range;
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
 use crate::{
-    archetype::{Archetype, Cell, Slot},
+    archetype::{Archetype, Cell, RefMut, Slot},
     dummy,
     entity::EntityKind,
     filter::{WithRelation, WithoutRelation},
@@ -239,7 +239,7 @@ impl<'a, T> Iterator for RelationIterMut<'a, T>
 where
     T: ComponentValue,
 {
-    type Item = (Entity, AtomicRefMut<'a, T>);
+    type Item = (Entity, RefMut<'a, T>);
 
     fn next(&mut self) -> Option<Self::Item> {
         let (&key, cell) = self.cells.next()?;

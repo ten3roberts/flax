@@ -1,10 +1,6 @@
-use core::iter::once;
 use core::iter::repeat;
 
-use flax::events::ChangeSubscriber;
-use flax::events::ShapeEvent;
-use flax::events::ShapeSubscriber;
-use flax::{component, entity_ids, events::ChangeEvent, name, Entity, Query, World};
+use flax::{component, entity_ids, name, Entity, Query, World};
 use itertools::Itertools;
 use pretty_assertions::assert_eq;
 
@@ -19,20 +15,16 @@ component! {
 fn subscribing() {
     use flax::{
         entity_ids,
-        events::{
-            ArchetypeEvent, ArchetypeSubscriber, ChangeEvent, ChangeSubscriber, SubscriberFilterExt,
-        },
-        ChangeKind, Query,
+        events::{Event, EventKind, EventSubscriber},
+        Query,
     };
     use itertools::Itertools;
+    use pretty_assertions::assert_eq;
 
     let mut world = World::new();
 
-    let (tx, events) = flume::unbounded();
-    world.subscribe(ArchetypeSubscriber::new(tx).filter(a().with()));
-
-    let (tx, changed) = flume::unbounded();
-    world.subscribe(ChangeSubscriber::new(&[a().key()], tx));
+    let (tx, rx) = flume::unbounded::<Event>();
+    world.subscribe(tx.filter_components([a().key()]));
 
     let mut q = Query::new(entity_ids()).filter(a().removed());
 
@@ -44,10 +36,11 @@ fn subscribing() {
         .spawn(&mut world);
 
     assert_eq!(
-        changed.drain().collect_vec(),
-        [ChangeEvent {
-            kind: ChangeKind::Inserted,
-            component: a().key(),
+        rx.drain().collect_vec(),
+        [Event {
+            id,
+            key: a().key(),
+            kind: flax::events::EventKind::Added,
         }]
     );
 
@@ -56,36 +49,40 @@ fn subscribing() {
     world.remove(id, a()).unwrap();
 
     assert_eq!(
-        changed.drain().collect_vec(),
+        rx.drain().collect_vec(),
         [
-            ChangeEvent {
-                kind: ChangeKind::Inserted,
-                component: a().key(),
+            Event {
+                id: id2,
+                kind: EventKind::Added,
+                key: a().key(),
             },
-            ChangeEvent {
-                kind: ChangeKind::Removed,
-                component: a().key(),
-            }
+            Event {
+                id,
+                kind: EventKind::Removed,
+                key: a().key(),
+            },
         ]
     );
 
     *world.get_mut(id2, a()).unwrap() = 1;
 
     assert_eq!(
-        changed.drain().collect_vec(),
-        [ChangeEvent {
-            kind: ChangeKind::Modified,
-            component: a().key(),
+        rx.drain().collect_vec(),
+        [Event {
+            id: id2,
+            kind: EventKind::Modified,
+            key: a().key(),
         }]
     );
 
     world.set(id2, a(), 2).unwrap();
 
     assert_eq!(
-        changed.drain().collect_vec(),
-        [ChangeEvent {
-            kind: ChangeKind::Modified,
-            component: a().key(),
+        rx.drain().collect_vec(),
+        [Event {
+            id: id2,
+            kind: EventKind::Modified,
+            key: a().key(),
         }]
     );
 
@@ -95,10 +92,11 @@ fn subscribing() {
         .for_each(|v| *v *= -1);
 
     assert_eq!(
-        changed.drain().collect_vec(),
-        [ChangeEvent {
-            kind: ChangeKind::Modified,
-            component: a().key(),
+        rx.drain().collect_vec(),
+        [Event {
+            id: id2,
+            kind: EventKind::Modified,
+            key: a().key(),
         }]
     );
 
@@ -107,16 +105,7 @@ fn subscribing() {
         .iter()
         .for_each(|v| v.push('!'));
 
-    assert_eq!(changed.drain().collect_vec(), []);
-
-    assert_eq!(
-        events.drain().collect_vec(),
-        [
-            ArchetypeEvent::Inserted(id),
-            ArchetypeEvent::Inserted(id2),
-            ArchetypeEvent::Removed(id)
-        ]
-    );
+    assert_eq!(rx.drain().collect_vec(), []);
 
     world.set(id2, b(), "Bar".to_string()).unwrap();
 
@@ -126,8 +115,8 @@ fn subscribing() {
 #[tokio::test]
 #[cfg(feature = "tokio")]
 async fn tokio_subscribe() {
-    use flax::events::ArchetypeSubscriber;
-    use flax::events::SubscriberFilterExt;
+    use futures::FutureExt;
+    use flax::events::*;
     use std::sync::Arc;
     use tokio::sync::mpsc;
     use tokio::sync::Notify;
@@ -135,49 +124,53 @@ async fn tokio_subscribe() {
 
     let mut world = World::new();
 
-    let (tx, mut modified) = mpsc::unbounded_channel();
-    world.subscribe(flax::events::ChangeSubscriber::new(&[a().key()], tx));
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    world.subscribe(tx.filter_components([a().key()]));
 
-    world.subscribe(
-        ArchetypeSubscriber::new(Arc::downgrade(&notify)).filter(a().with() | b().with()),
-    );
+    world.subscribe(Arc::downgrade(&notify).filter_arch(a().with() | b().with()));
 
     let id = Entity::builder().set(a(), 5).spawn(&mut world);
 
-    notify.notified().await;
+    notify.notified().now_or_never().unwrap();
 
     assert_eq!(
-        modified.recv().await,
-        Some(ChangeEvent {
-            kind: flax::ChangeKind::Inserted,
-            component: a().key()
+        rx.recv().now_or_never().unwrap(),
+        Some(Event {
+            id,
+            key: a().key(),
+            kind: EventKind::Added,
         })
     );
 
     world.remove(id, a()).unwrap();
 
     assert_eq!(
-        modified.recv().await,
-        Some(ChangeEvent {
-            kind: flax::ChangeKind::Removed,
-            component: a().key()
+        rx.recv().now_or_never().unwrap(),
+        Some(Event {
+            id,
+            key: a().key(),
+            kind: EventKind::Removed,
         })
     );
-    notify.notified().await;
+
+    notify.notified().now_or_never().unwrap();
     world.set(id, b(), "Hello, World!".into()).unwrap();
-    notify.notified().await;
+    notify.notified().now_or_never().unwrap();
 }
 
 #[test]
 #[cfg(feature = "flume")]
 fn moving_changes() {
+    use flax::events::{Event, EventKind, EventSubscriber};
+
     let mut world = World::new();
 
-    let (tx, tracking) = flume::unbounded();
-    world.subscribe(ShapeSubscriber::new(a().with() & c().without(), tx));
-    let (tx, modified) = flume::unbounded();
+    // world.subscribe(ShapeSubscriber::new(a().with() & c().without(), tx));
+    let (tx, rx) = flume::unbounded();
 
-    world.subscribe(ChangeSubscriber::new(&[a().key()], tx));
+    // world.subscribe(ChangeSubscriber::new(&[a().key()], tx));
+
+    world.subscribe(tx.filter_components([a().key(), c().key()]));
 
     let ids = (0..10)
         .map(|i| {
@@ -191,9 +184,15 @@ fn moving_changes() {
     let mut query = Query::new((entity_ids(), a().modified()));
 
     assert_eq!(
-        tracking.drain().collect_vec(),
+        rx.drain().collect_vec(),
         ids.iter()
-            .map(|&id| { ShapeEvent::Matched(id) })
+            .map(|&id| {
+                Event {
+                    id,
+                    key: a().key(),
+                    kind: EventKind::Added,
+                }
+            })
             .collect_vec()
     );
 
@@ -205,37 +204,33 @@ fn moving_changes() {
     world.set(ids[3], a(), 7).unwrap();
 
     assert_eq!(
-        modified.drain().collect_vec(),
-        repeat(ChangeEvent {
-            kind: flax::ChangeKind::Inserted,
-            component: a().key()
-        })
-        .take(10)
-        .chain(once(ChangeEvent {
-            kind: flax::ChangeKind::Modified,
-            component: a().key()
-        }))
-        .collect_vec()
+        rx.drain().collect_vec(),
+        [Event {
+            id: ids[3],
+            key: a().key(),
+            kind: EventKind::Modified,
+        }]
     );
 
     for &id in &ids {
         world.set(id, b(), "Foo".into()).unwrap();
     }
 
-    assert_eq!(tracking.drain().collect_vec(), []);
     world.set(ids[2], c(), 5.4).unwrap();
     world.set(ids[6], c(), 5.4).unwrap();
     world.set(ids[1], c(), 5.4).unwrap();
 
     assert_eq!(
-        tracking.drain().collect_vec(),
+        rx.drain().collect_vec(),
         [ids[2], ids[6], ids[1]]
             .iter()
-            .map(|&id| { ShapeEvent::Unmatched(id) })
+            .map(|&id| Event {
+                id,
+                key: c().key(),
+                kind: EventKind::Added
+            })
             .collect_vec()
     );
-
-    assert_eq!(modified.drain().collect_vec(), []);
 
     // Make sure the change survived the migrations
     assert_eq!(query.borrow(&world).iter().collect_vec(), [(ids[3], &7)]);

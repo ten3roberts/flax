@@ -208,7 +208,7 @@ impl Storage {
     #[inline(always)]
     /// # Safety
     /// The types must match
-    pub unsafe fn borrow_mut<T: ComponentValue>(&mut self) -> &mut [T] {
+    pub unsafe fn downcast_slice_mut<T: ComponentValue>(&mut self) -> &mut [T] {
         debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
 
         core::slice::from_raw_parts_mut(self.data.as_ptr().cast::<T>(), self.len)

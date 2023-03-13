@@ -322,10 +322,11 @@ impl ComponentBuffer {
     /// If the returned iterator is dropped before being fully consumed, the
     /// remaining values will be safely dropped.
     ///
-    /// The components are returned **in ComponentId order**
+    /// The components are returned *in ComponentId order*
     pub fn take_all(&mut self) -> ComponentBufferIter {
         let components = &mut self.components;
         let storage = &mut self.storage;
+
         ComponentBufferIter {
             components: core::mem::take(components).into_iter(),
             storage,

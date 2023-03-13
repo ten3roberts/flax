@@ -1,34 +1,10 @@
-use alloc::{boxed::Box, collections::BTreeSet};
-use core::sync::atomic::{AtomicBool, Ordering};
-use smallvec::SmallVec;
+use alloc::sync::Weak;
 
 use crate::{
-    archetype::{Archetype, Cell, Slice, Slot},
-    filter::StaticFilter,
-    And, ChangeKind, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Fetch,
+    archetype::Archetype, filter::StaticFilter, ComponentInfo, ComponentKey, ComponentValue, Entity,
 };
 
-/// Describes a component which changed in the matched archetype
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub struct ChangeEvent {
-    /// The kind of change
-    pub kind: ChangeKind,
-    /// The component that changed
-    pub component: ComponentKey,
-}
-
-impl ChangeEvent {
-    /// Returns the kind of the change
-    pub fn kind(&self) -> ChangeKind {
-        self.kind
-    }
-
-    /// Returns the key of the changed component
-    pub fn component(&self) -> ComponentKey {
-        self.component
-    }
-}
-
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Event {
     /// The affected entity
     pub id: Entity,
@@ -45,52 +21,78 @@ pub enum EventKind {
     Modified,
 }
 
-pub struct EventSubscriber<H, F> {
-    components: BTreeSet<ComponentKey>,
-    filter: F,
-    handler: H,
-    connected: AtomicBool,
+/// Represents the raw form of an event, where the archetype is available
+pub struct EventData<'a> {
+    /// The affected entities
+    pub ids: &'a [Entity],
+    /// The affected component
+    pub key: ComponentKey,
+    /// The kind of event
+    pub kind: EventKind,
 }
 
-/// Listen to shape changes of entities, such as a required component being removed, or an entity
-/// fulfilling the filter.
-pub struct ShapeSubscriber<F, L> {
-    shape: F,
-    listener: L,
-    connected: AtomicBool,
-}
+/// Allows subscribing to events *inside* the ECS, such as components being added, removed, or
+/// modified.
+pub trait EventSubscriber: ComponentValue {
+    /// Returns true if the listener is to be retained
+    fn on_event(&self, event: &EventData);
 
-impl<F, L> ShapeSubscriber<F, L> {
-    /// Create a new subscriber to handle
-    pub fn new(shape: F, listener: L) -> Self {
-        Self {
-            shape,
-            listener,
-            connected: AtomicBool::new(true),
+    /// Returns true if the subscriber is interested in this archetype
+    #[inline]
+    fn matches_arch(&self, arch: &Archetype) -> bool {
+        true
+    }
+
+    /// Returns true if the subscriber is interested in this component
+    #[inline]
+    fn matches_component(&self, info: ComponentInfo) -> bool {
+        true
+    }
+
+    /// Returns true if the subscriber is still connected
+    fn is_connected(&self) -> bool;
+
+    /// Filter each event before it is generated through a custom function
+    fn filter<F>(self, func: F) -> FilterFunc<Self, F>
+    where
+        Self: Sized,
+        F: Fn(&EventData) -> bool,
+    {
+        FilterFunc {
+            subscriber: self,
+            filter: func,
+        }
+    }
+
+    /// Filter the archetypes for which the subscriber will receive events
+    fn filter_arch<F: StaticFilter>(self, filter: F) -> FilterArch<Self, F>
+    where
+        Self: Sized,
+    {
+        FilterArch {
+            filter,
+            subscriber: self,
+        }
+    }
+
+    /// Filter a subscriber to only receive events for a specific set of components
+    fn filter_components<I: IntoIterator<Item = ComponentKey>>(
+        self,
+        components: I,
+    ) -> FilterComponents<Self>
+    where
+        Self: Sized,
+    {
+        FilterComponents {
+            components: components.into_iter().collect(),
+            subscriber: self,
         }
     }
 }
 
-/// Represents the raw form of an event, where the archetype is available
-pub struct BufferedEvent<'a> {
-    /// The affected entities
-    pub(crate) ids: &'a [Entity],
-    pub(crate) key: ComponentKey,
-    pub(crate) kind: EventKind,
-}
-
-/// Handles ecs events
-pub trait EventHandler: ComponentValue {
-    /// Returns true if the listener is to be retained
-    fn on_event(&self, event: &BufferedEvent);
-    fn filter_arch(&self, arch: &Archetype) -> bool;
-    fn filter_component(&self, info: ComponentInfo) -> bool;
-    fn is_connected(&self) -> bool;
-}
-
 #[cfg(feature = "flume")]
-impl EventHandler for flume::Sender<Event> {
-    fn on_event(&self, event: &BufferedEvent) {
+impl EventSubscriber for flume::Sender<Event> {
+    fn on_event(&self, event: &EventData) {
         for &id in event.ids {
             let _ = self.send(Event {
                 id,
@@ -100,16 +102,135 @@ impl EventHandler for flume::Sender<Event> {
         }
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
-        true
+    fn is_connected(&self) -> bool {
+        !self.is_disconnected()
     }
+}
 
-    fn filter_component(&self, info: ComponentInfo) -> bool {
-        true
+#[cfg(feature = "tokio")]
+impl EventSubscriber for tokio::sync::mpsc::UnboundedSender<Event> {
+    fn on_event(&self, event: &EventData) {
+        for &id in event.ids {
+            let _ = self.send(Event {
+                id,
+                key: event.key,
+                kind: event.kind,
+            });
+        }
     }
 
     fn is_connected(&self) -> bool {
-        !self.is_disconnected()
+        !self.is_closed()
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl EventSubscriber for alloc::sync::Weak<tokio::sync::Notify> {
+    fn on_event(&self, event: &EventData) {
+        if let Some(notify) = self.upgrade() {
+            notify.notify_one()
+        }
+    }
+
+    fn is_connected(&self) -> bool {
+        self.strong_count() > 0
+    }
+}
+
+/// Filter the archetypes for which the subscriber will receive events
+pub struct FilterArch<S, F> {
+    filter: F,
+    subscriber: S,
+}
+
+impl<S, F> EventSubscriber for FilterArch<S, F>
+where
+    S: EventSubscriber,
+    F: ComponentValue + StaticFilter,
+{
+    #[inline]
+    fn on_event(&self, event: &EventData) {
+        self.subscriber.on_event(event);
+    }
+
+    #[inline]
+    fn matches_arch(&self, arch: &Archetype) -> bool {
+        self.filter.filter_static(arch) && self.subscriber.matches_arch(arch)
+    }
+
+    #[inline]
+    fn matches_component(&self, info: ComponentInfo) -> bool {
+        self.subscriber.matches_component(info)
+    }
+
+    #[inline]
+    fn is_connected(&self) -> bool {
+        self.subscriber.is_connected()
+    }
+}
+
+/// Filter the archetypes for which the subscriber will receive events
+pub struct FilterFunc<S, F> {
+    filter: F,
+    subscriber: S,
+}
+
+impl<S, F> EventSubscriber for FilterFunc<S, F>
+where
+    S: EventSubscriber,
+    F: ComponentValue + Fn(&EventData) -> bool,
+{
+    #[inline]
+    fn on_event(&self, event: &EventData) {
+        if (self.filter)(event) {
+            self.subscriber.on_event(event);
+        }
+    }
+
+    #[inline]
+    fn matches_arch(&self, arch: &Archetype) -> bool {
+        self.subscriber.matches_arch(arch)
+    }
+
+    #[inline]
+    fn matches_component(&self, info: ComponentInfo) -> bool {
+        self.subscriber.matches_component(info)
+    }
+
+    #[inline]
+    fn is_connected(&self) -> bool {
+        self.subscriber.is_connected()
+    }
+}
+
+/// Filter a subscriber to only receive events for a specific set of components
+pub struct FilterComponents<S> {
+    components: Vec<ComponentKey>,
+    subscriber: S,
+}
+
+impl<S> EventSubscriber for FilterComponents<S>
+where
+    S: EventSubscriber,
+{
+    #[inline]
+    fn on_event(&self, event: &EventData) {
+        self.subscriber.on_event(event)
+    }
+
+    #[inline]
+    fn matches_arch(&self, arch: &Archetype) -> bool {
+        self.components.iter().any(|&key| arch.has(key)) && self.subscriber.matches_arch(arch)
+    }
+
+    #[inline]
+    fn matches_component(&self, info: ComponentInfo) -> bool {
+        self.components.contains(&info.key()) && self.subscriber.matches_component(info)
+    }
+
+    #[inline]
+    fn is_connected(&self) -> bool {
+        self.subscriber.is_connected()
     }
 }
 
