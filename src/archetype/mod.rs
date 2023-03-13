@@ -10,7 +10,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use itertools::Itertools;
 
 use crate::{
-    events::{BufferedEvent, EventHandler, EventKind},
+    events::{EventData, EventKind, EventSubscriber},
     Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Verbatim,
 };
 
@@ -20,8 +20,8 @@ pub type ArchetypeId = Entity;
 pub type Slot = usize;
 
 mod batch;
-mod cell;
 mod changes;
+mod guard;
 mod slice;
 mod storage;
 
@@ -30,7 +30,7 @@ pub use changes::*;
 pub use slice::*;
 pub(crate) use storage::*;
 
-pub(crate) use self::cell::CellMutGuard;
+pub use guard::*;
 
 #[derive(Debug, Clone)]
 /// Holds information of a single component storage buffer
@@ -114,7 +114,7 @@ pub(crate) struct Cell {
     storage: AtomicRefCell<Storage>,
     changes: AtomicRefCell<Changes>,
     info: ComponentInfo,
-    subscribers: Vec<Arc<dyn EventHandler>>,
+    subscribers: Vec<Arc<dyn EventSubscriber>>,
 }
 
 impl Cell {
@@ -210,16 +210,17 @@ impl Cell {
         AtomicRef::filter_map(storage, |v| v.get(slot))
     }
 
+    #[inline]
     pub fn borrow_mut<'a, T: ComponentValue>(
         &'a self,
         entities: &'a [Entity],
         tick: u32,
-    ) -> CellMutGuard<'a, T> {
+    ) -> CellMutGuard<'a, [T]> {
         let storage = self.storage.borrow_mut();
         let changes = self.changes.borrow_mut();
 
         CellMutGuard {
-            storage: AtomicRefMut::map(storage, |v| unsafe { v.borrow_mut() }),
+            storage: AtomicRefMut::map(storage, |v| unsafe { v.downcast_slice_mut() }),
             changes,
             cell: self,
             ids: entities,
@@ -232,15 +233,8 @@ impl Cell {
         entities: &'a [Entity],
         slot: Slot,
         tick: u32,
-    ) -> Option<AtomicRefMut<'a, T>> {
-        let storage = self.storage.borrow_mut();
-
-        let mut borrow = self.borrow_mut(entities, tick);
-        borrow.set_modified(Slice::single(slot));
-
-        let value = AtomicRefMut::filter_map(borrow.storage, |v| v.get_mut(slot))?;
-
-        Some(value)
+    ) -> Option<RefMut<'a, T>> {
+        RefMut::new(self.borrow_mut(entities, tick), slot)
     }
 
     pub(crate) fn info(&self) -> ComponentInfo {
@@ -264,16 +258,16 @@ pub struct Archetype {
     pub(crate) outgoing: BTreeMap<ComponentKey, ArchetypeId>,
     pub(crate) incoming: BTreeMap<ComponentKey, ArchetypeId>,
 
-    pub(crate) subscribers: Vec<Arc<dyn EventHandler>>,
+    pub(crate) subscribers: Vec<Arc<dyn EventSubscriber>>,
 }
 
-/// Since all components are Send + Sync, the archetype is as well
-unsafe impl Send for Archetype {}
-unsafe impl Sync for Archetype {}
+/// Since all components are Send + Sync, the cells are as well
+unsafe impl Send for Cell {}
+unsafe impl Sync for Cell {}
 
 impl Cell {
     fn on_event(&mut self, all_ids: &[Entity], slots: Slice, kind: EventKind) {
-        let event = BufferedEvent {
+        let event = EventData {
             ids: &all_ids[slots.as_range()],
             key: self.info.key,
             kind,
@@ -396,7 +390,7 @@ impl Archetype {
         &self,
         component: Component<T>,
         tick: u32,
-    ) -> Option<CellMutGuard<T>> {
+    ) -> Option<CellMutGuard<[T]>> {
         Some(self.cell(component.key())?.borrow_mut(&self.entities, tick))
     }
 
@@ -456,27 +450,32 @@ impl Archetype {
     }
 
     /// Get a component from the entity at `slot`
-    pub fn get_mut<T: ComponentValue>(
+    pub(crate) fn get_mut<T: ComponentValue>(
         &self,
         slot: Slot,
         component: Component<T>,
-        change_tick: u32,
-    ) -> Option<AtomicRefMut<T>> {
+        tick: u32,
+    ) -> Option<RefMut<T>> {
         let cell = self.cell(component.key())?;
 
-        unsafe { cell.get_mut(&self.entities, slot, change_tick) }
+        unsafe { cell.get_mut(&self.entities, slot, tick) }
     }
 
     /// Get a component from the entity at `slot`
-    pub fn get_dyn_mut(
+    #[inline]
+    pub fn mutate_in_place<T>(
         &mut self,
         slot: Slot,
         component: ComponentKey,
         change_tick: u32,
-    ) -> Option<*mut u8> {
-        let cell = self.cell_mut(component)?;
+        modify: impl FnOnce(*mut u8) -> T,
+    ) -> Option<T> {
+        let cell = self.cells.get_mut(&component)?;
 
         let value = unsafe { cell.storage.get_mut().at_mut(slot)? };
+        let value = (modify)(value);
+
+        cell.on_event(&self.entities, Slice::single(slot), EventKind::Modified);
 
         cell.changes
             .get_mut()
@@ -801,7 +800,7 @@ impl Archetype {
                 // unsafe { dst.storage.get_mut().append(storage) }
             } else {
                 // Notify the subscribers that the component was removed
-                cell.on_event(&self.entities, slots, EventKind::Removed);
+                cell.on_event(&entities, slots, EventKind::Removed);
 
                 cell.clear();
                 dst.push_removed(*key, Change::new(dst_slots, tick))
@@ -915,10 +914,10 @@ impl Archetype {
     }
 
     /// Add a new subscriber. The subscriber must be interested in this archetype
-    pub(crate) fn add_handler(&mut self, s: Arc<dyn EventHandler>) {
+    pub(crate) fn add_handler(&mut self, s: Arc<dyn EventSubscriber>) {
         // For component changes
         for (&key, cell) in &mut self.cells {
-            if s.filter_component(cell.info) {
+            if s.matches_component(cell.info) {
                 cell.subscribers.push(s.clone());
             }
 

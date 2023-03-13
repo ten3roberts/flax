@@ -3,10 +3,10 @@ use alloc::vec::Vec;
 
 use core::marker::PhantomData;
 
-use atomic_refcell::{AtomicRef, AtomicRefMut};
+use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{Cell, Slot},
+    archetype::{Cell, RefMut, Slot},
     Access, AccessKind, Component, ComponentValue, Entity, Fetch, FetchItem,
 };
 
@@ -140,7 +140,7 @@ impl<'w, T: ComponentValue> MutGuard<'w, T> {
     /// Acquire a mutable reference to the current value.
     ///
     /// Triggers a change
-    pub fn write(&self) -> AtomicRefMut<T> {
+    pub fn write(&self) -> RefMut<T> {
         // Type is guaranteed by constructor
         unsafe {
             self.cell

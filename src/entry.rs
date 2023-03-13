@@ -2,7 +2,7 @@ use core::mem;
 
 use atomic_refcell::AtomicRefMut;
 
-use crate::{Component, ComponentValue, Entity, World};
+use crate::{archetype::RefMut, Component, ComponentValue, Entity, World};
 
 pub enum Entry<'a, T: ComponentValue> {
     Vacant(VacantEntry<'a, T>),
@@ -24,7 +24,7 @@ impl<'a, T: ComponentValue> VacantEntry<'a, T> {
         }
     }
 
-    pub fn insert(self, value: T) -> AtomicRefMut<'a, T> {
+    pub fn insert(self, value: T) -> RefMut<'a, T> {
         let (old, loc) = self
             .world
             .set_inner(self.id, self.component, value)
@@ -35,15 +35,15 @@ impl<'a, T: ComponentValue> VacantEntry<'a, T> {
 }
 
 pub struct OccupiedEntry<'a, T: ComponentValue> {
-    pub(crate) borrow: AtomicRefMut<'a, T>,
+    pub(crate) borrow: RefMut<'a, T>,
 }
 
 impl<'a, T: ComponentValue> OccupiedEntry<'a, T> {
-    pub fn new(borrow: AtomicRefMut<'a, T>) -> Self {
+    pub fn new(borrow: RefMut<'a, T>) -> Self {
         Self { borrow }
     }
 
-    pub fn into_mut(self) -> AtomicRefMut<'a, T> {
+    pub fn into_mut(self) -> RefMut<'a, T> {
         self.borrow
     }
 }
@@ -61,7 +61,7 @@ where
     }
 
     /// Returns the contained component or inserts a default.
-    pub fn or_insert(self, value: T) -> AtomicRefMut<'a, T> {
+    pub fn or_insert(self, value: T) -> RefMut<'a, T> {
         match self {
             Entry::Vacant(slot) => slot.insert(value),
             Entry::Occupied(slot) => slot.into_mut(),
@@ -69,7 +69,7 @@ where
     }
 
     /// Return the component in the entry or insert the default value.
-    pub fn or_default(self) -> AtomicRefMut<'a, T>
+    pub fn or_default(self) -> RefMut<'a, T>
     where
         T: Default,
     {
@@ -81,7 +81,7 @@ where
 
     /// Returns the contained component or inserts a default provided by the
     /// function.
-    pub fn or_insert_with(self, func: impl FnOnce() -> T) -> AtomicRefMut<'a, T> {
+    pub fn or_insert_with(self, func: impl FnOnce() -> T) -> RefMut<'a, T> {
         match self {
             Entry::Vacant(slot) => slot.insert((func)()),
             Entry::Occupied(slot) => slot.into_mut(),

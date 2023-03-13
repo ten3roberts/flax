@@ -10,7 +10,7 @@ use core::{
 use once_cell::unsync::OnceCell;
 use smallvec::SmallVec;
 
-use atomic_refcell::{AtomicRef, AtomicRefMut};
+use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 
 use crate::{
@@ -21,7 +21,7 @@ use crate::{
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    events::EventHandler,
+    events::EventSubscriber,
     filter::{ArchetypeFilter, StaticFilter},
     relation::Relation,
     *,
@@ -495,12 +495,13 @@ impl World {
         for (info, data) in components.take_all() {
             let src = self.archetypes.get_mut(arch);
 
-            if let Some(old) = src.get_dyn_mut(slot, info.key, change_tick) {
+            if let Some(()) = src.mutate_in_place(slot, info.key, change_tick, |old| {
                 // Drop old and copy the new value in
                 unsafe {
                     info.drop(old);
                     ptr::copy_nonoverlapping(data, old, info.size());
                 }
+            }) {
             } else {
                 // Component does not exist yet, so defer a move
 
@@ -772,14 +773,14 @@ impl World {
 
         let src = self.archetypes.get_mut(src_id);
 
-        if let Some(old) = src.get_dyn_mut(slot, info.key(), change_tick) {
+        if let Some(()) = src.mutate_in_place(slot, info.key(), change_tick, |old| {
             // Make the caller responsible for drop or store
             (on_drop(old));
 
             unsafe {
                 ptr::copy_nonoverlapping(value, old, info.size());
             }
-
+        }) {
             return Ok(EntityLocation {
                 arch_id: src_id,
                 slot,
@@ -1000,12 +1001,13 @@ impl World {
         &self,
         id: Entity,
         component: Component<T>,
-    ) -> Result<AtomicRefMut<T>> {
+    ) -> Result<RefMut<T>> {
         let loc = self.location(id)?;
 
         self.get_mut_at(loc, component)
             .ok_or_else(|| Error::MissingComponent(id, component.info()))
     }
+
     /// Randomly access an entity's component.
     pub(crate) fn get_mut_at<T: ComponentValue>(
         &self,
@@ -1014,14 +1016,10 @@ impl World {
             slot,
         }: EntityLocation,
         component: Component<T>,
-    ) -> Option<AtomicRefMut<T>> {
-        let archetype = self.archetypes.get(arch);
-
-        if !archetype.has(component.key()) {
-            return None;
-        }
-
-        archetype.get_mut(slot, component, self.advance_change_tick())
+    ) -> Option<RefMut<T>> {
+        self.archetypes
+            .get(arch)
+            .get_mut(slot, component, self.advance_change_tick())
     }
 
     /// Returns true if the entity has the specified component.
@@ -1229,7 +1227,7 @@ impl World {
     /// This allows reacting to changes in other systems, in async contexts by using channels or [`tokio::sync::Notify`], or on other threads.
     pub fn subscribe<S>(&mut self, subscriber: S)
     where
-        S: EventHandler,
+        S: EventSubscriber,
     {
         self.archetypes.add_subscriber(Arc::new(subscriber))
     }

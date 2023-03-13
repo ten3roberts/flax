@@ -1,14 +1,9 @@
-use flax::{
-    child_of, component,
-    events::{ChangeEvent, ChangeSubscriber, ShapeSubscriber},
-    name, Entity, Query, RelationExt, World,
-};
+use flax::{child_of, component, name, Entity, Query, RelationExt, World};
 use itertools::Itertools;
 
 component! {
     a: i32,
     b: String,
-
 }
 
 #[test]
@@ -16,7 +11,7 @@ component! {
 fn entity_ref() {
     use flax::{
         entity_ids,
-        events::{ChangeEvent, ChangeSubscriber, ShapeEvent, ShapeSubscriber},
+        events::{Event, EventKind, EventSubscriber},
         Query,
     };
     use itertools::Itertools;
@@ -24,9 +19,7 @@ fn entity_ref() {
 
     let mut world = World::new();
     let (tx, changes) = flume::unbounded();
-    world.subscribe(ChangeSubscriber::new(&[a().key(), b().key()], tx));
-    let (tx, archetype_events) = flume::unbounded();
-    world.subscribe(ShapeSubscriber::new(a().with(), tx));
+    world.subscribe(tx.filter_components([a().key(), b().key()]));
 
     let mut query = Query::new(entity_ids()).filter(a().removed());
 
@@ -37,43 +30,37 @@ fn entity_ref() {
         .spawn(&mut world);
 
     assert_eq!(
-        archetype_events.drain().collect_vec(),
-        [ShapeEvent::Matched(id)]
-    );
-
-    assert_eq!(query.borrow(&world).iter().collect_vec(), []);
-
-    assert_eq!(
         changes.drain().collect_vec(),
         [
-            ChangeEvent {
-                kind: flax::ChangeKind::Inserted,
-                component: a().key(),
+            Event {
+                id,
+                key: a().key(),
+                kind: EventKind::Added
             },
-            ChangeEvent {
-                kind: flax::ChangeKind::Inserted,
-                component: b().key(),
+            Event {
+                id,
+                key: b().key(),
+                kind: EventKind::Added
             }
         ]
     );
 
-    world.clear(id).unwrap();
+    assert_eq!(query.borrow(&world).iter().collect_vec(), []);
 
-    assert_eq!(
-        archetype_events.drain().collect_vec(),
-        [ShapeEvent::Unmatched(id)]
-    );
+    world.clear(id).unwrap();
 
     assert_eq!(
         changes.drain().collect_vec(),
         [
-            ChangeEvent {
-                kind: flax::ChangeKind::Removed,
-                component: a().key(),
+            Event {
+                id,
+                key: a().key(),
+                kind: EventKind::Removed
             },
-            ChangeEvent {
-                kind: flax::ChangeKind::Removed,
-                component: b().key(),
+            Event {
+                id,
+                key: b().key(),
+                kind: EventKind::Removed
             }
         ]
     );
@@ -84,18 +71,16 @@ fn entity_ref() {
 #[test]
 #[cfg(feature = "flume")]
 fn entity_hierarchy() {
+    use flax::events::{Event, EventSubscriber};
     use pretty_assertions::assert_eq;
 
     let mut world = World::new();
-    let (tx, rx) = flume::unbounded();
+    let (tx, rx) = flume::unbounded::<Event>();
 
-    world.subscribe(ShapeSubscriber::new(
-        name().with() & child_of.with_relation(),
-        tx,
-    ));
-
-    let (tx, track_a) = flume::unbounded();
-    world.subscribe(ChangeSubscriber::new(&[a().key()], tx));
+    world.subscribe(
+        tx.filter_arch(name().with() & child_of.with_relation())
+            .filter_components([name().key()]),
+    );
 
     let id = Entity::builder()
         .set(name(), "root".into())
@@ -110,13 +95,7 @@ fn entity_hierarchy() {
         .spawn(&mut world);
 
     assert_eq!(rx.drain().len(), 3);
-    assert_eq!(
-        track_a.drain().collect_vec(),
-        [ChangeEvent {
-            kind: flax::ChangeKind::Inserted,
-            component: a().key()
-        }]
-    );
+
     assert_eq!(
         Query::new(name())
             .borrow(&world)
@@ -135,6 +114,7 @@ fn entity_hierarchy() {
     world.despawn_children(id, child_of).unwrap();
 
     assert_eq!(rx.drain().len(), 3);
+
     assert_eq!(
         Query::new(name())
             .borrow(&world)
@@ -155,12 +135,6 @@ fn entity_hierarchy() {
         entity.get(a()).as_deref(),
         Err(&flax::Error::MissingComponent(id, a().info()))
     );
+
     assert_eq!(rx.drain().collect_vec(), []);
-    assert_eq!(
-        track_a.drain().collect_vec(),
-        [ChangeEvent {
-            kind: flax::ChangeKind::Removed,
-            component: a().key()
-        }]
-    );
 }

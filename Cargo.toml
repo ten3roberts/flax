@@ -40,6 +40,7 @@ derivative = "2.2"
 
 [dev-dependencies]
 tokio = { version = "1.21", features = ["test-util", "macros"] }
+futures = "0.3"
 itertools = { version = "0.10.3", default_features = false }
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 test-log = { version = "0.2.11", default_features = false, features = [

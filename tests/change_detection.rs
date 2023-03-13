@@ -7,6 +7,8 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 #[test]
 #[cfg(feature = "flume")]
 fn change_detection() {
+    use flax::events::{EventKind, EventSubscriber};
+
     let (removed_tx, removed_rx) = flume::unbounded();
 
     component! {
@@ -16,7 +18,11 @@ fn change_detection() {
 
     let mut world = World::new();
 
-    world.on_removed(rotation(), removed_tx);
+    world.subscribe(
+        removed_tx
+            .filter_components([rotation().key()])
+            .filter(|v| v.kind == EventKind::Removed),
+    );
 
     let mut rng = StdRng::seed_from_u64(83);
     let mut ids = (0..10)
@@ -88,14 +94,14 @@ fn change_detection() {
     let removed = removed_rx
         .drain()
         .inspect(|v| eprintln!("removed: {v:?}"))
-        .map(|v| v.0)
+        .map(|v| v.id)
         .collect_vec();
 
     assert_eq!(removed, [ids[11], ids[12], ids[30]]);
 
     world.despawn(ids[35]).unwrap();
 
-    let removed = removed_rx.drain().map(|v| v.0).collect_vec();
+    let removed = removed_rx.drain().map(|v| v.id).collect_vec();
     assert_eq!(removed, [ids[35]]);
 
     dbg!(removed);

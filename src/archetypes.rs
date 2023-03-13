@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use crate::{
     archetype::Archetype,
     entity::{EntityKind, EntityStore, EntityStoreIter, EntityStoreIterMut},
-    events::EventHandler,
+    events::EventSubscriber,
     ArchetypeId, ComponentInfo, Entity,
 };
 
@@ -18,7 +18,7 @@ pub(crate) struct Archetypes {
     inner: EntityStore<Archetype>,
 
     // These trickle down to the archetypes
-    subscribers: Vec<Arc<dyn EventHandler>>,
+    subscribers: Vec<Arc<dyn EventSubscriber>>,
 }
 
 impl Archetypes {
@@ -90,7 +90,7 @@ impl Archetypes {
 
                     // Insert the appropriate subscribers
                     for s in &self.subscribers {
-                        if s.filter_arch(&new) {
+                        if s.matches_arch(&new) {
                             new.add_handler(s.clone())
                         }
                     }
@@ -150,12 +150,12 @@ impl Archetypes {
         arch
     }
 
-    pub fn add_subscriber(&mut self, subscriber: Arc<dyn EventHandler>) {
+    pub fn add_subscriber(&mut self, subscriber: Arc<dyn EventSubscriber>) {
         // Prune subscribers
         self.subscribers.retain(|v| v.is_connected());
 
         for (_, arch) in self.inner.iter_mut() {
-            if subscriber.filter_arch(arch) {
+            if subscriber.matches_arch(arch) {
                 arch.add_handler(subscriber.clone());
             }
         }

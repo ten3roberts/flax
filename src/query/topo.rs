@@ -1,6 +1,9 @@
 use core::iter::Flatten;
 
-use alloc::collections::{btree_map, BTreeMap, BTreeSet};
+use alloc::{
+    collections::{btree_map, BTreeMap, BTreeSet},
+    vec::Vec,
+};
 use smallvec::SmallVec;
 
 use crate::{
