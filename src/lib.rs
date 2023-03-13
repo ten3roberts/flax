@@ -243,7 +243,7 @@ pub mod vtable;
 
 // Required due to macro
 pub(crate) use archetype::*;
-pub use archetype::{ArchetypeId, BatchSpawn, ChangeKind};
+pub use archetype::{ArchetypeId, BatchSpawn};
 pub use commands::CommandBuffer;
 pub use component::*;
 pub use components::*;

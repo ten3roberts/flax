@@ -1,23 +1,26 @@
-use alloc::sync::Weak;
-
 use crate::{
     archetype::Archetype, filter::StaticFilter, ComponentInfo, ComponentKey, ComponentValue, Entity,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Represents a single ECS event
 pub struct Event {
     /// The affected entity
     pub id: Entity,
+    /// The affected component
     pub key: ComponentKey,
+    /// The type of event
     pub kind: EventKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// The type of ECS event
 pub enum EventKind {
     /// The component was added to the entity
     Added,
     /// The component was removed from the entity
     Removed,
+    /// The component was modified
     Modified,
 }
 
@@ -39,13 +42,13 @@ pub trait EventSubscriber: ComponentValue {
 
     /// Returns true if the subscriber is interested in this archetype
     #[inline]
-    fn matches_arch(&self, arch: &Archetype) -> bool {
+    fn matches_arch(&self, _: &Archetype) -> bool {
         true
     }
 
     /// Returns true if the subscriber is interested in this component
     #[inline]
-    fn matches_component(&self, info: ComponentInfo) -> bool {
+    fn matches_component(&self, _: ComponentInfo) -> bool {
         true
     }
 
@@ -126,7 +129,7 @@ impl EventSubscriber for tokio::sync::mpsc::UnboundedSender<Event> {
 
 #[cfg(feature = "tokio")]
 impl EventSubscriber for alloc::sync::Weak<tokio::sync::Notify> {
-    fn on_event(&self, event: &EventData) {
+    fn on_event(&self, _: &EventData) {
         if let Some(notify) = self.upgrade() {
             notify.notify_one()
         }

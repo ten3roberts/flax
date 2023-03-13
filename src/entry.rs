@@ -1,7 +1,5 @@
 use core::mem;
 
-use atomic_refcell::AtomicRefMut;
-
 use crate::{archetype::RefMut, Component, ComponentValue, Entity, World};
 
 pub enum Entry<'a, T: ComponentValue> {
