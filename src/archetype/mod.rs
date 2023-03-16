@@ -499,17 +499,12 @@ impl Archetype {
     pub(crate) fn insert(
         &mut self,
         id: Entity,
-        components: &mut crate::buffer::ComponentBuffer,
+        buffer: &mut crate::buffer::ComponentBuffer,
     ) -> Slot {
         let slot = self.allocate(id);
-        unsafe {
-            for (component, src) in components.take_all() {
-                let storage = self
-                    .cells
-                    .get_mut(&component.key)
-                    .unwrap()
-                    .storage
-                    .get_mut();
+        for (info, src) in buffer.drain() {
+            unsafe {
+                let storage = self.cells.get_mut(&info.key).unwrap().storage.get_mut();
 
                 storage.extend(src, 1);
             }

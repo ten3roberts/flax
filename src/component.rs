@@ -409,7 +409,7 @@ impl ComponentInfo {
     }
 
     /// Returns the component id
-    #[inline]
+    #[inline(always)]
     pub fn key(&self) -> ComponentKey {
         self.key
     }

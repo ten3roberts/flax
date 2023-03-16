@@ -105,7 +105,7 @@ impl CommandBuffer {
         component: Component<T>,
         value: T,
     ) -> &mut Self {
-        let offset = self.inserts.insert(value);
+        let offset = self.inserts.push(component.info(), value);
         self.commands.push(Command::Set {
             id,
             info: component.info(),
@@ -209,7 +209,7 @@ impl CommandBuffer {
                         .wrap_err("Failed to spawn entity")?;
                 }
                 Command::Set { id, info, offset } => unsafe {
-                    let value = self.inserts.take_dyn(offset);
+                    let value = self.inserts.at(offset);
                     world
                         .set_dyn(id, info, value, |v| info.drop(v.cast()))
                         .map_err(|v| v.into_eyre())

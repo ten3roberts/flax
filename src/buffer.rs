@@ -1,23 +1,26 @@
 use core::alloc::Layout;
+use core::mem;
 use core::ptr::{self, NonNull};
 
 use alloc::alloc::{dealloc, handle_alloc_error};
 use alloc::collections::{btree_map, BTreeMap};
 use itertools::Itertools;
 
-use crate::ComponentKey;
 use crate::{Component, ComponentInfo, ComponentValue};
 
 type Offset = usize;
 
-#[derive(Debug, Clone)]
-/// A type erased allocator
+struct BufferEntry {
+    drop_fn: unsafe fn(*mut u8),
+    info: ComponentInfo,
+}
+
+/// A type erased bump allocator
 /// Drops all remaining values on drop
 pub(crate) struct BufferStorage {
     data: NonNull<u8>,
     cursor: usize,
-    layout: Layout,
-    drops: BTreeMap<Offset, unsafe fn(*mut u8)>,
+    size: usize,
 }
 
 impl BufferStorage {
@@ -25,87 +28,69 @@ impl BufferStorage {
         Self {
             data: NonNull::dangling(),
             cursor: 0,
-            layout: Layout::from_size_align(0, 2).unwrap(),
-            drops: BTreeMap::new(),
+            size: 0,
         }
     }
 
     /// Allocate space for a value with `layout`.
-    /// Returns an offset into the internal data where a value of the compatible layout may lay.
-    pub(crate) fn allocate(&mut self, layout: Layout) -> Offset {
+    /// Returns an offset into the internal data where a value of the compatible layout may be
+    /// written.
+    fn allocate(&mut self, layout: Layout) -> Offset {
         // Offset + the remaining padding to get the current offset up to an alignment boundary of `layout`.
         let new_offset = self.cursor + (layout.align() - self.cursor % layout.align());
-        let new_len = new_offset + layout.size();
+        // The end of the allocated item
+        let new_end = new_offset + layout.size();
 
-        if new_len >= self.layout.size() || layout.align() > self.layout.align() && new_len != 0 {
-            let align = self.layout.align().max(layout.align());
-            let new_layout = Layout::from_size_align(new_len.next_power_of_two(), align).unwrap();
+        // Reallocate buffer if it is not large enough
+        if new_end >= self.size && new_end != 0 {
+            let new_size = new_end.next_power_of_two();
 
-            unsafe {
+            {
                 // Don't realloc since layout may change
-                let new_data = alloc::alloc::alloc(new_layout);
+                let new_layout = Layout::from_size_align(new_size, 1).unwrap();
+                let old_layout = Layout::from_size_align(self.size, 1).unwrap();
+
+                let new_data = if self.size == 0 {
+                    unsafe { alloc::alloc::alloc(new_layout) }
+                } else {
+                    eprintln!("Reallocating to {new_size}");
+                    unsafe { alloc::alloc::realloc(self.data.as_ptr(), old_layout, new_size) }
+                };
+
+                eprintln!("Got: {new_data:?}");
 
                 let new_data = match NonNull::new(new_data) {
                     Some(v) => v,
                     None => handle_alloc_error(layout),
                 };
 
-                if self.layout.size() > 0 {
-                    core::ptr::copy_nonoverlapping(
-                        self.data.as_ptr(),
-                        new_data.as_ptr(),
-                        self.cursor,
-                    );
-                    dealloc(self.data.as_ptr(), self.layout)
-                }
-
+                self.size = new_layout.size();
                 self.data = new_data;
             }
-            self.layout = new_layout;
         }
 
-        self.cursor = new_len;
+        self.cursor = new_end;
         new_offset
     }
 
     /// Moves the value out of the storage
+    ///
     /// # Safety
-    /// The data at offset is unchanged.
-    /// Reads to the same offset is undefined as the value has moved out.
+    /// Multiple reads to the same offset is undefined as the value is moved.
     ///
     /// The data at `offset` must be of type T and acquired from [`Self::allocate`]
     pub(crate) unsafe fn take<T>(&mut self, offset: Offset) -> T {
-        let data = core::ptr::read(self.data.as_ptr().add(offset).cast::<T>());
-        if self.drops.remove(&offset).is_none() {
-            panic!("Attempt to take non existent value");
-        }
-
-        data
+        core::ptr::read(self.data.as_ptr().add(offset).cast::<T>())
     }
 
-    /// Moves the value out of the storage
-    /// # Safety
-    /// The data at offset is unchanged.
-    /// Reads to the same offset is undefined as the value has moved out.
-    ///
-    /// The data at `offset` must be of type T and acquired from [`Self::allocate`]
-    pub(crate) unsafe fn take_dyn(&mut self, offset: Offset) -> *mut u8 {
-        let data = self.data.as_ptr().add(offset);
-        if self.drops.remove(&offset).is_none() {
-            panic!("Attempt to take non existent value");
-        }
-
-        data
-    }
-
-    /// Swaps the value at offset with `value`, returning the old value
+    /// Replaces the value at offset with `value`, returning the old value
     ///
     /// # Safety
     /// The data at `offset` must be of type T and acquired from [`Self::allocate`]
-    pub(crate) unsafe fn swap<T>(&mut self, offset: Offset, value: T) -> T {
-        let prev = self.take(offset);
-        self.write(offset, value);
-        prev
+    pub(crate) unsafe fn replace<T>(&mut self, offset: Offset, value: T) -> T {
+        let dst = self.data.as_ptr().add(offset).cast::<T>();
+
+        mem::replace(unsafe { &mut *dst }, value)
     }
 
     /// Returns the value at offset as a reference to T
@@ -130,9 +115,10 @@ impl BufferStorage {
     /// # Safety
     /// The existing data at offset is overwritten without calling drop on the contained value.
     /// The offset is must be allocated from [`Self::allocate`] with the layout of `T`
-    pub(crate) unsafe fn write<T>(&mut self, offset: Offset, data: T) {
+    pub(crate) unsafe fn write<T>(&mut self, offset: Offset, info: ComponentInfo, data: T) {
         let layout = Layout::new::<T>();
         let dst = self.data.as_ptr().add(offset).cast::<T>();
+
         assert_eq!(
             self.data.as_ptr() as usize % layout.align(),
             0,
@@ -142,24 +128,15 @@ impl BufferStorage {
         assert_eq!(dst as usize % layout.align(), 0);
 
         core::ptr::write(dst, data);
-
-        // Add a function to drop this stored value
-        self.drops
-            .insert(offset, |ptr| core::ptr::drop_in_place(ptr.cast::<T>()));
     }
 
     /// Overwrites data at offset without reading or dropping the old value
     /// # Safety
     /// The existing data at offset is overwritten without calling drop on the contained value.
     /// The offset is must be allocated from [`Self::allocate`] with the layout of `T`
-    pub(crate) unsafe fn write_dyn(
-        &mut self,
-        offset: Offset,
-        layout: Layout,
-        data: *mut u8,
-        on_drop: unsafe fn(*mut u8),
-    ) {
+    pub(crate) unsafe fn write_dyn(&mut self, offset: Offset, info: ComponentInfo, data: *mut u8) {
         let dst = self.data.as_ptr().add(offset);
+        let layout = info.layout();
 
         assert_eq!(
             self.data.as_ptr() as usize % layout.align(),
@@ -168,31 +145,20 @@ impl BufferStorage {
         );
 
         core::ptr::copy_nonoverlapping(data, dst, layout.size());
-
-        // Add a function to drop this stored value
-        self.drops.insert(offset, on_drop);
     }
 
-    /// Drops all values stored inside while keeping the allocation
+    /// Resets the buffer, discarding the previously held data
     pub(crate) fn clear(&mut self) {
-        let drops = core::mem::take(&mut self.drops);
-        for (offset, drop_func) in drops {
-            unsafe {
-                let ptr = self.data.as_ptr().add(offset);
-                (drop_func)(ptr);
-            }
-        }
-
         self.cursor = 0;
     }
 
     /// Insert a new value into storage
     /// Is equivalent to an alloc followed by a write
-    pub(crate) fn insert<T>(&mut self, value: T) -> Offset {
+    pub(crate) fn push<T>(&mut self, info: ComponentInfo, value: T) -> Offset {
         let offset = self.allocate(Layout::new::<T>());
 
         unsafe {
-            self.write(offset, value);
+            self.write(offset, info, value);
         }
 
         offset
@@ -207,9 +173,9 @@ impl Default for BufferStorage {
 
 impl Drop for BufferStorage {
     fn drop(&mut self) {
-        self.clear();
-        if self.layout.size() > 0 {
-            unsafe { dealloc(self.data.as_ptr(), self.layout) }
+        if self.size > 0 {
+            let layout = Layout::from_size_align(self.size, 1).unwrap();
+            unsafe { dealloc(self.data.as_ptr(), layout) }
         }
     }
 }
@@ -222,18 +188,8 @@ impl Drop for BufferStorage {
 /// This is a low level building block. Prefer [EntityBuilder](crate::EntityBuilder) or [CommandBuffer](crate::CommandBuffer) instead.
 #[derive(Default)]
 pub struct ComponentBuffer {
-    components: BTreeMap<ComponentKey, (Offset, ComponentInfo)>,
+    entries: BTreeMap<ComponentInfo, Offset>,
     storage: BufferStorage,
-}
-
-impl<'a> IntoIterator for &'a mut ComponentBuffer {
-    type Item = (ComponentInfo, *mut u8);
-
-    type IntoIter = ComponentBufferIter<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.take_all()
-    }
 }
 
 impl core::fmt::Debug for ComponentBuffer {
@@ -256,43 +212,40 @@ impl ComponentBuffer {
 
     /// Mutably access a component from the buffer
     pub fn get_mut<T: ComponentValue>(&mut self, component: Component<T>) -> Option<&mut T> {
-        let &(offset, _) = self.components.get(&component.key())?;
+        let &offset = self.entries.get(&component.info())?;
 
         unsafe { Some(self.storage.read_mut(offset)) }
     }
 
     /// Access a component from the buffer
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
-        let &(offset, _) = self.components.get(&component.key())?;
+        let &offset = self.entries.get(&component.info())?;
 
         unsafe { Some(self.storage.read(offset)) }
     }
 
     /// Returns the components in the buffer
     pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
-        self.components.values().map(|v| &v.1)
-    }
-
-    pub(crate) fn components_mut(&mut self) -> impl Iterator<Item = &mut ComponentInfo> {
-        self.components.values_mut().map(|v| &mut v.1)
+        self.entries.keys()
     }
 
     /// Remove a component from the component buffer
     pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Option<T> {
-        let (offset, _) = self.components.remove(&component.key())?;
+        let offset = self.entries.remove(&component.info())?;
 
         unsafe { Some(self.storage.take(offset)) }
     }
 
     /// Set a component in the component buffer
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
-        if let Some(&(offset, _)) = self.components.get(&component.key()) {
-            unsafe { Some(self.storage.swap(offset, value)) }
-        } else {
-            let offset = self.storage.insert(value);
+        let info = component.info();
 
-            self.components
-                .insert(component.key(), (offset, component.info()));
+        if let Some(&offset) = self.entries.get(&info) {
+            unsafe { Some(self.storage.replace(offset, value)) }
+        } else {
+            let offset = self.storage.push(info, value);
+
+            self.entries.insert(info, offset);
 
             None
         }
@@ -300,43 +253,46 @@ impl ComponentBuffer {
 
     /// Set from a type erased component
     pub(crate) unsafe fn set_dyn(&mut self, info: ComponentInfo, value: *mut u8) {
-        if let Some(&(offset, old_info)) = self.components.get(&info.key()) {
-            assert_eq!(old_info, info);
+        if let Some(&offset) = self.entries.get(&info) {
             let old_ptr = self.storage.at(offset);
-
             info.drop(old_ptr);
 
             ptr::copy_nonoverlapping(value, old_ptr, info.size());
         } else {
             let offset = self.storage.allocate(info.layout());
 
-            self.storage
-                .write_dyn(offset, info.layout(), value, info.drop_fn());
+            self.storage.write_dyn(offset, info, value);
 
-            self.components.insert(info.key(), (offset, info));
+            self.entries.insert(info, offset);
         }
     }
 
-    /// Take all components for the buffer.
-    /// The yielded pointers needs to be dropped manually.
+    /// Pops a value from the buffer and returns a pointer to the value.
+    ///
+    /// # Safety
+    /// The pointer is valid until the next write to the buffer
+    pub(crate) fn pop(&mut self) -> Option<(ComponentInfo, *mut u8)> {
+        let (info, offset) = self.entries.pop_first()?;
+        let ptr = unsafe { self.storage.at(offset) };
+
+        Some((info, ptr))
+    }
+
+    /// Drains the components from the buffer>
+    ///
+    /// The returned pointers must be manually dropped
     /// If the returned iterator is dropped before being fully consumed, the
     /// remaining values will be safely dropped.
-    ///
-    /// The components are returned *in ComponentId order*
-    pub fn take_all(&mut self) -> ComponentBufferIter {
-        let components = &mut self.components;
-        let storage = &mut self.storage;
-
+    pub(crate) fn drain(&mut self) -> ComponentBufferIter {
         ComponentBufferIter {
-            components: core::mem::take(components).into_iter(),
-            storage,
+            entries: &mut self.entries,
+            storage: &mut self.storage,
         }
     }
 }
 
-/// Iterate all items in the component buffer
-pub struct ComponentBufferIter<'a> {
-    components: btree_map::IntoIter<ComponentKey, (Offset, ComponentInfo)>,
+pub(crate) struct ComponentBufferIter<'a> {
+    entries: &'a mut BTreeMap<ComponentInfo, Offset>,
     storage: &'a mut BufferStorage,
 }
 
@@ -344,17 +300,23 @@ impl<'a> Iterator for ComponentBufferIter<'a> {
     type Item = (ComponentInfo, *mut u8);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (_, (offset, component)) = self.components.next()?;
+        let (info, offset) = self.entries.pop_first()?;
+
         unsafe {
-            let data = self.storage.take_dyn(offset);
-            Some((component, data))
+            let data = self.storage.at(offset);
+            Some((info, data))
         }
     }
 }
 
-impl<'a> Drop for ComponentBufferIter<'a> {
+impl Drop for ComponentBuffer {
     fn drop(&mut self) {
-        self.storage.clear();
+        for (info, &offset) in &self.entries {
+            unsafe {
+                let ptr = self.storage.at(offset);
+                info.drop(ptr);
+            }
+        }
     }
 }
 

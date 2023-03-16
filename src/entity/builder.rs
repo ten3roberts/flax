@@ -150,14 +150,15 @@ impl EntityBuilder {
     }
 
     fn prepare(&mut self, parent: Entity) {
-        self.buffer.components_mut().for_each(|info| {
-            let id = info.key();
-            if let Some(object) = id.object {
-                if object == dummy() {
-                    info.key.object = Some(parent);
-                }
-            }
-        });
+        todo!()
+        // self.buffer.components_mut().for_each(|info| {
+        //     let id = info.key();
+        //     if let Some(object) = id.object {
+        //         if object == dummy() {
+        //             info.key.object = Some(parent);
+        //         }
+        //     }
+        // });
     }
 
     #[inline(always)]
