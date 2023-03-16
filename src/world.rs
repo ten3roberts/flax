@@ -366,19 +366,19 @@ impl World {
     ) -> Result<(Entity, EntityLocation)> {
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, _) = self.archetypes.init(buffer.components().copied());
-        let (loc, arch) = self.spawn_at_inner(id, arch_id)?;
-
-        for (component, src) in buffer.take_all() {
-            unsafe {
-                arch.push(component.key, src, change_tick)
-                    .expect("Component not in archetype")
-            }
-        }
-
         for &component in buffer.components() {
             self.init_component(component)
                 .expect("Failed to initialize component");
+        }
+
+        let (arch_id, _) = self.archetypes.init(buffer.components().copied());
+        let (loc, arch) = self.spawn_at_inner(id, arch_id)?;
+
+        for (info, src) in buffer.drain() {
+            unsafe {
+                arch.push(info.key(), src, change_tick)
+                    .expect("Component not in archetype")
+            }
         }
 
         Ok((id, loc))
@@ -398,9 +398,9 @@ impl World {
 
         let (id, _, arch) = self.spawn_inner(arch_id, EntityKind::empty());
 
-        for (component, src) in buffer.take_all() {
+        for (info, src) in buffer.drain() {
             unsafe {
-                arch.push(component.key, src, change_tick)
+                arch.push(info.key, src, change_tick)
                     .expect("Component not in archetype")
             }
         }
@@ -492,21 +492,21 @@ impl World {
 
         let src_id = arch;
 
-        for (info, data) in components.take_all() {
+        for (info, ptr) in components.drain() {
             let src = self.archetypes.get_mut(arch);
 
             if let Some(()) = src.mutate_in_place(slot, info.key, change_tick, |old| {
                 // Drop old and copy the new value in
                 unsafe {
                     info.drop(old);
-                    ptr::copy_nonoverlapping(data, old, info.size());
+                    ptr::copy_nonoverlapping(ptr, old, info.size());
                 }
             }) {
             } else {
                 // Component does not exist yet, so defer a move
 
                 // Data will have a lifetime of `components`.
-                new_data.push((info, data));
+                new_data.push((info, ptr));
                 new_components.push(info);
             }
         }
