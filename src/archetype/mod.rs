@@ -171,8 +171,6 @@ impl Cell {
 
         storage.swap_remove(slot, |p| on_move(self.info, p));
         changes.swap_remove(slot, last, |_, _| {});
-
-        // Notify the subscribers that something was removed
     }
 
     /// Silently clears (and drops) all components and changes.

@@ -43,17 +43,13 @@ impl BufferStorage {
             {
                 // Don't realloc since layout may change
                 let align = self.layout.align().max(layout.align());
-                eprintln!("New alignment: {align}");
                 let new_layout = Layout::from_size_align(new_size, align).unwrap();
 
                 let new_data = if self.layout.size() == 0 {
                     unsafe { alloc::alloc::alloc(new_layout) }
                 } else {
-                    eprintln!("Reallocating to {new_size}");
                     unsafe { alloc::alloc::realloc(self.data.as_ptr(), self.layout, new_size) }
                 };
-
-                eprintln!("Got: {new_data:?}");
 
                 let new_data = match NonNull::new(new_data) {
                     Some(v) => v,
