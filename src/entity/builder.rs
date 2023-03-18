@@ -1,8 +1,25 @@
 use crate::{
-    buffer::ComponentBuffer, dummy, error::Result, CommandBuffer, Component, ComponentInfo,
+    buffer::ComponentBuffer, error::Result, CommandBuffer, Component, ComponentInfo,
     ComponentValue, Entity, RelationExt, World,
 };
 use alloc::vec::Vec;
+use derivative::Derivative;
+
+type ModifyFunc = Box<dyn FnOnce(Entity, &mut EntityBuilder) + Send + Sync>;
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct Child {
+    builder: EntityBuilder,
+    #[derivative(Debug = "ignore")]
+    modify: ModifyFunc,
+}
+
+impl Child {
+    fn spawn(mut self, world: &mut World, parent: Entity) -> Entity {
+        (self.modify)(parent, &mut self.builder);
+        self.builder.spawn(world)
+    }
+}
 
 #[derive(Debug)]
 /// Incrementally build a single entity which allows for more efficient
@@ -26,7 +43,7 @@ use alloc::vec::Vec;
 /// ```
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
-    children: Vec<EntityBuilder>,
+    children: Vec<Child>,
 }
 
 impl EntityBuilder {
@@ -94,20 +111,23 @@ impl EntityBuilder {
     /// The child is taken and cleared
     pub fn attach_with<T: ComponentValue>(
         &mut self,
-        relation: impl RelationExt<T>,
+        relation: impl RelationExt<T> + ComponentValue,
         value: T,
         other: impl Into<Self>,
     ) -> &mut Self {
-        let mut other = other.into();
-        other.set(relation.of(dummy()), value);
-        self.children.push(other);
+        self.children.push(Child {
+            builder: other.into(),
+            modify: Box::new(move |parent, builder| {
+                builder.set(relation.of(parent), value);
+            }),
+        });
         self
     }
 
     /// Attach a child with the default value
     pub fn attach<T: ComponentValue + Default>(
         &mut self,
-        relation: impl RelationExt<T>,
+        relation: impl RelationExt<T> + ComponentValue,
         other: impl Into<Self>,
     ) -> &mut Self {
         self.attach_with(relation, Default::default(), other)
@@ -118,7 +138,13 @@ impl EntityBuilder {
     /// Clears the builder and allows it to be used again, reusing the builder
     /// will reuse the inner storage, even for different components.
     pub fn spawn(&mut self, world: &mut World) -> Entity {
-        self.spawn_inner(world, None)
+        let id = world.spawn_with(&mut self.buffer);
+
+        self.children.drain(..).for_each(|child| {
+            child.spawn(world, id);
+        });
+
+        id
     }
 
     /// See: [`Self::spawn`]
@@ -129,8 +155,8 @@ impl EntityBuilder {
     pub fn spawn_at(&mut self, world: &mut World, id: Entity) -> Result<Entity> {
         let id = world.spawn_at_with(id, &mut self.buffer)?;
 
-        self.children.drain(..).for_each(|mut child| {
-            child.spawn_inner(world, Some(id));
+        self.children.drain(..).for_each(|child| {
+            child.spawn(world, id);
         });
 
         Ok(id)
@@ -142,38 +168,11 @@ impl EntityBuilder {
     pub fn append_to(&mut self, world: &mut World, id: Entity) -> Result<Entity> {
         world.set_with(id, &mut self.buffer)?;
 
-        self.children.drain(..).for_each(|mut child| {
-            child.spawn_inner(world, Some(id));
+        self.children.drain(..).for_each(|child| {
+            child.spawn(world, id);
         });
 
         Ok(id)
-    }
-
-    fn prepare(&mut self, parent: Entity) {
-        todo!()
-        // self.buffer.components_mut().for_each(|info| {
-        //     let id = info.key();
-        //     if let Some(object) = id.object {
-        //         if object == dummy() {
-        //             info.key.object = Some(parent);
-        //         }
-        //     }
-        // });
-    }
-
-    #[inline(always)]
-    fn spawn_inner(&mut self, world: &mut World, parent: Option<Entity>) -> Entity {
-        if let Some(parent) = parent {
-            self.prepare(parent)
-        }
-
-        let id = world.spawn_with(&mut self.buffer);
-
-        self.children.drain(..).for_each(|mut child| {
-            child.spawn_inner(world, Some(id));
-        });
-
-        id
     }
 
     /// Spawns the entity into the world through a commandbuffer

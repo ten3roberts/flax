@@ -3,24 +3,19 @@ use core::mem;
 use core::ptr::{self, NonNull};
 
 use alloc::alloc::{dealloc, handle_alloc_error};
-use alloc::collections::{btree_map, BTreeMap};
+use alloc::collections::BTreeMap;
 use itertools::Itertools;
 
 use crate::{Component, ComponentInfo, ComponentValue};
 
 type Offset = usize;
 
-struct BufferEntry {
-    drop_fn: unsafe fn(*mut u8),
-    info: ComponentInfo,
-}
-
 /// A type erased bump allocator
-/// Drops all remaining values on drop
+/// Does not handle dropping of the values
 pub(crate) struct BufferStorage {
     data: NonNull<u8>,
     cursor: usize,
-    size: usize,
+    layout: Layout,
 }
 
 impl BufferStorage {
@@ -28,7 +23,7 @@ impl BufferStorage {
         Self {
             data: NonNull::dangling(),
             cursor: 0,
-            size: 0,
+            layout: Layout::from_size_align(0, 8).unwrap(),
         }
     }
 
@@ -42,19 +37,20 @@ impl BufferStorage {
         let new_end = new_offset + layout.size();
 
         // Reallocate buffer if it is not large enough
-        if new_end >= self.size && new_end != 0 {
+        if (new_end >= self.layout.size() && new_end != 0) || self.layout.align() < layout.align() {
             let new_size = new_end.next_power_of_two();
 
             {
                 // Don't realloc since layout may change
-                let new_layout = Layout::from_size_align(new_size, 1).unwrap();
-                let old_layout = Layout::from_size_align(self.size, 1).unwrap();
+                let align = self.layout.align().max(layout.align());
+                eprintln!("New alignment: {align}");
+                let new_layout = Layout::from_size_align(new_size, align).unwrap();
 
-                let new_data = if self.size == 0 {
+                let new_data = if self.layout.size() == 0 {
                     unsafe { alloc::alloc::alloc(new_layout) }
                 } else {
                     eprintln!("Reallocating to {new_size}");
-                    unsafe { alloc::alloc::realloc(self.data.as_ptr(), old_layout, new_size) }
+                    unsafe { alloc::alloc::realloc(self.data.as_ptr(), self.layout, new_size) }
                 };
 
                 eprintln!("Got: {new_data:?}");
@@ -64,7 +60,7 @@ impl BufferStorage {
                     None => handle_alloc_error(layout),
                 };
 
-                self.size = new_layout.size();
+                self.layout = new_layout;
                 self.data = new_data;
             }
         }
@@ -115,7 +111,7 @@ impl BufferStorage {
     /// # Safety
     /// The existing data at offset is overwritten without calling drop on the contained value.
     /// The offset is must be allocated from [`Self::allocate`] with the layout of `T`
-    pub(crate) unsafe fn write<T>(&mut self, offset: Offset, info: ComponentInfo, data: T) {
+    pub(crate) unsafe fn write<T>(&mut self, offset: Offset, data: T) {
         let layout = Layout::new::<T>();
         let dst = self.data.as_ptr().add(offset).cast::<T>();
 
@@ -148,17 +144,18 @@ impl BufferStorage {
     }
 
     /// Resets the buffer, discarding the previously held data
-    pub(crate) fn clear(&mut self) {
+    #[inline(always)]
+    pub(crate) fn reset(&mut self) {
         self.cursor = 0;
     }
 
     /// Insert a new value into storage
     /// Is equivalent to an alloc followed by a write
-    pub(crate) fn push<T>(&mut self, info: ComponentInfo, value: T) -> Offset {
+    pub(crate) fn push<T>(&mut self, value: T) -> Offset {
         let offset = self.allocate(Layout::new::<T>());
 
         unsafe {
-            self.write(offset, info, value);
+            self.write(offset, value);
         }
 
         offset
@@ -173,9 +170,8 @@ impl Default for BufferStorage {
 
 impl Drop for BufferStorage {
     fn drop(&mut self) {
-        if self.size > 0 {
-            let layout = Layout::from_size_align(self.size, 1).unwrap();
-            unsafe { dealloc(self.data.as_ptr(), layout) }
+        if self.layout.size() > 0 {
+            unsafe { dealloc(self.data.as_ptr(), self.layout) }
         }
     }
 }
@@ -243,7 +239,7 @@ impl ComponentBuffer {
         if let Some(&offset) = self.entries.get(&info) {
             unsafe { Some(self.storage.replace(offset, value)) }
         } else {
-            let offset = self.storage.push(info, value);
+            let offset = self.storage.push(value);
 
             self.entries.insert(info, offset);
 
@@ -265,17 +261,6 @@ impl ComponentBuffer {
 
             self.entries.insert(info, offset);
         }
-    }
-
-    /// Pops a value from the buffer and returns a pointer to the value.
-    ///
-    /// # Safety
-    /// The pointer is valid until the next write to the buffer
-    pub(crate) fn pop(&mut self) -> Option<(ComponentInfo, *mut u8)> {
-        let (info, offset) = self.entries.pop_first()?;
-        let ptr = unsafe { self.storage.at(offset) };
-
-        Some((info, ptr))
     }
 
     /// Drains the components from the buffer>
@@ -319,6 +304,50 @@ impl Drop for ComponentBuffer {
         }
     }
 }
+
+#[derive(Default)]
+pub(crate) struct MultiComponentBuffer {
+    storage: BufferStorage,
+    drops: BTreeMap<Offset, unsafe fn(*mut u8)>,
+}
+
+impl MultiComponentBuffer {
+    /// Push a new value into the buffer
+    pub fn push<T: ComponentValue>(&mut self, value: T) -> Offset {
+        let offset = self.storage.push(value);
+        let old = self
+            .drops
+            .insert(offset, unsafe { |ptr| ptr.cast::<T>().drop_in_place() });
+
+        assert!(old.is_none());
+        offset
+    }
+
+    pub unsafe fn take_dyn(&mut self, offset: Offset) -> *mut u8 {
+        self.drops.remove(&offset).unwrap();
+        self.storage.at(offset)
+    }
+
+    pub fn clear(&mut self) {
+        for (&offset, drop) in &mut self.drops {
+            unsafe {
+                let ptr = self.storage.at(offset);
+                (drop)(ptr)
+            }
+        }
+        self.drops.clear();
+        self.storage.reset();
+    }
+}
+
+impl Drop for MultiComponentBuffer {
+    fn drop(&mut self) {
+        self.clear();
+    }
+}
+
+unsafe impl Send for MultiComponentBuffer {}
+unsafe impl Sync for MultiComponentBuffer {}
 
 #[cfg(test)]
 mod tests {
@@ -394,5 +423,25 @@ mod tests {
 
         assert_eq!(Arc::strong_count(&shared), 1);
         assert_eq!(Arc::strong_count(&shared_2), 2);
+    }
+
+    #[test]
+    fn multi_component_buffer() {
+        let mut buffer = MultiComponentBuffer::default();
+        let shared = Arc::new(4);
+
+        let a = buffer.push(9i32);
+        let b = buffer.push(String::from("Hello, there"));
+        let _c = buffer.push(shared.clone());
+        let d = buffer.push(shared.clone());
+
+        unsafe {
+            assert_eq!(buffer.take_dyn(b).cast::<String>().read(), "Hello, there");
+            assert_eq!(buffer.take_dyn(a).cast::<i32>().read(), 9);
+            assert_eq!(buffer.take_dyn(d).cast::<Arc<i32>>().read(), shared);
+        }
+        drop(buffer);
+
+        assert_eq!(Arc::strong_count(&shared), 1);
     }
 }
