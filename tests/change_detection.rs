@@ -108,6 +108,46 @@ fn change_detection() {
 }
 
 #[test]
+#[cfg(feature = "flume")]
+fn clear_events() {
+    use flax::events::{Event, EventSubscriber};
+
+    let mut world = World::new();
+
+    let (tx, rx) = flume::unbounded();
+    world.subscribe(
+        tx.filter_components([name().key()])
+            .filter_arch(component_info().without()),
+    );
+
+    let mut query = Query::new(entity_ids()).filter(name().removed());
+
+    let id = Entity::builder().set(name(), "id".into()).spawn(&mut world);
+
+    assert_eq!(query.collect_vec(&world), &[]);
+
+    world.clear(id).unwrap();
+
+    assert_eq!(query.collect_vec(&world), &[id]);
+
+    assert_eq!(
+        rx.drain().collect_vec(),
+        &[
+            Event {
+                id,
+                key: name().key(),
+                kind: events::EventKind::Added,
+            },
+            Event {
+                id,
+                key: name().key(),
+                kind: events::EventKind::Removed,
+            }
+        ]
+    );
+}
+
+#[test]
 fn query_changes() {
     component! {
         a: i32,
