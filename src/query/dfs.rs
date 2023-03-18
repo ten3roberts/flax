@@ -445,10 +445,10 @@ mod test {
             items,
             [
                 ("root".to_string(), 0),
-                ("child.2".to_string(), 3),
                 ("child.1".to_string(), 1),
                 ("child.1.1".to_string(), 2),
-                ("child.3".to_string(), 4)
+                ("child.3".to_string(), 4),
+                ("child.2".to_string(), 3),
             ]
         );
 

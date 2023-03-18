@@ -446,11 +446,6 @@ impl ComponentInfo {
     pub fn type_name(&self) -> &'static str {
         (self.vtable.type_name)()
     }
-
-    #[inline]
-    pub(crate) fn drop_fn(&self) -> unsafe fn(*mut u8) {
-        self.vtable.drop
-    }
 }
 
 #[cfg(test)]

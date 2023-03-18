@@ -4,7 +4,7 @@ use alloc::{boxed::Box, format, vec::Vec};
 use eyre::Context;
 
 use crate::{
-    buffer::BufferStorage, BatchSpawn, Component, ComponentInfo, ComponentValue, Entity,
+    buffer::MultiComponentBuffer, BatchSpawn, Component, ComponentInfo, ComponentValue, Entity,
     EntityBuilder, World,
 };
 
@@ -74,7 +74,7 @@ impl fmt::Debug for Command {
 /// mutably, such as in systems or during iteration.
 #[derive(Default)]
 pub struct CommandBuffer {
-    inserts: BufferStorage,
+    inserts: MultiComponentBuffer,
     commands: Vec<Command>,
 }
 
@@ -105,7 +105,7 @@ impl CommandBuffer {
         component: Component<T>,
         value: T,
     ) -> &mut Self {
-        let offset = self.inserts.push(component.info(), value);
+        let offset = self.inserts.push(value);
         self.commands.push(Command::Set {
             id,
             info: component.info(),
@@ -209,7 +209,7 @@ impl CommandBuffer {
                         .wrap_err("Failed to spawn entity")?;
                 }
                 Command::Set { id, info, offset } => unsafe {
-                    let value = self.inserts.at(offset);
+                    let value = self.inserts.take_dyn(offset);
                     world
                         .set_dyn(id, info, value, |v| info.drop(v.cast()))
                         .map_err(|v| v.into_eyre())
