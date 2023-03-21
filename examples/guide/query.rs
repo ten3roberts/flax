@@ -238,6 +238,7 @@ fn main() -> color_eyre::Result<()> {
         window_height: f32,
         allow_vsync: bool,
 
+        /// A static entity, which is always alive
         resources,
     }
 
@@ -249,7 +250,19 @@ fn main() -> color_eyre::Result<()> {
         .append_to(&mut world, resources())
         .unwrap();
 
-    let query = Query::new((window_width(), window_height(), allow_vsync())).entity(resources());
+    let mut query = Query::new((window_width(), window_height(), allow_vsync()))
+        // Change the query strategy to only iterate the `resources` entity
+        .entity(resources());
+
+    let mut borrow = query.borrow(&world);
+    let (width, height, vsync) = borrow.get().unwrap();
+    tracing::info!("width: {width} height: {height}, vsync: {vsync}");
+
+    // ANCHOR_END: entity_query
+
+    drop(borrow);
+
+    // ANCHOR: entity_query_system
 
     let mut window_system = System::builder()
         .with(query)
@@ -266,6 +279,7 @@ fn main() -> color_eyre::Result<()> {
     world.set(resources(), window_height(), 720.0)?;
     window_system.run_on(&mut world);
 
-    // ANCHOR_END: entity_query
+    // ANCHOR_END: entity_query_system
+
     Ok(())
 }

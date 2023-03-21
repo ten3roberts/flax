@@ -14,11 +14,9 @@ based on one or more components, or in other ways react to a changed value.
 The following example creates a system which prints the updated health values
 for each entity.
 
-A filter can be added *inline* as part of the fetch of a component, or as a filter.
-
 **Note**: Tuple queries combine using `and`, which means a query with multiple `modified` or other change filtered components will only yield if **all** the annotated components changed since the last query ran.
 
-Prefer using `.filter(a().modified | b().modified())` when dealing with multiple
+Prefer using `.filter(Or(a().modified, b().modified()))` when dealing with multiple
 change filters, or splitting up the query.
 
 ```rust

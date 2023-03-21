@@ -22,7 +22,9 @@ Combined with tag like components, a query which only yields the player can be a
 Several filters can be combined using `&` and `|`, as well as `!`.
 
 ## Comparison
-It is also possible to filter on the value of a component, using the
+It is also possible to filter on the value of a component.
+
+This is different from using `filter` on the iterator, as the comparison will filter and select *before* the query traverses the entities, which means it avoids unnecessary modification events for mutable queries.
 
 ```rust
 {{ #include ../../../examples/query/basic.rs:query_cmp }}
