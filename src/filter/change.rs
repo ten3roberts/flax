@@ -192,7 +192,9 @@ where
 }
 
 #[derive(Clone)]
-/// Filter which only yields removed `components
+/// Filter which only yields removed components.
+///
+/// See: [`Component::removed`](crate::Component::removed)
 pub struct RemovedFilter<T> {
     component: Component<T>,
 }

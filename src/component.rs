@@ -257,6 +257,16 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Construct a fine grained component remove detection filter.
+    ///
+    /// **Note**: This filter will yield entities **which are still alive** for which `component` was
+    /// removed, and the rest of the fetch matches.
+    ///
+    /// Since a query only iterates the living world, this filter does not work for despawned entities.
+    ///
+    /// In other words, queries only return valid entities.
+    ///
+    /// To capture *all* removed components, including despawned entities, prefer
+    /// [`World::subscribe`](crate::World::subscribe).
     pub fn removed(self) -> RemovedFilter<T> {
         RemovedFilter::new(self)
     }

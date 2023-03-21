@@ -89,42 +89,6 @@ impl World {
         ReservedEntityIter(iter)
     }
 
-    /// Converts all reserved entity ids into actual empty entities placed in a special archetype.
-    #[inline]
-    fn flush_reserved(&mut self) {
-        if !self.has_reserved.swap(false, Relaxed) {
-            return;
-        }
-
-        let reserved = self.archetypes.reserved;
-        let arch = self.archetypes.get_mut(reserved);
-
-        for store in self.entities.inner.values_mut() {
-            store.flush_reserved(|id| {
-                let slot = arch.allocate(id);
-
-                EntityLocation {
-                    slot,
-                    arch_id: reserved,
-                }
-            })
-        }
-    }
-
-    fn reserve_at(&mut self, id: Entity) -> Result<()> {
-        self.flush_reserved();
-        self.entities.init(id.kind).reserve_at(id.index())
-    }
-
-    /// Ensure a static entity id exists
-    fn ensure_static(&mut self, id: Entity) -> Result<EntityLocation> {
-        assert!(id.is_static());
-        let mut buffer = ComponentBuffer::new();
-        buffer.set(is_static(), ());
-        let (_, loc) = self.spawn_at_with_inner(id, &mut buffer)?;
-        Ok(loc)
-    }
-
     /// Create an iterator to spawn several entities
     pub fn spawn_many(&mut self) -> impl Iterator<Item = Entity> + '_ {
         (0..).map(|_| self.spawn())
@@ -190,138 +154,6 @@ impl World {
             .unwrap_or_default()
     }
 
-    /// Batch spawn multiple components with prespecified ids.
-    /// Fails if any of the entities already exist.
-    ///
-    /// Returns the passed ids, to allow chaining with result.
-    pub fn spawn_batch_at<'a>(
-        &mut self,
-        ids: &'a [Entity],
-        batch: &mut BatchSpawn,
-    ) -> Result<&'a [Entity]> {
-        for component in batch.components() {
-            self.init_component(component)
-                .expect("failed to initialize component");
-        }
-
-        self.spawn_batch_at_inner(ids, batch)
-    }
-
-    /// Does not initialize components
-    fn spawn_batch_at_inner<'a>(
-        &mut self,
-        ids: &'a [Entity],
-        batch: &mut BatchSpawn,
-    ) -> Result<&'a [Entity]> {
-        self.flush_reserved();
-        assert_eq!(
-            ids.len(),
-            batch.len(),
-            "The length of ids must match the number of slots in `batch`"
-        );
-
-        for &id in ids {
-            if self.is_reserved(id) {
-                self.despawn(id).unwrap();
-            } else if let Some(v) = self.reconstruct(id.index(), id.kind()) {
-                return Err(Error::EntityOccupied(v));
-            }
-        }
-
-        let change_tick = self.advance_change_tick();
-
-        let (arch_id, arch) = self.archetypes.init(batch.components());
-
-        let base = arch.len();
-        for (idx, &id) in ids.iter().enumerate() {
-            let kind = id.kind();
-            let store = self.entities.init(kind);
-            assert_eq!(store.kind, kind);
-            store
-                .spawn_at(
-                    id.index(),
-                    id.gen(),
-                    EntityLocation {
-                        slot: base + idx,
-                        arch_id,
-                    },
-                )
-                // The vacancy was checked prior
-                .unwrap();
-        }
-
-        let _ = arch.allocate_n(ids);
-
-        let arch = self.archetypes.get_mut(arch_id);
-
-        for (_, mut storage) in batch.take_all() {
-            unsafe {
-                arch.extend(&mut storage, change_tick)
-                    .expect("Component not in archetype");
-            }
-        }
-
-        Ok(ids)
-    }
-
-    /// Spawn a new component of type `T` which can be attached to an entity.
-    ///
-    /// The given name does not need to be unique.
-    pub fn spawn_component<T: ComponentValue>(
-        &mut self,
-        vtable: &'static ComponentVTable<T>,
-    ) -> Component<T> {
-        let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
-
-        // Safety
-        // The id is not used by anything else
-        let component = Component::new(ComponentKey::new(id, None), vtable);
-
-        let info = component.info();
-
-        let mut meta = info.meta()(info);
-        meta.set(component_info(), info);
-        meta.set(crate::name(), info.name().into());
-
-        self.set_with(id, &mut meta).unwrap();
-        component
-    }
-
-    /// Spawn a new relation of type `T` which can be attached to an entity.
-    ///
-    /// The given name does not need to be unique.
-    pub fn spawn_relation<T: ComponentValue>(
-        &mut self,
-        vtable: &'static ComponentVTable<T>,
-    ) -> Relation<T> {
-        let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
-
-        Relation::new(id, vtable)
-    }
-
-    #[inline(always)]
-    fn spawn_inner(
-        &mut self,
-        arch_id: ArchetypeId,
-        kind: EntityKind,
-    ) -> (Entity, EntityLocation, &mut Archetype) {
-        self.flush_reserved();
-        // Place at root
-        let ns = self.entities.init(kind);
-
-        let arch = self.archetypes.get_mut(arch_id);
-
-        let slot = arch.len();
-
-        let loc = EntityLocation { arch_id, slot };
-
-        let id = ns.spawn(loc);
-
-        arch.allocate(id);
-
-        (id, loc, arch)
-    }
-
     /// Spawns an entitiy with a specific id.
     /// Fails if an entity with the same index already exists.
     pub fn spawn_at(&mut self, id: Entity) -> Result<Entity> {
@@ -351,15 +183,7 @@ impl World {
         Ok((*loc, arch))
     }
 
-    /// Spawn an entity with the given components.
-    ///
-    /// For increased ergonomics, prefer [crate::EntityBuilder]
-    pub fn spawn_at_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Result<Entity> {
-        let (val, _) = self.spawn_at_with_inner(id, buffer)?;
-        Ok(val)
-    }
-
-    fn spawn_at_with_inner(
+    pub(crate) fn spawn_at_with(
         &mut self,
         id: Entity,
         buffer: &mut ComponentBuffer,
@@ -387,7 +211,7 @@ impl World {
     /// Spawn an entity with the given components.
     ///
     /// For increased ergonomics, prefer [crate::EntityBuilder]
-    pub fn spawn_with(&mut self, buffer: &mut ComponentBuffer) -> Entity {
+    pub(crate) fn spawn_with(&mut self, buffer: &mut ComponentBuffer) -> Entity {
         for component in buffer.components() {
             self.init_component(*component)
                 .expect("Failed to initialize component");
@@ -1096,6 +920,138 @@ impl World {
         }
     }
 
+    /// Batch spawn multiple components with prespecified ids.
+    /// Fails if any of the entities already exist.
+    ///
+    /// Returns the passed ids, to allow chaining with result.
+    pub fn spawn_batch_at<'a>(
+        &mut self,
+        ids: &'a [Entity],
+        batch: &mut BatchSpawn,
+    ) -> Result<&'a [Entity]> {
+        for component in batch.components() {
+            self.init_component(component)
+                .expect("failed to initialize component");
+        }
+
+        self.spawn_batch_at_inner(ids, batch)
+    }
+
+    /// Does not initialize components
+    fn spawn_batch_at_inner<'a>(
+        &mut self,
+        ids: &'a [Entity],
+        batch: &mut BatchSpawn,
+    ) -> Result<&'a [Entity]> {
+        self.flush_reserved();
+        assert_eq!(
+            ids.len(),
+            batch.len(),
+            "The length of ids must match the number of slots in `batch`"
+        );
+
+        for &id in ids {
+            if self.is_reserved(id) {
+                self.despawn(id).unwrap();
+            } else if let Some(v) = self.reconstruct(id.index(), id.kind()) {
+                return Err(Error::EntityOccupied(v));
+            }
+        }
+
+        let change_tick = self.advance_change_tick();
+
+        let (arch_id, arch) = self.archetypes.init(batch.components());
+
+        let base = arch.len();
+        for (idx, &id) in ids.iter().enumerate() {
+            let kind = id.kind();
+            let store = self.entities.init(kind);
+            assert_eq!(store.kind, kind);
+            store
+                .spawn_at(
+                    id.index(),
+                    id.gen(),
+                    EntityLocation {
+                        slot: base + idx,
+                        arch_id,
+                    },
+                )
+                // The vacancy was checked prior
+                .unwrap();
+        }
+
+        let _ = arch.allocate_n(ids);
+
+        let arch = self.archetypes.get_mut(arch_id);
+
+        for (_, mut storage) in batch.take_all() {
+            unsafe {
+                arch.extend(&mut storage, change_tick)
+                    .expect("Component not in archetype");
+            }
+        }
+
+        Ok(ids)
+    }
+
+    /// Spawn a new component of type `T` which can be attached to an entity.
+    ///
+    /// The given name does not need to be unique.
+    pub fn spawn_component<T: ComponentValue>(
+        &mut self,
+        vtable: &'static ComponentVTable<T>,
+    ) -> Component<T> {
+        let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
+
+        // Safety
+        // The id is not used by anything else
+        let component = Component::new(ComponentKey::new(id, None), vtable);
+
+        let info = component.info();
+
+        let mut meta = info.meta()(info);
+        meta.set(component_info(), info);
+        meta.set(crate::name(), info.name().into());
+
+        self.set_with(id, &mut meta).unwrap();
+        component
+    }
+
+    /// Spawn a new relation of type `T` which can be attached to an entity.
+    ///
+    /// The given name does not need to be unique.
+    pub fn spawn_relation<T: ComponentValue>(
+        &mut self,
+        vtable: &'static ComponentVTable<T>,
+    ) -> Relation<T> {
+        let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
+
+        Relation::new(id, vtable)
+    }
+
+    #[inline(always)]
+    fn spawn_inner(
+        &mut self,
+        arch_id: ArchetypeId,
+        kind: EntityKind,
+    ) -> (Entity, EntityLocation, &mut Archetype) {
+        self.flush_reserved();
+        // Place at root
+        let ns = self.entities.init(kind);
+
+        let arch = self.archetypes.get_mut(arch_id);
+
+        let slot = arch.len();
+
+        let loc = EntityLocation { arch_id, slot };
+
+        let id = ns.spawn(loc);
+
+        arch.allocate(id);
+
+        (id, loc, arch)
+    }
+
     /// Get a reference to the world's archetype generation
     #[must_use]
     pub fn archetype_gen(&self) -> u32 {
@@ -1222,8 +1178,6 @@ impl World {
 
     /// Subscribe to events in the world using the provided event handler.
     ///
-    /// **See**: [`ArchetypeSubscriber`](crate::events::ArchetypeSubscriber), [`ChangeSubscriber`](crate::events::ChangeSubscriber).
-    ///
     /// This allows reacting to changes in other systems, in async contexts by using channels or [`tokio::sync::Notify`], or on other threads.
     pub fn subscribe<S>(&mut self, subscriber: S)
     where
@@ -1348,6 +1302,42 @@ impl World {
             }
         }
         Migrated { ids: new_ids }
+    }
+
+    /// Converts all reserved entity ids into actual empty entities placed in a special archetype.
+    #[inline]
+    fn flush_reserved(&mut self) {
+        if !self.has_reserved.swap(false, Relaxed) {
+            return;
+        }
+
+        let reserved = self.archetypes.reserved;
+        let arch = self.archetypes.get_mut(reserved);
+
+        for store in self.entities.inner.values_mut() {
+            store.flush_reserved(|id| {
+                let slot = arch.allocate(id);
+
+                EntityLocation {
+                    slot,
+                    arch_id: reserved,
+                }
+            })
+        }
+    }
+
+    fn reserve_at(&mut self, id: Entity) -> Result<()> {
+        self.flush_reserved();
+        self.entities.init(id.kind).reserve_at(id.index())
+    }
+
+    /// Ensure a static entity id exists
+    fn ensure_static(&mut self, id: Entity) -> Result<EntityLocation> {
+        assert!(id.is_static());
+        let mut buffer = ComponentBuffer::new();
+        buffer.set(is_static(), ());
+        let (_, loc) = self.spawn_at_with(id, &mut buffer)?;
+        Ok(loc)
     }
 }
 
