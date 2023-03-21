@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use flax::{component, components::name, debug_visitor, entity_ids, EntityBuilder, Query, World};
+use flax::{component, components::name, debuggable, entity_ids, EntityBuilder, Query, World};
 use itertools::Itertools;
 
 #[test]
 fn creation() {
     component! {
-        a: i32 => [ flax::Debug ],
-        b: String => [ flax::Debug ],
+        a: i32 => [ flax::Debuggable ],
+        b: String => [ flax::Debuggable ],
         zst: (),
     }
 
@@ -18,7 +18,7 @@ fn creation() {
 
     world.set(id, zst(), ()).unwrap();
 
-    assert!(world.has(a().id(), debug_visitor()));
+    assert!(world.has(a().id(), debuggable()));
 
     assert!(world.is_alive(id));
     world.despawn(id).unwrap();
@@ -62,7 +62,7 @@ fn builder() {
     component! {
         a: usize,
         b: Arc<String>,
-        c: String => [ flax::Debug ],
+        c: String => [ flax::Debuggable ],
     }
 
     let mut world = World::new();
@@ -88,7 +88,7 @@ fn builder() {
         .set(c(), "Bar".to_string())
         .spawn(&mut world);
 
-    assert!(world.has(c().id(), debug_visitor()));
+    assert!(world.has(c().id(), debuggable()));
 
     let mut query = Query::new((a(), c()));
     let mut query = query.borrow(&world);

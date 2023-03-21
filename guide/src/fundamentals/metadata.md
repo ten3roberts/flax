@@ -40,7 +40,7 @@ The `component` component, and the `name` component is always present.
 ## Debug
 
 If a component has the
-[flax::Debug](https://docs.rs/flax/latest/flax/struct.Debug.html) component, the
+[flax::Debuggable](https://docs.rs/flax/latest/flax/struct.Debug.html) component, the
 component and value for each entity will be present when debug formatting the
 world.
 

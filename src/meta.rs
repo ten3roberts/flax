@@ -6,7 +6,7 @@ use crate::{ComponentInfo, ComponentValue};
 ///
 /// Implementors of this trait are proxy types for attaching the proper
 /// components.
-pub trait MetaData<T: ComponentValue> {
+pub trait Metadata<T: ComponentValue> {
     /// Attach the metadata to the component buffer
     fn attach(component: ComponentInfo, buffer: &mut ComponentBuffer);
 }
@@ -15,7 +15,7 @@ pub trait MetaData<T: ComponentValue> {
 /// Name metadata
 pub struct Name;
 
-impl<T> MetaData<T> for Name
+impl<T> Metadata<T> for Name
 where
     T: ComponentValue,
 {
@@ -28,19 +28,19 @@ where
 mod test {
     use alloc::string::String;
 
-    use crate::{component, debug_visitor};
+    use crate::{component, debuggable};
 
     use super::*;
 
     #[test]
     fn metadata_attach() {
         component! {
-            foo: String => [crate::Debug],
+            foo: String => [crate::Debuggable],
         }
 
         let meta = foo().get_meta();
 
-        assert!(meta.get(debug_visitor()).is_some());
+        assert!(meta.get(debuggable()).is_some());
         assert_eq!(meta.get(name()), Some(&"foo".into()));
     }
 }

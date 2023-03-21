@@ -38,8 +38,8 @@
 /// ```rust
 /// use flax::component;
 /// component! {
-///     health: f32 => [flax::Debug],
-///     position: (f32, f32) => [flax::Debug],
+///     health: f32 => [flax::Debuggable],
+///     position: (f32, f32) => [flax::Debuggable],
 /// }
 /// ```
 ///
@@ -62,7 +62,7 @@
 /// }
 ///
 /// component! {
-///     connection(id): Joint => [flax::Debug],
+///     connection(id): Joint => [flax::Debuggable],
 /// }
 /// ```
 /// # Static Entity

@@ -9,8 +9,8 @@ fn main() -> color_eyre::Result<()> {
 
     // ANCHOR: setup
     component! {
-        position: Vec3 => [Debug],
-        velocity: Vec3 => [Debug],
+        position: Vec3 => [Debuggable],
+        velocity: Vec3 => [Debuggable],
     }
 
     tracing_subscriber::fmt().init();

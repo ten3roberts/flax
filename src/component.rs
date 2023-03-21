@@ -19,7 +19,7 @@ use crate::{
     fetch::MaybeMut,
     filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
     vtable::{ComponentVTable, UntypedVTable},
-    ChangeKind, Entity, MetaData, Mutable, RelationExt,
+    ChangeKind, Entity, Metadata, Mutable, RelationExt,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
@@ -305,7 +305,7 @@ impl<T: ComponentValue> Component<T> {
     }
 }
 
-impl<T: ComponentValue> MetaData<T> for Component<T> {
+impl<T: ComponentValue> Metadata<T> for Component<T> {
     fn attach(info: ComponentInfo, buffer: &mut ComponentBuffer) {
         buffer.set(crate::components::component_info(), info);
     }

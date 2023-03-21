@@ -57,7 +57,7 @@ fn main() -> color_eyre::Result<()> {
 
     // ANCHOR: schedule
     component! {
-        world_matrix: Mat4 => [Debug],
+        world_matrix: Mat4 => [Debuggable],
     }
 
     // Make sure there are always 64 entities in the world

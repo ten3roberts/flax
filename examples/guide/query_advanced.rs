@@ -12,9 +12,9 @@ fn main() -> color_eyre::Result<()> {
         .init();
 
     component! {
-        position: Vec3 => [Debug],
-        velocity: Vec3 => [Debug],
-        mass: f32 => [Debug],
+        position: Vec3 => [Debuggable],
+        velocity: Vec3 => [Debuggable],
+        mass: f32 => [Debuggable],
     }
 
     let mut world = World::new();
@@ -66,7 +66,7 @@ fn main() -> color_eyre::Result<()> {
     component! {
         rotation: Quat,
         scale: Vec3,
-        world_matrix: Mat4 => [Debug],
+        world_matrix: Mat4 => [Debuggable],
     }
 
     let create_world_matrix = System::builder()

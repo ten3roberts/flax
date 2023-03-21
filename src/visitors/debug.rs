@@ -1,49 +1,51 @@
-use core::fmt::{self, Formatter};
+use core::{
+    any::Any,
+    fmt::{self, Debug, Formatter},
+};
 
 use crate::{
     archetype::{Slot, Storage},
     buffer::ComponentBuffer,
-    component, Archetype, ComponentInfo, ComponentKey, ComponentValue, MetaData, World,
+    component, Archetype, ComponentInfo, ComponentKey, ComponentValue, Metadata, World,
 };
-
-/// Format a component with debug
-pub struct DebugVisitor {
-    visit: for<'x> unsafe fn(&'x Storage, slot: Slot) -> &'x dyn fmt::Debug,
-}
-
-impl DebugVisitor {
-    /// Creates a new debug visitor visiting values of type `T`
-    fn new<T>() -> Self
-    where
-        T: ComponentValue + core::fmt::Debug,
-    {
-        Self {
-            visit: |storage, slot| &storage.downcast_ref::<T>()[slot],
-        }
-    }
-}
 
 component! {
     /// Allows visiting and debug formatting the component
-    pub debug_visitor: DebugVisitor,
+    pub debuggable: Debuggable,
 }
 
-#[derive(Debug, Clone)]
-/// Forward the debug implementation to the component
-pub struct Debug;
+#[derive(Clone)]
+/// Formats a component value using [`Debug`](core::fmt::Debug)
+pub struct Debuggable {
+    debug: fn(&dyn Any) -> &dyn Debug,
+    debug_storage: fn(&Storage, slot: Slot) -> &dyn Debug,
+}
 
-impl<T> MetaData<T> for Debug
+impl Debuggable {
+    /// Formats the given value
+    pub fn debug<'a>(&self, value: &'a dyn Any) -> &'a dyn Debug {
+        (self.debug)(value)
+    }
+}
+
+impl<T> Metadata<T> for Debuggable
 where
-    T: core::fmt::Debug + ComponentValue,
+    T: Sized + core::fmt::Debug + ComponentValue,
 {
     fn attach(_: ComponentInfo, buffer: &mut ComponentBuffer) {
-        buffer.set(debug_visitor(), DebugVisitor::new::<T>());
+        buffer.set(
+            debuggable(),
+            Debuggable {
+                debug: |value| value.downcast_ref::<T>().unwrap(),
+                debug_storage: |storage, slot| &storage.downcast_ref::<T>()[slot],
+            },
+        );
     }
 }
 
 struct MissingDebug;
 
-impl fmt::Debug for MissingDebug {
+impl Debug for MissingDebug {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "...")
     }
@@ -60,13 +62,13 @@ struct ComponentName {
     id: ComponentKey,
 }
 
-impl fmt::Debug for ComponentName {
+impl Debug for ComponentName {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.base_name, self.id)
     }
 }
 
-impl<'a> fmt::Debug for RowValueFormatter<'a> {
+impl<'a> Debug for RowValueFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
         for storage in self.arch.try_borrow_all().flatten() {
@@ -77,10 +79,8 @@ impl<'a> fmt::Debug for RowValueFormatter<'a> {
                 id: info.key(),
             };
 
-            if let Ok(visitor) = self.world.get(info.key().id, debug_visitor()) {
-                unsafe {
-                    map.entry(&name, (visitor.visit)(&storage, self.slot));
-                }
+            if let Ok(visitor) = self.world.get(info.key().id, debuggable()) {
+                map.entry(&name, (visitor.debug_storage)(&storage, self.slot));
             } else {
                 map.entry(&name, &MissingDebug);
             }

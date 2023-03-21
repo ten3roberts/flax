@@ -11,9 +11,9 @@ fn main() {
 
     // ANCHOR: builder
     component! {
-        health: f32 => [Debug],
-        position: (f32, f32) => [Debug],
-        is_player: () => [Debug],
+        health: f32 => [Debuggable],
+        position: (f32, f32) => [Debuggable],
+        is_player: () => [Debuggable],
     }
 
     let mut world = World::new();

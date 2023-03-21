@@ -197,7 +197,7 @@ fn merge_custom() {
         .unwrap();
 
     let custom_component =
-        src_world.spawn_component(component_vtable!(custom: Arc<String> => [ Debug ]));
+        src_world.spawn_component(component_vtable!(custom: Arc<String> => [ Debuggable ]));
 
     let unused_component = src_world.spawn_component(component_vtable!(unused: f32));
 
@@ -207,7 +207,7 @@ fn merge_custom() {
 
     let mut rng = StdRng::seed_from_u64(62);
 
-    assert!(src_world.has(custom_component.id(), debug_visitor()));
+    assert!(src_world.has(custom_component.id(), debuggable()));
 
     let root = Entity::builder()
         .set(name(), "root".into())
@@ -237,7 +237,7 @@ fn merge_custom() {
         )
         .unwrap();
 
-    assert!(src_world.has(custom_component.id(), debug_visitor()));
+    assert!(src_world.has(custom_component.id(), debuggable()));
 
     let mut world = World::new();
 
@@ -267,7 +267,7 @@ fn merge_custom() {
 
     let _ = migrated.get_component::<f32>(unused_component);
 
-    assert!(world.has(new_custom_component.id(), debug_visitor()));
+    assert!(world.has(new_custom_component.id(), debuggable()));
 
     let new_custom_relation = migrated.get_relation(custom_relation);
 
