@@ -58,6 +58,7 @@ impl Archetypes {
             return false;
         }
 
+        eprintln!("Pruning arch: {arch_id}");
         let arch = self.inner.despawn(arch_id).unwrap();
 
         for (&key, &dst_id) in &arch.incoming {

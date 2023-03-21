@@ -115,7 +115,7 @@ impl<'a, T> Iterator for RelationsIter<'a, T> {
 }
 
 /// Query all relations of the specified kind
-pub fn relations_like<T: ComponentValue>(relation: fn(Entity) -> Component<T>) -> Relations<T> {
+pub fn relations_like<T: ComponentValue>(relation: impl RelationExt<T>) -> Relations<T> {
     Relations {
         component: relation.of(dummy()),
     }
