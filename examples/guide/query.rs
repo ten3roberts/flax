@@ -1,5 +1,5 @@
 use flax::{
-    component, entity_ids, CommandBuffer, Component, Debug, Entity, EntityBorrow, FetchExt,
+    component, entity_ids, CommandBuffer, Component, Debuggable, Entity, EntityBorrow, FetchExt,
     Mutable, Query, QueryBorrow, Schedule, System, World,
 };
 use glam::{vec2, Vec2};
@@ -17,8 +17,8 @@ fn main() -> color_eyre::Result<()> {
     let mut world = World::new();
 
     component! {
-        position: Vec2 => [ Debug ],
-        health: f32 => [ Debug ],
+        position: Vec2 => [ Debuggable ],
+        health: f32 => [ Debuggable ],
     }
 
     // Spawn two entities
@@ -43,7 +43,7 @@ fn main() -> color_eyre::Result<()> {
 
     component! {
         /// Distance to origin
-        distance: f32 => [ flax::Debug ],
+        distance: f32 => [ flax::Debuggable ],
     }
 
     tracing::info!("Spawning id3");
@@ -159,7 +159,7 @@ fn main() -> color_eyre::Result<()> {
     // ANCHOR_END: system_cmd
 
     component! {
-        is_static: () => [ flax::Debug ],
+        is_static: () => [ flax::Debuggable ],
     }
 
     // Spawn 150 static entities, which wont move

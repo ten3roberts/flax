@@ -9,8 +9,8 @@ fn main() -> color_eyre::Result<()> {
 
     // ANCHOR: relation_basic
     component! {
-        child_of(parent): () => [Debug],
-        spring_joint(other): f32 => [Debug],
+        child_of(parent): () => [Debuggable],
+        spring_joint(other): f32 => [Debuggable],
     }
 
     let mut world = World::new();

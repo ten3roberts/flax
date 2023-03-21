@@ -7,7 +7,7 @@ fn custom_component() {
 
     static VTABLE: &ComponentVTable<Vec2> = &ComponentVTable::new("position", |info| {
         let mut buf = ComponentBuffer::new();
-        <Debug as MetaData<Vec2>>::attach(info, &mut buf);
+        <Debuggable as Metadata<Vec2>>::attach(info, &mut buf);
         buf
     });
 

@@ -23,36 +23,36 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_tree::HierarchicalLayer;
 
 component! {
-    position: Vec2 => [ Debug ],
-    rotation: f32 => [ Debug ],
+    position: Vec2 => [ Debuggable ],
+    rotation: f32 => [ Debuggable ],
 
-    asteroid: () => [ Debug ],
-    player: () => [ Debug ],
+    asteroid: () => [ Debuggable ],
+    player: () => [ Debuggable ],
 
     /// Invincibility time in seconds
     invincibility: f32,
 
     /// The amount of material collected from asteroids
-    material: f32 => [ Debug ],
+    material: f32 => [ Debuggable ],
 
-    camera: Mat3 => [ Debug ],
-    health: f32 => [ Debug ],
-    color: Color => [ Debug ],
-    mass: f32 => [ Debug ],
-    difficulty: f32 => [Debug],
+    camera: Mat3 => [ Debuggable ],
+    health: f32 => [ Debuggable ],
+    color: Color => [ Debuggable ],
+    mass: f32 => [ Debuggable ],
+    difficulty: f32 => [Debuggable],
 
-    velocity: Vec2=> [ Debug ],
-    angular_velocity: f32 => [ Debug ],
+    velocity: Vec2=> [ Debuggable ],
+    angular_velocity: f32 => [ Debuggable ],
 
-    shape: Shape => [ Debug ],
-    radius: f32 => [ Debug ],
+    shape: Shape => [ Debuggable ],
+    radius: f32 => [ Debuggable ],
 
     particle_size: f32,
     particle_lifetime: f32,
 
     on_collision: Box<dyn Fn(&World, Collision) + Send + Sync>,
 
-    lifetime: f32 => [ Debug ],
+    lifetime: f32 => [ Debuggable ],
 
     resources,
     rng: StdRng,

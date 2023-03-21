@@ -65,7 +65,7 @@ pub fn main() -> color_eyre::Result<()> {
     component! {
         /// An entity's health.
         /// Provides the Debug bundle, which adds the `debug_visitor` component.
-        health: f32 => [ flax::Debug ],
+        health: f32 => [ flax::Debuggable ],
     }
 
     // After adding the component, the associate metadata of the `health`

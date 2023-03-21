@@ -1,6 +1,6 @@
 use flax::components::{child_of, name};
-use flax::{component, debug_visitor, EntityBuilder, FetchExt, Query, World};
-use flax::{entity_ids, relations_like, Debug, Entity};
+use flax::{component, debuggable, EntityBuilder, FetchExt, Query, World};
+use flax::{entity_ids, relations_like, Debuggable, Entity};
 use itertools::Itertools;
 
 #[derive(Debug, Clone)]
@@ -34,11 +34,11 @@ impl<const C: usize> Default for Countdown<C> {
 
 #[test]
 fn visitors() {
-    use flax::Debug;
+    use flax::Debuggable;
     component! {
-        health: f32 => [Debug],
+        health: f32 => [Debuggable],
         // Then shalt count to three, no more no less
-        count: Countdown<3> => [Debug],
+        count: Countdown<3> => [Debuggable],
     }
 
     let mut world = World::new();
@@ -68,9 +68,9 @@ fn relations() {
     }
 
     component! {
-        hobby: &'static str => [ Debug ],
-        profession: &'static str => [ Debug ],
-        child_of(e): RelationKind => [ Debug ],
+        hobby: &'static str => [ Debuggable ],
+        profession: &'static str => [ Debuggable ],
+        child_of(e): RelationKind => [ Debuggable ],
     }
 
     let mut world = World::new();
@@ -99,7 +99,7 @@ fn relations() {
         .set(profession(), "Student")
         .spawn(&mut world);
 
-    assert!(world.get(child_of(parent).id(), debug_visitor()).is_ok());
+    assert!(world.get(child_of(parent).id(), debuggable()).is_ok());
 
     let child3 = EntityBuilder::new()
         .set(name(), "Reacher".to_string())
@@ -109,8 +109,8 @@ fn relations() {
 
     let mut query = Query::new((name(), child_of(parent)));
 
-    assert!(world.get(child_of(parent).id(), debug_visitor()).is_ok());
-    assert!(world.get(child_of(parent2).id(), debug_visitor()).is_ok());
+    assert!(world.get(child_of(parent).id(), debuggable()).is_ok());
+    assert!(world.get(child_of(parent2).id(), debuggable()).is_ok());
 
     let items = query
         .borrow(&world)
@@ -182,9 +182,9 @@ fn build_hierarchy() {
     }
 
     component! {
-        hobby: &'static str => [ Debug ],
-        profession: &'static str => [ Debug ],
-        child_of(e): RelationKind => [ Debug ],
+        hobby: &'static str => [ Debuggable ],
+        profession: &'static str => [ Debuggable ],
+        child_of(e): RelationKind => [ Debuggable ],
     }
 
     let mut world = World::new();

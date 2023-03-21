@@ -3,9 +3,9 @@ use flax_derive::Fetch;
 #[test]
 fn derive_fetch() {
     flax::component! {
-        position: Vec3 => [flax::Debug],
-        rotation: Quat => [flax::Debug],
-        scale: Vec3 => [flax::Debug],
+        position: Vec3 => [flax::Debuggable],
+        rotation: Quat => [flax::Debuggable],
+        scale: Vec3 => [flax::Debuggable],
     }
 
     use glam::*;
