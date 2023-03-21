@@ -680,7 +680,7 @@ impl Archetype {
         slot: Slot,
         mut on_move: impl FnMut(ComponentInfo, *mut u8),
     ) -> Option<(Entity, Slot)> {
-        let id = self.entity(slot).expect("Invalid entity");
+        self.entity(slot).expect("Invalid entity");
 
         // for subscriber in &self.subscribers {
         //     subscriber.on_despawned(id, slot, self);

@@ -148,6 +148,39 @@ fn clear_events() {
 }
 
 #[test]
+#[cfg(feature = "flume")]
+fn despawn() {
+    use flax::events::{Event, EventSubscriber};
+
+    let mut world = World::new();
+
+    let (tx, rx) = flume::unbounded();
+    world.subscribe(
+        tx.filter_components([name().key()])
+            .filter_arch(component_info().without()),
+    );
+
+    let id = Entity::builder().set(name(), "id".into()).spawn(&mut world);
+
+    world.clear(id).unwrap();
+
+    assert_eq!(
+        rx.drain().collect_vec(),
+        &[
+            Event {
+                id,
+                key: name().key(),
+                kind: events::EventKind::Added,
+            },
+            Event {
+                id,
+                key: name().key(),
+                kind: events::EventKind::Removed,
+            }
+        ]
+    );
+}
+#[test]
 fn query_changes() {
     component! {
         a: i32,

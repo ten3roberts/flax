@@ -153,7 +153,7 @@ impl EntityBuilder {
     ///
     /// Fails if an entity with the same index already exists.
     pub fn spawn_at(&mut self, world: &mut World, id: Entity) -> Result<Entity> {
-        let id = world.spawn_at_with(id, &mut self.buffer)?;
+        let (id, _) = world.spawn_at_with(id, &mut self.buffer)?;
 
         self.children.drain(..).for_each(|child| {
             child.spawn(world, id);
