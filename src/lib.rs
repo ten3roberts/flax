@@ -219,25 +219,23 @@ pub mod error;
 pub mod fetch;
 #[macro_use]
 mod macros;
-mod meta;
-/// System execution
-pub mod schedule;
-/// Provides tuple utilities like `cloned`
-mod util;
 /// Provides a debug visitor
-pub mod visitors;
-
 // mod cascade;
 mod archetypes;
 /// Subscribe to changes in the world
 pub mod events;
+mod metadata;
 /// Query the world
 pub mod query;
 mod relation;
+/// System execution
+pub mod schedule;
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein
 #[cfg(feature = "serde")]
 pub mod serialize;
+/// Provides tuple utilities like `cloned`
+mod util;
 /// vtable implementation for dynamic dispatching
 pub mod vtable;
 
@@ -254,14 +252,13 @@ pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
 pub use filter::{All, And, Cmp, Nothing, Or, With, Without};
-pub use meta::*;
+pub use metadata::*;
 pub use paste::paste;
 pub(crate) use query::ArchetypeSearcher;
 pub use query::*;
 pub use relation::*;
 pub use schedule::*;
 pub use system::*;
-pub use visitors::*;
 pub(crate) use vtable::*;
 pub use world::*;
 

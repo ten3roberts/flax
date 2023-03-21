@@ -14,13 +14,13 @@
 ///     name: type, // component
 ///
 ///     // component with metadata/reflection
-///     name: type => [ MetaData, ... ],
+///     name: type => [ Metadata, ... ],
 ///
 ///     // relational component
 ///     name(object): type
 ///
 ///     // relation component with metadata/reflection
-///     name(object): type => [ MetaData, ... ]
+///     name(object): type => [ Metadata, ... ]
 ///
 ///     // static entity
 ///     name,
@@ -30,7 +30,7 @@
 /// # Metadata
 ///
 /// Metadata can be attached to any component, which allows reflection and
-/// additional info for components. Any type which implements [`crate::MetaData`] can be used.
+/// additional info for components. Any type which implements [`crate::Metadata`] can be used.
 ///
 /// The following allows the component value to be printed for the world debug
 /// formatter, and it thus recommended to add where possible.
@@ -109,12 +109,12 @@ macro_rules! component {
                 fn meta(_component: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
                     let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
-                    <$crate::Name as $crate::MetaData<$ty>>::attach(_component, &mut _buffer);
-                    <$crate::Component<$ty> as $crate::MetaData<$ty>>::attach(_component, &mut _buffer);
+                    <$crate::Name as $crate::Metadata<$ty>>::attach(_component, &mut _buffer);
+                    <$crate::Component<$ty> as $crate::Metadata<$ty>>::attach(_component, &mut _buffer);
 
                     $(
                         $(
-                            <$metadata as $crate::MetaData::<$ty>>::attach(_component, &mut _buffer);
+                            <$metadata as $crate::Metadata::<$ty>>::attach(_component, &mut _buffer);
                         )*
                     )*
 
@@ -143,12 +143,12 @@ macro_rules! component {
                 fn meta(_component: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
                     let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
-                    <$crate::Name as $crate::MetaData<$ty>>::attach(_component, &mut _buffer);
-                    <$crate::Component<$ty> as $crate::MetaData<$ty>>::attach(_component, &mut _buffer);
+                    <$crate::Name as $crate::Metadata<$ty>>::attach(_component, &mut _buffer);
+                    <$crate::Component<$ty> as $crate::Metadata<$ty>>::attach(_component, &mut _buffer);
 
                     $(
                         $(
-                            <$metadata as $crate::MetaData::<$ty>>::attach(_component, &mut _buffer);
+                            <$metadata as $crate::Metadata::<$ty>>::attach(_component, &mut _buffer);
                         )*
                     )*
 
@@ -193,12 +193,12 @@ macro_rules! component_vtable {
 
                 let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
-                <$crate::Name as $crate::MetaData<$ty>>::attach(_info, &mut _buffer);
-                <$crate::Component<$ty> as $crate::MetaData<$ty>>::attach(_info, &mut _buffer);
+                <$crate::Name as $crate::Metadata<$ty>>::attach(_info, &mut _buffer);
+                <$crate::Component<$ty> as $crate::Metadata<$ty>>::attach(_info, &mut _buffer);
 
                 $(
                 $(
-                <$metadata as $crate::MetaData::<$ty>>::attach(_info, &mut _buffer);
+                <$metadata as $crate::Metadata::<$ty>>::attach(_info, &mut _buffer);
             )*
             )*
 

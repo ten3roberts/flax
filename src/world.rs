@@ -115,8 +115,7 @@ impl World {
         self.flush_reserved();
 
         for component in batch.components() {
-            self.init_component(component)
-                .expect("Failed to initialize component");
+            self.init_component(component);
         }
 
         let change_tick = self.advance_change_tick();
@@ -191,8 +190,7 @@ impl World {
         let change_tick = self.advance_change_tick();
 
         for &component in buffer.components() {
-            self.init_component(component)
-                .expect("Failed to initialize component");
+            self.init_component(component);
         }
 
         let (arch_id, _) = self.archetypes.init(buffer.components().copied());
@@ -213,8 +211,7 @@ impl World {
     /// For increased ergonomics, prefer [crate::EntityBuilder]
     pub(crate) fn spawn_with(&mut self, buffer: &mut ComponentBuffer) -> Entity {
         for component in buffer.components() {
-            self.init_component(*component)
-                .expect("Failed to initialize component");
+            self.init_component(*component);
         }
 
         let change_tick = self.advance_change_tick();
@@ -302,9 +299,13 @@ impl World {
     }
 
     /// Add the components stored in a component buffer to an entity
-    pub fn set_with(&mut self, id: Entity, components: &mut ComponentBuffer) -> Result<()> {
+    pub fn set_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Result<()> {
         let id: Entity = id;
         let change_tick = self.advance_change_tick();
+
+        for &info in buffer.components() {
+            self.init_component(info);
+        }
 
         let EntityLocation {
             arch_id: arch,
@@ -316,7 +317,9 @@ impl World {
 
         let src_id = arch;
 
-        for (info, ptr) in components.drain() {
+        let mut exclusive_relations = Vec::new();
+
+        for (info, ptr) in buffer.drain() {
             let src = self.archetypes.get_mut(arch);
 
             if let Some(()) = src.mutate_in_place(slot, info.key, change_tick, |old| {
@@ -330,19 +333,39 @@ impl World {
                 // Component does not exist yet, so defer a move
 
                 // Data will have a lifetime of `components`.
-                new_data.push((info, ptr));
+
+                let key = info.key;
+
+                // Exclusive relation
+                if key.object.is_some() && self.has(key.id, exclusive()) {
+                    if exclusive_relations.contains(&key.id) {
+                        // Drop immediately
+                        unsafe { info.drop(ptr) }
+                        continue;
+                    }
+
+                    exclusive_relations.push(key.id);
+                }
+
                 new_components.push(info);
+                new_data.push((info, ptr));
             }
         }
 
         if !new_data.is_empty() {
             debug_assert_eq!(new_data.len(), new_components.len());
             let src = self.archetypes.get_mut(arch);
-            new_components.extend(src.components());
+            new_components.reserve(src.cells().len());
+
+            // Add the existing components, making sure new exclusive relations are favored
+            new_components.extend(
+                src.components()
+                    .filter(|v| !exclusive_relations.contains(&v.key.id)),
+            );
+
             new_components.sort_unstable();
 
             // Make sure everything is in its order
-            #[cfg(feature = "internal_assert")]
             {
                 let v = new_components.iter().sorted().cloned().collect_vec();
                 assert_eq!(
@@ -360,17 +383,11 @@ impl World {
 
             // dst.push is called immediately
             unsafe {
-                let (dst_slot, swapped) = src.move_to(
-                    dst,
-                    slot,
-                    |c, _| panic!("Component {c:#?} was removed"),
-                    change_tick,
-                );
+                let (dst_slot, swapped) = src.move_to(dst, slot, |c, ptr| c.drop(ptr), change_tick);
 
                 // Insert the missing components
                 for &(component, data) in &new_data {
-                    dst.push(component.key, data, change_tick)
-                        .expect("Insert should not fail");
+                    dst.push(component.key, data, change_tick).unwrap();
                 }
 
                 assert_eq!(dst.entity(dst_slot), Some(id));
@@ -393,25 +410,19 @@ impl World {
             }
         }
 
-        for (component, _) in new_data {
-            if component.key.id != id {
-                self.init_component(component)
-                    .expect("Failed to initialize component");
-            }
-        }
-
         Ok(())
     }
 
     /// Set metadata for a given component if they do not already exist
-    fn init_component(&mut self, info: ComponentInfo) -> Result<ComponentInfo> {
+    #[inline]
+    fn init_component(&mut self, info: ComponentInfo) {
         assert!(
             info.key().id.kind().contains(EntityKind::COMPONENT),
             "Component is not a component kind id"
         );
 
-        if self.has(info.key().id, component_info()) {
-            return Ok(info);
+        if self.is_alive(info.key.id()) {
+            return;
         }
 
         let id = info.key().id;
@@ -428,8 +439,6 @@ impl World {
         }
 
         self.set_with(id, &mut meta).unwrap();
-
-        Ok(info)
     }
 
     /// Despawn an entity.
@@ -597,6 +606,7 @@ impl World {
 
         let src = self.archetypes.get_mut(src_id);
 
+        // Fast track if the component already exists
         if let Some(()) = src.mutate_in_place(slot, info.key(), change_tick, |old| {
             // Make the caller responsible for drop or store
             (on_drop(old));
@@ -611,46 +621,51 @@ impl World {
             });
         }
 
+        // Exclusive relations may cause the dst archetype to be a sibling rather than a child
+        // of src. Adding a strong link breaks the tree in there cases
+        let mut strict_superset = true;
+
         // Pick up the entity and move it to the destination archetype
-        let dst_id = match src.outgoing.get(&info.key()) {
-            Some(&dst) => dst,
-            None => {
-                let pivot = src.components().take_while(|v| v.key < info.key()).count();
+        let dst_id = if let Some(&dst) = src.outgoing.get(&info.key()) {
+            dst
+        } else {
+            let pivot = src.components().take_while(|v| v.key < info.key()).count();
 
-                // Split the components
-                // A B C [new] D E F
-                let left = src.components().take(pivot);
-                let right = src.components().skip(pivot);
+            // Split the components
+            // A B C [new] D E F
+            let left = src.components().take(pivot);
+            let right = src.components().skip(pivot);
 
-                let components = left.chain(once(info)).chain(right).collect_vec();
+            let mut components = left.chain(once(info)).chain(right).collect_vec();
 
-                // assert in order
-                let (dst_id, _) = self.archetypes.init(components);
+            // Initialize component
+            self.init_component(info);
 
-                dst_id
+            // Ensure exclusive property
+            if info.key.object.is_some() && self.has(info.key.id, exclusive()) {
+                strict_superset = false;
+                components.retain(|v| v.key == info.key || v.key.id != info.key.id)
             }
+
+            // assert in order
+            let (dst_id, _) = self.archetypes.init(components);
+
+            dst_id
         };
 
         assert_ne!(src_id, dst_id);
 
-        // Initialize component
-        self.init_component(info).unwrap();
-
         // Borrow disjoint
         let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
 
-        let (dst_slot, swapped) = unsafe {
-            src.move_to(
-                dst,
-                slot,
-                |c, _| panic!("Component {c:#?} was removed"),
-                change_tick,
-            )
-        };
+        let (dst_slot, swapped) =
+            unsafe { src.move_to(dst, slot, |c, ptr| c.drop(ptr), change_tick) };
 
         // Add a quick edge to refer to later
-        src.add_outgoing(info.key(), dst_id);
-        dst.add_incoming(info.key(), src_id);
+        if strict_superset {
+            src.add_outgoing(info.key(), dst_id);
+            dst.add_incoming(info.key(), src_id);
+        }
 
         // Insert the missing component
         unsafe {
@@ -672,6 +687,7 @@ impl World {
             slot: dst_slot,
             arch_id: dst_id,
         };
+
         *ns.get_mut(id).expect("Entity is not valid") = loc;
 
         Ok(loc)
@@ -930,8 +946,7 @@ impl World {
         batch: &mut BatchSpawn,
     ) -> Result<&'a [Entity]> {
         for component in batch.components() {
-            self.init_component(component)
-                .expect("failed to initialize component");
+            self.init_component(component);
         }
 
         self.spawn_batch_at_inner(ids, batch)

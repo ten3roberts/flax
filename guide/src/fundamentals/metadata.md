@@ -9,7 +9,7 @@ the world.
 This brings some interesting possibilities which are not possible in other ECS
 systems, mainly: components can have components.
 
-This allows the components to be queried just as they were normal entities. This
+This allows the components to be queried just as they were normal entities, which
 allows reflection.
 
 For example, a component can itself have a component which knows how to
