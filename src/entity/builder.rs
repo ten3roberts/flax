@@ -2,7 +2,7 @@ use crate::{
     buffer::ComponentBuffer, error::Result, CommandBuffer, Component, ComponentInfo,
     ComponentValue, Entity, RelationExt, World,
 };
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 use derivative::Derivative;
 
 type ModifyFunc = Box<dyn FnOnce(Entity, &mut EntityBuilder) + Send + Sync>;

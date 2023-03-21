@@ -1,6 +1,8 @@
-use core::ops::Deref;
+use core::{fmt, ops::Deref};
 
-use crate::{Fetch, FetchItem};
+use alloc::vec::Vec;
+
+use crate::{query::ArchetypeSearcher, Fetch, FetchItem};
 
 use super::{FmtQuery, PreparedFetch, ReadOnlyFetch};
 
@@ -36,7 +38,7 @@ where
     }
 
     #[inline]
-    fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "deref {:?}", FmtQuery(&self.0))
     }
 
@@ -46,7 +48,7 @@ where
     }
 
     #[inline]
-    fn searcher(&self, searcher: &mut crate::query::ArchetypeSearcher) {
+    fn searcher(&self, searcher: &mut ArchetypeSearcher) {
         self.0.searcher(searcher)
     }
 }

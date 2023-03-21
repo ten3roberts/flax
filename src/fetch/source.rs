@@ -273,6 +273,8 @@ mod test {
             *id3_a.write() += name.len() as u32;
         }
 
+        use alloc::string::ToString;
+
         assert_eq!(
             query.borrow(&world).iter().collect_vec(),
             &[
