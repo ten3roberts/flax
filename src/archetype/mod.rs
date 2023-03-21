@@ -844,11 +844,6 @@ impl Archetype {
         self.cells.values().map(|v| v.info.name())
     }
 
-    /// Returns a iterator which borrows each storage in the archetype
-    pub(crate) fn borrow_all(&self) -> impl Iterator<Item = AtomicRef<Storage>> {
-        self.cells.values().map(|v| v.storage.borrow())
-    }
-
     /// Returns a iterator which attempts to borrows each storage in the archetype
     pub(crate) fn try_borrow_all(&self) -> impl Iterator<Item = Option<AtomicRef<Storage>>> {
         self.cells.values().map(|v| v.storage.try_borrow().ok())
