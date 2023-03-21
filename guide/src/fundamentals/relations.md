@@ -1,19 +1,15 @@
 # Relations
 
-Relations such as hierarchies or entity-entity connections are a common way to structure entities in an application or game,
-such as nested UI elements or entities in a game world which move along with
-their parents.
+A relation is a component which *links* to another `Entity`, similar to a foreign key in a database.
 
-Flax has first class support for hierarchies, called `Relations`.
+The linked entity is referred to as the `object` of a relation, while the entity the component is attached to is called the `subject`.
 
-A relation in Flax is represented by a parameterized component containing the
-`object`, i.e; parent added to the `subject`, i.e; child entity.
+This allows forming hierarchies such as *parent-child* relations for transforms and UI, as well as arbitrary graphs.
 
-Think of it as the component accepting an argument entity prior to adding it to
-another entity.
+A relation is used as a *parameterized* component, which requires an `Entity` to be fully instantiated.
 
-Relations are declared using the
-[component](https://docs.rs/flax/latest/flax/macro.component.html) macro
+Relations are most easily declared using the
+[component](https://docs.rs/flax/latest/flax/macro.component.html) macro.
 
 ```rust
 {{ #include ../../../examples/guide/relations.rs:relation_basic }}
@@ -21,9 +17,9 @@ Relations are declared using the
 
 Important to note is that the same `child_of` component with different `object`
 arguments are distinct, and can as such exist on an entity at the same time,
-allowing many-many relationsships between entities;
+allowing many-many relationships between entities;
 
-There is no limatation of the number of relations an entity can have. As such,
+There is no limitation of the number of relations an entity can have. As such,
 an entity can have multiple relations to other entities, allowing for any kind of graphs inside the ecs.
 
 ```rust
@@ -34,6 +30,8 @@ an entity can have multiple relations to other entities, allowing for any kind o
 
 Since relations are normal components, they can be used in a query as normal, or
 used to exclude components.
+
+See the [Graphs](../query/graphs.md) chapter in queries.
 
 ```rust
 {{ #include ../../../examples/guide/relations.rs:query }}
