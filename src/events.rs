@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::{
     archetype::Archetype, filter::StaticFilter, ComponentInfo, ComponentKey, ComponentValue, Entity,
 };

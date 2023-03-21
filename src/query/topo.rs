@@ -90,7 +90,6 @@ impl State {
                 order.push(arch_index);
             }
         }
-        eprintln!("Sorting topo");
 
         let mut visited = BTreeSet::new();
         for &arch_id in self.archetypes.iter() {
@@ -239,6 +238,7 @@ where
 
 #[cfg(test)]
 mod test {
+    use alloc::vec;
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
@@ -302,10 +302,6 @@ mod test {
                 let arch_id = state.archetypes[idx];
                 let arch = world.archetypes.get(arch_id);
 
-                eprintln!(
-                    "{:?}",
-                    arch.borrow::<String>(name().key()).unwrap().to_vec()
-                );
                 arch.entities().to_vec()
             })
             .collect_vec();

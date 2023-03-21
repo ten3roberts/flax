@@ -1,15 +1,16 @@
-use core::{iter::Zip, marker::PhantomData, ops::Range, slice::Iter};
-
-use alloc::collections::{BTreeMap, BTreeSet};
-use derivative::Derivative;
-use smallvec::SmallVec;
-
 use crate::{
     archetype::{Slice, Slot},
     filter::Filtered,
     All, And, ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, PreparedArchetype,
     RelationExt, World,
 };
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    vec::Vec,
+};
+use core::{iter::Zip, marker::PhantomData, ops::Range, slice::Iter};
+use derivative::Derivative;
+use smallvec::SmallVec;
 
 use super::borrow::QueryBorrowState;
 
@@ -327,6 +328,7 @@ where
 
 #[cfg(test)]
 mod test {
+    use alloc::{string::String, vec, vec::Vec};
     use itertools::Itertools;
 
     use crate::{child_of, name, Component, With};
@@ -419,7 +421,6 @@ mod test {
                     depth: usize,
                 ) {
                     let name = node.get(borrow).cloned();
-                    eprintln!("{depth}: {name:?}");
                     let path = path.iter().cloned().chain([name]).collect_vec();
                     paths.push((path.clone(), depth));
 

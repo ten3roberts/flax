@@ -3,6 +3,7 @@ use core::{
     slice,
 };
 
+use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
 use itertools::Itertools;
 use smallvec::SmallVec;
