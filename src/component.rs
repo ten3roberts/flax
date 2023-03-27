@@ -300,10 +300,6 @@ impl<T: ComponentValue> Component<T> {
     pub fn get_meta(&self) -> ComponentBuffer {
         self.vtable.meta.get(self.info())
     }
-
-    pub(crate) fn meta_ref(&self) -> &ComponentBuffer {
-        self.vtable.meta.get_ref(self.info())
-    }
 }
 
 impl<T: ComponentValue> Metadata<T> for Component<T> {

@@ -92,7 +92,9 @@ impl DfsState {
                         result.archetypes.push(arch_id);
                         *slot.insert(idx)
                     }
-                    btree_map::Entry::Occupied(_) => panic!("Cycle"),
+                    btree_map::Entry::Occupied(_) => {
+                        return;
+                    }
                 };
 
                 for &id in arch.entities().iter() {
@@ -308,10 +310,10 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    archetypes: &'q mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
-    stack: SmallVec<[Batch<'q, Q::Prepared, F::Prepared>; 8]>,
+    pub(crate) archetypes: &'q mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
+    pub(crate) stack: SmallVec<[Batch<'q, Q::Prepared, F::Prepared>; 8]>,
 
-    adj: &'q AdjMap,
+    pub(crate) adj: &'q AdjMap,
 }
 
 impl<'w, 'q, Q, F> Iterator for DfsIter<'w, 'q, Q, F>
@@ -357,14 +359,14 @@ mod test {
     use super::*;
 
     #[test]
-    fn dfs() {
+    fn dfs_cycle() {
         component! {
             tree: (),
         }
 
         let mut world = World::new();
 
-        let [a, b, c, d, e, f, g] = *('a'..='g')
+        let [a, b, c] = *('a'..='c')
             .map(|i| {
                 Entity::builder()
                     .set(name(), i.into())
@@ -373,26 +375,14 @@ mod test {
             })
             .collect_vec() else { unreachable!() };
 
-        //       c
-        //       |
-        // *-----*-----*
-        // |     |     |
-        // b     d     e
-        // |
-        // *-----*
-        // |     |
-        // a     g
-        // |
-        // f
+        world.set(b, child_of(a), ()).unwrap();
+        world.set(c, child_of(b), ()).unwrap();
 
-        world.set(a, child_of(b), ()).unwrap();
-        world.set(b, child_of(c), ()).unwrap();
-        world.set(d, child_of(c), ()).unwrap();
-        world.set(e, child_of(c), ()).unwrap();
-        world.set(f, child_of(a), ()).unwrap();
-        world.set(g, child_of(b), ()).unwrap();
+        let mut query = Query::new(entity_ids()).with_strategy(Dfs::new(child_of, a));
+        assert_eq!(query.borrow(&world).iter().collect_vec(), [a, b, c]);
 
-        // world.remove(tree, b());
+        world.set(a, child_of(c), ()).unwrap();
+        assert_eq!(query.borrow(&world).iter().collect_vec(), [a, b, c]);
     }
 
     #[test]
