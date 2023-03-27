@@ -4,6 +4,7 @@
 use alloc::string::String;
 
 use crate::component;
+use crate::Exclusive;
 
 use crate::ComponentInfo;
 use crate::Debuggable;
@@ -11,8 +12,11 @@ use crate::Debuggable;
 component! {
     /// A name for an entity of component
     pub name: String => [ Debuggable ],
-    /// The default parent relationship
-    pub child_of(parent): () => [ Debuggable ],
+    /// Exclusive parent-child relation ship.
+    ///
+    /// Only one parent can exist for an entity. Adding a second relationship will override the
+    /// existing one, effectively moving the subtree.
+    pub child_of(parent): () => [ Debuggable, Exclusive ],
 
     /// Contains type erased metadata.
     ///

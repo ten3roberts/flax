@@ -242,10 +242,14 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{child_of, component_info, name, FetchExt, Query, World};
+    use crate::{component_info, name, Debuggable, FetchExt, Query, World};
     use alloc::string::ToString;
 
     use super::*;
+
+    component! {
+        connected_to(id): () => [ Debuggable ],
+    }
 
     #[test]
     fn topological_sort() {
@@ -277,23 +281,23 @@ mod test {
          *  e,b
          */
 
-        world.set(e, child_of(g), ()).unwrap();
-        world.set(e, child_of(c), ()).unwrap();
-        world.set(b, child_of(g), ()).unwrap();
-        world.set(b, child_of(c), ()).unwrap();
+        world.set(e, connected_to(g), ()).unwrap();
+        world.set(e, connected_to(c), ()).unwrap();
+        world.set(b, connected_to(g), ()).unwrap();
+        world.set(b, connected_to(c), ()).unwrap();
 
-        world.set(g, child_of(a), ()).unwrap();
+        world.set(g, connected_to(a), ()).unwrap();
 
-        world.set(c, child_of(g), ()).unwrap();
+        world.set(c, connected_to(g), ()).unwrap();
 
-        world.set(f, child_of(a), ()).unwrap();
-        world.set(f, child_of(d), ()).unwrap();
+        world.set(f, connected_to(a), ()).unwrap();
+        world.set(f, connected_to(d), ()).unwrap();
 
         let mut state = State::default();
 
         let fetch = name().with() & !component_info().with();
 
-        state.update(child_of.id(), &world, &fetch);
+        state.update(connected_to.id(), &world, &fetch);
 
         let visited = state
             .order
@@ -316,6 +320,7 @@ mod test {
     fn topo_query() {
         component! {
             tree: (),
+            connected_to(parent): (),
         }
 
         let mut world = World::new();
@@ -338,20 +343,20 @@ mod test {
         //   |
         //   g
 
-        world.set(b, child_of(d), ()).unwrap();
+        world.set(b, connected_to(d), ()).unwrap();
 
-        world.set(e, child_of(d), ()).unwrap();
-        world.set(e, child_of(b), ()).unwrap();
+        world.set(e, connected_to(d), ()).unwrap();
+        world.set(e, connected_to(b), ()).unwrap();
 
-        world.set(c, child_of(b), ()).unwrap();
+        world.set(c, connected_to(b), ()).unwrap();
 
-        world.set(f, child_of(b), ()).unwrap();
-        world.set(f, child_of(c), ()).unwrap();
+        world.set(f, connected_to(b), ()).unwrap();
+        world.set(f, connected_to(c), ()).unwrap();
 
-        world.set(g, child_of(e), ()).unwrap();
+        world.set(g, connected_to(e), ()).unwrap();
 
         let mut query = Query::new(name().cloned())
-            .with_strategy(Topo::new(child_of))
+            .with_strategy(Topo::new(connected_to))
             .without(component_info())
             .with(tree());
 

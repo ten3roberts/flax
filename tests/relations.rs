@@ -3,10 +3,6 @@ use itertools::Itertools;
 
 #[test]
 fn relations() {
-    component! {
-        child_of(parent): () => [Debuggable],
-    }
-
     let mut world = World::new();
 
     let parent = Entity::builder()
@@ -38,7 +34,7 @@ fn relations() {
         .sorted()
         .collect_vec();
 
-    assert_eq!(children, [child1, child2]);
+    assert_eq!(children, [child2]);
     tracing::info!("Children: {children:?}");
 
     let parents = Query::new(entity_ids())
@@ -50,14 +46,15 @@ fn relations() {
     assert_eq!(parents, [parent, parent2]);
     assert!(world.has(child1, child_of(parent2)));
 
+    assert!(!world.has(child1, child_of(parent)));
     world.despawn(parent2).unwrap();
 
     assert!(!world.has(child1, child_of(parent2)));
-    assert!(world.has(child1, child_of(parent)));
 
     world.despawn_recursive(parent, child_of).unwrap();
 
-    assert!(!world.is_alive(child1));
+    // Moved and detached
+    assert!(world.is_alive(child1));
     assert!(!world.is_alive(child2));
 
     tracing::info!("World: {world:#?}");
