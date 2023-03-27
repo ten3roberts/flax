@@ -39,9 +39,12 @@ impl<T: ComponentValue> Metadata<T> for Symmetric {
 mod test {
     use alloc::sync::Arc;
     use itertools::Itertools;
+    use pretty_assertions::assert_eq;
 
     use crate::{
-        entity_ids, relations_like, Entity, EntityIds, Query, QueryBorrow, Relations, World,
+        entity_ids,
+        events::{Event, EventKind, EventSubscriber},
+        relations_like, Entity, EntityIds, Query, QueryBorrow, RelationExt, Relations, World,
     };
 
     use super::*;
@@ -54,14 +57,14 @@ mod test {
     fn exclusive_set() {
         let mut world = World::new();
 
-        let id1 = world.spawn();
-        let id2 = world.spawn();
-        let id3 = world.spawn();
-        let shared = Arc::new(());
-
-        world.set(id1, a(id2), shared.clone()).unwrap();
+        let (tx, rx) = flume::unbounded();
+        world.subscribe(
+            tx.filter_arch(a.with_relation())
+                .filter(|v| v.key.id == a.id()),
+        );
 
         type Expected<'a> = &'a [(Entity, Vec<(Entity, &'a Arc<()>)>)];
+
         fn ensure(mut query: QueryBorrow<(EntityIds, Relations<Arc<()>>)>, expected: Expected) {
             assert_eq!(
                 query
@@ -73,18 +76,87 @@ mod test {
             );
         }
 
+        let shared = Arc::new(());
+
+        let id1 = world.spawn();
+        let id2 = world.spawn();
+        let id3 = Entity::builder()
+            .set(a(id2), shared.clone())
+            .set(a(id2), shared.clone())
+            .set(a(id1), shared.clone())
+            .spawn(&mut world);
+
         let mut query = Query::new((entity_ids(), relations_like(a)));
 
         ensure(
             query.borrow(&world),
-            &[(id1, vec![(id2, &shared)]), (id2, vec![]), (id3, vec![])],
+            &[(id1, vec![]), (id2, vec![]), (id3, vec![(id1, &shared)])],
+        );
+
+        world.set(id1, a(id2), shared.clone()).unwrap();
+
+        assert_eq!(
+            rx.drain().collect_vec(),
+            [
+                Event {
+                    id: id3,
+                    key: a(id1).key(),
+                    kind: EventKind::Added
+                },
+                Event {
+                    id: id1,
+                    key: a(id2).key(),
+                    kind: EventKind::Added
+                }
+            ]
+        );
+
+        world.set(id3, a(id2), shared.clone()).unwrap();
+
+        ensure(
+            query.borrow(&world),
+            &[
+                (id1, vec![(id2, &shared)]),
+                (id2, vec![]),
+                (id3, vec![(id2, &shared)]),
+            ],
         );
 
         world.set(id1, a(id3), shared.clone()).unwrap();
 
+        assert_eq!(
+            rx.drain().collect_vec(),
+            [
+                Event {
+                    id: id3,
+                    key: a(id1).key(),
+                    kind: EventKind::Removed
+                },
+                Event {
+                    id: id3,
+                    key: a(id2).key(),
+                    kind: EventKind::Added
+                },
+                Event {
+                    id: id1,
+                    key: a(id2).key(),
+                    kind: EventKind::Removed
+                },
+                Event {
+                    id: id1,
+                    key: a(id3).key(),
+                    kind: EventKind::Added
+                },
+            ]
+        );
+
         ensure(
             query.borrow(&world),
-            &[(id1, vec![(id3, &shared)]), (id2, vec![]), (id3, vec![])],
+            &[
+                (id1, vec![(id3, &shared)]),
+                (id2, vec![]),
+                (id3, vec![(id2, &shared)]),
+            ],
         );
 
         Entity::builder()
@@ -98,10 +170,46 @@ mod test {
 
         ensure(
             query.borrow(&world),
-            &[(id1, vec![(id1, &shared)]), (id2, vec![]), (id3, vec![])],
+            &[
+                (id1, vec![(id1, &shared)]),
+                (id2, vec![]),
+                (id3, vec![(id2, &shared)]),
+            ],
+        );
+
+        assert_eq!(
+            rx.drain().collect_vec(),
+            [
+                Event {
+                    id: id1,
+                    key: a(id3).key(),
+                    kind: EventKind::Removed
+                },
+                Event {
+                    id: id1,
+                    key: a(id1).key(),
+                    kind: EventKind::Added
+                }
+            ]
         );
 
         drop(world);
+
+        assert_eq!(
+            rx.drain().sorted_by_key(|v| v.id).collect_vec(),
+            [
+                Event {
+                    id: id1,
+                    key: a(id1).key(),
+                    kind: EventKind::Removed
+                },
+                Event {
+                    id: id3,
+                    key: a(id2).key(),
+                    kind: EventKind::Removed
+                }
+            ]
+        );
 
         // Ensure relations where dropped
         assert_eq!(Arc::strong_count(&shared), 1);

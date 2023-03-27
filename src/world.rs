@@ -120,7 +120,7 @@ impl World {
 
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, arch) = self.archetypes.init(batch.components());
+        let (arch_id, arch) = self.archetypes.find(batch.components());
 
         let base = arch.len();
         let store = self.entities.init(EntityKind::empty());
@@ -193,7 +193,7 @@ impl World {
             self.init_component(component);
         }
 
-        let (arch_id, _) = self.archetypes.init(buffer.components().copied());
+        let (arch_id, _) = self.archetypes.find(buffer.components().copied());
         let (loc, arch) = self.spawn_at_inner(id, arch_id)?;
 
         for (info, src) in buffer.drain() {
@@ -215,14 +215,15 @@ impl World {
         }
 
         let change_tick = self.advance_change_tick();
-        let (arch_id, _) = self.archetypes.init(buffer.components().copied());
+        let (arch_id, _) = self.archetypes.find(buffer.components().copied());
 
         let (id, _, arch) = self.spawn_inner(arch_id, EntityKind::empty());
 
         for (info, src) in buffer.drain() {
             unsafe {
-                arch.push(info.key, src, change_tick)
-                    .expect("Component not in archetype")
+                if arch.push(info.key, src, change_tick).is_none() {
+                    info.drop(src);
+                }
             }
         }
 
@@ -272,7 +273,7 @@ impl World {
         let dst_components: SmallVec<[ComponentInfo; 8]> =
             src.components().filter(|v| f(v.key())).collect();
 
-        let (dst_id, _) = self.archetypes.init(dst_components);
+        let (dst_id, _) = self.archetypes.find(dst_components);
 
         let (src, dst) = self.archetypes.get_disjoint(loc.arch_id, dst_id).unwrap();
 
@@ -376,7 +377,7 @@ impl World {
 
             let components = new_components;
 
-            let (dst_id, _) = self.archetypes.init(components);
+            let (dst_id, _) = self.archetypes.find(components);
 
             // Borrow disjoint
             let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
@@ -426,7 +427,7 @@ impl World {
         }
 
         let id = info.key().id;
-        let mut meta = info.meta()(info);
+        let mut meta = info.get_meta();
         meta.set(component_info(), info);
         meta.set(name(), info.name().into());
 
@@ -554,7 +555,7 @@ impl World {
                 !(key.id == id || key.object == Some(id))
             });
 
-            let (dst_id, dst) = self.archetypes.init(components);
+            let (dst_id, dst) = self.archetypes.find(components);
 
             for (id, slot) in src.move_all(dst, change_tick) {
                 *self.location_mut(id).expect("Entity id was not valid") = EntityLocation {
@@ -648,7 +649,7 @@ impl World {
             }
 
             // assert in order
-            let (dst_id, _) = self.archetypes.init(components);
+            let (dst_id, _) = self.archetypes.find(components);
 
             dst_id
         };
@@ -748,7 +749,7 @@ impl World {
                     .filter(|v| v.key != component.key())
                     .collect_vec();
 
-                let (dst_id, _) = self.archetypes.init(components);
+                let (dst_id, _) = self.archetypes.find(components);
 
                 dst_id
             }
@@ -975,7 +976,7 @@ impl World {
 
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, arch) = self.archetypes.init(batch.components());
+        let (arch_id, arch) = self.archetypes.find(batch.components());
 
         let base = arch.len();
         for (idx, &id) in ids.iter().enumerate() {
@@ -1024,7 +1025,7 @@ impl World {
 
         let info = component.info();
 
-        let mut meta = info.meta()(info);
+        let mut meta = info.get_meta();
         meta.set(component_info(), info);
         meta.set(crate::name(), info.name().into());
 
@@ -1554,14 +1555,14 @@ mod tests {
         let mut world = World::new();
 
         // () -> (a) -> (ab) -> (abc)
-        let (_, archetype) = world.archetypes.init([a().info(), b().info(), c().info()]);
+        let (_, archetype) = world.archetypes.find([a().info(), b().info(), c().info()]);
         assert!(!archetype.has(d().key()));
         assert!(archetype.has(a().key()));
         assert!(archetype.has(b().key()));
 
         // () -> (a) -> (ab) -> (abc)
         //                   -> (abd)
-        let (_, archetype) = world.archetypes.init([a().info(), b().info(), d().info()]);
+        let (_, archetype) = world.archetypes.find([a().info(), b().info(), d().info()]);
         assert!(archetype.has(d().key()));
         assert!(!archetype.has(c().key()));
     }

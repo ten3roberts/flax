@@ -121,8 +121,9 @@ macro_rules! component {
                     _buffer
                 }
 
+                static META: $crate::vtable::LazyComponentBuffer = $crate::vtable::LazyComponentBuffer::new(meta);
                 static VTABLE: &$crate::vtable::ComponentVTable<$ty> =
-                    &$crate::vtable::ComponentVTable::new(stringify!($name), meta);
+                    &$crate::vtable::ComponentVTable::new(stringify!($name), &META);
                 use $crate::entity::EntityKind;
                 use $crate::RelationExt;
                 $crate::Component::static_init(&COMPONENT_ID, EntityKind::COMPONENT, VTABLE).of($obj)
@@ -155,8 +156,9 @@ macro_rules! component {
                     _buffer
                 }
 
+                static META: $crate::vtable::LazyComponentBuffer = $crate::vtable::LazyComponentBuffer::new(meta);
                 static VTABLE: &$crate::vtable::ComponentVTable<$ty> =
-                    &$crate::vtable::ComponentVTable::new(stringify!($name), meta);
+                    &$crate::vtable::ComponentVTable::new(stringify!($name), &META);
                 use $crate::entity::EntityKind;
                 $crate::Component::static_init(&[<COMPONENT_ $name:snake:upper _ID>], EntityKind::COMPONENT, VTABLE)
             }
@@ -188,22 +190,25 @@ macro_rules! component_vtable {
     ($name:tt: $ty: ty $(=> [$($metadata: ty),*])?) => {
 
         {
-            static VTABLE: &$crate::vtable::ComponentVTable<$ty> =
-            &$crate::vtable::ComponentVTable::new(stringify!($name), |_info| {
-
+            fn meta(_info: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
                 let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
                 <$crate::Name as $crate::Metadata<$ty>>::attach(_info, &mut _buffer);
                 <$crate::Component<$ty> as $crate::Metadata<$ty>>::attach(_info, &mut _buffer);
 
                 $(
-                $(
-                <$metadata as $crate::Metadata::<$ty>>::attach(_info, &mut _buffer);
-            )*
-            )*
+                    $(
+                        <$metadata as $crate::Metadata::<$ty>>::attach(_info, &mut _buffer);
+                    )*
+                )*
 
                 _buffer
-            });
+
+            }
+
+            static META: $crate::vtable::LazyComponentBuffer = $crate::vtable::LazyComponentBuffer::new(meta);
+            static VTABLE: &$crate::vtable::ComponentVTable<$ty> =
+                &$crate::vtable::ComponentVTable::new(stringify!($name), &META);
 
             VTABLE
         }

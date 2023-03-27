@@ -1,15 +1,21 @@
-use flax::{buffer::ComponentBuffer, vtable::ComponentVTable, *};
+use flax::{
+    buffer::ComponentBuffer,
+    vtable::{ComponentVTable, LazyComponentBuffer},
+    *,
+};
 use glam::{vec2, Vec2};
 
 #[test]
 fn custom_component() {
     let mut world = World::new();
 
-    static VTABLE: &ComponentVTable<Vec2> = &ComponentVTable::new("position", |info| {
+    static META: LazyComponentBuffer = LazyComponentBuffer::new(|info| {
         let mut buf = ComponentBuffer::new();
         <Debuggable as Metadata<Vec2>>::attach(info, &mut buf);
         buf
     });
+
+    static VTABLE: &ComponentVTable<Vec2> = &ComponentVTable::new("position", &META);
 
     let position = world.spawn_component(VTABLE);
 
