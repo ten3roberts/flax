@@ -1,6 +1,7 @@
 mod borrow;
 mod data;
 mod dfs;
+mod dfs_roots;
 mod difference;
 mod entity;
 mod iter;
@@ -25,6 +26,7 @@ use self::borrow::QueryBorrowState;
 pub(crate) use borrow::*;
 pub use data::*;
 pub use dfs::*;
+pub use dfs_roots::*;
 pub use entity::EntityBorrow;
 pub(crate) use iter::*;
 pub use planar::*;

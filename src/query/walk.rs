@@ -124,10 +124,9 @@ struct GraphState {
 }
 
 impl GraphState {
-    fn update<'w, Q, F>(&mut self, world: &'w World, relation: Entity, fetch: &Filtered<Q, F>)
+    fn update<'w, Q>(&mut self, world: &'w World, relation: Entity, fetch: &Q)
     where
         Q: Fetch<'w>,
-        F: Fetch<'w>,
     {
         self.edges.clear();
         self.archetypes.clear();
