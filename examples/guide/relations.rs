@@ -9,7 +9,6 @@ fn main() -> color_eyre::Result<()> {
 
     // ANCHOR: relation_basic
     component! {
-        child_of(parent): () => [Debuggable],
         spring_joint(other): f32 => [Debuggable],
     }
 
