@@ -1,8 +1,33 @@
 use core::{alloc::Layout, any::TypeId, marker::PhantomData, mem};
 
+use once_cell::sync::OnceCell;
+
 use crate::{buffer::ComponentBuffer, ComponentInfo, ComponentValue};
 
-#[derive(PartialEq, Eq)]
+#[doc(hidden)]
+pub struct LazyComponentBuffer {
+    value: OnceCell<ComponentBuffer>,
+    init: fn(ComponentInfo) -> ComponentBuffer,
+}
+
+impl LazyComponentBuffer {
+    /// Creates a new component buffer which can also be recreated
+    pub const fn new(init: fn(ComponentInfo) -> ComponentBuffer) -> Self {
+        Self {
+            value: OnceCell::new(),
+            init,
+        }
+    }
+
+    pub(crate) fn get_ref(&self, info: ComponentInfo) -> &ComponentBuffer {
+        self.value.get_or_init(|| (self.init)(info))
+    }
+
+    pub(crate) fn get(&self, info: ComponentInfo) -> ComponentBuffer {
+        (self.init)(info)
+    }
+}
+
 /// Describes a components dynamic functionality, such as name, metadata, and type layout.
 pub struct UntypedVTable {
     pub(crate) name: &'static str,
@@ -12,7 +37,7 @@ pub struct UntypedVTable {
     pub(crate) type_name: fn() -> &'static str,
     /// A metadata is a component which is attached to the component, such as
     /// metadata or name
-    pub(crate) meta: fn(ComponentInfo) -> ComponentBuffer,
+    pub(crate) meta: &'static LazyComponentBuffer,
 }
 
 impl UntypedVTable {
@@ -24,7 +49,7 @@ impl UntypedVTable {
     /// Creates a new vtable of type `T`
     pub(crate) const fn new<T: ComponentValue>(
         name: &'static str,
-        meta: fn(ComponentInfo) -> ComponentBuffer,
+        meta: &'static LazyComponentBuffer,
     ) -> Self {
         unsafe fn drop_ptr<T>(x: *mut u8) {
             x.cast::<T>().drop_in_place()
@@ -32,11 +57,11 @@ impl UntypedVTable {
 
         UntypedVTable {
             name,
-            meta,
             drop: drop_ptr::<T>,
             layout: Layout::new::<T>(),
             type_id: || TypeId::of::<T>(),
             type_name: || core::any::type_name::<T>(),
+            meta,
         }
     }
 }
@@ -56,17 +81,9 @@ impl<T> core::ops::Deref for ComponentVTable<T> {
     }
 }
 
-impl<T: ComponentValue + Eq> Eq for ComponentVTable<T> {}
-
-impl<T: ComponentValue + PartialEq> PartialEq for ComponentVTable<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner && self.marker == other.marker
-    }
-}
-
 impl<T: ComponentValue> ComponentVTable<T> {
     /// Creates a new *typed* vtable of `T`
-    pub const fn new(name: &'static str, meta: fn(ComponentInfo) -> ComponentBuffer) -> Self {
+    pub const fn new(name: &'static str, meta: &'static LazyComponentBuffer) -> Self {
         Self {
             inner: UntypedVTable::new::<T>(name, meta),
             marker: PhantomData,

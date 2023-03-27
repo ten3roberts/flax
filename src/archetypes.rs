@@ -4,7 +4,7 @@ use crate::{
     archetype::Archetype,
     entity::{EntityKind, EntityStore, EntityStoreIter, EntityStoreIterMut},
     events::EventSubscriber,
-    ArchetypeId, ComponentInfo, Entity,
+    exclusive, ArchetypeId, ComponentInfo, Entity,
 };
 
 // fn is_sorted<T: Ord>(v: &[T]) -> bool {
@@ -73,9 +73,13 @@ impl Archetypes {
         true
     }
 
+    /// Returns or creates an archetype which satisfies all the given components
+    ///
     /// Get the archetype which has `components`.
     /// `components` must be sorted.
-    pub(crate) fn init(
+    ///
+    /// Ensures the `exclusive` property of any relations are satisfied
+    pub(crate) fn find(
         &mut self,
         components: impl IntoIterator<Item = ComponentInfo>,
     ) -> (ArchetypeId, &mut Archetype) {
@@ -87,7 +91,21 @@ impl Archetypes {
             cursor = match cur.outgoing.get(&head.key) {
                 Some(&id) => id,
                 None => {
-                    let mut new = Archetype::new(cur.components().chain([head]));
+                    // Create archetypes as we go and build the tree
+                    let arch_components = cur.components().chain([head]);
+
+                    // Ensure exclusive property of the new component are maintained
+                    let mut new = if head.is_relation() && head.meta_ref().has(exclusive()) {
+                        // Remove any existing components of the same relation
+                        // `head` is always a more recently added component since an
+                        // archetype with it does not exist (yet)
+                        Archetype::new(
+                            arch_components
+                                .filter(|v| v.key.id != head.key.id || v.key == head.key),
+                        )
+                    } else {
+                        Archetype::new(arch_components)
+                    };
 
                     // Insert the appropriate subscribers
                     for s in &self.subscribers {

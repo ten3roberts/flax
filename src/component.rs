@@ -3,6 +3,7 @@ use core::{
     any::TypeId,
     fmt::{self, Debug, Display, Formatter},
     marker::PhantomData,
+    ptr,
     sync::atomic::AtomicU32,
 };
 
@@ -92,6 +93,7 @@ impl<'de> Deserialize<'de> for ComponentKey {
 
 impl ComponentKey {
     /// Returns true if the component is a relation
+    #[inline]
     pub fn is_relation(&self) -> bool {
         self.object.is_some()
     }
@@ -296,12 +298,11 @@ impl<T: ComponentValue> Component<T> {
 
     /// Returns all metadata components
     pub fn get_meta(&self) -> ComponentBuffer {
-        (self.vtable.meta)(self.info())
+        self.vtable.meta.get(self.info())
     }
 
-    /// Returns the component metadata fn
-    pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
-        self.vtable.meta
+    pub(crate) fn meta_ref(&self) -> &ComponentBuffer {
+        self.vtable.meta.get_ref(self.info())
     }
 }
 
@@ -351,10 +352,17 @@ impl<T: ComponentValue> RelationExt<T> for Component<T> {
 }
 
 /// Represents a type erased component along with its memory layout and drop fn.
-#[derive(Clone, PartialEq, Eq, Copy)]
+#[derive(Clone, Copy)]
 pub struct ComponentInfo {
     pub(crate) key: ComponentKey,
     pub(crate) vtable: &'static UntypedVTable,
+}
+
+impl Eq for ComponentInfo {}
+impl PartialEq for ComponentInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key && ptr::eq(self.vtable, other.vtable)
+    }
 }
 
 impl core::fmt::Debug for ComponentInfo {
@@ -424,12 +432,6 @@ impl ComponentInfo {
         self.key
     }
 
-    /// Returns the component metadata fn
-    #[inline]
-    pub fn meta(&self) -> fn(ComponentInfo) -> ComponentBuffer {
-        self.vtable.meta
-    }
-
     #[inline]
     pub(crate) fn align(&self) -> usize {
         self.vtable.layout.align()
@@ -455,6 +457,19 @@ impl ComponentInfo {
     /// Returns the type name of the component
     pub fn type_name(&self) -> &'static str {
         (self.vtable.type_name)()
+    }
+
+    #[inline]
+    pub(crate) fn is_relation(&self) -> bool {
+        self.key.object.is_some()
+    }
+
+    pub(crate) fn get_meta(&self) -> ComponentBuffer {
+        self.vtable.meta.get(*self)
+    }
+
+    pub(crate) fn meta_ref(&self) -> &ComponentBuffer {
+        self.vtable.meta.get_ref(*self)
     }
 }
 

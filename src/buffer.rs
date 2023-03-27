@@ -6,7 +6,7 @@ use alloc::alloc::{dealloc, handle_alloc_error};
 use alloc::collections::BTreeMap;
 use itertools::Itertools;
 
-use crate::{Component, ComponentInfo, ComponentValue};
+use crate::{metadata, Component, ComponentInfo, ComponentKey, ComponentValue, Entity};
 
 type Offset = usize;
 
@@ -173,14 +173,14 @@ impl Drop for BufferStorage {
 }
 
 /// Storage for components.
-/// Can hold up to one if each component.
+/// Can hold up to one of each component.
 ///
 /// Used for gathering up an entity's components or inserting it.
 ///
 /// This is a low level building block. Prefer [EntityBuilder](crate::EntityBuilder) or [CommandBuffer](crate::CommandBuffer) instead.
 #[derive(Default)]
 pub struct ComponentBuffer {
-    entries: BTreeMap<ComponentInfo, Offset>,
+    entries: BTreeMap<ComponentKey, (ComponentInfo, Offset)>,
     storage: BufferStorage,
 }
 
@@ -204,26 +204,31 @@ impl ComponentBuffer {
 
     /// Mutably access a component from the buffer
     pub fn get_mut<T: ComponentValue>(&mut self, component: Component<T>) -> Option<&mut T> {
-        let &offset = self.entries.get(&component.info())?;
+        let &(_, offset) = self.entries.get(&component.key())?;
 
         unsafe { Some(self.storage.read_mut(offset)) }
     }
 
     /// Access a component from the buffer
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
-        let &offset = self.entries.get(&component.info())?;
+        let &(_, offset) = self.entries.get(&component.key())?;
 
         unsafe { Some(self.storage.read(offset)) }
     }
 
+    /// Returns true if the buffer contains the given component
+    pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
+        self.entries.contains_key(&component.key())
+    }
+
     /// Returns the components in the buffer
     pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
-        self.entries.keys()
+        self.entries.values().map(|v| &v.0)
     }
 
     /// Remove a component from the component buffer
     pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Option<T> {
-        let offset = self.entries.remove(&component.info())?;
+        let (_, offset) = self.entries.remove(&component.key())?;
 
         unsafe { Some(self.storage.take(offset)) }
     }
@@ -232,30 +237,53 @@ impl ComponentBuffer {
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
         let info = component.info();
 
-        if let Some(&offset) = self.entries.get(&info) {
+        if let Some(&(_, offset)) = self.entries.get(&info.key()) {
             unsafe { Some(self.storage.replace(offset, value)) }
         } else {
+            if info.key().is_relation() && info.meta_ref().has(metadata::exclusive()) {
+                self.drain_relations_like(info.key.id());
+            }
+
             let offset = self.storage.push(value);
 
-            self.entries.insert(info, offset);
+            self.entries.insert(info.key(), (info, offset));
 
             None
         }
     }
 
+    pub(crate) fn drain_relations_like(&mut self, relation: Entity) {
+        let start = ComponentKey::new(relation, Some(Entity::MIN));
+        let end = ComponentKey::new(relation, Some(Entity::MAX));
+
+        while let Some((&key, _)) = self.entries.range(start..=end).next() {
+            eprintln!("Removing existing relation {key}");
+
+            let (info, offset) = self.entries.remove(&key).unwrap();
+            unsafe {
+                let ptr = self.storage.at(offset);
+                info.drop(ptr);
+            }
+        }
+    }
+
     /// Set from a type erased component
     pub(crate) unsafe fn set_dyn(&mut self, info: ComponentInfo, value: *mut u8) {
-        if let Some(&offset) = self.entries.get(&info) {
+        if let Some(&(_, offset)) = self.entries.get(&info.key()) {
             let old_ptr = self.storage.at(offset);
             info.drop(old_ptr);
 
             ptr::copy_nonoverlapping(value, old_ptr, info.size());
         } else {
+            if info.key().is_relation() && info.meta_ref().has(metadata::exclusive()) {
+                self.drain_relations_like(info.key.id());
+            }
+
             let offset = self.storage.allocate(info.layout());
 
             self.storage.write_dyn(offset, info, value);
 
-            self.entries.insert(info, offset);
+            self.entries.insert(info.key(), (info, offset));
         }
     }
 
@@ -273,7 +301,7 @@ impl ComponentBuffer {
 }
 
 pub(crate) struct ComponentBufferIter<'a> {
-    entries: &'a mut BTreeMap<ComponentInfo, Offset>,
+    entries: &'a mut BTreeMap<ComponentKey, (ComponentInfo, Offset)>,
     storage: &'a mut BufferStorage,
 }
 
@@ -281,7 +309,7 @@ impl<'a> Iterator for ComponentBufferIter<'a> {
     type Item = (ComponentInfo, *mut u8);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (info, offset) = self.entries.pop_first()?;
+        let (_, (info, offset)) = self.entries.pop_first()?;
 
         unsafe {
             let data = self.storage.at(offset);
@@ -292,7 +320,7 @@ impl<'a> Iterator for ComponentBufferIter<'a> {
 
 impl Drop for ComponentBuffer {
     fn drop(&mut self) {
-        for (info, &offset) in &self.entries {
+        for &(info, offset) in self.entries.values() {
             unsafe {
                 let ptr = self.storage.at(offset);
                 info.drop(ptr);
