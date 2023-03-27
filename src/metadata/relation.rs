@@ -6,10 +6,10 @@ component! {
     /// Ensures only one pair of the relation exists.
     pub exclusive: Exclusive,
 
-    /// Ensures that for every relation `A => B` the relation `B => A` exists.
-    ///
-    /// This creates a bidirectional graph.
-    pub symmetric: Symmetric,
+    ///// Ensures that for every relation `A => B` the relation `B => A` exists.
+    /////
+    ///// This creates a bidirectional graph.
+    //pub symmetric: Symmetric,
 
 }
 
@@ -18,10 +18,10 @@ component! {
 /// Ensures only one pair exists of the relation exists.
 pub struct Exclusive;
 
-/// Ensures that for every relation `A => B` the relation `B => A` exists.
-///
-/// This creates a bidirectional graph.
-pub struct Symmetric;
+///// Ensures that for every relation `A => B` the relation `B => A` exists.
+/////
+///// This creates a bidirectional graph.
+//pub struct Symmetric;
 
 impl<T: ComponentValue> Metadata<T> for Exclusive {
     fn attach(_: crate::ComponentInfo, buffer: &mut crate::buffer::ComponentBuffer) {
@@ -29,11 +29,11 @@ impl<T: ComponentValue> Metadata<T> for Exclusive {
     }
 }
 
-impl<T: ComponentValue> Metadata<T> for Symmetric {
-    fn attach(_: crate::ComponentInfo, buffer: &mut crate::buffer::ComponentBuffer) {
-        buffer.set(exclusive(), Exclusive);
-    }
-}
+// impl<T: ComponentValue> Metadata<T> for Symmetric {
+//     fn attach(_: crate::ComponentInfo, buffer: &mut crate::buffer::ComponentBuffer) {
+//         buffer.set(exclusive(), Exclusive);
+//     }
+// }
 
 #[cfg(test)]
 mod test {
