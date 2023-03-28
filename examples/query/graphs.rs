@@ -1,4 +1,4 @@
-use flax::{child_of, entity_ids, name, Dfs, DfsRoots, Entity, Query, Topo, World};
+use flax::{child_of, entity_ids, name, Dfs, Entity, Query, Topo, World};
 use tracing_subscriber::{prelude::*, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 
@@ -64,16 +64,9 @@ fn main() {
         let _span = tracing::info_span!("dfs");
         // ANCHOR: dfs
 
-        let mut query = Query::new((entity_ids(), name())).with_strategy(Dfs::new(child_of, root));
+        let mut query = Query::new((entity_ids(), name())).with_strategy(Dfs::new(child_of));
 
         tracing::info!("Dfs:");
-        for (id, name) in query.borrow(&world).iter() {
-            tracing::info!(?id, ?name);
-        }
-
-        let mut query = Query::new((entity_ids(), name())).with_strategy(DfsRoots::new(child_of));
-
-        tracing::info!("DfsRoots:");
         for (id, name) in query.borrow(&world).iter() {
             tracing::info!(?id, ?name);
         }
