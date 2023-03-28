@@ -14,10 +14,12 @@ Likewise, [`attach_with`](https://docs.rs/flax/latest/flax/entity/struct.EntityB
 
 ## Depth First Iteration
 
-[Dfs](https://docs.rs/flax/latest/flax/struct.Dfs.html) will traverse the subtree of the provided `root` in depth-first order.
-
-[DfsRoots](https://docs.rs/flax/latest/flax/struct.DfsRoots.html) is similar to `Dfs`, but will traverse *all* trees, and does as such not require a starting point.
+[Dfs](https://docs.rs/flax/latest/flax/struct.Dfs.html) allows traversing hierarchies in depth-first order.
 
 ```rust
 {{ #include ../../../examples/query/graphs.rs:dfs }}
 ```
+
+### Traversal
+
+In addition to plain iteration, the `Dfs` allows you
