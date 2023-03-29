@@ -122,6 +122,11 @@ name = "graphs"
 path = "./examples/query/graphs.rs"
 required-features = ["std"]
 
+[[example]]
+name = "transform"
+path = "./examples/query/transform.rs"
+required-features = ["std"]
+
 
 [[bench]]
 name = "benchmarks"

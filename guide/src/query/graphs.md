@@ -14,7 +14,7 @@ Likewise, [`attach_with`](https://docs.rs/flax/latest/flax/entity/struct.EntityB
 
 ## Depth First Iteration
 
-[Dfs](https://docs.rs/flax/latest/flax/struct.Dfs.html) allows traversing hierarchies in depth-first order.
+[Dfs](https://docs.rs/flax/latest/flax/query/struct.Dfs.html) allows traversing hierarchies in depth-first order.
 
 ```rust
 {{ #include ../../../examples/query/graphs.rs:dfs }}
@@ -22,4 +22,14 @@ Likewise, [`attach_with`](https://docs.rs/flax/latest/flax/entity/struct.EntityB
 
 ### Traversal
 
-In addition to plain iteration, the `Dfs` allows you
+For modifying a graph through a value which is passed through the parents, such as updating a UI layout, there is [Dfs::traverse](https://docs.rs/flax/latest/flax/query/struct.Dfs.html#method.traverse) which provides an easy recursion based visit.
+
+## Topological Iteration
+
+In addition to *depth first* traversal, queries offer iteration in topological ordering through [Topo](https://docs.rs/flax/latest/flax/query/struct.Topo.html).
+
+Topological ordering is less constrained as it only ensures that each node's parents are visited before the children, but not that the children are visited immediately after the parent.
+
+More specifically, each *node* is visited in the ordered of their *maximum recursion depth*. I.e, first all roots are visited, then all children, then all *2nd* level children and so on.
+
+This allows far greater cache locality and is more similar in memory access patterns to the non-relation aware [Planar](https://docs.rs/flax/latest/flax/query/struct.Planar.html) strategy.

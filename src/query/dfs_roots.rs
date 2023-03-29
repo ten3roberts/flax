@@ -4,7 +4,7 @@ use crate::{
     archetype::Slice,
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
-    Access, AccessKind, ArchetypeId, Batch, ComponentKey, ComponentValue, FetchItem,
+    Access, AccessKind, All, ArchetypeId, Batch, ComponentKey, ComponentValue, FetchItem,
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 use smallvec::SmallVec;
@@ -41,7 +41,7 @@ where
     Q: 'w + Fetch<'w>,
     F: 'w + Fetch<'w>,
 {
-    type Borrow = DfsBorrow<'w, T, Q, F>;
+    type Borrow = DfsBorrow<'w, Q, F, T>;
 
     fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow {
         if dirty {
@@ -121,7 +121,7 @@ impl State {
 }
 
 /// Borrowed state for [`Dfs`] strategy
-pub struct DfsBorrow<'w, T, Q, F>
+pub struct DfsBorrow<'w, Q, F = All, T = ()>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
@@ -131,7 +131,7 @@ where
     dfs: &'w Dfs<T>,
 }
 
-impl<'w, T, Q, F> DfsBorrow<'w, T, Q, F>
+impl<'w, Q, F, T> DfsBorrow<'w, Q, F, T>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
