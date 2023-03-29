@@ -33,7 +33,7 @@
     "kind": "term"
   },
   "doc": {
-    "cmd": "cargo doc --all-features"
+    "cmd": "cargo doc --all-features --open"
   },
   "test-nostd": {
     "cmd": "cargo nextest run --no-default-features",
