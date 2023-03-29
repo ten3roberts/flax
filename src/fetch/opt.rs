@@ -93,7 +93,8 @@ pub struct OptOr<F, V> {
 }
 
 impl<F, V> OptOr<F, V> {
-    pub(crate) fn new(inner: F, or: V) -> Self {
+    /// Creates a new optional query
+    pub fn new(inner: F, or: V) -> Self {
         Self { fetch: inner, or }
     }
 }

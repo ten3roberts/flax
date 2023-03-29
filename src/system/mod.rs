@@ -238,10 +238,10 @@ impl<Args> SystemBuilder<Args> {
 
 /// Holds the data and an inner system satisfying all dependencies
 pub struct System<F, Args, Ret> {
-    name: String,
-    data: Args,
-    func: F,
-    _marker: PhantomData<Ret>,
+    pub name: String,
+    pub data: Args,
+    pub func: F,
+    pub _marker: PhantomData<Ret>,
 }
 
 struct FormatWith<F> {
@@ -341,7 +341,7 @@ where
 }
 
 impl<F, Args, Ret> System<F, Args, Ret> {
-    pub(crate) fn new(name: String, func: F, data: Args) -> Self {
+    pub fn new(name: String, func: F, data: Args) -> Self {
         Self {
             name,
             data,
@@ -674,5 +674,117 @@ mod test {
         let res = boxed.execute(&ctx);
         eprintln!("{:?}", res.as_ref().unwrap_err());
         let _ = res.unwrap_err();
+    }
+}
+
+mod ice_bug {
+
+    use core::marker::PhantomData;
+
+    use crate::{component, All, Component, Fetch, OptOr, QueryBorrow};
+
+    use crate::AsBorrow;
+    pub trait SystemData<'a> {
+        type Value;
+    }
+    pub struct Query<Q> {
+        fetch: Q,
+    }
+
+    impl<Q> Query<Q> {
+        pub fn new(fetch: Q) -> Self {
+            Self { fetch }
+        }
+    }
+
+    impl<'a, Q> SystemData<'a> for Query<Q>
+    where
+        Q: 'static + for<'x> Fetch<'x>,
+    {
+        type Value = QueryData<'a, Q>;
+    }
+
+    pub struct QueryData<'a, Q> {
+        marker: PhantomData<&'a Q>,
+    }
+
+    impl<'a, 'w, Q> AsBorrow<'a> for QueryData<'w, Q>
+    where
+        Q: for<'x> Fetch<'x> + 'static,
+    {
+        type Borrowed = QueryBorrow<'a, Q>;
+
+        fn as_borrow(&'a mut self) -> Self::Borrowed {
+            loop {}
+        }
+    }
+    /// A callable function
+    trait SystemFn<'this, Args, Ret> {
+        /// Execute the function
+        fn execute(&'this mut self, args: Args) -> Ret;
+    }
+
+    pub fn build<Args, Func>(data: Args, func: Func) -> System<Func, Args>
+    where
+        Args: for<'a> SystemData<'a> + 'static,
+        Func: for<'this, 'a> SystemFn<'this, <Args as SystemData<'a>>::Value, ()>,
+    {
+        System { data, func }
+    }
+
+    macro_rules! tuple_impl {
+    ($($idx: tt => $ty: ident),*) => {
+        impl<'this, Func, Ret, $($ty,)*> SystemFn<'this, ($($ty,)*), Ret> for Func
+        where
+            $(for<'x> $ty: AsBorrow<'x>,)*
+            // for<'x> Func: FnMut($($ty),*) -> Ret,
+            for<'x> Func: FnMut($(<$ty as AsBorrow<'x>>::Borrowed),*) -> Ret,
+        {
+            fn execute(&'this mut self, mut args: ($($ty,)*)) -> Ret {
+                let borrowed = ($(args.$idx.as_borrow(),)*);
+                (self)($(borrowed.$idx,)*)
+            }
+
+        }
+
+
+        // impl<'a, $($ty,)*> AsBorrow<'a> for ($($ty,)*)
+        // where
+        //     $($ty: AsBorrow<'a>,)*
+        // {
+        //     type Borrowed = ($(<$ty as AsBorrow<'a>>::Borrowed,)*);
+
+        //     fn as_borrow(&'a mut self) -> Self::Borrowed {
+        //         ($((self.$idx).as_borrow(),)*)
+        //     }
+        // }
+
+        impl<'w, $($ty,)*> SystemData<'w> for ($($ty,)*)
+        where
+            $($ty: SystemData<'w>,)*
+        {
+            type Value = ($(<$ty as SystemData<'w>>::Value,)*);
+        }
+    };
+}
+
+    // tuple_impl! {}
+    tuple_impl! { 0 => A }
+
+    pub struct System<F, Args> {
+        pub data: Args,
+        pub func: F,
+    }
+
+    fn main() {
+        component! {
+            position: f32,
+        }
+
+        let query = Query::new(OptOr::new(position(), 0.0));
+
+        let system =
+            // Should be `OptOr<Component<f32>, f32>`
+            build((query,), |query: QueryBorrow<Component<_>, All>| {});
     }
 }
