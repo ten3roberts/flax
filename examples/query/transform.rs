@@ -1,5 +1,6 @@
 use flax::*;
 use glam::{vec3, Vec3};
+use std::fmt::Write;
 use tracing_subscriber::{prelude::*, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 
@@ -11,14 +12,13 @@ fn main() {
 
     let mut world = World::new();
 
-    // ANCHOR: builder
-
+    // ANCHOR: init
     component! {
         world_position: Vec3,
         position: Vec3,
     }
 
-    let root = Entity::builder()
+    let _root = Entity::builder()
         .set(name(), "root".into())
         .set_default(world_position())
         .set(position(), vec3(0.0, 1.0, 0.0))
@@ -32,7 +32,8 @@ fn main() {
                     child_of,
                     Entity::builder()
                         .set(name(), "root.child.1.1".into())
-                        .set_default(world_position()),
+                        .set_default(world_position())
+                        .set(position(), vec3(0.0, 4.0, 0.0)),
                 ),
         )
         .attach(
@@ -50,12 +51,12 @@ fn main() {
                 .set(position(), vec3(0.0, -1.0, 0.0)),
         )
         .spawn(&mut world);
+    // ANCHOR_END: init
+
+    // ANCHOR: systems
 
     let update_world_position = System::builder()
-        .with(
-            Query::new((world_position().as_mut(), position().opt_or_default()))
-                .with_strategy(Dfs::new(child_of)),
-        )
+        .with(Query::new((world_position().as_mut(), position())).with_strategy(Dfs::new(child_of)))
         .build(
             |mut query: DfsBorrow<(Mutable<Vec3>, Component<Vec3>), All, ()>| {
                 query.traverse(&Vec3::ZERO, |(world_pos, &pos), _, &parent_pos| {
@@ -65,12 +66,30 @@ fn main() {
             },
         );
 
-    // let mut buf = String::new();
-    // let print_hierarchy = System::builder()
-    //     .with(Query::new((name(), world_position())))
-    //     .build(|mut query: DfsBorrow<_, _, _>| {
-    //         query.traverse(0usize, |(name, world_pos), _, depth| {
-    //             write!(buf, "{:indent$}{name}: {world_pos}", "", indent = depth * 4)
-    //         });
-    //     });
+    let mut buf = String::new();
+    let print_hierarchy = System::builder()
+        .with(Query::new((name(), position(), world_position())).with_strategy(Dfs::new(child_of)))
+        .build(move |mut query: DfsBorrow<_, _, _>| {
+            query.traverse(&0usize, |(name, pos, world_pos), _, depth| {
+                let indent = depth * 4;
+                writeln!(
+                    buf,
+                    "{:indent$}{name}: {pos} {world_pos}",
+                    "",
+                    indent = indent,
+                )
+                .unwrap();
+                depth + 1
+            });
+
+            tracing::info!("{buf}");
+        });
+
+    let mut schedule = Schedule::new()
+        .with_system(update_world_position)
+        .with_system(print_hierarchy);
+
+    schedule.execute_seq(&mut world).unwrap();
+
+    // ANCHOR_END: systems
 }

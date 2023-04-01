@@ -238,9 +238,9 @@ where
         Visit: for<'q> FnMut(<Q as FetchItem<'q>>::Item, Option<&T>, &V) -> V,
     {
         for &arch_index in self.dfs.state.roots.iter() {
-            let arch = &mut self.prepared[arch_index];
+            let p = &mut self.prepared[arch_index];
             // Fetch will never change and all calls are disjoint
-            let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
+            let p = unsafe { &mut *(p as *mut PreparedArchetype<_, _>) };
             for mut chunk in p.chunks() {
                 self.traverse_batch(&mut chunk, None, value, &mut visit)
             }
@@ -266,7 +266,8 @@ where
 
                 let edge = arch.borrow::<T>(ComponentKey::new(id, Some(self.dfs.relation)));
 
-                let mut p = self.query_state.prepare_fetch(arch_id, arch).unwrap();
+                let p = &mut self.prepared[arch_index];
+                let p = unsafe { &mut *(p as *mut PreparedArchetype<_, _>) };
 
                 for mut chunk in p.chunks() {
                     self.traverse_batch(&mut chunk, edge.as_deref(), &value, visit)
