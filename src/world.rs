@@ -624,7 +624,6 @@ impl World {
 
         // Exclusive relations may cause the dst archetype to be a sibling rather than a child
         // of src. Adding a strong link breaks the tree in there cases
-        let mut strict_superset = true;
 
         // Pick up the entity and move it to the destination archetype
         let dst_id = if let Some(&dst) = src.outgoing.get(&info.key()) {
@@ -637,16 +636,16 @@ impl World {
             let left = src.components().take(pivot);
             let right = src.components().skip(pivot);
 
-            let mut components = left.chain(once(info)).chain(right).collect_vec();
+            let components = left.chain(once(info)).chain(right).collect_vec();
 
             // Initialize component
             self.init_component(info);
 
             // Ensure exclusive property
-            if info.key.object.is_some() && self.has(info.key.id, exclusive()) {
-                strict_superset = false;
-                components.retain(|v| v.key == info.key || v.key.id != info.key.id)
-            }
+            // if info.key.object.is_some() && self.has(info.key.id, exclusive()) {
+            //     strict_superset = false;
+            //     components.retain(|v| v.key == info.key || v.key.id != info.key.id)
+            // }
 
             // assert in order
             let (dst_id, _) = self.archetypes.find(components);
@@ -663,10 +662,8 @@ impl World {
             unsafe { src.move_to(dst, slot, |c, ptr| c.drop(ptr), change_tick) };
 
         // Add a quick edge to refer to later
-        if strict_superset {
-            src.add_outgoing(info.key(), dst_id);
-            dst.add_incoming(info.key(), src_id);
-        }
+        src.add_outgoing(info.key(), dst_id);
+        dst.add_incoming(info.key(), src_id);
 
         // Insert the missing component
         unsafe {

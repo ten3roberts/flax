@@ -22,7 +22,15 @@ Likewise, [`attach_with`](https://docs.rs/flax/latest/flax/entity/struct.EntityB
 
 ### Traversal
 
-For modifying a graph through a value which is passed through the parents, such as updating a UI layout, there is [Dfs::traverse](https://docs.rs/flax/latest/flax/query/struct.Dfs.html#method.traverse) which provides an easy recursion based visit.
+For modifying a graph through a value which is passed through the parents, such as updating a UI layout, there is [Dfs::traverse](https://docs.rs/flax/latest/flax/query/struct.Dfs.html#method.traverse) which provides an easy recursion based visiting, which can for example be used for updating transform hierarchies.
+
+Example:
+
+```rust
+{{ #include ../../../examples/query/transform.rs:systems }}
+```
+
+See: [transform](https://github.com/ten3roberts/flax/blob/main/examples/query/transform.rs)
 
 ## Topological Iteration
 
