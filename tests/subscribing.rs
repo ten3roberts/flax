@@ -1,8 +1,4 @@
-use core::iter::repeat;
-
-use flax::{component, entity_ids, name, Entity, Query, World};
-use itertools::Itertools;
-use pretty_assertions::assert_eq;
+use flax::component;
 
 component! {
     a:i32,
@@ -16,7 +12,7 @@ fn subscribing() {
     use flax::{
         entity_ids,
         events::{Event, EventKind, EventSubscriber},
-        Query,
+        Entity, Query, World,
     };
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
@@ -115,8 +111,12 @@ fn subscribing() {
 #[tokio::test]
 #[cfg(feature = "tokio")]
 async fn tokio_subscribe() {
+    use flax::events::Event;
+    use flax::events::EventKind;
+    use flax::events::EventSubscriber;
+    use flax::*;
     use futures::FutureExt;
-    use flax::events::*;
+    use pretty_assertions::assert_eq;
     use std::sync::Arc;
     use tokio::sync::mpsc;
     use tokio::sync::Notify;
@@ -161,7 +161,13 @@ async fn tokio_subscribe() {
 #[test]
 #[cfg(feature = "flume")]
 fn moving_changes() {
-    use flax::events::{Event, EventKind, EventSubscriber};
+    use std::iter::repeat;
+
+    use flax::{
+        events::{Event, EventKind, EventSubscriber},
+        *,
+    };
+    use itertools::Itertools;
 
     let mut world = World::new();
 

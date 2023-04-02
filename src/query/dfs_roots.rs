@@ -429,8 +429,6 @@ mod test {
 
         from_edges(&mut world, &edges).unwrap();
 
-        eprintln!("World: {world:#?}");
-
         let mut query = Query::new((entity_ids(), name())).with_strategy(Dfs::new(child_of));
 
         assert_dfs(query.borrow(&world).iter(), &edges, &all);

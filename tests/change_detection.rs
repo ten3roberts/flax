@@ -1,12 +1,16 @@
 use flax::*;
-use glam::{Quat, Vec3};
 use itertools::Itertools;
 use pretty_assertions::assert_eq;
-use rand::{rngs::StdRng, Rng, SeedableRng};
 
 #[test]
 #[cfg(feature = "flume")]
 fn change_detection() {
+    use flax::*;
+    use glam::{Quat, Vec3};
+    use itertools::Itertools;
+    use pretty_assertions::assert_eq;
+    use rand::{rngs::StdRng, Rng, SeedableRng};
+
     use flax::events::{EventKind, EventSubscriber};
 
     let (removed_tx, removed_rx) = flume::unbounded();

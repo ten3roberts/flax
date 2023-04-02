@@ -257,8 +257,6 @@ impl ComponentBuffer {
         let end = ComponentKey::new(relation, Some(Entity::MAX));
 
         while let Some((&key, _)) = self.entries.range(start..=end).next() {
-            eprintln!("Removing existing relation {key}");
-
             let (info, offset) = self.entries.remove(&key).unwrap();
             unsafe {
                 let ptr = self.storage.at(offset);
