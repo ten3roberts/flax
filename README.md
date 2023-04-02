@@ -12,8 +12,9 @@ Flax is a performant and easy to use Entity Component System.
 
 The world is organized by simple identifiers known as an [Entity](https://docs.rs/flax/latest/flax/entity/struct.Entity.html), which can have any number of components attached to them.
 
-Systems operate and iterate upon entities and their attached components and
-provide the application logic.
+Systems operate on the world's entities and provide the application logic.
+
+Consider reading the [User Guide](https://ten3roberts.github.io/flax/guide)
 
 ## Features
 - [Declarative component macro](https://docs.rs/flax/latest/flax/macro.component.html)
@@ -25,13 +26,9 @@ provide the application logic.
 - [Many to many entity relation and graphs](https://docs.rs/flax/latest/flax/macro.component.html#relations)
 - [Reflection through component metadata](https://docs.rs/flax/latest/flax/macro.component.html)
 - [Ergonomic entity builder](https://docs.rs/flax/latest/flax/struct.EntityBuilder.html)
-- Tracing
 - [Serialization and deserialization](https://docs.rs/flax/latest/flax/serialize/)
 - [(async) event subscription](https://docs.rs/flax/latest/flax/struct.World.html#method.subscribe)
 - [Runtime components](https://docs.rs/flax/latest/flax/struct.World.html#method.spawn_component)
-
-## Consider reading the **[User Guide](https://ten3roberts.github.io/flax/guide)**
-
 
 ## [Live Demo](https://ten3roberts.github.io/flax/asteroids)
 See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/flax/asteroids).
