@@ -38,14 +38,6 @@ impl<T: ComponentValue> Metadata<T> for Exclusive {
 #[cfg(test)]
 mod test {
     use alloc::sync::Arc;
-    use itertools::Itertools;
-    use pretty_assertions::assert_eq;
-
-    use crate::{
-        entity_ids,
-        events::{Event, EventKind, EventSubscriber},
-        relations_like, Entity, EntityIds, Query, QueryBorrow, RelationExt, Relations, World,
-    };
 
     use super::*;
 
@@ -54,7 +46,17 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "flume")]
     fn exclusive_set() {
+        use crate::{
+            entity_ids,
+            events::{Event, EventKind, EventSubscriber},
+            relations_like, Entity, EntityIds, Query, QueryBorrow, RelationExt, Relations, World,
+        };
+        use alloc::{sync::Arc, vec, vec::Vec};
+        use itertools::Itertools;
+        use pretty_assertions::assert_eq;
+
         let mut world = World::new();
 
         let (tx, rx) = flume::unbounded();

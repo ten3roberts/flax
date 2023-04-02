@@ -80,4 +80,3 @@ impl Benchmark {
         self.1.execute_par(&mut self.0).unwrap();
     }
 }
-

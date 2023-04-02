@@ -1,5 +1,4 @@
-use flax::{child_of, component, name, Entity, Query, RelationExt, World};
-use itertools::Itertools;
+use flax::*;
 
 component! {
     a: i32,
@@ -72,6 +71,7 @@ fn entity_ref() {
 #[cfg(feature = "flume")]
 fn entity_hierarchy() {
     use flax::events::{Event, EventSubscriber};
+    use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
     let mut world = World::new();

@@ -1,44 +1,43 @@
-use flax::*;
-use std::iter::repeat;
-
-fn ab_system() -> BoxedSystem {
-    System::builder()
-        .with(Query::new((a().as_mut(), b().as_mut())))
-        .for_each(|(a, b)| {
-            std::mem::swap(a, b);
-        })
-        .boxed()
-}
-
-fn cd_system() -> BoxedSystem {
-    System::builder()
-        .with(Query::new((c().as_mut(), d().as_mut())))
-        .for_each(|(c, d)| {
-            std::mem::swap(c, d);
-        })
-        .boxed()
-}
-
-fn ce_system() -> BoxedSystem {
-    System::builder()
-        .with(Query::new((c().as_mut(), e().as_mut())))
-        .for_each(|(c, e)| {
-            std::mem::swap(c, e);
-        })
-        .boxed()
-}
-
-component! {
-    a: f32,
-    b: f32,
-    c: f32,
-    d: f32,
-    e: f32,
-}
-
 #[test]
 #[cfg(feature = "parallel")]
 fn schedule_granularity() {
+    use flax::*;
+    use std::iter::repeat;
+
+    fn ab_system() -> BoxedSystem {
+        System::builder()
+            .with(Query::new((a().as_mut(), b().as_mut())))
+            .for_each(|(a, b)| {
+                std::mem::swap(a, b);
+            })
+            .boxed()
+    }
+
+    fn cd_system() -> BoxedSystem {
+        System::builder()
+            .with(Query::new((c().as_mut(), d().as_mut())))
+            .for_each(|(c, d)| {
+                std::mem::swap(c, d);
+            })
+            .boxed()
+    }
+
+    fn ce_system() -> BoxedSystem {
+        System::builder()
+            .with(Query::new((c().as_mut(), e().as_mut())))
+            .for_each(|(c, e)| {
+                std::mem::swap(c, e);
+            })
+            .boxed()
+    }
+
+    component! {
+        a: f32,
+        b: f32,
+        c: f32,
+        d: f32,
+        e: f32,
+    }
     let mut world = World::default();
 
     let mut batch = BatchSpawn::new(10_000);
