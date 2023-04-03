@@ -72,7 +72,7 @@ pub(crate) fn traverse_archetypes<'a>(
         [head, tail @ ..] => {
             // Since the components in the trie are in order, a value greater than head means the
             // current component will never occur
-            for (&component, &arch_id) in &arch.outgoing {
+            for (&component, &arch_id) in &arch.children {
                 // Oops, don't even step on it
                 if excluded.contains(&component) {
                     continue;
