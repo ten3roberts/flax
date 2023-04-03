@@ -187,6 +187,7 @@ fn bitops() {
             .filter(a().gt(1.1) & a().lt(5.0))
             .borrow(&world)
             .iter()
+            .sorted()
             .collect_vec(),
         vec![id1]
     );
@@ -196,6 +197,7 @@ fn bitops() {
             .filter((a().gt(1.1) & a().lt(5.0)) | (d().without() & b().without()))
             .borrow(&world)
             .iter()
+            .sorted()
             .collect_vec(),
         vec![id1, id3]
     );
@@ -205,6 +207,7 @@ fn bitops() {
             .filter((a().cmp(|&v: &f32| v > 5.1 && v < 9.0)) | (d().without() & b().without()))
             .borrow(&world)
             .iter()
+            .sorted()
             .collect_vec(),
         vec![id2, id3]
     );

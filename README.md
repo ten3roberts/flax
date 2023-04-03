@@ -109,7 +109,7 @@ details.
 
 ```rust
 component! {
-    child_of(parent): () => [Debug],
+    child_of(parent): () => [ Debuggable ],
 }
 
 let mut world = World::new();

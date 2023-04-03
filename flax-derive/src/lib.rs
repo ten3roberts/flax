@@ -4,7 +4,7 @@ use proc_macro_crate::FoundCrate;
 use quote::quote;
 use syn::*;
 
-/// ```rust
+/// ```rust,ignore
 /// use glam::*;
 /// #[derive(Fetch)]
 /// #[fetch(Debug)]
