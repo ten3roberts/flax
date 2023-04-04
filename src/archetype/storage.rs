@@ -35,8 +35,11 @@ impl Storage {
 
     pub fn with_capacity(info: ComponentInfo, cap: usize) -> Self {
         if cap == 0 {
+            let data = (info.vtable.dangling)();
+
+            assert_eq!(data.as_ptr() as usize % info.layout().align(), 0);
             return Self {
-                data: NonNull::dangling(),
+                data,
                 cap: 0,
                 len: 0,
                 info,
@@ -51,6 +54,7 @@ impl Storage {
                 Some(v) => v,
                 None => handle_alloc_error(layout),
             };
+            assert_eq!(data.as_ptr() as usize % info.layout().align(), 0);
             Self {
                 data,
                 cap,
@@ -90,20 +94,22 @@ impl Storage {
         assert!(new_layout.size() < isize::MAX as usize);
 
         let ptr = if old_cap == 0 {
-            debug_assert_eq!(self.data, NonNull::dangling());
+            // Old pointer is dangling
             unsafe { alloc(new_layout) }
         } else {
             let ptr = self.data.as_ptr();
             unsafe { realloc(ptr, old_layout, new_layout.size()) }
         };
 
-        let ptr = match NonNull::new(ptr) {
+        let data = match NonNull::new(ptr) {
             Some(v) => v,
             None => handle_alloc_error(new_layout),
         };
 
+        assert_eq!(data.as_ptr() as usize % self.info.layout().align(), 0);
+
         self.cap = new_cap;
-        self.data = ptr
+        self.data = data
     }
 
     pub fn swap_remove(&mut self, slot: Slot, on_move: impl FnOnce(*mut u8)) {
@@ -200,12 +206,19 @@ impl Storage {
         unsafe { core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len) }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     /// # Safety
     /// The types must match
     pub unsafe fn borrow<T: ComponentValue>(&self) -> &[T] {
-        debug_assert!(self.info.is::<T>(), "Mismatched types");
+        assert!(self.info.is::<T>(), "Mismatched types");
 
+        println!("layout: {:?}", self.info().layout());
+        assert_eq!(
+            self.data.as_ptr() as usize % self.info().layout().align(),
+            0,
+            "{}",
+            self.info.type_name()
+        );
         core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
     }
 
@@ -237,7 +250,7 @@ impl Storage {
     /// # Safety
     /// `item` must be of the same type.
     pub(crate) unsafe fn push<T: ComponentValue>(&mut self, item: T) {
-        debug_assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
+        assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
 
         self.reserve(1);
 

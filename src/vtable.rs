@@ -1,4 +1,4 @@
-use core::{alloc::Layout, any::TypeId, marker::PhantomData, mem};
+use core::{alloc::Layout, any::TypeId, marker::PhantomData, mem, ptr::NonNull};
 
 use once_cell::sync::OnceCell;
 
@@ -35,6 +35,9 @@ pub struct UntypedVTable {
     pub(crate) layout: Layout,
     pub(crate) type_id: fn() -> TypeId,
     pub(crate) type_name: fn() -> &'static str,
+    // Dangling pointer with proper alignment
+    // See: https://github.com/rust-lang/rust/issues/55724
+    pub(crate) dangling: fn() -> NonNull<u8>,
     /// A metadata is a component which is attached to the component, such as
     /// metadata or name
     pub(crate) meta: &'static LazyComponentBuffer,
@@ -62,6 +65,7 @@ impl UntypedVTable {
             type_id: || TypeId::of::<T>(),
             type_name: || core::any::type_name::<T>(),
             meta,
+            dangling: || NonNull::<T>::dangling().cast(),
         }
     }
 }
