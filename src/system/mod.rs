@@ -630,6 +630,10 @@ mod test {
     use super::*;
 
     #[test]
+    // Fails due to eyre::Report
+    //
+    // See: https://github.com/yaahc/eyre/issues/59
+    #[cfg_attr(miri, ignore)]
     fn system_builder() {
         component! {
             a: String,
