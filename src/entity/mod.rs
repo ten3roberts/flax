@@ -215,6 +215,7 @@ static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 
 bitflags::bitflags! {
     /// Declares the roles an entity id serves
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct EntityKind: u16 {
         /// The entity is a component
         const COMPONENT = 1;

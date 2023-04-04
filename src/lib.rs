@@ -250,7 +250,6 @@ pub use fetch::{
 };
 pub use filter::{All, And, Cmp, Nothing, Or, With, Without};
 pub use metadata::*;
-pub use paste::paste;
 pub(crate) use query::ArchetypeSearcher;
 pub use query::*;
 pub use relation::*;
