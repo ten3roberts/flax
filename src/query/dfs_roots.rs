@@ -162,26 +162,29 @@ where
     where
         'w: 'q,
     {
-        // Safety: the iterator will not borrow this archetype again
-        let Ok(loc) = self.query_state.world.location(root) else {
-            return DfsIter::empty();
-        };
-
-        let arch_index = *self.dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
-
-        let arch = &mut self.prepared[arch_index];
-        // Fetch will never change and all calls are disjoint
-        let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
-        let chunk = match p.manual_chunk(Slice::single(loc.slot)) {
-            Some(v) => smallvec::smallvec![v],
-            None => smallvec::smallvec![],
-        };
-
-        DfsIter {
-            archetypes: &mut self.prepared[..],
-            stack: chunk,
+        let mut iter = DfsIter {
+            prepared: &mut self.prepared[..],
+            stack: smallvec::smallvec![],
             adj: &self.dfs.state.edges,
+        };
+
+        let loc = self.query_state.world.location(root);
+        if let Ok(loc) = loc {
+            let arch_index = *self.dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
+            // Safety: is root archetype
+            unsafe {
+                iter.push_slice_to_stack(arch_index, Slice::single(loc.slot));
+            }
         }
+
+        iter
+
+        // let arch = &mut self.prepared[arch_index];
+        // // Fetch will never change and all calls are disjoint
+        // let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
+        // if let Some(v) = p.manual_chunk(Slice::single(loc.slot)) {
+
+        // }
     }
 
     /// Iterate all trees in depth first order
@@ -189,25 +192,22 @@ where
     where
         'w: 'q,
     {
-        // Safety: the iterator will not borrow these archetypes again
-        let stack = self
-            .dfs
-            .state
-            .roots
-            .iter()
-            .flat_map(|&arch_index| {
-                let arch = &mut self.prepared[arch_index];
-                // Fetch will never change and all calls are disjoint
-                let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
-                p.chunks()
-            })
-            .collect();
-
-        DfsIter {
-            archetypes: &mut self.prepared[..],
-            stack,
+        let mut iter = DfsIter {
+            prepared: &mut self.prepared[..],
+            stack: smallvec::smallvec![],
             adj: &self.dfs.state.edges,
+        };
+
+        // Safety: the iterator will not borrow these archetypes again
+        for &arch_index in &self.dfs.state.roots {
+            unsafe { iter.push_to_stack(arch_index) }
+            // let arch = &mut prepared[arch_index];
+            // // Fetch will never change and all calls are disjoint
+            // let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
+            // p.chunks()
         }
+
+        iter
     }
 
     /// Traverse the subtree recursively, visiting each node using the provided function
@@ -220,14 +220,23 @@ where
             return;
         };
 
-        let arch_index = *self.dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
+        let dfs = &self.dfs;
+        let prepared = (&mut self.prepared[..]) as *mut [_] as *mut PreparedArchetype<_, _>;
+        let arch_index = *dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
 
-        let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
-        let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
+        let p = unsafe { &mut *prepared.add(arch_index) };
 
         if let Some(mut chunk) = p.manual_chunk(Slice::single(loc.slot)) {
-            self.traverse_batch(&mut chunk, None, value, &mut visit)
+            Self::traverse_batch(
+                self.query_state.world,
+                dfs,
+                prepared,
+                &mut chunk,
+                None,
+                value,
+                &mut visit,
+            )
         }
     }
 
@@ -237,40 +246,62 @@ where
     where
         Visit: for<'q> FnMut(<Q as FetchItem<'q>>::Item, Option<&T>, &V) -> V,
     {
-        for &arch_index in self.dfs.state.roots.iter() {
-            let p = &mut self.prepared[arch_index];
+        let dfs = &self.dfs;
+        let prepared = (&mut self.prepared[..]) as *mut [_] as *mut PreparedArchetype<_, _>;
+        for &arch_index in dfs.state.roots.iter() {
             // Fetch will never change and all calls are disjoint
-            let p = unsafe { &mut *(p as *mut PreparedArchetype<_, _>) };
+            let p = unsafe { &mut *prepared.add(arch_index) };
             for mut chunk in p.chunks() {
-                self.traverse_batch(&mut chunk, None, value, &mut visit)
+                Self::traverse_batch(
+                    self.query_state.world,
+                    dfs,
+                    prepared,
+                    &mut chunk,
+                    None,
+                    value,
+                    &mut visit,
+                )
             }
         }
     }
 
     fn traverse_batch<V, Visit>(
-        &mut self,
+        world: &World,
+        dfs: &Dfs<T>,
+        // Uses a raw pointer to be able to recurse inside the loop
+        // Alternative: release all borrows and borrow/prepare each fetch inside the loop
+        prepared: *mut PreparedArchetype<Q::Prepared, F::Prepared>,
         chunk: &mut Batch<Q::Prepared, F::Prepared>,
         edge: Option<&[T]>,
         value: &V,
         visit: &mut Visit,
     ) where
         Visit: for<'q> FnMut(<Q as FetchItem<'q>>::Item, Option<&T>, &V) -> V,
+        Q: 'w,
+        F: 'w,
     {
         while let Some((slot, id, item)) = chunk.next_full() {
             let value = (visit)(item, edge.map(|v| &v[slot]), value);
 
             // Iterate the archetypes which contain all references to `id`
-            for &arch_index in self.dfs.state.edges.get(&id).into_iter().flatten() {
-                let arch_id = self.dfs.state.archetypes[arch_index];
-                let arch = self.query_state.world.archetypes.get(arch_id);
+            for &arch_index in dfs.state.edges.get(&id).into_iter().flatten() {
+                let arch_id = dfs.state.archetypes[arch_index];
+                let arch = world.archetypes.get(arch_id);
 
-                let edge = arch.borrow::<T>(ComponentKey::new(id, Some(self.dfs.relation)));
+                let edge = arch.borrow::<T>(ComponentKey::new(id, Some(dfs.relation)));
 
-                let p = &mut self.prepared[arch_index];
-                let p = unsafe { &mut *(p as *mut PreparedArchetype<_, _>) };
+                let p = unsafe { &mut *prepared.add(arch_index) };
 
                 for mut chunk in p.chunks() {
-                    self.traverse_batch(&mut chunk, edge.as_deref(), &value, visit)
+                    Self::traverse_batch(
+                        world,
+                        dfs,
+                        prepared,
+                        &mut chunk,
+                        edge.as_deref(),
+                        &value,
+                        visit,
+                    )
                 }
             }
         }
@@ -284,7 +315,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    pub(crate) archetypes: &'q mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
+    pub(crate) prepared: &'q mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
     pub(crate) stack: SmallVec<[Batch<'q, Q::Prepared, F::Prepared>; 8]>,
 
     pub(crate) adj: &'q AdjMap,
@@ -295,13 +326,25 @@ where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    pub(crate) fn empty() -> DfsIter<'w, 'q, Q, F> {
-        static EMPTY: AdjMap = BTreeMap::new();
+    /// Pushes all chunks from arch onto the stack
+    ///
+    /// # Safety
+    /// The arch_index must not be pushed twice or appear later in the stack as a result of
+    /// the hierarchy
+    unsafe fn push_to_stack(&mut self, arch_index: usize) {
+        let arch = &mut self.prepared[arch_index];
+        // Fetch will never change and all calls are disjoint
+        let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
+        self.stack.extend(p.chunks())
+    }
 
-        Self {
-            archetypes: &mut [],
-            stack: SmallVec::new(),
-            adj: &EMPTY,
+    /// See: [`Self::push_to_stack`]
+    unsafe fn push_slice_to_stack(&mut self, arch_index: usize, slice: Slice) {
+        let arch = &mut self.prepared[arch_index];
+        // Fetch will never change and all calls are disjoint
+        let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
+        if let Some(chunk) = p.manual_chunk(slice) {
+            self.stack.push(chunk)
         }
     }
 }
@@ -320,7 +363,7 @@ where
             if let Some((id, item)) = chunk.next_with_id() {
                 // Add the children
                 for &arch_index in self.adj.get(&id).into_iter().flatten() {
-                    let p = &mut self.archetypes[arch_index];
+                    let p = &mut self.prepared[arch_index];
 
                     // Promote the borrow of the fetch to 'q
                     // This is safe because each borrow is disjoint
