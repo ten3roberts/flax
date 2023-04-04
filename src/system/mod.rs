@@ -672,7 +672,6 @@ mod test {
 
         let ctx = SystemContext::new(&mut world, &mut cmd);
         let res = boxed.execute(&ctx);
-        eprintln!("{:?}", res.as_ref().unwrap_err());
         let _ = res.unwrap_err();
     }
 }

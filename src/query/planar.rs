@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use alloc::{collections::BTreeSet, vec::Vec};
 use core::{
     iter::Flatten,
     mem::{self, MaybeUninit},
@@ -58,6 +58,13 @@ impl Planar {
 
             result.push(arch_id)
         });
+
+        let mut unique = BTreeSet::new();
+
+        assert!(
+            result.iter().all(|v| unique.insert(v)),
+            "Duplicate archetypes: {result:?}"
+        );
     }
 }
 
