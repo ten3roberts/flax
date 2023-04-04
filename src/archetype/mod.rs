@@ -738,7 +738,6 @@ impl Archetype {
     /// Returns the new location of all entities
     pub fn move_all(&mut self, dst: &mut Self, tick: u32) -> Vec<(Entity, Slot)> {
         let len = self.len();
-        // Storage is dangling
         if len == 0 {
             return Vec::new();
         }
