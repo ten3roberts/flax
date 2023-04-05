@@ -1,4 +1,5 @@
 use any::type_name;
+use anyhow::anyhow;
 use core::any;
 use core::fmt::{self, Formatter};
 use core::marker::PhantomData;
@@ -6,7 +7,6 @@ use core::marker::PhantomData;
 use alloc::vec;
 use alloc::{string::String, vec::Vec};
 use atomic_refcell::{AtomicRef, AtomicRefMut};
-use eyre::eyre;
 
 use crate::*;
 
@@ -41,7 +41,7 @@ pub trait SystemData<'a>: SystemAccess {
     /// The borrow from the system context
     type Value;
     /// Get the data from the system context
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value>;
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value>;
 }
 
 /// Describe an access to the world in ters of shared and unique accesses
@@ -135,7 +135,7 @@ macro_rules! tuple_impl {
         {
             type Value = ($(<$ty as SystemData<'w>>::Value,)*);
 
-            fn acquire(&'w mut self, _ctx: &'w SystemContext<'_>) -> eyre::Result<Self::Value> {
+            fn acquire(&'w mut self, _ctx: &'w SystemContext<'_>) -> anyhow::Result<Self::Value> {
                 Ok(
                     ($((self.$idx).acquire(_ctx)?,)*)
                 )
@@ -194,18 +194,18 @@ impl<T> Default for Write<T> {
 impl<'a> SystemData<'a> for Write<World> {
     type Value = AtomicRefMut<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
         ctx.world_mut()
-            .map_err(|_| eyre!("Failed to borrow world mutably"))
+            .map_err(|_| anyhow!("Failed to borrow world mutably"))
     }
 }
 
 impl<'a> SystemData<'a> for Read<World> {
     type Value = AtomicRef<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
         ctx.world()
-            .map_err(|_| eyre!("Failed to borrow world mutably"))
+            .map_err(|_| anyhow!("Failed to borrow world mutably"))
     }
 }
 
@@ -231,9 +231,9 @@ impl SystemAccess for Read<World> {
 impl<'a> SystemData<'a> for Write<CommandBuffer> {
     type Value = AtomicRefMut<'a, CommandBuffer>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
         ctx.cmd_mut()
-            .map_err(|_| eyre!("Failed to borrow commandbuffer mutably"))
+            .map_err(|_| anyhow!("Failed to borrow commandbuffer mutably"))
     }
 }
 
@@ -265,7 +265,7 @@ mod test {
     }
 
     #[test]
-    fn system_fn() -> eyre::Result<()> {
+    fn system_fn() -> anyhow::Result<()> {
         let mut world = World::new();
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(&mut world, &mut cmd);

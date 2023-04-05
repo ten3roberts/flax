@@ -1,9 +1,6 @@
 // Needed in macro expansion
 #![allow(unused_parens)]
 
-mod cloned;
-pub(crate) use cloned::*;
-
 /// Allows pushing onto a tuple
 pub trait TupleCombine<T> {
     /// The resulting right push
@@ -19,17 +16,6 @@ pub trait TupleCombine<T> {
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<$($ty,)*> TupleCloned for ($($ty,)*)
-            where $($ty: TupleCloned,)*
-        {
-            type Cloned = ($($ty::Cloned,)*);
-            fn clone_tuple_contents(self) -> Self::Cloned {
-                ($(
-                    ( self.$idx ).clone_tuple_contents(),
-                )*)
-            }
-        }
-
         impl<$($ty,)* T> TupleCombine<T> for ($($ty,)*) {
             type PushRight = ($($ty,)* T);
             type PushLeft  = (T, $($ty,)*);
@@ -46,12 +32,6 @@ macro_rules! tuple_impl {
             }
         }
     };
-}
-
-impl TupleCloned for () {
-    type Cloned = ();
-
-    fn clone_tuple_contents(self) -> Self::Cloned {}
 }
 
 impl<T> TupleCombine<T> for () {
@@ -80,19 +60,18 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 
 
 #[cfg(test)]
 mod test {
-    use alloc::string::String;
 
-    use super::{TupleCloned, TupleCombine};
+    use super::TupleCombine;
 
     #[test]
-    fn tuples_clone() {
+    fn tuples_push() {
         let a: i32 = 5;
-        let b = "foo".into();
+        let b = "foo";
 
-        let tuple = (&a, &b);
+        let tuple = (a, b);
 
-        let cloned: (i32, String, i32) = tuple.push_right(&a).clone_tuple_contents();
-        assert_eq!(cloned, (a, b, a));
+        let cloned: (i32, &str, i64) = tuple.push_right(a as i64);
+        assert_eq!(cloned, (a, b, a as i64));
         let t = ().push_right(5);
         assert_eq!(t, (5,));
     }

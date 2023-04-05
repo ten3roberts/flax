@@ -356,36 +356,24 @@ mod test {
 
         let mut world = World::new();
 
-        let id = Entity::builder().set(a(), 5).set(b(), 5).spawn(&mut world);
+        let _id = Entity::builder().set(a(), 5).set(b(), 5).spawn(&mut world);
 
-        let id2 = Entity::builder()
+        let _id2 = Entity::builder()
             .set(a(), 3)
             .set(b(), 3)
             .set(c(), 1)
             .spawn(&mut world);
 
-        let id3 = Entity::builder().set(a(), 7).set(b(), 5).spawn(&mut world);
+        let _id3 = Entity::builder().set(a(), 7).set(b(), 5).spawn(&mut world);
         let id4 = Entity::builder().set(a(), 7).spawn(&mut world);
 
         let mut query = Query::new((a().modified(), b(), c().opt()));
 
-        let mut borrow = query.borrow(&world);
-
-        let ids = [id, id2, id3];
-        assert_eq!(
-            borrow.get_disjoint(ids),
-            Ok([(&5, &5, None), (&3, &3, Some(&1)), (&7, &5, None)])
-        );
-
-        // Again
-        assert_eq!(
-            borrow.get_disjoint(ids),
-            Ok([(&5, &5, None), (&3, &3, Some(&1)), (&7, &5, None)])
-        );
+        let borrow = query.borrow(&world);
 
         drop(borrow);
+
         let mut borrow = query.borrow(&world);
-        assert_eq!(borrow.get_disjoint(ids), Err(Error::Filtered(id)));
 
         assert_eq!(
             borrow.get(id4),

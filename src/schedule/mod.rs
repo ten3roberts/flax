@@ -1,8 +1,8 @@
 use core::{mem, ops::Deref};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
-use eyre::WrapErr;
 
+use anyhow::Context;
 use itertools::Itertools;
 
 use crate::{
@@ -65,7 +65,7 @@ fn flush_system() -> BoxedSystem {
         .write::<CommandBuffer>()
         .build(|world: &mut World, cmd: &mut CommandBuffer| {
             cmd.apply(world)
-                .wrap_err("Failed to flush commandbuffer in schedule\n")
+                .context("Failed to flush commandbuffer in schedule\n")
         })
         .boxed()
 }
@@ -232,7 +232,7 @@ impl Schedule {
 
     /// Execute all systems in the schedule sequentially on the world.
     /// Returns the first error and aborts if the execution fails.
-    pub fn execute_seq(&mut self, world: &mut World) -> eyre::Result<()> {
+    pub fn execute_seq(&mut self, world: &mut World) -> anyhow::Result<()> {
         let ctx = SystemContext::new(world, &mut self.cmd);
 
         #[cfg(feature = "tracing")]
@@ -245,14 +245,14 @@ impl Schedule {
 
         self.cmd
             .apply(world)
-            .wrap_err("Failed to apply commandbuffer")?;
+            .context("Failed to apply commandbuffer")?;
 
         Ok(())
     }
 
     #[cfg(feature = "parallel")]
     /// Parallel version of [Self::execute_seq]
-    pub fn execute_par(&mut self, world: &mut World) -> eyre::Result<()> {
+    pub fn execute_par(&mut self, world: &mut World) -> anyhow::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
         #[cfg(feature = "tracing")]
@@ -272,7 +272,7 @@ impl Schedule {
 
         self.cmd
             .apply(world)
-            .wrap_err("Failed to apply commandbuffer")?;
+            .context("Failed to apply commandbuffer")?;
 
         result
     }
@@ -449,7 +449,7 @@ mod test {
             .spawn(&mut world);
 
         let system_a = System::builder().with(Query::new(a())).build(
-            move |mut a: QueryBorrow<_>| -> eyre::Result<()> {
+            move |mut a: QueryBorrow<_>| -> anyhow::Result<()> {
                 let _count = a.iter().count() as i32;
 
                 // eprintln!("Change: {prev_count} -> {count}");
@@ -459,8 +459,8 @@ mod test {
         );
 
         let system_b = System::builder().with(Query::new(b())).build(
-            move |mut query: QueryBorrow<_>| -> eyre::Result<()> {
-                let _item: &i32 = query.get(id).map_err(|v| v.into_eyre())?;
+            move |mut query: QueryBorrow<_>| -> anyhow::Result<()> {
+                let _item: &i32 = query.get(id).map_err(|v| v.into_anyhow())?;
                 // eprintln!("Item: {item}");
 
                 Ok(())
@@ -472,7 +472,7 @@ mod test {
         schedule.execute_seq(&mut world).unwrap();
 
         world.despawn(id).unwrap();
-        let result: eyre::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
+        let result: anyhow::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
 
         // eprintln!("{result:?}");
         assert!(result.is_err());

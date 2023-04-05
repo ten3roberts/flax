@@ -1,13 +1,12 @@
-use eyre::Context;
+use anyhow::Context;
 use flax::*;
 use glam::{vec2, Mat4, Vec2};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;
 
-fn main() -> color_eyre::Result<()> {
+fn main() -> anyhow::Result<()> {
     registry().with(HierarchicalLayer::default()).init();
-    color_eyre::install()?;
 
     // ANCHOR: basics
 
@@ -28,7 +27,7 @@ fn main() -> color_eyre::Result<()> {
         .borrow(&world)
         .iter()
         .next()
-        .ok_or(eyre::eyre!("Missing entity"))?;
+        .context("Missing entity")?;
 
     cmd.set(id, position(), vec2(32.0, 2.6));
     let id2 = world.spawn();
@@ -115,7 +114,7 @@ fn main() -> color_eyre::Result<()> {
 
     schedule
         .execute_par(&mut world)
-        .wrap_err("Failed to run schedule")?;
+        .context("Failed to run schedule")?;
 
     // ANCHOR_END: schedule
 

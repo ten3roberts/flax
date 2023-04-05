@@ -3,9 +3,8 @@ use itertools::Itertools;
 use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;
 
-fn main() -> color_eyre::Result<()> {
+fn main() -> anyhow::Result<()> {
     registry().with(HierarchicalLayer::default()).init();
-    color_eyre::install()?;
 
     // ANCHOR: relation_basic
     component! {

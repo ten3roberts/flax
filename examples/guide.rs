@@ -1,7 +1,7 @@
 use flax::{component, components::name, World};
 use itertools::Itertools;
 
-pub fn main() -> color_eyre::Result<()> {
+pub fn main() -> anyhow::Result<()> {
     // ANCHOR: world
     let mut world = World::new();
     // ANCHOR_END: world

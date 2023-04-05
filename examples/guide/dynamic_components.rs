@@ -3,7 +3,7 @@ use glam::{vec2, Vec2};
 use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;
 
-fn main() -> color_eyre::Result<()> {
+fn main() -> anyhow::Result<()> {
     // ANCHOR: custom
 
     registry().with(HierarchicalLayer::default()).init();

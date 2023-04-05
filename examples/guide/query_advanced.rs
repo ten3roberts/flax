@@ -6,7 +6,7 @@ use itertools::Itertools;
 use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 use tracing_subscriber::prelude::*;
 
-fn main() -> color_eyre::Result<()> {
+fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(tracing_tree::HierarchicalLayer::default())
         .init();
