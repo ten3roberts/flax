@@ -2,7 +2,7 @@
 fn main() {}
 
 #[cfg(feature = "serde")]
-fn main() -> color_eyre::Result<()> {
+fn main() -> anyhow::Result<()> {
     use flax::*;
     use glam::*;
     use rand::{distributions::Standard, rngs::StdRng, Rng, SeedableRng};

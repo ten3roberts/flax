@@ -1,14 +1,9 @@
 use alloc::{collections::BTreeSet, vec::Vec};
-use core::{
-    iter::Flatten,
-    mem::{self, MaybeUninit},
-    slice::IterMut,
-};
+use core::{ iter::Flatten, slice::IterMut};
 use smallvec::SmallVec;
 
 use crate::{
     archetype::Slice,
-    dummy,
     entity::EntityLocation,
     error::Result,
     fetch::{FetchAccessData, PreparedFetch},
@@ -282,68 +277,6 @@ where
             prepared.push(fetch);
 
             Some(prepared.len() - 1)
-        }
-    }
-
-    /// Access any number of entities which are disjoint.
-    /// # Panics
-    /// If entities are not disjoint
-    /// See: [`Self::get`]
-    pub fn get_disjoint<'q, const C: usize>(
-        &'q mut self,
-        ids: [Entity; C],
-    ) -> Result<[<Q::Prepared as PreparedFetch>::Item; C]>
-    where
-        'w: 'q,
-    {
-        let mut sorted = ids;
-        sorted.sort();
-        if sorted.windows(C).any(|v| v[0] == v[1]) {
-            // Not disjoint
-            panic!("{ids:?} are not disjoint");
-        }
-
-        // Prepare all
-        let mut idxs = [(0, 0, dummy()); C];
-
-        for i in 0..C {
-            let id = ids[i];
-            let EntityLocation { arch_id, slot } = self.state.world.location(id)?;
-            let idx =
-                self.prepare_archetype(arch_id).ok_or_else(|| {
-                    match find_missing_components(self.state.fetch, arch_id, self.state.world)
-                        .next()
-                    {
-                        Some(missing) => Error::MissingComponent(id, missing),
-                        None => Error::DoesNotMatch(id),
-                    }
-                })?;
-
-            idxs[i] = (idx, slot, id);
-        }
-
-        // Fetch all
-        // All items will be initialized
-        let mut items: [MaybeUninit<_>; C] = unsafe { MaybeUninit::uninit().assume_init() };
-
-        for i in 0..C {
-            let (idx, slot, id) = idxs[i];
-
-            let prepared = &mut self.prepared[idx];
-
-            // All entities are disjoint at this point
-            let prepared = unsafe { &mut *(prepared as *mut PreparedArchetype<_, _>) };
-
-            let mut chunk = prepared
-                .manual_chunk(Slice::single(slot))
-                .ok_or(Error::Filtered(id))?;
-
-            items[i].write(chunk.next().unwrap());
-        }
-
-        unsafe {
-            let items = mem::transmute_copy::<_, [<Q::Prepared as PreparedFetch>::Item; C]>(&items);
-            Ok(items)
         }
     }
 

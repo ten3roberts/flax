@@ -69,7 +69,7 @@
 //! #   player: (),
 //! #   items: Vec<String>,
 //! # }
-//! # fn main() -> color_eyre::Result<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! # let mut world = World::new();
 //! let regen_system = System::builder()
 //!     .with(Query::new((health().as_mut(), regen())))
@@ -151,7 +151,7 @@
 //!     velocity: Vec3,
 //!     position: Vec3,
 //! }
-//! # fn main() -> color_eyre::Result<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! # let mut world = World::new();
 //! # let entity = EntityBuilder::new().set(velocity(), glam::vec3(1.0, 3.0, 5.0)).set_default(position()).spawn(&mut world);
 //!

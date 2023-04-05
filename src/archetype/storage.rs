@@ -212,7 +212,6 @@ impl Storage {
     pub unsafe fn borrow<T: ComponentValue>(&self) -> &[T] {
         assert!(self.info.is::<T>(), "Mismatched types");
 
-        println!("layout: {:?}", self.info().layout());
         assert_eq!(
             self.data.as_ptr() as usize % self.info().layout().align(),
             0,

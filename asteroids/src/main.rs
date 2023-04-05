@@ -1,7 +1,4 @@
-use color_eyre::{
-    eyre::{eyre, ContextCompat},
-    Result,
-};
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use std::f32::consts::TAU;
 use tracing_subscriber::{prelude::*, registry};
@@ -100,7 +97,6 @@ impl Shape {
 
 #[macroquad::main("Asteroids")]
 async fn main() -> Result<()> {
-    color_eyre::install()?;
     registry().with(HierarchicalLayer::default()).init();
 
     let mut world = World::new();
@@ -317,8 +313,9 @@ fn camera_system(dt: f32) -> BoxedSystem {
                   mut cameras: QueryBorrow<(Mutable<Vec2>, Mutable<Vec2>, Mutable<Mat3>)>|
                   -> Result<()> {
                 if let Some((player_pos, player_vel)) = players.first() {
-                    let (camera_pos, camera_vel, camera) =
-                        cameras.first().ok_or_else(|| eyre!("No camera"))?;
+                    let (camera_pos, camera_vel, camera) = cameras
+                        .first()
+                        .ok_or_else(|| anyhow::anyhow!("No camera"))?;
 
                     *camera_pos = camera_pos.lerp(*player_pos, dt).lerp(*player_pos, dt);
                     *camera_vel = camera_vel.lerp(*player_vel, dt * 0.1);
@@ -399,7 +396,7 @@ fn collision_system() -> BoxedSystem {
              mut b: QueryBorrow<(EntityIds, CollisionQuery)>,
              world: &World,
              cmd: &mut CommandBuffer|
-             -> color_eyre::Result<()> {
+             -> Result<()> {
                 let mut collisions = Vec::new();
 
                 for (id_a, a) in &mut a {
@@ -448,7 +445,7 @@ fn collision_system() -> BoxedSystem {
                             collision.dir * collision.depth * (1.0 - mass / collision.system_mass);
                     }
 
-                    let rng = resources.get().map_err(|e| e.into_eyre())?;
+                    let rng = resources.get().map_err(anyhow::Error::msg)?;
                     create_explosion(rng, 8, collision.point, collision.impact, 4.0, 1.0, GRAY)
                         .for_each(|v| {
                             cmd.spawn(v);

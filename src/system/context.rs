@@ -51,9 +51,9 @@ where
 {
     type Value = AtomicRefMut<'a, T>;
 
-    fn acquire(&'a mut self, _: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
+    fn acquire(&'a mut self, _: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
         let borrow = self.try_borrow_mut().map_err(|_| {
-            eyre::eyre!(
+            anyhow::anyhow!(
                 "Failed to borrow shared resource of {}",
                 core::any::type_name::<T>()
             )

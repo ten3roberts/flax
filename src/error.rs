@@ -21,13 +21,13 @@ pub enum Error {
 }
 
 impl Error {
-    /// Convert the error into an eyre report, regardlees of [std::error::Error] or not.
-    pub fn into_eyre(self) -> eyre::Report {
+    /// Convert the error into an anyhow report, regardlees of [std::error::Error] or not.
+    pub(crate) fn into_anyhow(self) -> anyhow::Error {
         #[cfg(not(feature = "std"))]
-        return eyre::Report::msg(self);
+        return anyhow::Error::msg(self);
 
         #[cfg(feature = "std")]
-        return eyre::Report::new(self);
+        return anyhow::Error::new(self);
     }
 }
 

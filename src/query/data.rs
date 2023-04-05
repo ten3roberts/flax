@@ -35,10 +35,10 @@ where
 {
     type Value = QueryData<'a, Q, F, S>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> eyre::Result<Self::Value> {
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
         let world = ctx
             .world()
-            .map_err(|_| eyre::eyre!(alloc::format!("Failed to borrow world for query")))?;
+            .map_err(|_| anyhow::anyhow!(alloc::format!("Failed to borrow world for query")))?;
 
         Ok(QueryData { world, query: self })
     }

@@ -7,7 +7,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::{prelude::*, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 
-fn main() -> color_eyre::Result<()> {
+fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(EnvFilter::from_default_env())
         .with(HierarchicalLayer::default().with_indent_lines(true))

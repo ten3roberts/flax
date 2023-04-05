@@ -2,14 +2,14 @@ use alloc::string::ToString;
 mod context;
 mod traits;
 
-use core::any::{type_name, TypeId};
-use core::fmt;
-use core::{fmt::Formatter, marker::PhantomData};
-
 use crate::{
     archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer,
     ComponentKey, Fetch, FetchItem, Query, QueryData, World,
 };
+use anyhow::Context;
+use core::any::{type_name, TypeId};
+use core::fmt;
+use core::{fmt::Formatter, marker::PhantomData};
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -19,7 +19,6 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 pub use context::*;
-use eyre::Context;
 #[cfg(feature = "parallel")]
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 pub use traits::*;
@@ -257,25 +256,25 @@ where
     }
 }
 
-impl<'this, F, Args, Err> SystemFn<'this, &'this SystemContext<'this>, eyre::Result<()>>
+impl<'this, F, Args, Err> SystemFn<'this, &'this SystemContext<'this>, anyhow::Result<()>>
     for System<F, Args, Result<(), Err>>
 where
     Args: for<'x> SystemData<'x>,
     F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
-    Err: Into<eyre::Error>,
+    Err: Into<anyhow::Error>,
 {
-    fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
+    fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
         let data = self
             .data
             .acquire(ctx)
-            .wrap_err_with(|| format!("Failed to bind system data for {}", self.name))?;
+            .with_context(|| format!("Failed to bind system data for {}", self.name))?;
 
-        let res: eyre::Result<()> = self.func.execute(data).map_err(Into::into);
+        let res: anyhow::Result<()> = self.func.execute(data).map_err(Into::into);
         if let Err(err) = res {
-            return Err(err.wrap_err(format!("Failed to execute system: {:?}", self)));
+            return Err(err.context(format!("Failed to execute system: {:?}", self)));
         }
 
         Ok(())
@@ -296,20 +295,20 @@ where
     }
 }
 
-impl<'this, F, Args> SystemFn<'this, &'this SystemContext<'this>, eyre::Result<()>>
+impl<'this, F, Args> SystemFn<'this, &'this SystemContext<'this>, anyhow::Result<()>>
     for System<F, Args, ()>
 where
     Args: SystemData<'this>,
     F: SystemFn<'this, Args::Value, ()>,
 {
-    fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> eyre::Result<()> {
+    fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
         let data = self
             .data
             .acquire(ctx)
-            .wrap_err_with(|| format!("Failed to bind system data for {}", self.name))?;
+            .with_context(|| format!("Failed to bind system data for {}", self.name))?;
 
         self.func.execute(data);
 
@@ -333,7 +332,7 @@ where
 
 impl<F, Args, Ret> fmt::Debug for System<F, Args, Ret>
 where
-    Self: for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>>,
+    Self: for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.describe(f)
@@ -356,7 +355,7 @@ impl<F, Args, Ret> System<F, Args, Ret> {
         Ret: Send + Sync + 'static,
         Args: Send + Sync + 'static,
         F: Send + Sync + 'static,
-        Self: for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>>,
+        Self: for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>>,
     {
         BoxedSystem::new(self)
     }
@@ -541,8 +540,8 @@ impl Access {
 /// Is essentially a `None` variant system.
 pub(crate) struct NeverSystem;
 
-impl<'a> SystemFn<'a, &'a SystemContext<'a>, eyre::Result<()>> for NeverSystem {
-    fn execute(&'a mut self, _: &'a SystemContext<'a>) -> eyre::Result<()> {
+impl<'a> SystemFn<'a, &'a SystemContext<'a>, anyhow::Result<()>> for NeverSystem {
+    fn execute(&'a mut self, _: &'a SystemContext<'a>) -> anyhow::Result<()> {
         panic!("This system should never be executed as it is a placeholder");
     }
 
@@ -561,7 +560,7 @@ impl<'a> SystemFn<'a, &'a SystemContext<'a>, eyre::Result<()>> for NeverSystem {
 
 /// A type erased system
 pub struct BoxedSystem {
-    inner: Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>> + Send + Sync>,
+    inner: Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>> + Send + Sync>,
 }
 
 impl core::fmt::Debug for BoxedSystem {
@@ -573,7 +572,7 @@ impl core::fmt::Debug for BoxedSystem {
 impl BoxedSystem {
     /// Creates a new boxed system from any other kind of system
     pub fn new(
-        system: impl for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>>
+        system: impl for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>>
             + Send
             + Sync
             + 'static,
@@ -584,12 +583,12 @@ impl BoxedSystem {
     }
 
     /// Execute the system with the provided context
-    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'a>) -> eyre::Result<()> {
+    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'a>) -> anyhow::Result<()> {
         self.inner.execute(ctx)
     }
 
     /// Same as execute but creates and applied a temporary commandbuffer
-    pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> eyre::Result<()> {
+    pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> anyhow::Result<()> {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd);
         self.inner.execute(&ctx)?;
@@ -614,7 +613,7 @@ impl BoxedSystem {
 
 impl<T> From<T> for BoxedSystem
 where
-    T: for<'x> SystemFn<'x, &'x SystemContext<'x>, eyre::Result<()>> + Send + Sync + 'static,
+    T: for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>> + Send + Sync + 'static,
 {
     fn from(system: T) -> Self {
         Self::new(system)
@@ -630,10 +629,6 @@ mod test {
     use super::*;
 
     #[test]
-    // Fails due to eyre::Report
-    //
-    // See: https://github.com/yaahc/eyre/issues/59
-    #[cfg_attr(miri, ignore)]
     fn system_builder() {
         component! {
             a: String,
@@ -655,7 +650,7 @@ mod test {
         let mut fallible = System::builder()
             // .with_name("Fallible")
             .with(Query::new(b()))
-            .build(move |mut query: QueryBorrow<_>| -> eyre::Result<()> {
+            .build(move |mut query: QueryBorrow<_>| -> anyhow::Result<()> {
                 // Lock archetypes
                 let item: &i32 = query.get(id)?;
                 eprintln!("Item: {item}");

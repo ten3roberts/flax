@@ -70,7 +70,7 @@ fn merge() {
 #[test]
 #[cfg(feature = "serde")]
 /// Merge into an empty world
-fn merge_empty() -> color_eyre::Result<()> {
+fn merge_empty() -> anyhow::Result<()> {
     use bincode::Options;
     use flax::{filter::All, serialize::*};
 
@@ -117,7 +117,7 @@ fn merge_empty() -> color_eyre::Result<()> {
 }
 
 #[test]
-fn merge_hierarchy() -> color_eyre::Result<()> {
+fn merge_hierarchy() -> anyhow::Result<()> {
     let mut src_world = World::new();
     let mut rng = StdRng::seed_from_u64(67);
 

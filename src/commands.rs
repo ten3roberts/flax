@@ -1,14 +1,14 @@
 use core::fmt;
 
 use alloc::{boxed::Box, format, vec::Vec};
-use eyre::Context;
+use anyhow::Context;
 
 use crate::{
     buffer::MultiComponentBuffer, BatchSpawn, Component, ComponentInfo, ComponentValue, Entity,
     EntityBuilder, World,
 };
 
-type DeferFn = Box<dyn Fn(&mut World) -> eyre::Result<()> + Send + Sync>;
+type DeferFn = Box<dyn Fn(&mut World) -> anyhow::Result<()> + Send + Sync>;
 
 /// A recorded action to be applied to the world.
 enum Command {
@@ -173,7 +173,7 @@ impl CommandBuffer {
     /// Errors will be propagated.
     pub fn defer(
         &mut self,
-        func: impl Fn(&mut World) -> eyre::Result<()> + Send + Sync + 'static,
+        func: impl Fn(&mut World) -> anyhow::Result<()> + Send + Sync + 'static,
     ) -> &mut Self {
         self.commands.push(Command::Defer(Box::new(func)));
         self
@@ -181,7 +181,7 @@ impl CommandBuffer {
 
     /// Applies all contents of the command buffer to the world.
     /// The commandbuffer is cleared and can be reused.
-    pub fn apply(&mut self, world: &mut World) -> eyre::Result<()> {
+    pub fn apply(&mut self, world: &mut World) -> anyhow::Result<()> {
         for cmd in self.commands.drain(..) {
             match cmd {
                 Command::Spawn(mut entity) => {
@@ -190,14 +190,14 @@ impl CommandBuffer {
                 Command::SpawnAt(mut entity, id) => {
                     entity
                         .spawn_at(world, id)
-                        .map_err(|v| v.into_eyre())
-                        .wrap_err("Failed to spawn entity")?;
+                        .map_err(|v| v.into_anyhow())
+                        .context("Failed to spawn entity")?;
                 }
                 Command::AppendTo(mut entity, id) => {
                     entity
                         .append_to(world, id)
-                        .map_err(|v| v.into_eyre())
-                        .wrap_err("Failed to append to entity")?;
+                        .map_err(|v| v.into_anyhow())
+                        .context("Failed to append to entity")?;
                 }
                 Command::SpawnBatch(mut batch) => {
                     batch.spawn(world);
@@ -205,26 +205,26 @@ impl CommandBuffer {
                 Command::SpawnBatchAt(mut batch, ids) => {
                     batch
                         .spawn_at(world, &ids)
-                        .map_err(|v| v.into_eyre())
-                        .wrap_err("Failed to spawn entity")?;
+                        .map_err(|v| v.into_anyhow())
+                        .context("Failed to spawn entity")?;
                 }
                 Command::Set { id, info, offset } => unsafe {
                     let value = self.inserts.take_dyn(offset);
                     world
                         .set_dyn(id, info, value, |v| info.drop(v.cast()))
-                        .map_err(|v| v.into_eyre())
-                        .wrap_err_with(|| format!("Failed to set component {}", info.name()))?;
+                        .map_err(|v| v.into_anyhow())
+                        .with_context(|| format!("Failed to set component {}", info.name()))?;
                 },
                 Command::Despawn(id) => world
                     .despawn(id)
-                    .map_err(|v| v.into_eyre())
-                    .wrap_err("Failed to despawn entity")?,
+                    .map_err(|v| v.into_anyhow())
+                    .context("Failed to despawn entity")?,
                 Command::Remove { id, info } => world
                     .remove_dyn(id, info)
-                    .map_err(|v| v.into_eyre())
-                    .wrap_err_with(|| format!("Failed to remove component {}", info.name()))?,
+                    .map_err(|v| v.into_anyhow())
+                    .with_context(|| format!("Failed to remove component {}", info.name()))?,
                 Command::Defer(func) => {
-                    func(world).wrap_err("Failed to execute deferred function")?
+                    func(world).context("Failed to execute deferred function")?
                 }
             }
         }

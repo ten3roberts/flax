@@ -114,7 +114,7 @@ pub(crate) struct Cell {
     storage: AtomicRefCell<Storage>,
     changes: AtomicRefCell<Changes>,
     info: ComponentInfo,
-    subscribers: Vec<Arc<dyn EventSubscriber>>,
+    pub(crate) subscribers: Vec<Arc<dyn EventSubscriber>>,
 }
 
 impl Cell {
@@ -238,6 +238,11 @@ impl Cell {
     // pub(crate) fn info(&self) -> ComponentInfo {
     //     self.info
     // }
+
+    #[inline]
+    pub(crate) fn info(&self) -> ComponentInfo {
+        self.info
+    }
 }
 
 // #[derive(Debug)]

@@ -15,10 +15,10 @@ use super::{Cell, Change, Changes, Slice, Slot};
 
 pub(crate) struct CellMutGuard<'a, T: ?Sized> {
     pub(crate) storage: AtomicRefMut<'a, T>,
-    pub(super) changes: AtomicRefMut<'a, Changes>,
-    pub(super) cell: &'a Cell,
-    pub(super) ids: &'a [Entity],
-    pub(super) tick: u32,
+    pub(crate) changes: AtomicRefMut<'a, Changes>,
+    pub(crate) cell: &'a Cell,
+    pub(crate) ids: &'a [Entity],
+    pub(crate) tick: u32,
 }
 
 impl<'a, T: Debug + ?Sized> Debug for CellMutGuard<'a, T> {
