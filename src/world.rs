@@ -434,10 +434,7 @@ impl World {
         if id.is_static() {
             meta.set(is_static(), ());
         }
-
-        if !self.is_alive(id) {
-            self.spawn_at(id).unwrap();
-        }
+        self.spawn_at(id).unwrap();
 
         self.set_with(id, &mut meta).unwrap();
     }

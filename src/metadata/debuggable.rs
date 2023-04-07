@@ -1,6 +1,7 @@
 use core::{
     any::Any,
     fmt::{self, Debug, Formatter},
+    marker::PhantomData,
 };
 
 use crate::{
@@ -18,6 +19,7 @@ component! {
 /// Formats a component value using [`Debug`](core::fmt::Debug)
 pub struct Debuggable {
     debug: fn(&dyn Any) -> &dyn Debug,
+    debug_ptr: fn(&*const u8) -> &dyn Debug,
     debug_storage: fn(&Storage, slot: Slot) -> &dyn Debug,
 }
 
@@ -25,6 +27,10 @@ impl Debuggable {
     /// Formats the given value
     pub fn debug<'a>(&self, value: &'a dyn Any) -> &'a dyn Debug {
         (self.debug)(value)
+    }
+
+    pub(crate) unsafe fn debug_ptr<'a>(&self, ptr: &'a *const u8) -> &'a dyn Debug {
+        (self.debug_ptr)(ptr)
     }
 }
 
@@ -38,12 +44,13 @@ where
             Debuggable {
                 debug: |value| value.downcast_ref::<T>().unwrap(),
                 debug_storage: |storage, slot| &storage.downcast_ref::<T>()[slot],
+                debug_ptr: |value| unsafe { &*(value.cast::<T>()) },
             },
         );
     }
 }
 
-struct MissingDebug;
+pub(crate) struct MissingDebug;
 
 impl Debug for MissingDebug {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {

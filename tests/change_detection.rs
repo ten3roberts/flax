@@ -42,7 +42,7 @@ fn change_detection() {
         Entity::builder()
             .set(name(), format!("b.{i}"))
             .set(position(), rng.gen())
-            .set(rotation(), rng.gen())
+            .set(rotation(), Quat::from_scaled_axis(rng.gen()))
             .spawn(&mut world)
     }));
 
