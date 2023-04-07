@@ -1,12 +1,14 @@
 use core::alloc::Layout;
-use core::mem;
+use core::mem::{self, align_of};
 use core::ptr::{self, NonNull};
 
-use alloc::alloc::{dealloc, handle_alloc_error};
+use alloc::alloc::{dealloc, handle_alloc_error, realloc};
 use alloc::collections::BTreeMap;
-use itertools::Itertools;
 
-use crate::{metadata, Component, ComponentInfo, ComponentKey, ComponentValue, Entity};
+use crate::{
+    debuggable, metadata, Component, ComponentInfo, ComponentKey, ComponentValue, Entity,
+    MissingDebug,
+};
 
 type Offset = usize;
 
@@ -23,42 +25,56 @@ impl BufferStorage {
         Self {
             data: NonNull::dangling(),
             cursor: 0,
-            layout: Layout::from_size_align(0, 8).unwrap(),
+            layout: Layout::from_size_align(0, align_of::<u8>()).unwrap(),
         }
     }
 
     /// Allocate space for a value with `layout`.
     /// Returns an offset into the internal data where a value of the compatible layout may be
     /// written.
-    fn allocate(&mut self, layout: Layout) -> Offset {
+    fn allocate(&mut self, item_layout: Layout) -> Offset {
         // Offset + the remaining padding to get the current offset up to an alignment boundary of `layout`.
-        let new_offset = self.cursor + (layout.align() - self.cursor % layout.align());
+        let new_offset = self.cursor + (item_layout.align() - self.cursor % item_layout.align());
         // The end of the allocated item
-        let new_end = new_offset + layout.size();
+        let new_end = new_offset + item_layout.size();
 
         // Reallocate buffer if it is not large enough
-        if (new_end >= self.layout.size() && new_end != 0) || self.layout.align() < layout.align() {
+        if (new_end >= self.layout.size() && new_end != 0)
+            || self.layout.align() < item_layout.align()
+        {
             let new_size = new_end.next_power_of_two();
 
-            {
-                // Don't realloc since layout may change
-                let align = self.layout.align().max(layout.align());
-                let new_layout = Layout::from_size_align(new_size, align).unwrap();
+            // Don't realloc since layout may change
+            let new_align = self.layout.align().max(item_layout.align());
+            let new_layout = Layout::from_size_align(new_size, new_align).unwrap();
 
-                let new_data = if self.layout.size() == 0 {
-                    unsafe { alloc::alloc::alloc(new_layout) }
-                } else {
-                    unsafe { alloc::alloc::realloc(self.data.as_ptr(), self.layout, new_size) }
-                };
-
-                let new_data = match NonNull::new(new_data) {
+            let new_data = if self.layout.size() == 0 {
+                match NonNull::new(unsafe { alloc::alloc::alloc(new_layout) }) {
                     Some(v) => v,
-                    None => handle_alloc_error(layout),
-                };
+                    None => handle_alloc_error(new_layout),
+                }
+            } else if new_align != self.layout.align() {
+                unsafe {
+                    let old_ptr = self.data.as_ptr();
+                    let new_ptr = match NonNull::new(alloc::alloc::alloc(new_layout)) {
+                        Some(v) => v,
+                        None => handle_alloc_error(new_layout),
+                    };
+                    ptr::copy_nonoverlapping(old_ptr, new_ptr.as_ptr(), self.cursor);
+                    dealloc(old_ptr, self.layout);
+                    new_ptr
+                }
+            } else {
+                unsafe {
+                    match NonNull::new(realloc(self.data.as_ptr(), self.layout, new_size)) {
+                        Some(v) => v,
+                        None => alloc::alloc::handle_alloc_error(self.layout),
+                    }
+                }
+            };
 
-                self.layout = new_layout;
-                self.data = new_data;
-            }
+            self.layout = new_layout;
+            self.data = new_data;
         }
 
         self.cursor = new_end;
@@ -92,7 +108,11 @@ impl BufferStorage {
         &*self.data.as_ptr().add(offset).cast::<T>()
     }
 
-    pub(crate) unsafe fn at(&mut self, offset: Offset) -> *mut u8 {
+    pub(crate) unsafe fn at_mut(&mut self, offset: Offset) -> *mut u8 {
+        self.data.as_ptr().add(offset)
+    }
+
+    pub(crate) unsafe fn at(&self, offset: Offset) -> *const u8 {
         self.data.as_ptr().add(offset)
     }
 
@@ -186,9 +206,21 @@ pub struct ComponentBuffer {
 
 impl core::fmt::Debug for ComponentBuffer {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_list()
-            .entries(self.components().collect_vec())
-            .finish()
+        let mut s = f.debug_map();
+
+        for &(info, offset) in self.entries.values() {
+            let debugger = info.meta_ref().get(debuggable());
+            if let Some(debugger) = debugger {
+                unsafe {
+                    let ptr = self.storage.at(offset);
+                    s.entry(&info.name(), debugger.debug_ptr(&ptr));
+                }
+            } else {
+                s.entry(&info.name(), &MissingDebug);
+            }
+        }
+
+        s.finish()
     }
 }
 
@@ -259,7 +291,7 @@ impl ComponentBuffer {
         while let Some((&key, _)) = self.entries.range(start..=end).next() {
             let (info, offset) = self.entries.remove(&key).unwrap();
             unsafe {
-                let ptr = self.storage.at(offset);
+                let ptr = self.storage.at_mut(offset);
                 info.drop(ptr);
             }
         }
@@ -268,7 +300,7 @@ impl ComponentBuffer {
     /// Set from a type erased component
     pub(crate) unsafe fn set_dyn(&mut self, info: ComponentInfo, value: *mut u8) {
         if let Some(&(_, offset)) = self.entries.get(&info.key()) {
-            let old_ptr = self.storage.at(offset);
+            let old_ptr = self.storage.at_mut(offset);
             info.drop(old_ptr);
 
             ptr::copy_nonoverlapping(value, old_ptr, info.size());
@@ -310,7 +342,7 @@ impl<'a> Iterator for ComponentBufferIter<'a> {
         let (_, (info, offset)) = self.entries.pop_first()?;
 
         unsafe {
-            let data = self.storage.at(offset);
+            let data = self.storage.at_mut(offset);
             Some((info, data))
         }
     }
@@ -320,7 +352,7 @@ impl Drop for ComponentBuffer {
     fn drop(&mut self) {
         for &(info, offset) in self.entries.values() {
             unsafe {
-                let ptr = self.storage.at(offset);
+                let ptr = self.storage.at_mut(offset);
                 info.drop(ptr);
             }
         }
@@ -347,13 +379,13 @@ impl MultiComponentBuffer {
 
     pub unsafe fn take_dyn(&mut self, offset: Offset) -> *mut u8 {
         self.drops.remove(&offset).unwrap();
-        self.storage.at(offset)
+        self.storage.at_mut(offset)
     }
 
     pub fn clear(&mut self) {
         for (&offset, drop) in &mut self.drops {
             unsafe {
-                let ptr = self.storage.at(offset);
+                let ptr = self.storage.at_mut(offset);
                 (drop)(ptr)
             }
         }

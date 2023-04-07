@@ -163,7 +163,7 @@ impl Storage {
     /// # Safety
     /// Other must be of the same type as self
     pub(crate) unsafe fn append(&mut self, other: &mut Self) {
-        debug_assert_eq!(
+        assert_eq!(
             self.info.type_id(),
             other.info.type_id(),
             "Mismatched types"
@@ -175,6 +175,13 @@ impl Storage {
             mem::swap(self, other);
             return;
         }
+
+        eprintln!(
+            "Appending: {:?} {} with {}",
+            self.info(),
+            self.len,
+            other.len
+        );
 
         self.reserve(other.len);
 
@@ -225,6 +232,7 @@ impl Storage {
         // Drop all contained valid values
         for slot in 0..self.len {
             unsafe {
+                eprintln!("Dropping: {:?} {:?}", self.info, self.info.type_id());
                 let value = self.at_mut(slot).unwrap();
                 self.info.drop(value);
             }

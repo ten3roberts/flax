@@ -96,7 +96,6 @@ fn get_ordered_archetypes(
     for (key, _) in relations {
         is_root = false;
         let parent = key.object.unwrap();
-        eprintln!("Found parent: {parent}");
 
         let loc = world.location(parent).unwrap();
         // Part of the visited set
