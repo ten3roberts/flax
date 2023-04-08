@@ -102,8 +102,9 @@ mod test {
     use core::iter::repeat;
 
     use glam::{Mat4, Vec3};
+    use itertools::Itertools;
 
-    use crate::{component, components::name, World};
+    use crate::{component, components::name, FetchExt, Query, World};
 
     use super::*;
     #[test]
@@ -150,15 +151,37 @@ mod test {
         }
 
         let mut world = World::new();
-        let mut batch = BatchSpawn::new(10_000);
+        let mut batch = BatchSpawn::new(100);
 
         batch
             .set(transform(), repeat(Mat4::from_scale(Vec3::ONE)))
             .unwrap();
 
-        batch.set(position(), repeat(Vec3::X)).unwrap();
+        batch
+            .set(position(), (0..).map(|i| Vec3::X * i as f32))
+            .unwrap();
         batch.set(rotation(), repeat(Vec3::X)).unwrap();
         batch.set(velocity(), repeat(Vec3::X)).unwrap();
         batch.spawn(&mut world);
+
+        pretty_assertions::assert_eq!(
+            Query::new((
+                transform().copied(),
+                position().copied(),
+                rotation().copied(),
+                velocity().copied()
+            ))
+            .borrow(&world)
+            .iter()
+            .collect_vec(),
+            (0..100)
+                .map(|i| (
+                    Mat4::from_scale(Vec3::ONE),
+                    Vec3::X * i as f32,
+                    Vec3::X,
+                    Vec3::X
+                ))
+                .collect_vec()
+        );
     }
 }

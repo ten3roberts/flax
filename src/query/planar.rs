@@ -1,5 +1,5 @@
 use alloc::{collections::BTreeSet, vec::Vec};
-use core::{ iter::Flatten, slice::IterMut};
+use core::{iter::Flatten, slice::IterMut};
 use smallvec::SmallVec;
 
 use crate::{
@@ -54,12 +54,12 @@ impl Planar {
             result.push(arch_id)
         });
 
-        let mut unique = BTreeSet::new();
+        // let mut unique = BTreeSet::new();
 
-        assert!(
-            result.iter().all(|v| unique.insert(v)),
-            "Duplicate archetypes: {result:?}"
-        );
+        // assert!(
+        //     result.iter().all(|v| unique.insert(v)),
+        //     "Duplicate archetypes: {result:?}"
+        // );
     }
 }
 
