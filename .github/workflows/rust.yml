@@ -114,9 +114,10 @@ jobs:
           toolchain: nightly
           override: true
           profile: minimal
+          components: miri
 
       - name: Test code coverage
-        run: "cargo +nightly tarpaulin --verbose --all-features --timeout 120 --out Xml"
+        run: "cargo +nightly tarpaulin --all-features --timeout 120 --out Xml"
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v2

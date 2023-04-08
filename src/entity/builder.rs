@@ -3,15 +3,17 @@ use crate::{
     ComponentValue, Entity, RelationExt, World,
 };
 use alloc::{boxed::Box, vec::Vec};
-use derivative::Derivative;
 
 type ModifyFunc = Box<dyn FnOnce(Entity, &mut EntityBuilder) + Send + Sync>;
-#[derive(Derivative)]
-#[derivative(Debug)]
 struct Child {
     builder: EntityBuilder,
-    #[derivative(Debug = "ignore")]
     modify: ModifyFunc,
+}
+
+impl core::fmt::Debug for Child {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.builder.fmt(f)
+    }
 }
 
 impl Child {

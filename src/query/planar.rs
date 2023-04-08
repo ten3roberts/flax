@@ -1,4 +1,4 @@
-use alloc::{collections::BTreeSet, vec::Vec};
+use alloc::vec::Vec;
 use core::{iter::Flatten, slice::IterMut};
 use smallvec::SmallVec;
 
