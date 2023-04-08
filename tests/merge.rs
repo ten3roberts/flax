@@ -57,12 +57,8 @@ fn merge() {
         world1.despawn(id).unwrap();
     }
 
-    eprintln!("world1: {world1:#?}\n\nworld2: {world2:#?}");
-
     let new_ids = world1.merge_with(&mut world2);
 
-    eprintln!("New ids: {new_ids:#?}");
-    eprintln!("World: {world1:#?}");
     assert_eq!(Query::new(position()).borrow(&world2).count(), 0);
     assert_eq!(Query::new(name()).borrow(&world1).count(), 80);
 }
@@ -160,7 +156,6 @@ fn merge_hierarchy() -> anyhow::Result<()> {
     assert_eq!(Query::new(()).borrow(&world).count(), 104);
 
     let new_root = migrated.get(root);
-    eprintln!("{root} => {new_root}");
 
     let children = Query::new(name())
         .with(child_of(new_root))
@@ -270,9 +265,6 @@ fn merge_custom() {
     assert!(world.has(new_custom_component.id(), debuggable()));
 
     let new_custom_relation = migrated.get_relation(custom_relation);
-
-    eprintln!("{root} => {new_root}");
-    eprintln!("{custom_component:?} => {new_custom_component:?}");
 
     assert_eq!(
         world.get(new_root, new_custom_component).as_deref(),
