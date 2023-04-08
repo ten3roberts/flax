@@ -172,7 +172,7 @@ fn relations() {
     assert!(world.get(child3, child_of(parent2)).is_err());
 }
 
-#[test_log::test]
+#[test]
 fn build_hierarchy() {
     // tracing_subscriber::fmt::init();
 
