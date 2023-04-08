@@ -102,9 +102,6 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
-    container:
-      image: xd009642/tarpaulin:develop-nightly
-      options: --security-opt seccomp=unconfined
 
     steps:
       - uses: actions/checkout@v2
@@ -116,8 +113,13 @@ jobs:
           profile: minimal
           components: miri
 
-      - name: Test code coverage
-        run: "cargo +nightly tarpaulin --features std,flume,serde --timeout 120 --out Xml"
+      - uses: taiki-e/install-action@cargo-tarpaulin
+
+      - name: Run cargo tarpaulin
+        uses: actions-rs/cargo@v1
+        with:
+          command: tarpaulin
+          args: --features std,flume,serde --out Xml
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v2
