@@ -106,8 +106,6 @@ impl Storage {
             None => handle_alloc_error(new_layout),
         };
 
-        assert_eq!(data.as_ptr() as usize % self.info.layout().align(), 0);
-
         self.cap = new_cap;
         self.data = data
     }
@@ -232,7 +230,6 @@ impl Storage {
         // Drop all contained valid values
         for slot in 0..self.len {
             unsafe {
-                eprintln!("Dropping: {:?} {:?}", self.info, self.info.type_id());
                 let value = self.at_mut(slot).unwrap();
                 self.info.drop(value);
             }
@@ -257,8 +254,6 @@ impl Storage {
     /// # Safety
     /// `item` must be of the same type.
     pub(crate) unsafe fn push<T: ComponentValue>(&mut self, item: T) {
-        assert_eq!(self.info.type_id(), TypeId::of::<T>(), "Mismatched types");
-
         self.reserve(1);
 
         core::ptr::write(self.as_ptr().cast::<T>().add(self.len), item);

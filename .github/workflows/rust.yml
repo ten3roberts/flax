@@ -21,11 +21,13 @@ jobs:
           override: true
           profile: minimal
 
+      - uses: taiki-e/install-action@nextest
       - name: Run cargo test
         uses: actions-rs/cargo@v1
         with:
-          command: test
-          args: --all-features
+          command: nextest
+          args: run --all-features
+
   test_miri:
     runs-on: ubuntu-latest
     steps:
@@ -37,11 +39,33 @@ jobs:
           override: true
           components: miri
 
+      - uses: taiki-e/install-action@nextest
+
       - name: Run cargo miri
         uses: actions-rs/cargo@v1
         with:
           command: miri
-          args: test --features serde,parallel
+          args: nextest run --no-default-features --features std,serde,flume
+
+  test_nostd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run --no-default-features
+
   lint_doc:
     runs-on: ubuntu-latest
     steps:
@@ -58,7 +82,8 @@ jobs:
         with:
           command: doc
           args: --all-features
-  test_nostd:
+
+  test_doc:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -69,11 +94,11 @@ jobs:
           override: true
           profile: minimal
 
-      - name: Run cargo test
+      - name: Run cargo test (doc)
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --no-default-features --lib --bins
+          args: --doc --all-features
 
   coverage:
     runs-on: ubuntu-latest
