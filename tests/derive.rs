@@ -1,6 +1,5 @@
-use flax_derive::Fetch;
-
 #[test]
+#[cfg(feature = "derive")]
 fn derive_fetch() {
     flax::component! {
         position: Vec3 => [flax::Debuggable],

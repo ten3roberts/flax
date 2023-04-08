@@ -481,7 +481,7 @@ mod test {
     #[test]
     #[cfg(feature = "parallel")]
     #[cfg(feature = "std")]
-    #[cfg_attr(miri, ignore)]
+    #[cfg(feature = "derive")]
     fn schedule_par() {
         use glam::{vec2, Vec2};
 

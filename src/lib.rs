@@ -258,4 +258,5 @@ pub use system::*;
 pub(crate) use vtable::*;
 pub use world::*;
 
+#[cfg(feature = "derive")]
 pub use flax_derive::*;

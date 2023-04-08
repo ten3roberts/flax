@@ -45,7 +45,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: miri
-          args: nextest run --no-default-features --features std,serde,flume
+          args: nextest run --no-default-features --features std,serde,flume,derive
 
   test_nostd:
     runs-on: ubuntu-latest
@@ -117,7 +117,7 @@ jobs:
           components: miri
 
       - name: Test code coverage
-        run: "cargo +nightly tarpaulin --all-features --timeout 120 --out Xml"
+        run: "cargo +nightly tarpaulin --features std,flume,serde --timeout 120 --out Xml"
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v2
