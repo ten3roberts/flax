@@ -8,8 +8,7 @@ use alloc::{
     collections::{BTreeMap, BTreeSet},
     vec::Vec,
 };
-use core::{iter::Zip, marker::PhantomData, ops::Range, slice::Iter};
-use derivative::Derivative;
+use core::{fmt::Debug, iter::Zip, marker::PhantomData, ops::Range, slice::Iter};
 use smallvec::SmallVec;
 
 use super::borrow::QueryBorrowState;
@@ -149,8 +148,6 @@ impl GraphState {
     }
 }
 
-#[derive(Derivative)]
-#[derivative(Debug)]
 /// The borrowed state for a [`GraphQuery`]
 pub struct GraphBorrow<'w, Q, F>
 where
@@ -159,10 +156,21 @@ where
 {
     world: &'w World,
     relation: Entity,
-    #[derivative(Debug = "ignore")]
     prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 16]>,
-    #[derivative(Debug = "ignore")]
     state: &'w GraphState,
+}
+
+impl<'w, Q: Debug, F: Debug> Debug for GraphBorrow<'w, Q, F>
+where
+    Q: Fetch<'w>,
+    F: Fetch<'w>,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("GraphBorrow")
+            .field("world", &self.world)
+            .field("relation", &self.relation)
+            .finish()
+    }
 }
 
 impl<'w, Q, F> GraphBorrow<'w, Q, F>
@@ -186,8 +194,6 @@ where
 }
 
 /// A cursor to a node/entity in the graph
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""), Clone(bound = ""), Copy(bound = ""))]
 pub struct Node<'w, Q, F> {
     id: Entity,
     slot: Slot,
@@ -195,6 +201,27 @@ pub struct Node<'w, Q, F> {
     state: &'w GraphState,
     world: &'w World,
     _marker: PhantomData<(Q, F)>,
+}
+
+impl<'w, Q, F> Clone for Node<'w, Q, F> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            slot: self.slot,
+            arch_id: self.arch_id,
+            state: self.state,
+            world: self.world,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'w, Q, F> Copy for Node<'w, Q, F> {}
+
+impl<'w, Q, F> Debug for Node<'w, Q, F> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Node").field("id", &self.id).finish()
+    }
 }
 
 impl<'w, Q, F> Node<'w, Q, F>

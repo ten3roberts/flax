@@ -4,7 +4,6 @@ use core::{
 };
 
 use atomic_refcell::AtomicRefMut;
-use derivative::Derivative;
 
 use crate::{
     events::{EventData, EventKind},
@@ -70,12 +69,16 @@ impl<'a, T: ?Sized> CellMutGuard<'a, T> {
 }
 
 /// A mutable reference to an entity's component
-#[derive(Derivative)]
-#[derivative(Debug)]
 pub struct RefMut<'a, T> {
     guard: CellMutGuard<'a, T>,
     slot: Slot,
     modified: bool,
+}
+
+impl<'a, T: Debug> Debug for RefMut<'a, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.guard.fmt(f)
+    }
 }
 
 impl<'a, T> RefMut<'a, T> {

@@ -1,4 +1,4 @@
-use core::{any::TypeId, mem, ptr::NonNull};
+use core::{mem, ptr::NonNull};
 
 use alloc::{
     alloc::alloc, alloc::dealloc, alloc::handle_alloc_error, alloc::realloc, alloc::Layout,
@@ -174,13 +174,6 @@ impl Storage {
             return;
         }
 
-        eprintln!(
-            "Appending: {:?} {} with {}",
-            self.info(),
-            self.len,
-            other.len
-        );
-
         self.reserve(other.len);
 
         core::ptr::copy_nonoverlapping(
@@ -215,14 +208,8 @@ impl Storage {
     /// # Safety
     /// The types must match
     pub unsafe fn borrow<T: ComponentValue>(&self) -> &[T] {
-        assert!(self.info.is::<T>(), "Mismatched types");
+        debug_assert!(self.info.is::<T>(), "Mismatched types");
 
-        assert_eq!(
-            self.data.as_ptr() as usize % self.info().layout().align(),
-            0,
-            "{}",
-            self.info.type_name()
-        );
         core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
     }
 

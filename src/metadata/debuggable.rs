@@ -1,7 +1,6 @@
 use core::{
     any::Any,
     fmt::{self, Debug, Formatter},
-    marker::PhantomData,
 };
 
 use crate::{
