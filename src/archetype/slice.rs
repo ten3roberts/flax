@@ -18,6 +18,7 @@ impl Slice {
         Self { start, end }
     }
 
+    #[inline]
     pub(crate) fn single(slot: Slot) -> Slice {
         Self::new(slot, slot + 1)
     }

@@ -50,6 +50,9 @@ tracing = "0.1"
 criterion = "0.4"
 pretty_assertions = "1.3.0"
 
+[profile.bench]
+debug = true
+
 [features]
 std = ["itertools/use_std", "itertools/use_alloc", "anyhow/std"]
 default = ["std", "parallel", "flume"]

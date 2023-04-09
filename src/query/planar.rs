@@ -200,12 +200,12 @@ where
                 continue;
             }
 
-            let Some(mut p) = self.state.prepare_fetch(arch_id, arch) else { continue };
+            if let Some(mut p) = self.state.prepare_fetch(arch_id, arch) {
+                let chunk = p.chunks();
 
-            let chunk = p.chunks();
-
-            for item in chunk.flatten() {
-                func(item)
+                for item in chunk.flatten() {
+                    func(item)
+                }
             }
         }
     }
@@ -225,23 +225,12 @@ where
         F::Prepared: Send,
         // BatchedIter<'q, 'w, Q>: Send,
     {
-        use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+        use rayon::prelude::{ParallelBridge, ParallelIterator};
 
         self.clear_borrows();
-        self.archetypes.par_iter().for_each(|&arch_id| {
-            let arch = self.state.world.archetypes.get(arch_id);
-            if arch.is_empty() {
-                return;
-            }
-
-            let Some(mut p) = self.state.prepare_fetch(arch_id, arch) else { return };
-
-            let chunk = p.chunks();
-
-            for item in chunk.flatten() {
-                func(item)
-            }
-        });
+        self.iter_batched()
+            .par_bridge()
+            .for_each(|batch| batch.for_each(&func))
     }
 
     /// Release all borrowed archetypes
