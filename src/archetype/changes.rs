@@ -384,8 +384,9 @@ impl Change {
     pub(crate) fn new(slice: Slice, tick: u32) -> Self {
         Self { slice, tick }
     }
+    #[inline]
     pub(crate) fn single(slot: Slot, tick: u32) -> Self {
-        Self::new(Slice::single(slot), tick)
+        Self::new(Slice::new(slot, slot + 1), tick)
     }
 }
 

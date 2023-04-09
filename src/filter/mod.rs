@@ -136,7 +136,7 @@ where
 {
     type Item = Q::Item;
 
-    #[inline]
+    #[inline(always)]
     unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.fetch.fetch(slot)
     }
@@ -449,6 +449,7 @@ pub struct FilterIter<Q> {
 impl<Q> FilterIter<Q> {
     /// Creates a new filter iterator visiting the `slot` of the same archetype
     /// as `F`
+    #[inline(always)]
     pub fn new(slots: Slice, fetch: Q) -> Self {
         Self { slots, fetch }
     }

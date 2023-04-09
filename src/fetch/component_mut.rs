@@ -107,7 +107,6 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
         unsafe { &mut *(self.storage.get_unchecked_mut(slot) as *mut T) }
     }
 
-    #[inline]
     fn set_visited(&mut self, slots: Slice) {
         let event = EventData {
             ids: &self.ids[slots.as_range()],

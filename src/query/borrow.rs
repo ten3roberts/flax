@@ -14,6 +14,7 @@ pub(crate) struct PreparedArchetype<'w, Q, F> {
 }
 
 impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
+    #[inline]
     pub fn manual_chunk<'q>(&'q mut self, slots: Slice) -> Option<Batch<'q, Q, F>>
     where
         Q: PreparedFetch<'q>,
@@ -33,6 +34,7 @@ impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
         Some(chunk)
     }
 
+    #[inline]
     pub fn chunks(&mut self) -> ArchetypeChunks<Q, F> {
         ArchetypeChunks {
             iter: FilterIter::new(self.arch.slots(), &mut self.fetch),

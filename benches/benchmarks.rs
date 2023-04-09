@@ -58,7 +58,7 @@ fn benchmarks(c: &mut Criterion) {
         })
         .bench_function("par", |b| {
             let mut bench = schedule::Benchmark::new();
-            b.iter(|| bench.run())
+            b.iter(|| bench.run_par())
         })
         .bench_function("seq", |b| {
             let mut bench = schedule::Benchmark::new();
