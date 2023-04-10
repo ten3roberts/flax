@@ -922,7 +922,6 @@ mod tests {
         let a_map = changes_1.as_changed_set(1);
         let b_map = changes_2.as_changed_set(2);
 
-        // eprintln!("ChangeList: \n  {changes_1:?}\n  {changes_2:?}");
         let slots = Slice::new(0, 1000);
 
         // Or

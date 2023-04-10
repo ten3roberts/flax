@@ -57,7 +57,7 @@ fn merge() {
         world1.despawn(id).unwrap();
     }
 
-    let new_ids = world1.merge_with(&mut world2);
+    let _new_ids = world1.merge_with(&mut world2);
 
     assert_eq!(Query::new(position()).borrow(&world2).count(), 0);
     assert_eq!(Query::new(name()).borrow(&world1).count(), 80);

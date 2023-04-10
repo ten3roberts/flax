@@ -102,9 +102,9 @@ fn access() {
     assert_eq!(
         schedule.batch_info(&mut world).to_names(),
         [
-            vec!["regen_system", "weapons"],
+            vec!["regen_system", "weapons", "names"],
             vec!["blue_system", "red_system"],
-            vec!["stats", "names"]
+            vec!["stats"]
         ]
     );
 
@@ -113,9 +113,9 @@ fn access() {
     assert_eq!(
         schedule.batch_info(&mut world).to_names(),
         [
-            vec!["regen_system", "weapons"],
+            vec!["regen_system", "weapons", "names"],
             vec!["blue_system", "red_system"],
-            vec!["stats", "names"]
+            vec!["stats"]
         ]
     );
 
@@ -125,10 +125,10 @@ fn access() {
     assert_eq!(
         schedule.batch_info(&mut world).to_names(),
         [
-            vec!["regen_system", "weapons"],
+            vec!["regen_system", "weapons", "names"],
             vec!["blue_system"],
             vec!["red_system"],
-            vec!["stats", "names"],
+            vec!["stats"],
         ]
     );
 
@@ -137,9 +137,9 @@ fn access() {
     assert_eq!(
         schedule.batch_info(&mut world).to_names(),
         [
-            vec!["regen_system", "weapons"],
+            vec!["regen_system", "weapons", "names"],
             vec!["blue_system", "red_system"],
-            vec!["stats", "names"]
+            vec!["stats"]
         ]
     );
 }

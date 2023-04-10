@@ -77,8 +77,6 @@ impl Benchmark {
     }
 
     pub fn run_par(&mut self) {
-        let batches = self.1.batch_info(&mut self.0);
-        assert_eq!(batches.len(), 3, "{batches:?}");
         self.1.execute_par(&mut self.0).unwrap();
     }
 

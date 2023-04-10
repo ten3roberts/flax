@@ -40,25 +40,25 @@ fn schedule_granularity() {
     }
     let mut world = World::default();
 
-    let mut batch = BatchSpawn::new(10_000);
+    let mut batch = BatchSpawn::new(100);
     batch.set(a(), repeat(0.0)).unwrap();
     batch.set(b(), repeat(0.0)).unwrap();
     batch.spawn(&mut world);
 
-    let mut batch = BatchSpawn::new(10_000);
+    let mut batch = BatchSpawn::new(100);
     batch.set(a(), repeat(0.0)).unwrap();
     batch.set(b(), repeat(0.0)).unwrap();
     batch.set(c(), repeat(0.0)).unwrap();
     batch.spawn(&mut world);
 
-    let mut batch = BatchSpawn::new(10_000);
+    let mut batch = BatchSpawn::new(100);
     batch.set(a(), repeat(0.0)).unwrap();
     batch.set(b(), repeat(0.0)).unwrap();
     batch.set(c(), repeat(0.0)).unwrap();
     batch.set(d(), repeat(0.0)).unwrap();
     batch.spawn(&mut world);
 
-    let mut batch = BatchSpawn::new(10_000);
+    let mut batch = BatchSpawn::new(100);
     batch.set(a(), repeat(0.0)).unwrap();
     batch.set(b(), repeat(0.0)).unwrap();
     batch.set(c(), repeat(0.0)).unwrap();
@@ -73,7 +73,19 @@ fn schedule_granularity() {
 
     let batches = schedule.batch_info(&mut world);
 
-    assert_eq!(batches.len(), 1, "{batches:?}");
+    assert_eq!(batches.len(), 1);
 
+    let mut batch = BatchSpawn::new(100);
+    batch.set(a(), repeat(0.0)).unwrap();
+    batch.set(b(), repeat(0.0)).unwrap();
+    batch.set(c(), repeat(0.0)).unwrap();
+    batch.set(d(), repeat(0.0)).unwrap();
+    batch.set(e(), repeat(0.0)).unwrap();
+    batch.spawn(&mut world);
+
+    let batches = schedule.batch_info(&mut world);
+    let names = batches.to_names();
+
+    assert_eq!(batches.len(), 2, "{names:#?}");
     schedule.execute_par(&mut world).unwrap();
 }

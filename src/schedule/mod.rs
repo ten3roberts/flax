@@ -6,57 +6,8 @@ use anyhow::Context;
 use itertools::Itertools;
 
 use crate::{
-    access_info, system::SystemContext, AccessInfo, BoxedSystem, CommandBuffer, NeverSystem,
-    System, World,
+    access_info, system::SystemContext, AccessInfo, BoxedSystem, CommandBuffer, System, World,
 };
-
-enum Systems {
-    Unbatched(Vec<BoxedSystem>),
-    Batched(Vec<Vec<BoxedSystem>>),
-}
-
-impl Default for Systems {
-    fn default() -> Self {
-        Self::Unbatched(Vec::new())
-    }
-}
-
-impl Systems {
-    fn as_unbatched(&mut self) -> &mut Vec<BoxedSystem> {
-        match self {
-            Systems::Unbatched(v) => v,
-            Systems::Batched(v) => {
-                let v = mem::take(v);
-                *self = Self::Unbatched(v.into_iter().flatten().collect_vec());
-                self.as_unbatched()
-            }
-        }
-    }
-
-    fn as_batched(&mut self) -> Option<&mut Vec<Vec<BoxedSystem>>> {
-        if let Self::Batched(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-}
-
-impl core::fmt::Debug for Systems {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut list = f.debug_list();
-        match self {
-            Self::Unbatched(v) => {
-                list.entries(v.iter());
-            }
-            Self::Batched(v) => {
-                list.entries(v.iter().flatten());
-            }
-        }
-
-        list.finish()
-    }
-}
 
 fn flush_system() -> BoxedSystem {
     System::builder()
@@ -128,7 +79,7 @@ impl SystemInfo {
 /// A collection of systems to run on the world
 #[derive(Default)]
 pub struct Schedule {
-    systems: Systems,
+    systems: Vec<Vec<BoxedSystem>>,
     cmd: CommandBuffer,
 
     archetype_gen: u32,
@@ -205,23 +156,31 @@ impl Schedule {
     /// Creates a schedule from a group of existing systems
     pub fn from_systems(systems: impl Into<Vec<BoxedSystem>>) -> Self {
         Self {
-            systems: Systems::Unbatched(systems.into()),
+            systems: alloc::vec![systems.into()],
             archetype_gen: 0,
             cmd: CommandBuffer::new(),
         }
     }
 
     /// Append one schedule onto another
-    pub fn append(&mut self, mut other: Self) {
-        self.systems
-            .as_unbatched()
-            .append(other.systems.as_unbatched())
+    pub fn append(&mut self, other: Self) {
+        self.archetype_gen = 0;
+        self.systems.extend(other.systems)
     }
 
     /// Add a new system to the schedule.
     /// Respects order.
     pub fn with_system(mut self, system: impl Into<BoxedSystem>) -> Self {
-        self.systems.as_unbatched().push(system.into());
+        self.archetype_gen = 0;
+        let v = match self.systems.first_mut() {
+            Some(v) => v,
+            None => {
+                self.systems.push(Default::default());
+                &mut self.systems[0]
+            }
+        };
+
+        v.push(system.into());
         self
     }
 
@@ -239,8 +198,8 @@ impl Schedule {
         let _span = tracing::info_span!("execute_seq").entered();
 
         self.systems
-            .as_unbatched()
             .iter_mut()
+            .flatten()
             .try_for_each(|system| system.execute(&ctx))?;
 
         self.cmd
@@ -251,20 +210,33 @@ impl Schedule {
     }
 
     #[cfg(feature = "parallel")]
-    /// Parallel version of [Self::execute_seq]
+    /// Executes the systems in the schedule in parallel.
+    ///
+    /// Systems will run in an order such that changes and mutable accesses made by systems
+    /// provided
+    /// *before* are observable when the system runs.
+    ///
+    /// Systems with no dependencies between each other may run in any order, but will **not** run
+    /// before any previously provided system which it depends on.
+    ///
+    /// A dependency between two systems is given by a side effect, e.g; a component write, which
+    /// is accessed by the seconds system through a read or other side effect.
     pub fn execute_par(&mut self, world: &mut World) -> anyhow::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("execute_par").entered();
 
-        self.calculate_batches(world);
-
-        let batches = self.systems.as_batched().unwrap();
+        let w_gen = world.archetype_gen();
+        // New archetypes
+        if self.archetype_gen != w_gen {
+            self.archetype_gen = w_gen;
+            self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
+        }
 
         let ctx = SystemContext::new(world, &mut self.cmd);
 
-        let result = batches.iter_mut().try_for_each(|batch| {
+        let result = self.systems.iter_mut().try_for_each(|batch| {
             batch
                 .par_iter_mut()
                 .try_for_each(|system| system.execute(&ctx))
@@ -277,28 +249,12 @@ impl Schedule {
         result
     }
 
-    fn calculate_batches(&mut self, world: &mut World) -> &mut Vec<Vec<BoxedSystem>> {
-        let w_gen = world.archetype_gen();
-        // New archetypes
-        if self.archetype_gen != w_gen {
-            self.systems.as_unbatched();
-            self.archetype_gen = w_gen;
-        }
-
-        match self.systems {
-            Systems::Unbatched(ref mut systems) => {
-                let systems = Self::build_dependencies(systems, world);
-                self.systems = Systems::Batched(systems);
-                self.systems.as_batched().unwrap()
-            }
-            Systems::Batched(ref mut v) => v,
-        }
-    }
-
     /// Returns information about the current multithreaded batch partioning and system accesses.
     pub fn batch_info(&mut self, world: &mut World) -> BatchInfos {
+        self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
+
         let batches = self
-            .calculate_batches(world)
+            .systems
             .iter()
             .map(|batch| {
                 let systems = batch
@@ -316,13 +272,14 @@ impl Schedule {
         BatchInfos(batches)
     }
 
-    fn build_dependencies(systems: &mut [BoxedSystem], world: &mut World) -> Vec<Vec<BoxedSystem>> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::debug_span!("build_dependencies", systems = ?systems).entered();
-
+    fn build_dependencies(
+        systems: Vec<Vec<BoxedSystem>>,
+        world: &mut World,
+    ) -> Vec<Vec<BoxedSystem>> {
         let accesses = systems
-            .iter_mut()
-            .map(|v| (v.name(), v.access(world)))
+            .iter()
+            .flatten()
+            .map(|v| (v.access(world)))
             .collect_vec();
 
         let mut deps = BTreeMap::new();
@@ -330,12 +287,11 @@ impl Schedule {
         for (dst_idx, dst) in accesses.iter().enumerate() {
             let accesses = &accesses;
             let dst_deps =
-                dst.1
-                    .iter()
+                dst.iter()
                     .flat_map(|dst_access| {
                         accesses.iter().take(dst_idx).enumerate().filter_map(
                             move |(src_idx, src)| {
-                                if src.1.iter().any(move |v| !v.is_compatible_with(dst_access)) {
+                                if src.iter().any(move |v| !v.is_compatible_with(dst_access)) {
                                     Some(src_idx)
                                 } else {
                                     None
@@ -349,20 +305,54 @@ impl Schedule {
             deps.insert(dst_idx, dst_deps);
         }
 
-        // Topo sort
-        let depths = topo_sort(systems, &deps);
+        // let mut current_access = BTreeMap::new();
+        // let mut batches = Vec::new();
 
-        depths
-            .into_iter()
-            .map(|depth| {
-                depth
-                    .into_iter()
-                    .map(|idx| mem::replace(&mut systems[idx], BoxedSystem::new(NeverSystem)))
-                    .collect_vec()
-            })
-            .collect_vec()
+        // let mut current_batch = Vec::new();
+        // for (system, (name, accesses)) in systems.into_iter().zip(accesses) {
+        //     if !update_compatible(&accesses, &mut current_access) {
+        //         eprintln!("Pushing new batch with");
+        //         batches.push(mem::take(&mut current_batch));
+        //     }
+        //     current_batch.push(system);
+        //     eprintln!("system: {name}");
+        // }
+
+        // batches.push(current_batch);
+
+        // batches
+
+        topo_sort(systems, &deps)
     }
 }
+
+///// Insert accesses checking for compatibility.
+/////
+///// If the new system's accesses are not compatible, the current acceses are replaced with the new
+///// system, and false is returned
+// fn update_compatible(accesses: &[Access], current: &mut BTreeMap<AccessKind, bool>) -> bool {
+//     let compatible = true;
+//     for access in accesses {
+//         match current.entry(access.kind) {
+//             // Add the access as is
+//             btree_map::Entry::Vacant(slot) => {
+//                 slot.insert(access.mutable);
+//             }
+//             btree_map::Entry::Occupied(slot) => {
+//                 let current_access = *slot.get();
+
+//                 // Compatible iff both are immutable accesses
+//                 if access.mutable || current_access {
+//                     current.clear();
+//                     current.extend(accesses.iter().map(|v| (v.kind, v.mutable)));
+//                     return false;
+//                 }
+//             }
+//         }
+//     }
+
+//     true
+// }
 
 #[derive(Debug, Clone, Copy)]
 enum VisitedState {
@@ -370,7 +360,7 @@ enum VisitedState {
     Visited(u32),
 }
 
-fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usize>> {
+fn topo_sort<T>(items: Vec<Vec<T>>, deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<T>> {
     let mut visited = BTreeMap::new();
     let mut result = Vec::new();
 
@@ -379,53 +369,51 @@ fn topo_sort<T>(items: &[T], deps: &BTreeMap<usize, Vec<usize>>) -> Vec<Vec<usiz
         deps: &BTreeMap<usize, Vec<usize>>,
         visited: &mut BTreeMap<usize, VisitedState>,
         result: &mut Vec<usize>,
-        depth: u32,
-    ) {
+    ) -> u32 {
         match visited.get_mut(&idx) {
             Some(VisitedState::Pending) => unreachable!("cyclic dependency"),
-            Some(VisitedState::Visited(d)) => {
-                if depth > *d {
-                    // Update self and children
-                    *d = depth;
-                    deps.get(&idx).into_iter().flatten().for_each(|&dep| {
-                        inner(dep, deps, visited, result, depth + 1);
-                    });
-                }
-            }
+            Some(VisitedState::Visited(d)) => *d,
             None => {
                 visited.insert(idx, VisitedState::Pending);
 
                 // First, push all dependencies
-                deps.get(&idx).into_iter().flatten().for_each(|&dep| {
-                    inner(dep, deps, visited, result, depth + 1);
-                });
+                // Find the longest path to a root
+                let depth = deps
+                    .get(&idx)
+                    .into_iter()
+                    .flatten()
+                    .map(|&dep| inner(dep, deps, visited, result))
+                    .max()
+                    .map(|v| v + 1)
+                    .unwrap_or(0);
 
                 visited.insert(idx, VisitedState::Visited(depth));
-                result.push(idx)
+                result.push(idx);
+                depth
             }
         }
     }
 
-    for i in 0..items.len() {
-        inner(i, deps, &mut visited, &mut result, 0)
+    // The property of a graph ensures that for any depth `n` there exists a depth `n-1` where `n
+    // > 1` as each non-root node has at least *one* ancestor with depth `n-1`
+
+    let mut batches = Vec::new();
+    for (idx, system) in items.into_iter().flatten().enumerate() {
+        let depth = inner(idx, deps, &mut visited, &mut result) as usize;
+        if depth >= batches.len() {
+            batches.resize_with(depth + 1, Vec::default);
+        }
+
+        batches[depth].push(system);
     }
 
-    let groups = result.into_iter().group_by(|v| match visited.get(v) {
-        Some(VisitedState::Visited(depth)) => depth,
-        _ => unreachable!(),
-    });
-
-    groups
-        .into_iter()
-        .map(|(_, v)| v.collect_vec())
-        .collect_vec()
+    batches
 }
 
 #[cfg(test)]
 mod test {
 
     use alloc::{string::String, vec};
-    use itertools::Itertools;
 
     use crate::{
         component, schedule::Schedule, system::System, EntityBuilder, Query, QueryBorrow, World,
@@ -452,8 +440,6 @@ mod test {
             move |mut a: QueryBorrow<_>| -> anyhow::Result<()> {
                 let _count = a.iter().count() as i32;
 
-                // eprintln!("Change: {prev_count} -> {count}");
-                // prev_count = count;
                 Ok(())
             },
         );
@@ -461,7 +447,6 @@ mod test {
         let system_b = System::builder().with(Query::new(b())).build(
             move |mut query: QueryBorrow<_>| -> anyhow::Result<()> {
                 let _item: &i32 = query.get(id).map_err(|v| v.into_anyhow())?;
-                // eprintln!("Item: {item}");
 
                 Ok(())
             },
@@ -474,7 +459,6 @@ mod test {
         world.despawn(id).unwrap();
         let result: anyhow::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
 
-        // eprintln!("{result:?}");
         assert!(result.is_err());
     }
 
@@ -484,6 +468,7 @@ mod test {
     #[cfg(feature = "derive")]
     fn schedule_par() {
         use glam::{vec2, Vec2};
+        use itertools::Itertools;
 
         use crate::{
             components::name, entity_ids, CommandBuffer, Component, EntityIds, Fetch, Mutable,
@@ -636,20 +621,17 @@ mod test {
 
     #[test]
     fn test_topo_sort() {
-        let items = vec!["a", "b", "c", "d", "e", "f"];
+        let items = vec![vec!["a", "b", "c", "d", "e", "f"]];
         // a => b c
         // b => c d
         // e => a c
         let deps = [(0, vec![1, 2]), (1, vec![2, 3]), (4, vec![0, 2])].into();
 
-        let sorted = topo_sort(&items, &deps)
-            .into_iter()
-            .map(|v| v.into_iter().map(|i| items[i]).collect_vec())
-            .collect_vec();
+        let sorted = topo_sort(items, &deps);
 
         assert_eq!(
             sorted,
-            [vec!["c", "d"], vec!["b"], vec!["a"], vec!["e", "f"]]
+            [vec!["c", "d", "f"], vec!["b"], vec!["a"], vec!["e"]]
         )
     }
 }

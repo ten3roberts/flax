@@ -550,8 +550,6 @@ mod tests {
         changes.set(Change::new(Slice::new(70, 249), 300));
         changes.set(Change::new(Slice::new(0, 89), 301));
         changes.set(Change::new(Slice::new(209, 300), 302));
-
-        // eprintln!("Changes: {changes:#?}");
     }
 
     #[test]
@@ -607,7 +605,6 @@ mod tests {
         changes.set(Change::new(Slice::new(1, 4), 2));
         changes.set(Change::new(Slice::new(1, 3), 8));
         changes.set(Change::new(Slice::new(5, 6), 1));
-        // eprintln!("Changes: {changes:#?}");
         // changes.swap_remove(1);
         assert_eq!(changes.swap_remove_collect(6, 6), [Change::single(6, 6)]);
         assert_eq!(changes.swap_remove_collect(6, 6), []);
@@ -623,6 +620,5 @@ mod tests {
         );
 
         assert_eq!(changes.swap_remove_collect(4, 9), []);
-        // eprintln!("Changes: {changes:#?}");
     }
 }

@@ -1,6 +1,5 @@
 use alloc::{
     collections::{btree_map, BTreeMap},
-    format,
     sync::Arc,
     vec::Vec,
 };
@@ -11,7 +10,7 @@ use itertools::Itertools;
 
 use crate::{
     events::{EventData, EventKind, EventSubscriber},
-    Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Verbatim,
+    Component, ComponentInfo, ComponentKey, ComponentValue, Entity,
 };
 
 /// Unique archetype id
@@ -57,39 +56,21 @@ impl StorageInfo {
     }
 }
 
-const SHORT_DEBUG_LEN: usize = 8;
-#[derive(Clone)]
-/// Shows only a handful of entries to avoid cluttering the terminal with gigantic vecs
-struct ShortDebugVec<T>(Vec<T>);
-
-impl<T> Default for ShortDebugVec<T> {
-    fn default() -> Self {
-        Self(Default::default())
-    }
-}
-
-impl<T: Debug> Debug for ShortDebugVec<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut s = f.debug_list();
-        s.entries(self.0.iter().take(SHORT_DEBUG_LEN));
-
-        if self.0.len() > SHORT_DEBUG_LEN {
-            s.entry(&Verbatim(&format!(
-                "+{} more",
-                self.0.len() - SHORT_DEBUG_LEN
-            )));
-        }
-
-        s.finish()
-    }
-}
-
 /// Human friendly archetype inspection
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Clone)]
 pub struct ArchetypeInfo {
     storage: Vec<StorageInfo>,
     components: Vec<ComponentInfo>,
-    entities: ShortDebugVec<Entity>,
+    entities: usize,
+}
+
+impl Debug for ArchetypeInfo {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ArchetypeInfo")
+            .field("components", &self.components)
+            .field("entities", &self.entities)
+            .finish()
+    }
 }
 
 impl ArchetypeInfo {
@@ -101,11 +82,6 @@ impl ArchetypeInfo {
     /// Returns the components in the archetype
     pub fn components(&self) -> &[ComponentInfo] {
         self.components.as_ref()
-    }
-
-    /// Returns the entities in the archetype
-    pub fn entities(&self) -> &[Entity] {
-        &self.entities.0
     }
 }
 
@@ -427,7 +403,7 @@ impl Archetype {
         ArchetypeInfo {
             components,
             storage,
-            entities: ShortDebugVec(self.entities.clone()),
+            entities: self.entities.len(),
         }
     }
 
