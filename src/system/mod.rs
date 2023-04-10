@@ -390,7 +390,7 @@ impl<F, Args, Ret> System<F, Args, Ret> {
     }
 }
 
-#[derive(Hash, Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 /// Describes a kind of access
 pub enum AccessKind {
     /// Borrow a single component of an archetype

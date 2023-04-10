@@ -207,7 +207,6 @@ mod test {
             &serializer.serialize(&world, SerializeFormat::ColumnMajor),
         )
         .unwrap();
-        // eprintln!("World: {json}");
 
         let new_world: World = deserializer
             .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
@@ -218,7 +217,6 @@ mod test {
         let json =
             serde_json::to_string_pretty(&serializer.serialize(&world, SerializeFormat::RowMajor))
                 .unwrap();
-        // eprintln!("World: {json}");
 
         let world = new_world;
         let new_world = deserializer

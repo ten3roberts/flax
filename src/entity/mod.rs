@@ -277,7 +277,6 @@ mod tests {
 
         store.despawn(b).unwrap();
 
-        // eprintln!("Despawning: {b:?}");
         assert!(store.is_alive(a));
         assert!(!store.is_alive(b));
         assert!(store.is_alive(c));
