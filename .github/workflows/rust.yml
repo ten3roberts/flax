@@ -119,7 +119,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: tarpaulin
-          args: --features --all-features --out Xml --engine llvm
+          args: --all-features --out Xml --engine llvm
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v2
