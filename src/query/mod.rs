@@ -1,6 +1,6 @@
 mod borrow;
 mod data;
-mod dfs_roots;
+mod dfs;
 mod difference;
 mod entity;
 mod iter;
@@ -24,7 +24,7 @@ use alloc::vec::Vec;
 use self::borrow::QueryBorrowState;
 pub(crate) use borrow::*;
 pub use data::*;
-pub use dfs_roots::*;
+pub use dfs::*;
 pub use entity::EntityBorrow;
 pub(crate) use iter::*;
 pub use planar::*;
