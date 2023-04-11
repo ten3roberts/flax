@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>World - Flax Guide</title>
+        <title>Graphs - Flax Guide</title>
 
 
         <!-- Custom HTML head -->
@@ -83,7 +83,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html" class="active"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.3.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.4.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.5.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.6.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.7.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.8.</strong> Component metadata</a></li></ol></li><li class="chapter-item expanded "><a href="../query/index.html"><strong aria-hidden="true">2.</strong> Queries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../query/basics.html"><strong aria-hidden="true">2.1.</strong> Basics</a></li><li class="chapter-item expanded "><a href="../query/filters.html"><strong aria-hidden="true">2.2.</strong> Filters</a></li><li class="chapter-item expanded "><a href="../query/change_detection.html"><strong aria-hidden="true">2.3.</strong> Change Detection</a></li><li class="chapter-item expanded "><a href="../query/entity_query.html"><strong aria-hidden="true">2.4.</strong> Entity Query</a></li><li class="chapter-item expanded "><a href="../query/graphs.html"><strong aria-hidden="true">2.5.</strong> Graphs</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">3.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">3.1.</strong> Advanced Queries</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">3.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">3.3.</strong> Serialization</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.3.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.4.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.5.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.6.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.7.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.8.</strong> Component metadata</a></li></ol></li><li class="chapter-item expanded "><a href="../query/index.html"><strong aria-hidden="true">2.</strong> Queries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../query/basics.html"><strong aria-hidden="true">2.1.</strong> Basics</a></li><li class="chapter-item expanded "><a href="../query/filters.html"><strong aria-hidden="true">2.2.</strong> Filters</a></li><li class="chapter-item expanded "><a href="../query/change_detection.html"><strong aria-hidden="true">2.3.</strong> Change Detection</a></li><li class="chapter-item expanded "><a href="../query/entity_query.html"><strong aria-hidden="true">2.4.</strong> Entity Query</a></li><li class="chapter-item expanded "><a href="../query/graphs.html" class="active"><strong aria-hidden="true">2.5.</strong> Graphs</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">3.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">3.1.</strong> Advanced Queries</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">3.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">3.3.</strong> Serialization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -144,52 +144,106 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="world"><a class="header" href="#world">World</a></h1>
-<p>The world holds the entities and components in the ECS.</p>
+                        <h1 id="graphs"><a class="header" href="#graphs">Graphs</a></h1>
+<p>The relation system allows creating Entity hierarchies and graphs.</p>
+<p>These graphs can be traversed in different ways through the use of a <a href="https://docs.rs/flax/latest/flax/struct.Query.html">Query</a>.</p>
+<p>The default <code>child_of</code> relation provides a <em>mutually exclusive</em> parent-child relation, which is perfect for transform hierarchies or trees, and is trivial to construct using the <a href="https://docs.rs/flax/latest/flax/struct.EntityBuilder.html#method.attach">EntityBuilder::attach</a> method.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>    let mut world = World::new();
-<span class="boring">}</span></code></pre></pre>
-<p>Spawning an entity yields an <code>Entity</code> id.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>    let id = world.spawn();
-
-    if world.is_alive(id) {
-        println!(&quot;It is alive!&quot;);
-    }
-<span class="boring">}</span></code></pre></pre>
-<p>When an entity is despawned, it can no longer be accessed.</p>
-<p>Entity ids are versioned, which means that once an entity is despawned the index
-in the storage may be reused, but it will have a different version, which
-prevents dead entities to become alive at a later point in time. I.e; dead
-entities stay dead, this is not a zombie apocalypse we are working with.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>    world.despawn(id)?;
-
-    if world.is_alive(id) {
-        println!(&quot;We've got a zombie on our hands&quot;);
-    }
+</span>
+<span class="boring">fn main() {
+</span>    let root = Entity::builder()
+        .set(name(), &quot;root&quot;.into())
+        .attach(
+            child_of,
+            Entity::builder().set(name(), &quot;root.child.1&quot;.into()).attach(
+                child_of,
+                Entity::builder().set(name(), &quot;root.child.1.1&quot;.into()),
+            ),
+        )
+        .attach(
+            child_of,
+            Entity::builder().set(name(), &quot;root.child.2&quot;.into()),
+        )
+        .attach(
+            child_of,
+            Entity::builder().set(name(), &quot;root.child.3&quot;.into()),
+        )
+        .spawn(&amp;mut world);
 
 <span class="boring">}</span></code></pre></pre>
-<p>Many entities can be spawned at a time, which is easily demonstrated by this
-iterator which takes entity ids from the world</p>
+<p>Likewise, <a href="https://docs.rs/flax/latest/flax/entity/struct.EntityBuilder.html#method.attach_with"><code>attach_with</code></a> can be used for stateful relations</p>
+<h2 id="depth-first-iteration"><a class="header" href="#depth-first-iteration">Depth First Iteration</a></h2>
+<p><a href="https://docs.rs/flax/latest/flax/query/struct.Dfs.html">Dfs</a> allows traversing hierarchies in depth-first order.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>    let ids = world.spawn_many().take(10).collect_vec();
-    println!(&quot;ids: {ids:?}&quot;);
+</span>
+<span class="boring">fn main() {
+</span>        let mut query = Query::new((entity_ids(), name())).with_strategy(Dfs::new(child_of));
+
+        tracing::info!(&quot;Dfs:&quot;);
+        for (id, name) in query.borrow(&amp;world).iter() {
+            tracing::info!(?id, ?name);
+        }
+
 <span class="boring">}</span></code></pre></pre>
+<h3 id="traversal"><a class="header" href="#traversal">Traversal</a></h3>
+<p>For modifying a graph through a value which is passed through the parents, such as updating a UI layout, there is <a href="https://docs.rs/flax/latest/flax/query/struct.Dfs.html#method.traverse">Dfs::traverse</a> which provides an easy recursion based visiting, which can for example be used for updating transform hierarchies.</p>
+<p>Example:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let update_world_position = System::builder()
+        .with(Query::new((world_position().as_mut(), position())).with_strategy(Dfs::new(child_of)))
+        .build(
+            |mut query: DfsBorrow&lt;(Mutable&lt;Vec3&gt;, Component&lt;Vec3&gt;), All, ()&gt;| {
+                query.traverse(&amp;Vec3::ZERO, |(world_pos, &amp;pos), _, &amp;parent_pos| {
+                    *world_pos = pos + parent_pos;
+                    *world_pos
+                });
+            },
+        );
+
+    let mut buf = String::new();
+    let print_hierarchy = System::builder()
+        .with(Query::new((name(), position(), world_position())).with_strategy(Dfs::new(child_of)))
+        .build(move |mut query: DfsBorrow&lt;_, _, _&gt;| {
+            query.traverse(&amp;0usize, |(name, pos, world_pos), _, depth| {
+                let indent = depth * 4;
+                writeln!(
+                    buf,
+                    &quot;{:indent$}{name}: {pos} {world_pos}&quot;,
+                    &quot;&quot;,
+                    indent = indent,
+                )
+                .unwrap();
+                depth + 1
+            });
+
+            tracing::info!(&quot;{buf}&quot;);
+        });
+
+    let mut schedule = Schedule::new()
+        .with_system(update_world_position)
+        .with_system(print_hierarchy);
+
+    schedule.execute_seq(&amp;mut world).unwrap();
+
+<span class="boring">}</span></code></pre></pre>
+<p>See: <a href="https://github.com/ten3roberts/flax/blob/main/examples/query/transform.rs">transform</a></p>
+<h2 id="topological-iteration"><a class="header" href="#topological-iteration">Topological Iteration</a></h2>
+<p>In addition to <em>depth first</em> traversal, queries offer iteration in topological ordering through <a href="https://docs.rs/flax/latest/flax/query/struct.Topo.html">Topo</a>.</p>
+<p>Topological ordering is less constrained as it only ensures that each node's parents are visited before the children, but not that the children are visited immediately after the parent.</p>
+<p>More specifically, each <em>node</em> is visited in the ordered of their <em>maximum recursion depth</em>. I.e, first all roots are visited, then all children, then all <em>2nd</em> level children and so on.</p>
+<p>This allows far greater cache locality and is more similar in memory access patterns to the non-relation aware <a href="https://docs.rs/flax/latest/flax/query/struct.Planar.html">Planar</a> strategy.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../fundamentals/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../query/entity_query.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="../fundamentals/components.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="../diving_deeper/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -199,11 +253,11 @@ iterator which takes entity ids from the world</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../fundamentals/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../query/entity_query.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="../fundamentals/components.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="../diving_deeper/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

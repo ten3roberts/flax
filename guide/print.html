@@ -33,6 +33,7 @@
 
     </head>
     <body>
+    <div id="body-container">
         <!-- Provide site root to javascript -->
         <script>
             var path_to_root = "";
@@ -70,10 +71,12 @@
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
             var html = document.querySelector('html');
-            var sidebar = 'hidden';
+            var sidebar = null;
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
             }
             html.classList.remove('sidebar-visible');
             html.classList.add("sidebar-" + sidebar);
@@ -81,7 +84,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.3.</strong> Component metadata</a></li><li class="chapter-item expanded "><a href="fundamentals/query.html"><strong aria-hidden="true">1.4.</strong> Query</a></li><li class="chapter-item expanded "><a href="fundamentals/entity_query.html"><strong aria-hidden="true">1.5.</strong> EntityQuery</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.6.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.7.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="fundamentals/relations.html"><strong aria-hidden="true">1.8.</strong> Relations</a></li><li class="chapter-item expanded "><a href="fundamentals/builder.html"><strong aria-hidden="true">1.9.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="fundamentals/commandbuffer.html"><strong aria-hidden="true">1.10.</strong> CommandBuffer</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">2.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">2.1.</strong> Query Advanced</a></li><li class="chapter-item expanded "><a href="diving_deeper/dynamic_components.html"><strong aria-hidden="true">2.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="diving_deeper/serde.html"><strong aria-hidden="true">2.3.</strong> Serialization</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="fundamentals/systems.html"><strong aria-hidden="true">1.3.</strong> Systems</a></li><li class="chapter-item expanded "><a href="fundamentals/schedule.html"><strong aria-hidden="true">1.4.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="fundamentals/builder.html"><strong aria-hidden="true">1.5.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="fundamentals/commandbuffer.html"><strong aria-hidden="true">1.6.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="fundamentals/relations.html"><strong aria-hidden="true">1.7.</strong> Relations</a></li><li class="chapter-item expanded "><a href="fundamentals/metadata.html"><strong aria-hidden="true">1.8.</strong> Component metadata</a></li></ol></li><li class="chapter-item expanded "><a href="query/index.html"><strong aria-hidden="true">2.</strong> Queries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="query/basics.html"><strong aria-hidden="true">2.1.</strong> Basics</a></li><li class="chapter-item expanded "><a href="query/filters.html"><strong aria-hidden="true">2.2.</strong> Filters</a></li><li class="chapter-item expanded "><a href="query/change_detection.html"><strong aria-hidden="true">2.3.</strong> Change Detection</a></li><li class="chapter-item expanded "><a href="query/entity_query.html"><strong aria-hidden="true">2.4.</strong> Entity Query</a></li><li class="chapter-item expanded "><a href="query/graphs.html"><strong aria-hidden="true">2.5.</strong> Graphs</a></li></ol></li><li class="chapter-item expanded "><a href="diving_deeper/index.html"><strong aria-hidden="true">3.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diving_deeper/query.html"><strong aria-hidden="true">3.1.</strong> Advanced Queries</a></li><li class="chapter-item expanded "><a href="diving_deeper/dynamic_components.html"><strong aria-hidden="true">3.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="diving_deeper/serde.html"><strong aria-hidden="true">3.3.</strong> Serialization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -257,271 +260,6 @@ between different libraries and users.</p>
 <li><a href="https://docs.rs/flax/latest/flax/components/fn.name.html">name</a>: Provides a name for entities and components.</li>
 <li><a href="https://docs.rs/flax/latest/flax/components/fn.child_of.html">child_of</a>: Default dataless hierarchy relation. See: <a href="https://ten3roberts.github.io/flax/guide/fundamentals/hierarchy.html">Hierarchy</a></li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="component-metadata"><a class="header" href="#component-metadata">Component metadata</a></h1>
-<p>The keen eyed of you may have noticed that <code>ComponentId</code> is the same as
-<code>Entity</code>.</p>
-<p>This is a design choice; a component is also an entity, and as such, exists in
-the world.</p>
-<p>This brings some interesting possibilities which are not possible in other ECS
-systems, mainly: components can have components.</p>
-<p>This allows the components to be queried just as they were normal entities. This
-allows reflection.</p>
-<p>For example, a component can itself have a component which knows how to
-<code>Debug::fmt</code> the component value, another component could be used to serialize a
-value.</p>
-<p>While components could be added to components through the conventional
-[<code>World::set</code>] syntax, it can quickly become a spaghetti of <code>init</code> functions for
-each library to add the required components, or metadata to the exported
-components.</p>
-<p>This is where the <a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro comes into play. The component function acquires a globally free <code>Entity</code> and assigns that to the strongly typed component.
-When the component is first inserted into the world it can insert so called <em>metadata</em> to the component.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    component! {
-        /// An entity's health.
-        /// Provides the Debug bundle, which adds the `debug_visitor` component.
-        health: f32 =&gt; [ flax::Debug ],
-    }
-
-    // After adding the component, the associate metadata of the `health`
-    // component is added to the world.
-    world.set(id, health(), 100.0)?;
-
-    let component_name = world.get(health().id(), name())?;
-    println!(&quot;The name of the component is {component_name:?}&quot;);
-
-    // Print the state of the world
-    println!(&quot;World: {world:#?}&quot;);
-    // Prints:
-    //
-    // World: {
-    //     1v2: {},
-    //     2v1: {},
-    //     3v1: {},
-    //     4v1: {},
-    //     5v1: {},
-    //     6v1: {},
-    //     7v1: {},
-    //     8v1: {},
-    //     9v1: {},
-    //     10v1: {},
-    //     11v1: {
-    //         &quot;position&quot;: _,
-    //         &quot;health&quot;: 100.0,
-    //     },
-    // }
-
-<span class="boring">}</span></code></pre></pre>
-<p>The</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>component: type =&gt; [ Meta, Meta, Meta ]
-<span class="boring">}</span></code></pre></pre>
-<p>syntax is used to add metadata to the component.</p>
-<p>The <code>component</code> component, and the <code>name</code> component is always present.</p>
-<h2 id="debug"><a class="header" href="#debug">Debug</a></h2>
-<p>If a component has the
-<a href="https://docs.rs/flax/latest/flax/struct.Debug.html">flax::Debug</a> component, the
-component and value for each entity will be present when debug formatting the
-world.</p>
-<h2 id="name"><a class="header" href="#name">Name</a></h2>
-<p>Every component has a <code>name</code>, which is the same as the declaration.</p>
-<h2 id="custom-metadata"><a class="header" href="#custom-metadata">Custom metadata</a></h2>
-<p>Custom metadata can be added to a component by creating a struct which
-implements <a href="https://docs.rs/flax/latest/flax/trait.MetaData.html">MetaData</a>,
-which is responsible of adding the appropriate components.</p>
-<p><strong>Note</strong>: Do not use conditional compilation for these structs as this leaks the
-<code>cfg</code> directives to any uses of the metadata in the <code>component</code> macro. Instead,
-conditionally add, or do not add, the component in the <code>attach</code> method.</p>
-<p>A common example of this is <code>serde</code>, prefer to not add the <code>serializer</code>
-component and still define <code>Serialize</code> and making it no-op when <code>serde</code> is not
-enabled.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="query"><a class="header" href="#query">Query</a></h1>
-<p>Queries allow efficient access and iteration over multiple components.</p>
-<p>They allow iterating entities which have a certain set of components, and match
-a certain filter.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>    let mut world = World::new();
-
-    component! {
-        position: Vec2 =&gt; [ Debug ],
-        health: f32 =&gt; [ Debug ],
-    }
-
-    // Spawn two entities
-    let id = world.spawn();
-
-    world.set(id, position(), vec2(1.0, 4.0))?;
-    world.set(id, health(), 100.0)?;
-
-    let id2 = world.spawn();
-
-    world.set(id2, position(), vec2(-1.0, 4.0))?;
-    world.set(id2, health(), 75.0)?;
-
-    let mut query = Query::new((position(), health()));
-
-    for (pos, health) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;pos: {pos:?}, health: {health}&quot;);
-    }
-
-<span class="boring">}</span></code></pre></pre>
-<p>A query accepts any type which implements
-<a href="https://docs.rs/flax/latest/flax/fetch/trait.Fetch.html">Fetch</a>:</p>
-<ul>
-<li>A component</li>
-<li>A tuple of components</li>
-<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.as_mut"><code>component.as_mut()</code></a> for mutable access</li>
-<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.as_cloned"><code>component.as_cloned()</code></a> for cloning the values</li>
-<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt"><code>component.opt()</code></a> for an optional access, returns Option&lt;&amp;T&gt;,</li>
-<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt"><code>component.as_mut().opt()</code></a> for an optional mutable access, returns Option&lt;&amp;mut T&gt;,</li>
-<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or_default"><code>component.opt_or_default()</code></a> for an access which returns a default value if</li>
-<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or"><code>component.opt_or()</code></a> for an access which returns a provided value if
-the current entity does not have the component.</li>
-<li><a href="https://docs.rs/flax/latest/flax/fn.entities.html">entities</a> to return the
-iterated <code>Entity</code> ids.</li>
-<li>... and many more</li>
-</ul>
-<h2 id="filters"><a class="header" href="#filters">Filters</a></h2>
-<p>A query allows for filters, such as skipping entities which have a certain
-components, or where the value of a component satisfies some condition.</p>
-<p>The difference between using a query filter and a filter on the iterator is that
-mutable components are not marked as modified if skipped by a query iterator.
-This is because the <code>QueryIter</code> is not able to determine if a later <code>filter</code>
-skipped the item. In addition, the query filters operate on ranges and can look
-up modifications and alike for a group of entities, E.g; if all entities next to
-each other are modified, only one range will be yielded, instead of each entity
-separately.</p>
-<p><strong>Note</strong>: It is not possible to access a component mutably and filter on it at
-the same time.</p>
-<p>Change detection is also supported and allows querying only over the entities
-where a certain component changed.</p>
-<p>The following example shows a query which will update the distance to origin
-when an entity moves for every entity which are not despawned.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    component! {
-        /// Distance to origin
-        distance: f32 =&gt; [ flax::Debug ],
-    }
-
-    tracing::info!(&quot;Spawning id3&quot;);
-    let id3 = world.spawn();
-    world.set(id3, position(), vec2(5.0, 6.0))?;
-    world.set(id3, health(), 5.0)?;
-
-    for id in [id, id2, id3] {
-        tracing::info!(&quot;Adding distance to {id}&quot;);
-        world.set(id, distance(), 0.0)?;
-    }
-
-    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
-        .filter(position().modified() &amp; health().gt(0.0));
-
-    tracing::info!(&quot;Updating distances&quot;);
-    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = pos.length();
-    }
-
-<span class="boring">}</span></code></pre></pre>
-<p>The same query can be run again, but since all changes have been visited, it
-yields nothing.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    tracing::info!(&quot;Running query again&quot;);
-    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = pos.length();
-    }
-<span class="boring">}</span></code></pre></pre>
-<p>However, if the position were to be modified, the query would pick up that, and
-only that change.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
-
-    tracing::info!(&quot;... and again&quot;);
-    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = pos.length();
-    }
-
-<span class="boring">}</span></code></pre></pre>
-<p>For situations where an <code>or</code> combined filter is used in conjunction with a fetch
-of the same components, the filter may be attached directly to the query fetch
-instead.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>        // Instead of this:
-        let query = Query::new((position(), health(), distance()))
-            .filter(position().modified() | health().modified());
-
-        // Do this:
-        let query = Query::new((position().modified(), health().modified(), distance()));
-<span class="boring">}</span></code></pre></pre>
-<h3 id="change-detection"><a class="header" href="#change-detection">Change detection</a></h3>
-<ul>
-<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.modified">modified</a> yields components which have been updated <strong>or</strong> inserted.</li>
-<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.inserted">inserted</a> yields new components.</li>
-<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.removed">removed</a> yields each entity for which the component was recently removed.</li>
-</ul>
-<p>All change detection is per query and based on when the query last executed.</p>
-<h3 id="comparative-filter"><a class="header" href="#comparative-filter">Comparative filter</a></h3>
-<p>In addition to change detection, filtering on value is also possible. See: <a href="https://docs.rs/flax/latest/flax/trait.CmpExt.html">CmpExt</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="entityquery"><a class="header" href="#entityquery">EntityQuery</a></h1>
-<p>Similar to a normal query, an
-<a href="https://docs.rs/flax/latest/flax/struct.EntityQuery.html">EntityQuery</a> allows
-simultanous access to multiple components using a fetch, but for a single,
-already known entity.</p>
-<p>This is useful when dealing with static resource entities and allowing systems
-to efficiently access the resources it needs.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>    component! {
-        window_width: f32,
-        window_height: f32,
-        allow_vsync: bool,
-
-        resources,
-    }
-
-    Entity::builder()
-        .set(window_width(), 800.0)
-        .set(window_height(), 600.0)
-        .set(allow_vsync(), false)
-        // Since `resources` is static, it is not required to spawn it
-        .append_to(&amp;mut world, resources())
-        .unwrap();
-
-    let query = Query::new((
-        window_width().modified(),
-        window_height().modified(),
-        allow_vsync().modified(),
-    ))
-    .entity(resources());
-
-    let mut window_system = System::builder()
-        .with(query)
-        .build(|mut q: EntityBorrow&lt;_&gt;| {
-            if let Ok((width, height, allow_vsync)) = q.get() {
-                tracing::info!(width, height, allow_vsync, &quot;Config changed&quot;);
-            } else {
-                tracing::info!(&quot;No config change&quot;);
-            }
-        });
-
-    window_system.run_on(&amp;mut world);
-    window_system.run_on(&amp;mut world);
-    world.set(resources(), window_height(), 720.0)?;
-    window_system.run_on(&amp;mut world);
-
-<span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="systems"><a class="header" href="#systems">Systems</a></h1>
 <p>Having to both keep queries around, and their logic is tedious and error prone.</p>
 <p>Systems aid in organizing your applications logic and required data.</p>
@@ -535,7 +273,7 @@ thrice could be turned into a query.</p>
 <span class="boring">fn main() {
 </span>    component! {
         /// Distance to origin
-        distance: f32 =&gt; [ flax::Debug ],
+        distance: f32 =&gt; [ flax::Debuggable ],
     }
 
     tracing::info!(&quot;Spawning id3&quot;);
@@ -664,7 +402,7 @@ sequence.</p>
 
 
     component! {
-        is_static: () =&gt; [ flax::Debug ],
+        is_static: () =&gt; [ flax::Debuggable ],
     }
 
     // Spawn 150 static entities, which wont move
@@ -733,127 +471,8 @@ sequence.</p>
         tracing::info!(&quot;Frame: {i}&quot;);
         tracing::info!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;mut world));
         schedule.execute_par(&amp;mut world)?;
-        // sleep(Duration::from_secs_f32(0.1));
     }
 
-<span class="boring">}</span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="relations"><a class="header" href="#relations">Relations</a></h1>
-<p>Relations such as hierarchies or entity-entity connections are a common way to structure entities in an application or game,
-such as nested UI elements or entities in a game world which move along with
-their parents.</p>
-<p>Flax has first class support for hierarchies, called <code>Relations</code>.</p>
-<p>A relation in Flax is represented by a parameterized component containing the
-<code>object</code>, i.e; parent added to the <code>subject</code>, i.e; child entity.</p>
-<p>Think of it as the component accepting an argument entity prior to adding it to
-another entity.</p>
-<p>Relations are declared using the
-<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>    component! {
-        child_of(parent): () =&gt; [Debug],
-        spring_joint(other): f32 =&gt; [Debug],
-    }
-
-    let mut world = World::new();
-
-    let parent = Entity::builder()
-        .set(name(), &quot;Parent&quot;.into())
-        .spawn(&amp;mut world);
-
-    let child1 = Entity::builder()
-        .set(name(), &quot;Child1&quot;.into())
-        .set_default(child_of(parent))
-        .spawn(&amp;mut world);
-
-    let child2 = Entity::builder()
-        .set(name(), &quot;Child2&quot;.into())
-        .set_default(child_of(parent))
-        .spawn(&amp;mut world);
-
-<span class="boring">}</span></code></pre></pre>
-<p>Important to note is that the same <code>child_of</code> component with different <code>object</code>
-arguments are distinct, and can as such exist on an entity at the same time,
-allowing many-many relationsships between entities;</p>
-<p>There is no limatation of the number of relations an entity can have. As such,
-an entity can have multiple relations to other entities, allowing for any kind of graphs inside the ecs.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>    let parent2 = Entity::builder()
-        .set(name(), &quot;Parent2&quot;.into())
-        .spawn(&amp;mut world);
-
-    world.set(child1, child_of(parent2), ())?;
-
-    tracing::info!(&quot;World: {world:#?}&quot;);
-
-    // Connect child1 with two entities via springs of different strength
-    world.set(child1, spring_joint(child2), 1.5)?;
-    world.set(child1, spring_joint(parent2), 7.4)?;
-
-    tracing::info!(
-        &quot;Connections from child1({child1}): {:?}&quot;,
-        Query::new(relations_like(spring_joint))
-            .borrow(&amp;world)
-            .get(child1)?
-            .collect_vec()
-    );
-
-<span class="boring">}</span></code></pre></pre>
-<h2 id="queries"><a class="header" href="#queries">Queries</a></h2>
-<p>Since relations are normal components, they can be used in a query as normal, or
-used to exclude components.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    let children_of_parent = Query::new(entity_ids())
-        .with(child_of(parent))
-        .borrow(&amp;world)
-        .iter()
-        .collect_vec();
-
-    tracing::info!(&quot;Children: {children_of_parent:?}&quot;);
-
-    let all_children = Query::new(entity_ids())
-        .filter(child_of.with_relation())
-        .borrow(&amp;world)
-        .iter()
-        .collect_vec();
-
-    tracing::info!(&quot;Children: {all_children:?}&quot;);
-
-    let roots = Query::new(entity_ids())
-        .filter(child_of.without_relation())
-        .borrow(&amp;world)
-        .iter()
-        .collect_vec();
-
-    tracing::info!(&quot;Roots: {roots:?}&quot;);
-
-<span class="boring">}</span></code></pre></pre>
-<h2 id="lifetime"><a class="header" href="#lifetime">Lifetime</a></h2>
-<p>When an entity is despawned, all relations to it present on other components
-will be removed and dropped. As such, no entity will have a relation to an
-entity which does not exist.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    tracing::info!(
-        &quot;has relation to: {parent2}: {}&quot;,
-        world.has(child1, child_of(parent2))
-    );
-
-    world.despawn(parent2)?;
-
-    tracing::info!(
-        &quot;has relation to: {parent2}: {}&quot;,
-        world.has(child1, child_of(parent2))
-    );
-
-    tracing::info!(&quot;World: {world:#?}&quot;);
-    world.despawn_recursive(parent, child_of)?;
-
-    tracing::info!(&quot;World: {world:#?}&quot;);
 <span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="entity-builder"><a class="header" href="#entity-builder">Entity Builder</a></h1>
 <p>The <a href="https://docs.rs/flax/latest/flax/struct.EntityBuilder.struct">EntityBuilder</a>
@@ -865,9 +484,9 @@ the world, like a function which only creates the <code>EntityBuilder</code>.</p
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    component! {
-        health: f32 =&gt; [Debug],
-        position: (f32, f32) =&gt; [Debug],
-        is_player: () =&gt; [Debug],
+        health: f32 =&gt; [Debuggable],
+        position: (f32, f32) =&gt; [Debuggable],
+        is_player: () =&gt; [Debuggable],
     }
 
     let mut world = World::new();
@@ -1009,11 +628,11 @@ in other situations where a mutable reference to the world is not available.</p>
     cmd.apply(&amp;mut world)?;
 
     let id = Query::new(entity_ids())
-        .filter(name().eq(&quot;a&quot;.into()))
+        .filter(name().eq(&quot;a&quot;))
         .borrow(&amp;world)
         .iter()
         .next()
-        .ok_or(eyre::eyre!(&quot;Missing entity&quot;))?;
+        .context(&quot;Missing entity&quot;)?;
 
     cmd.set(id, position(), vec2(32.0, 2.6));
     let id2 = world.spawn();
@@ -1045,7 +664,7 @@ in other situations where a mutable reference to the world is not available.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    component! {
-        world_matrix: Mat4 =&gt; [Debug],
+        world_matrix: Mat4 =&gt; [Debuggable],
     }
 
     // Make sure there are always 64 entities in the world
@@ -1103,12 +722,588 @@ in other situations where a mutable reference to the world is not available.</p>
 
     schedule
         .execute_par(&amp;mut world)
-        .wrap_err(&quot;Failed to run schedule&quot;)?;
+        .context(&quot;Failed to run schedule&quot;)?;
 
 <span class="boring">}</span></code></pre></pre>
 <p>The commandbuffer will be applied at the end of the schedule automatically.</p>
 <p><code>flush</code> can be used to apply the commandbuffer to make the modifications visible
 to the following systems.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="relations"><a class="header" href="#relations">Relations</a></h1>
+<p>A relation is a component which <em>links</em> to another <code>Entity</code>, similar to a foreign key in a database.</p>
+<p>The linked entity is referred to as the <code>object</code> of a relation, while the entity the component is attached to is called the <code>subject</code>.</p>
+<p>This allows forming hierarchies such as <em>parent-child</em> relations for transforms and UI, as well as arbitrary graphs.</p>
+<p>A relation is used as a <em>parameterized</em> component, which requires an <code>Entity</code> to be fully instantiated.</p>
+<p>Relations are most easily declared using the
+<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    component! {
+        spring_joint(other): f32 =&gt; [Debuggable],
+    }
+
+    let mut world = World::new();
+
+    let parent = Entity::builder()
+        .set(name(), &quot;Parent&quot;.into())
+        .spawn(&amp;mut world);
+
+    let child1 = Entity::builder()
+        .set(name(), &quot;Child1&quot;.into())
+        .set_default(child_of(parent))
+        .spawn(&amp;mut world);
+
+    let child2 = Entity::builder()
+        .set(name(), &quot;Child2&quot;.into())
+        .set_default(child_of(parent))
+        .spawn(&amp;mut world);
+
+<span class="boring">}</span></code></pre></pre>
+<p>Important to note is that the same <code>child_of</code> component with different <code>object</code>
+arguments are distinct, and can as such exist on an entity at the same time,
+allowing many-many relationships between entities;</p>
+<p>There is no limitation of the number of relations an entity can have. As such,
+an entity can have multiple relations to other entities, allowing for any kind of graphs inside the ecs.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    let parent2 = Entity::builder()
+        .set(name(), &quot;Parent2&quot;.into())
+        .spawn(&amp;mut world);
+
+    world.set(child1, child_of(parent2), ())?;
+
+    tracing::info!(&quot;World: {world:#?}&quot;);
+
+    // Connect child1 with two entities via springs of different strength
+    world.set(child1, spring_joint(child2), 1.5)?;
+    world.set(child1, spring_joint(parent2), 7.4)?;
+
+    tracing::info!(
+        &quot;Connections from child1({child1}): {:?}&quot;,
+        Query::new(relations_like(spring_joint))
+            .borrow(&amp;world)
+            .get(child1)?
+            .collect_vec()
+    );
+
+<span class="boring">}</span></code></pre></pre>
+<h2 id="queries"><a class="header" href="#queries">Queries</a></h2>
+<p>Since relations are normal components, they can be used in a query as normal, or
+used to exclude components.</p>
+<p>See the <a href="fundamentals/../query/graphs.html">Graphs</a> chapter in queries.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let children_of_parent = Query::new(entity_ids())
+        .with(child_of(parent))
+        .borrow(&amp;world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!(&quot;Children: {children_of_parent:?}&quot;);
+
+    let all_children = Query::new(entity_ids())
+        .filter(child_of.with_relation())
+        .borrow(&amp;world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!(&quot;Children: {all_children:?}&quot;);
+
+    let roots = Query::new(entity_ids())
+        .filter(child_of.without_relation())
+        .borrow(&amp;world)
+        .iter()
+        .collect_vec();
+
+    tracing::info!(&quot;Roots: {roots:?}&quot;);
+
+<span class="boring">}</span></code></pre></pre>
+<h2 id="lifetime"><a class="header" href="#lifetime">Lifetime</a></h2>
+<p>When an entity is despawned, all relations to it present on other components
+will be removed and dropped. As such, no entity will have a relation to an
+entity which does not exist.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    tracing::info!(
+        &quot;has relation to: {parent2}: {}&quot;,
+        world.has(child1, child_of(parent2))
+    );
+
+    world.despawn(parent2)?;
+
+    tracing::info!(
+        &quot;has relation to: {parent2}: {}&quot;,
+        world.has(child1, child_of(parent2))
+    );
+
+    tracing::info!(&quot;World: {world:#?}&quot;);
+    world.despawn_recursive(parent, child_of)?;
+
+    tracing::info!(&quot;World: {world:#?}&quot;);
+<span class="boring">}</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="component-metadata"><a class="header" href="#component-metadata">Component metadata</a></h1>
+<p>The keen eyed of you may have noticed that <code>ComponentId</code> is the same as
+<code>Entity</code>.</p>
+<p>This is a design choice; a component is also an entity, and as such, exists in
+the world.</p>
+<p>This brings some interesting possibilities which are not possible in other ECS
+systems, mainly: components can have components.</p>
+<p>This allows the components to be queried just as they were normal entities, which
+allows reflection.</p>
+<p>For example, a component can itself have a component which knows how to
+<code>Debug::fmt</code> the component value, another component could be used to serialize a
+value.</p>
+<p>While components could be added to components through the conventional
+[<code>World::set</code>] syntax, it can quickly become a spaghetti of <code>init</code> functions for
+each library to add the required components, or metadata to the exported
+components.</p>
+<p>This is where the <a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro comes into play. The component function acquires a globally free <code>Entity</code> and assigns that to the strongly typed component.
+When the component is first inserted into the world it can insert so called <em>metadata</em> to the component.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    component! {
+        /// An entity's health.
+        /// Provides the Debug bundle, which adds the `debug_visitor` component.
+        health: f32 =&gt; [ flax::Debuggable ],
+    }
+
+    // After adding the component, the associate metadata of the `health`
+    // component is added to the world.
+    world.set(id, health(), 100.0)?;
+
+    let component_name = world.get(health().id(), name())?;
+    println!(&quot;The name of the component is {component_name:?}&quot;);
+
+    // Print the state of the world
+    println!(&quot;World: {world:#?}&quot;);
+    // Prints:
+    //
+    // World: {
+    //     1v2: {},
+    //     2v1: {},
+    //     3v1: {},
+    //     4v1: {},
+    //     5v1: {},
+    //     6v1: {},
+    //     7v1: {},
+    //     8v1: {},
+    //     9v1: {},
+    //     10v1: {},
+    //     11v1: {
+    //         &quot;position&quot;: _,
+    //         &quot;health&quot;: 100.0,
+    //     },
+    // }
+
+<span class="boring">}</span></code></pre></pre>
+<p>The</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>component: type =&gt; [ Meta, Meta, Meta ]
+<span class="boring">}</span></code></pre></pre>
+<p>syntax is used to add metadata to the component.</p>
+<p>The <code>component</code> component, and the <code>name</code> component is always present.</p>
+<h2 id="debug"><a class="header" href="#debug">Debug</a></h2>
+<p>If a component has the
+<a href="https://docs.rs/flax/latest/flax/struct.Debug.html">flax::Debuggable</a> component, the
+component and value for each entity will be present when debug formatting the
+world.</p>
+<h2 id="name"><a class="header" href="#name">Name</a></h2>
+<p>Every component has a <code>name</code>, which is the same as the declaration.</p>
+<h2 id="custom-metadata"><a class="header" href="#custom-metadata">Custom metadata</a></h2>
+<p>Custom metadata can be added to a component by creating a struct which
+implements <a href="https://docs.rs/flax/latest/flax/trait.MetaData.html">MetaData</a>,
+which is responsible of adding the appropriate components.</p>
+<p><strong>Note</strong>: Do not use conditional compilation for these structs as this leaks the
+<code>cfg</code> directives to any uses of the metadata in the <code>component</code> macro. Instead,
+conditionally add, or do not add, the component in the <code>attach</code> method.</p>
+<p>A common example of this is <code>serde</code>, prefer to not add the <code>serializer</code>
+component and still define <code>Serialize</code> and making it no-op when <code>serde</code> is not
+enabled.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="queries-1"><a class="header" href="#queries-1">Queries</a></h1>
+<p>Queries are the beating heart of any ECS.</p>
+<p>They provide a declarative method to iterate, modify, and inspect the world, or a subset thereof.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="basics"><a class="header" href="#basics">Basics</a></h1>
+<p>At its simplest form, a query is composed of a <a href="https://docs.rs/flax/latest/flax/fetch/trait.Fetch.html">Fetch</a> which specify the group of components to select. The query will visit the subset of entities in the world which have the specified components, and return their values.</p>
+<p>In order to execute a query, it has borrow the relevant data from the world. This returns a <a href="https://docs.rs/flax/latest/flax/struct.QueryBorrow">QueryBorrow</a> which can then be iterated.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>        let mut query = Query::new(name());
+
+        for name in &amp;mut query.borrow(&amp;world) {
+            tracing::info!(&quot;Entity: {name:?}&quot;);
+        }
+
+<span class="boring">}</span></code></pre></pre>
+<p>A <code>tuple</code> can be used which will yield the entities with all the specified components, such as all entities with a <code>name</code>, <code>position</code>, and <code>health</code>; which excludes all the pretty rocks.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>        let mut query = Query::new((name(), position(), health()));
+
+        for (name, pos, health) in &amp;mut query.borrow(&amp;world) {
+            tracing::info!(&quot;Entity: {name:?} pos: {pos}, health: {health}&quot;);
+        }
+
+<span class="boring">}</span></code></pre></pre>
+<h2 id="mutation"><a class="header" href="#mutation">Mutation</a></h2>
+<p><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.as_mut"><code>.as_mut</code></a> will transform a component into yielding mutable references.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>        fn lightning_strike(world: &amp;World, rng: &amp;mut StdRng) {
+            let mut query = Query::new(health().as_mut());
+            for h in &amp;mut query.borrow(world) {
+                // &amp;mut f32
+                *h -= rng.gen_range(10.0..20.0);
+            }
+        }
+
+        lightning_strike(&amp;world, &amp;mut rng);
+
+<span class="boring">}</span></code></pre></pre>
+<h2 id="optional"><a class="header" href="#optional">Optional</a></h2>
+<p><a href="https://docs.rs/flax/latest/flax/fetch/trait.FetchExt.html#method.opt"><code>.opt</code></a> makes a part of the fetch optional. This can be applied to a single component, or to the tuple or nested tuples as a whole.</p>
+<p>In addition, <a href="https://docs.rs/flax/latest/flax/fetch/trait.FetchExt.html#method.opt"><code>.opt_or</code></a>, and <a href="https://docs.rs/flax/latest/flax/fetch/trait.FetchExt.html#method.opt"><code>.opt_or_default</code></a> allows specifying a fallback if the entity does not have the component.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>        let mut query = Query::new((name(), position(), health().opt()));
+
+        (&amp;mut query.borrow(&amp;world)).into_iter().for_each(
+            |(name, pos, health): (&amp;String, &amp;Vec3, Option&lt;&amp;f32&gt;)| {
+                tracing::info!(&quot;Entity: {name:?} pos: {pos}, health: {health:?}&quot;);
+            },
+        );
+
+<span class="boring">}</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="filters"><a class="header" href="#filters">Filters</a></h1>
+<p>A filter allows further specifying, and consequently narrowing, the subset of entities to visit.</p>
+<p>For instance, a filter can allow querying the set of entities which have a specified component, or the set of entities which <em>do not</em> have the specified components, among others.</p>
+<h2 id="with-and-without"><a class="header" href="#with-and-without">With and Without</a></h2>
+<p>Allows including or excluding a set of entities from the query depending on their components.</p>
+<p>Combined with tag like components, a query which only yields the player can be achieved.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>        let mut query = Query::new((name(), health())).filter(player().with());
+
+        let mut borrow = query.borrow(&amp;world);
+
+        if let Some((name, health)) = borrow.iter().next() {
+            tracing::info!(&quot;The player {name} is alive and well at {health} health&quot;);
+        } else {
+            tracing::info!(&quot;The player seems to have perished&quot;);
+        }
+
+<span class="boring">}</span></code></pre></pre>
+<p>... or everything that isn't a player, that of course still has the required <code>name</code> and <code>health</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>        let mut query = Query::new((name(), health())).filter(player().without());
+
+        for (name, health) in &amp;mut query.borrow(&amp;world) {
+            tracing::info!(&quot;Npc: {name} at {health} health&quot;);
+        }
+
+<span class="boring">}</span></code></pre></pre>
+<h2 id="combinators"><a class="header" href="#combinators">Combinators</a></h2>
+<p>Several filters can be combined using <code>&amp;</code> and <code>|</code>, as well as <code>!</code>.</p>
+<h2 id="comparison"><a class="header" href="#comparison">Comparison</a></h2>
+<p>It is also possible to filter on the value of a component.</p>
+<p>This is different from using <code>filter</code> on the iterator, as the comparison will filter and select <em>before</em> the query traverses the entities, which means it avoids unnecessary modification events for mutable queries.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>        let mut query = Query::new(name()).filter(health().without() | health().ge(35.0));
+        for name in &amp;mut query.borrow(&amp;world) {
+            tracing::info!(&quot;{name} is still standing strong&quot;);
+        }
+
+<span class="boring">}</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="change-detection"><a class="header" href="#change-detection">Change Detection</a></h1>
+<p>Flax tracks when a component is added, mutably accessed, or removed.</p>
+<p>Queries allow filtering on change events since the query last run.</p>
+<ul>
+<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.modified"><code>modified</code></a> filter mutated or new components</li>
+<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.modified"><code>inserted</code></a> only new components</li>
+<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.modified"><code>removed</code></a> filter recently removed components.</li>
+</ul>
+<p>The modified filter is best used for queries which calculate or update a value
+based on one or more components, or in other ways react to a changed value.</p>
+<p>The following example creates a system which prints the updated health values
+for each entity.</p>
+<p><strong>Note</strong>: Tuple queries combine using <code>and</code>, which means a query with multiple <code>modified</code> or other change filtered components will only yield if <strong>all</strong> the annotated components changed since the last query ran.</p>
+<p>Prefer using <code>.filter(Or(a().modified, b().modified()))</code> when dealing with multiple
+change filters, or splitting up the query.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let query = Query::new((name(), health().modified()));
+
+    let health_changes = System::builder()
+        .with(query)
+        .build(|mut query: QueryBorrow&lt;_&gt;| {
+            info_span!(&quot;health_changes&quot;);
+            for (name, health) in &amp;mut query {
+                tracing::info!(&quot;{name:?}: is now at {health} health&quot;);
+            }
+        });
+
+<span class="boring">}</span></code></pre></pre>
+<h1 id="combining-filters"><a class="header" href="#combining-filters">Combining filters</a></h1>
+<p>Change filters can be combined with other filters, which leads to queries which
+do even less work than that particular group member.</p>
+<p>The following example creates a query which removes despawns entities when their
+health becomes <code>0</code>. Noteworthy in particular, is that this system can run in
+parallel with the previously discussed system, since they do not overlap in
+mutable access.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let query = Query::new((entity_ids(), player().satisfied())).filter(health().le(0.0));
+
+    let cleanup = System::builder()
+        .with_name(&quot;cleanup&quot;)
+        .with(query)
+        .write::&lt;CommandBuffer&gt;()
+        .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
+            for (id, is_player) in &amp;mut q {
+                if is_player {
+                    tracing::info!(&quot;Player died&quot;);
+                }
+                tracing::info!(is_player, &quot;Despawning {id}&quot;);
+                cmd.despawn(id);
+            }
+        });
+
+<span class="boring">}</span></code></pre></pre>
+<h1 id="bringing-it-all-together"><a class="header" href="#bringing-it-all-together">Bringing it all together</a></h1>
+<p>In order for the health monitoring and cleanup systems to be effective, there
+needs to be something to modify the health of entities.</p>
+<p>Such as a random damage system, and a poison status effect.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let player_id = Entity::builder()
+        .set(name(), &quot;player&quot;.into())
+        .set(health(), 100.0)
+        .set_default(player())
+        .spawn(&amp;mut world);
+
+    let enemies = (0..10)
+        .map(|i| {
+            Entity::builder()
+                .set(name(), format!(&quot;enemy.{i}&quot;))
+                .set(health(), 50.0)
+                .spawn(&amp;mut world)
+        })
+        .collect_vec();
+
+    let all = enemies.iter().copied().chain([player_id]).collect_vec();
+
+    let mut rng = StdRng::from_entropy();
+
+    all.choose_multiple(&amp;mut rng, all.len() / 5)
+        .for_each(|&amp;id| {
+            world.set(id, poison(), 10.0).unwrap();
+        });
+
+    let damage_random = System::builder()
+        .write::&lt;World&gt;()
+        .build(move |world: &amp;mut World| {
+            let count = rng.gen_range(0..enemies.len());
+            let targets = all.choose_multiple(&amp;mut rng, count);
+            for &amp;enemy in targets {
+                if let Ok(mut health) = world.get_mut(enemy, health()) {
+                    *health -= 1.0;
+                }
+            }
+        });
+
+    let update_poison = System::builder()
+        .with(Query::new((name().opt(), health().as_mut(), poison())))
+        .for_each(|(name, health, poison)| {
+            *health -= poison;
+            tracing::info!(&quot;{name:?} suffered {poison} in poison damage&quot;);
+        });
+
+<span class="boring">}</span></code></pre></pre>
+<p>Using a schedule allows for easy parallelization and execution of the systems, but
+is not a requirement for change detection.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let mut schedule = Schedule::new()
+        .with_system(damage_random)
+        .with_system(update_poison)
+        .with_system(health_changes)
+        .with_system(cleanup)
+        .flush();
+
+    while world.is_alive(player_id) {
+        schedule
+            .execute_par(&amp;mut world)
+            .expect(&quot;Failed to run schedule&quot;);
+        sleep(Duration::from_millis(1000));
+    }
+
+<span class="boring">}</span></code></pre></pre>
+<p>See the full example <a href="https://github.com/ten3roberts/flax/blob/main/examples/guide/change_detection.rs">here</a></p>
+<h2 id="implementation-details"><a class="header" href="#implementation-details">Implementation details</a></h2>
+<p>Each <code>ChangeEvent</code> consists of a subslice of adjacent entities in the same
+archetype, the change type, and when the change occurred.</p>
+<p>Two change events where the entities are adjacent will be joined into a single
+one will be joined. This means the change list is always rather small compared
+to the number of changing entities (especially compared to using a <code>HashSet</code>).</p>
+<p>The following example combines optional queries with change detection to create
+a small physic calculation.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="entity-query"><a class="header" href="#entity-query">Entity Query</a></h1>
+<p>By default, a query will iterate all entities which match the archetype.</p>
+<p>However, the query strategy can be changed to only return a single entity, which is useful for queries over a resource entity or player.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    component! {
+        window_width: f32,
+        window_height: f32,
+        allow_vsync: bool,
+
+        /// A static entity, which is always alive
+        resources,
+    }
+
+    Entity::builder()
+        .set(window_width(), 800.0)
+        .set(window_height(), 600.0)
+        .set(allow_vsync(), false)
+        // Since `resources` is static, it is not required to spawn it
+        .append_to(&amp;mut world, resources())
+        .unwrap();
+
+    let mut query = Query::new((window_width(), window_height(), allow_vsync()))
+        // Change the query strategy to only iterate the `resources` entity
+        .entity(resources());
+
+    let mut borrow = query.borrow(&amp;world);
+    let (width, height, vsync) = borrow.get().unwrap();
+    tracing::info!(&quot;width: {width} height: {height}, vsync: {vsync}&quot;);
+
+<span class="boring">}</span></code></pre></pre>
+<p>In addition, an entity query can be used in a system</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let mut window_system = System::builder()
+        .with(query)
+        .build(|mut q: EntityBorrow&lt;_&gt;| {
+            if let Ok((width, height, allow_vsync)) = q.get() {
+                tracing::info!(width, height, allow_vsync, &quot;Config changed&quot;);
+            } else {
+                tracing::info!(&quot;No config change&quot;);
+            }
+        });
+
+    window_system.run_on(&amp;mut world);
+    window_system.run_on(&amp;mut world);
+    world.set(resources(), window_height(), 720.0)?;
+    window_system.run_on(&amp;mut world);
+
+
+<span class="boring">}</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="graphs"><a class="header" href="#graphs">Graphs</a></h1>
+<p>The relation system allows creating Entity hierarchies and graphs.</p>
+<p>These graphs can be traversed in different ways through the use of a <a href="https://docs.rs/flax/latest/flax/struct.Query.html">Query</a>.</p>
+<p>The default <code>child_of</code> relation provides a <em>mutually exclusive</em> parent-child relation, which is perfect for transform hierarchies or trees, and is trivial to construct using the <a href="https://docs.rs/flax/latest/flax/struct.EntityBuilder.html#method.attach">EntityBuilder::attach</a> method.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let root = Entity::builder()
+        .set(name(), &quot;root&quot;.into())
+        .attach(
+            child_of,
+            Entity::builder().set(name(), &quot;root.child.1&quot;.into()).attach(
+                child_of,
+                Entity::builder().set(name(), &quot;root.child.1.1&quot;.into()),
+            ),
+        )
+        .attach(
+            child_of,
+            Entity::builder().set(name(), &quot;root.child.2&quot;.into()),
+        )
+        .attach(
+            child_of,
+            Entity::builder().set(name(), &quot;root.child.3&quot;.into()),
+        )
+        .spawn(&amp;mut world);
+
+<span class="boring">}</span></code></pre></pre>
+<p>Likewise, <a href="https://docs.rs/flax/latest/flax/entity/struct.EntityBuilder.html#method.attach_with"><code>attach_with</code></a> can be used for stateful relations</p>
+<h2 id="depth-first-iteration"><a class="header" href="#depth-first-iteration">Depth First Iteration</a></h2>
+<p><a href="https://docs.rs/flax/latest/flax/query/struct.Dfs.html">Dfs</a> allows traversing hierarchies in depth-first order.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>        let mut query = Query::new((entity_ids(), name())).with_strategy(Dfs::new(child_of));
+
+        tracing::info!(&quot;Dfs:&quot;);
+        for (id, name) in query.borrow(&amp;world).iter() {
+            tracing::info!(?id, ?name);
+        }
+
+<span class="boring">}</span></code></pre></pre>
+<h3 id="traversal"><a class="header" href="#traversal">Traversal</a></h3>
+<p>For modifying a graph through a value which is passed through the parents, such as updating a UI layout, there is <a href="https://docs.rs/flax/latest/flax/query/struct.Dfs.html#method.traverse">Dfs::traverse</a> which provides an easy recursion based visiting, which can for example be used for updating transform hierarchies.</p>
+<p>Example:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    let update_world_position = System::builder()
+        .with(Query::new((world_position().as_mut(), position())).with_strategy(Dfs::new(child_of)))
+        .build(
+            |mut query: DfsBorrow&lt;(Mutable&lt;Vec3&gt;, Component&lt;Vec3&gt;), All, ()&gt;| {
+                query.traverse(&amp;Vec3::ZERO, |(world_pos, &amp;pos), _, &amp;parent_pos| {
+                    *world_pos = pos + parent_pos;
+                    *world_pos
+                });
+            },
+        );
+
+    let mut buf = String::new();
+    let print_hierarchy = System::builder()
+        .with(Query::new((name(), position(), world_position())).with_strategy(Dfs::new(child_of)))
+        .build(move |mut query: DfsBorrow&lt;_, _, _&gt;| {
+            query.traverse(&amp;0usize, |(name, pos, world_pos), _, depth| {
+                let indent = depth * 4;
+                writeln!(
+                    buf,
+                    &quot;{:indent$}{name}: {pos} {world_pos}&quot;,
+                    &quot;&quot;,
+                    indent = indent,
+                )
+                .unwrap();
+                depth + 1
+            });
+
+            tracing::info!(&quot;{buf}&quot;);
+        });
+
+    let mut schedule = Schedule::new()
+        .with_system(update_world_position)
+        .with_system(print_hierarchy);
+
+    schedule.execute_seq(&amp;mut world).unwrap();
+
+<span class="boring">}</span></code></pre></pre>
+<p>See: <a href="https://github.com/ten3roberts/flax/blob/main/examples/query/transform.rs">transform</a></p>
+<h2 id="topological-iteration"><a class="header" href="#topological-iteration">Topological Iteration</a></h2>
+<p>In addition to <em>depth first</em> traversal, queries offer iteration in topological ordering through <a href="https://docs.rs/flax/latest/flax/query/struct.Topo.html">Topo</a>.</p>
+<p>Topological ordering is less constrained as it only ensures that each node's parents are visited before the children, but not that the children are visited immediately after the parent.</p>
+<p>More specifically, each <em>node</em> is visited in the ordered of their <em>maximum recursion depth</em>. I.e, first all roots are visited, then all children, then all <em>2nd</em> level children and so on.</p>
+<p>This allows far greater cache locality and is more similar in memory access patterns to the non-relation aware <a href="https://docs.rs/flax/latest/flax/query/struct.Planar.html">Planar</a> strategy.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="diving-deeper"><a class="header" href="#diving-deeper">Diving deeper</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-query"><a class="header" href="#advanced-query">Advanced query</a></h1>
 <p>A query is a combination of a
@@ -1183,7 +1378,7 @@ handle a 3d world.</p>
 </span>    component! {
         rotation: Quat,
         scale: Vec3,
-        world_matrix: Mat4 =&gt; [Debug],
+        world_matrix: Mat4 =&gt; [Debuggable],
     }
 
     let create_world_matrix = System::builder()
@@ -1251,7 +1446,7 @@ handle a 3d world.</p>
     tracing::info!(&quot;World: {world:#?}&quot;);
 
 <span class="boring">}</span></code></pre></pre>
-<h3 id="implementation-details"><a class="header" href="#implementation-details">Implementation details</a></h3>
+<h3 id="implementation-details-1"><a class="header" href="#implementation-details-1">Implementation details</a></h3>
 <pre><code>Each `ChangeEvent` consists of a subslice of adjacent entities in the same
 archetype, the change type, and when the change occurred.
 
@@ -1363,9 +1558,10 @@ components.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    component! {
-        position: Vec3 =&gt; [Debug],
-        velocity: Vec3 =&gt; [Debug],
+        position: Vec3 =&gt; [Debuggable],
+        velocity: Vec3 =&gt; [Debuggable],
     }
+
     tracing_subscriber::fmt().init();
 
     use flax::serialize::{SerdeBuilder, SerializeFormat};
@@ -1482,5 +1678,6 @@ deserialization failed.</p>
         });
         </script>
 
+    </div>
     </body>
 </html>
