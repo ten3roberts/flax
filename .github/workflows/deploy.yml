@@ -13,7 +13,7 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v2
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.66.0
         with:
           target: wasm32-unknown-unknown
       - run: cargo build --release --package asteroids --target wasm32-unknown-unknown --manifest-path=asteroids/Cargo.toml
