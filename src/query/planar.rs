@@ -223,17 +223,16 @@ where
         Q::Prepared: Send,
         F: Sync,
         F::Prepared: Send,
-        // BatchedIter<'q, 'w, Q>: Send,
     {
         use rayon::prelude::{ParallelBridge, ParallelIterator};
 
-        self.clear_borrows();
         self.iter_batched()
             .par_bridge()
             .for_each(|batch| batch.for_each(&func))
     }
 
     /// Release all borrowed archetypes
+    #[inline]
     pub fn clear_borrows(&mut self) {
         self.prepared.clear()
     }
