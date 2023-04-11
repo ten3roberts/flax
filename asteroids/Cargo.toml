@@ -7,7 +7,10 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flax = { path = "../", default-features = false, features = ["flume"] }
+flax = { path = "../", default-features = false, features = [
+    "flume",
+    "derive",
+] }
 macroquad = "0.3.8"
 # sapp-wasm = "=0.1.26"
 
