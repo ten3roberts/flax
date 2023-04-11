@@ -45,7 +45,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: miri
-          args: nextest run --no-default-features --features std,serde,flume,derive
+          args: nextest run -j16 --no-default-features --features std,serde,flume,derive
 
   test_nostd:
     runs-on: ubuntu-latest
