@@ -249,7 +249,12 @@ impl fmt::Debug for Entity {
 
 impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+        let Self {
+            index,
+            gen,
+            kind: _,
+        } = *self;
+        write!(f, "{index}v{gen}")
     }
 }
 
