@@ -171,13 +171,19 @@ impl<T> Clone for Component<T> {
 
 impl<T> fmt::Debug for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Component").field("key", &self.key).finish()
+        match self.key.object {
+            Some(object) => write!(f, "{}({}) {}", self.vtable.name, object, self.key.id()),
+            None => write!(f, "{} {}", self.vtable.name, self.key.id),
+        }
     }
 }
 
 impl<T> Display for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", self.vtable.name, self.key)
+        match self.key.object {
+            Some(object) => write!(f, "{}({}) {}", self.vtable.name, object, self.key.id()),
+            None => write!(f, "{} {}", self.vtable.name, self.key.id),
+        }
     }
 }
 
@@ -363,10 +369,10 @@ impl PartialEq for ComponentInfo {
 
 impl core::fmt::Debug for ComponentInfo {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ComponentInfo")
-            .field("key", &self.key)
-            .field("name", &self.vtable.name)
-            .finish()
+        match self.key.object {
+            Some(object) => write!(f, "{}({}) {}", self.vtable.name, object, self.key.id()),
+            None => write!(f, "{} {}", self.vtable.name, self.key.id),
+        }
     }
 }
 

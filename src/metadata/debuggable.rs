@@ -70,7 +70,7 @@ struct ComponentName {
 
 impl Debug for ComponentName {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.base_name, self.id)
+        write!(f, "{}{}", self.base_name, self.id)
     }
 }
 
@@ -86,9 +86,9 @@ impl<'a> Debug for RowValueFormatter<'a> {
             };
 
             if let Ok(visitor) = self.world.get(info.key().id, debuggable()) {
-                map.entry(&name, (visitor.debug_storage)(&storage, self.slot));
+                map.entry(&info, (visitor.debug_storage)(&storage, self.slot));
             } else {
-                map.entry(&name, &MissingDebug);
+                map.entry(&info, &MissingDebug);
             }
         }
 
