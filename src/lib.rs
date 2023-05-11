@@ -244,6 +244,7 @@ pub use component::*;
 pub use components::*;
 pub use entity::{entity_ids, Entity, EntityBuilder};
 pub use entity_ref::*;
+pub use entry::{Entry, OccupiedEntry, VacantEntry};
 pub use error::Error;
 pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
