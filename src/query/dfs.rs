@@ -4,7 +4,8 @@ use crate::{
     archetype::Slice,
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
-    Access, AccessKind, All, ArchetypeId, Batch, ComponentKey, ComponentValue, FetchItem,
+    system::{Access, AccessKind},
+    All, ArchetypeId, Batch, ComponentKey, ComponentValue, FetchItem,
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 use smallvec::SmallVec;
@@ -52,7 +53,7 @@ where
         DfsBorrow::new(query_state, self)
     }
 
-    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<crate::Access> {
+    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<Access> {
         let mut state = State::default();
         state.update(world, self.relation, fetch);
 

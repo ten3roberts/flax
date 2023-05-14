@@ -6,6 +6,7 @@ use crate::{
     archetype::{Archetype, Slice, Slot},
     fetch::FetchPrepareData,
     fetch::PreparedFetch,
+    system::Access,
     ComponentValue, Fetch,
 };
 
@@ -35,7 +36,7 @@ where
         true
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<crate::Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         self.0.access(data)
     }
 
@@ -119,7 +120,7 @@ where
         true
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<crate::Access> {
+    fn access(&self, data: FetchAccessData) -> Vec<Access> {
         self.fetch.access(data)
     }
 

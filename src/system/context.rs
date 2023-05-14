@@ -3,7 +3,12 @@ use core::{any::TypeId, ops::Deref};
 use alloc::{sync::Arc, vec::Vec};
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-use crate::{Access, AccessKind, CommandBuffer, SystemAccess, SystemData, World};
+use crate::{
+    system::{Access, AccessKind},
+    CommandBuffer, World,
+};
+
+use super::{SystemAccess, SystemData};
 
 /// A resource that can be shared between systems
 /// The difference between this and an `Arc<Mutex<_>>` is that this will be
@@ -37,7 +42,7 @@ impl<T> SystemAccess for SharedResource<T>
 where
     T: Send + 'static,
 {
-    fn access(&self, _: &World) -> Vec<crate::Access> {
+    fn access(&self, _: &World) -> Vec<Access> {
         alloc::vec![Access {
             kind: AccessKind::External(TypeId::of::<Self>()),
             mutable: true,
@@ -60,6 +65,12 @@ where
         })?;
 
         Ok(borrow)
+    }
+
+    fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("SharedResource<")?;
+        f.write_str(&tynm::type_name::<T>())?;
+        f.write_str(">")
     }
 }
 

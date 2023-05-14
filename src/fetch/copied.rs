@@ -7,7 +7,8 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Archetype, Slice},
-    Access, Fetch, FetchItem,
+    system::Access,
+    Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};

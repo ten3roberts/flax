@@ -209,7 +209,7 @@ fn derive_data_struct(
                         s.finish()
                     }
 
-                    fn access(&self, data: #crate_name::fetch::FetchAccessData) -> Vec<#crate_name::Access> {
+                    fn access(&self, data: #crate_name::fetch::FetchAccessData) -> Vec<#crate_name::system::Access> {
                         [ #(self.#names.access(data)),* ].concat()
                     }
 

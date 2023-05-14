@@ -2,11 +2,15 @@ use core::mem;
 
 use crate::{archetype::RefMut, Component, ComponentValue, Entity, World};
 
+/// Entry like api for an entity's component
 pub enum Entry<'a, T: ComponentValue> {
+    /// A vacant entry
     Vacant(VacantEntry<'a, T>),
+    /// An occupied entry
     Occupied(OccupiedEntry<'a, T>),
 }
 
+/// A view into a vacant component entry
 pub struct VacantEntry<'a, T: ComponentValue> {
     pub(crate) world: &'a mut World,
     pub(crate) id: Entity,
@@ -14,14 +18,7 @@ pub struct VacantEntry<'a, T: ComponentValue> {
 }
 
 impl<'a, T: ComponentValue> VacantEntry<'a, T> {
-    pub fn new(world: &'a mut World, id: Entity, component: Component<T>) -> Self {
-        Self {
-            world,
-            id,
-            component,
-        }
-    }
-
+    /// Insert a value into the entry, returning a mutable reference to it
     pub fn insert(self, value: T) -> RefMut<'a, T> {
         let (old, loc) = self
             .world
@@ -32,15 +29,13 @@ impl<'a, T: ComponentValue> VacantEntry<'a, T> {
     }
 }
 
+/// A view into an occupied component entry
 pub struct OccupiedEntry<'a, T: ComponentValue> {
     pub(crate) borrow: RefMut<'a, T>,
 }
 
 impl<'a, T: ComponentValue> OccupiedEntry<'a, T> {
-    pub fn new(borrow: RefMut<'a, T>) -> Self {
-        Self { borrow }
-    }
-
+    /// Convert the entry into a mutable reference
     pub fn into_mut(self) -> RefMut<'a, T> {
         self.borrow
     }
@@ -50,6 +45,7 @@ impl<'a, T> Entry<'a, T>
 where
     T: ComponentValue,
 {
+    /// Mutate the value in place
     pub fn and_modify(mut self, mut func: impl FnMut(&mut T)) -> Self {
         if let Self::Occupied(v) = &mut self {
             (func)(&mut *v.borrow)

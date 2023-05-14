@@ -7,7 +7,8 @@ use atomic_refcell::AtomicRefMut;
 use crate::{
     archetype::{Archetype, Cell, CellMutGuard, Change, Changes, Slice, Slot},
     events::{EventData, EventKind},
-    Access, AccessKind, Component, ComponentValue, Entity, Fetch, FetchItem,
+    system::{Access, AccessKind},
+    Component, ComponentValue, Entity, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch};

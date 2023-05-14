@@ -7,7 +7,8 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Cell, RefMut, Slot},
-    Access, AccessKind, Component, ComponentValue, Entity, Fetch, FetchItem,
+    system::{Access, AccessKind},
+    Component, ComponentValue, Entity, Fetch, FetchItem,
 };
 
 use super::{PreparedFetch, ReadOnlyFetch};
@@ -44,7 +45,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for MaybeMut<T> {
         arch.has(self.0.key())
     }
 
-    fn access(&self, data: super::FetchAccessData) -> Vec<crate::Access> {
+    fn access(&self, data: super::FetchAccessData) -> Vec<Access> {
         if data.arch.has(self.0.key()) {
             vec![
                 Access {

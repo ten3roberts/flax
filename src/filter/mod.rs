@@ -13,7 +13,8 @@ use crate::{
     archetype::{Archetype, Slice, Slot},
     component_info,
     fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch},
-    Access, ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
+    system::Access,
+    ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
 };
 
 pub use change::*;
@@ -118,7 +119,7 @@ where
     #[inline]
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.fetch.describe(f)?;
-        write!(f, " & ")?;
+        write!(f, ", ")?;
         self.filter.describe(f)
     }
 

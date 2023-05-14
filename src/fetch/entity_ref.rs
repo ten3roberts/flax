@@ -1,6 +1,10 @@
 use alloc::vec::Vec;
 
-use crate::{archetype::Archetype, Access, EntityRef, Fetch, FetchItem, World};
+use crate::{
+    archetype::Archetype,
+    system::{Access, AccessKind},
+    EntityRef, Fetch, FetchItem, World,
+};
 
 use super::PreparedFetch;
 
@@ -37,7 +41,7 @@ impl<'w> Fetch<'w> for EntityRefs {
 
     fn access(&self, _: super::FetchAccessData) -> Vec<Access> {
         alloc::vec![Access {
-            kind: crate::AccessKind::World {},
+            kind: AccessKind::World {},
             mutable: true,
         }]
     }

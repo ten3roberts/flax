@@ -1,6 +1,4 @@
-use any::type_name;
 use anyhow::anyhow;
-use core::any;
 use core::fmt::{self, Formatter};
 use core::marker::PhantomData;
 
@@ -8,9 +6,13 @@ use alloc::vec;
 use alloc::{string::String, vec::Vec};
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
+use crate::system::AccessKind;
 use crate::*;
 
+use super::{Access, SystemContext};
+
 /// Allows dereferencing `AtomicRef<T>` to &T and similar "lock" types in a safe manner.
+/// Traits for guarded types like `AtomicRef`, `Mutex` or [`QueryData`](crate::QueryData).
 pub trait AsBorrow<'a> {
     /// The dereference target
     type Borrowed: 'a;
@@ -35,16 +37,27 @@ impl<'a, 'b, T: 'a> AsBorrow<'a> for AtomicRefMut<'b, T> {
     }
 }
 
-/// Describes a type which can fetch assocated Data from the system context and
-/// provide it to the system.
+struct FmtSystemData<'a, T>(&'a T);
+impl<'a, 'w, T> std::fmt::Debug for FmtSystemData<'a, T>
+where
+    T: SystemData<'w>,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.describe(f)
+    }
+}
+
+/// Provider trait for data from a system execution context
 pub trait SystemData<'a>: SystemAccess {
     /// The borrow from the system context
     type Value;
     /// Get the data from the system context
     fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value>;
+    /// Human friendly debug description
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 }
 
-/// Describe an access to the world in ters of shared and unique accesses
+/// Describe an access to the world in terms of shared and unique accesses
 pub trait SystemAccess {
     /// Returns all the accesses for a system
     fn access(&self, world: &World) -> Vec<Access>;
@@ -54,19 +67,15 @@ pub trait SystemAccess {
 pub trait SystemFn<'this, Args, Ret> {
     /// Execute the function
     fn execute(&'this mut self, args: Args) -> Ret;
-    /// Debug for Fn
-    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
-    /// Returns a short name
-    fn name(&self) -> String;
     /// Returns the data accesses of a system function
     fn access(&self, world: &World) -> Vec<Access>;
 }
 
 #[derive(PartialEq, Eq, Clone)]
-pub(crate) struct Verbatim<'a>(pub(crate) &'a str);
-impl<'a> fmt::Debug for Verbatim<'a> {
+pub(crate) struct Verbatim(pub String);
+impl fmt::Debug for Verbatim {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
+        f.write_str(&self.0)
     }
 }
 
@@ -75,7 +84,6 @@ macro_rules! tuple_impl {
         impl<'this, Func, Ret, $($ty,)*> SystemFn<'this, ($($ty,)*), Ret> for Func
         where
             $(for<'x> $ty: AsBorrow<'x>,)*
-            // for<'x> Func: FnMut($($ty),*) -> Ret,
             for<'x> Func: FnMut($(<$ty as AsBorrow<'x>>::Borrowed),*) -> Ret,
         {
             fn execute(&'this mut self, mut args: ($($ty,)*)) -> Ret {
@@ -83,27 +91,8 @@ macro_rules! tuple_impl {
                 (self)($(borrowed.$idx,)*)
             }
 
-            fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                use fmt::Debug;
-                f.write_str("fn")?;
-
-                ($(
-                    Verbatim(type_name::<<$ty as AsBorrow>::Borrowed>()),
-                )*).fmt(f)?;
-
-                if type_name::<Ret>() != type_name::<()>() {
-                    write!(f, " -> {}", type_name::<Ret>())?;
-                }
-
-                Ok(())
-            }
-
             fn access(&self, _: &World) -> Vec<Access> {
     Default::default()
-            }
-
-            fn name(&self) -> String {
-                any::type_name::<Self>().into()
             }
         }
 
@@ -139,6 +128,14 @@ macro_rules! tuple_impl {
                 Ok(
                     ($((self.$idx).acquire(_ctx)?,)*)
                 )
+            }
+
+            fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+
+                core::fmt::Debug::fmt(&($(
+                    FmtSystemData(&self.$idx),
+                )*), f)
+
             }
         }
     };
@@ -198,6 +195,10 @@ impl<'a> SystemData<'a> for Write<World> {
         ctx.world_mut()
             .map_err(|_| anyhow!("Failed to borrow world mutably"))
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("&mut World")
+    }
 }
 
 impl<'a> SystemData<'a> for Read<World> {
@@ -206,6 +207,10 @@ impl<'a> SystemData<'a> for Read<World> {
     fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
         ctx.world()
             .map_err(|_| anyhow!("Failed to borrow world mutably"))
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("&World")
     }
 }
 
@@ -235,6 +240,10 @@ impl<'a> SystemData<'a> for Write<CommandBuffer> {
         ctx.cmd_mut()
             .map_err(|_| anyhow!("Failed to borrow commandbuffer mutably"))
     }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("&mut CommandBuffer")
+    }
 }
 
 impl SystemAccess for Write<CommandBuffer> {
@@ -255,10 +264,10 @@ mod test {
 
     use crate::{
         component, components::name, system::SystemContext, All, CommandBuffer, Component, Entity,
-        Query, QueryBorrow, QueryData, SystemData, SystemFn, World,
+        Query, QueryBorrow, QueryData, World,
     };
 
-    use super::Write;
+    use super::{SystemData, SystemFn, Write};
 
     component! {
         health: f32,

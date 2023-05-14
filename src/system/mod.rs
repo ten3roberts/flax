@@ -3,8 +3,8 @@ mod context;
 mod traits;
 
 use crate::{
-    archetype::ArchetypeInfo, fetch::PreparedFetch, util::TupleCombine, ArchetypeId, CommandBuffer,
-    ComponentKey, Fetch, FetchItem, Query, QueryData, World,
+    archetype::ArchetypeInfo, util::TupleCombine, ArchetypeId, CommandBuffer, ComponentKey, Fetch,
+    FetchItem, Query, QueryData, World,
 };
 use anyhow::Context;
 use core::any::{type_name, TypeId};
@@ -47,41 +47,24 @@ impl Default for SystemBuilder<()> {
 }
 
 #[doc(hidden)]
-pub struct ForEach<F> {
-    func: F,
+pub struct ForEach<Func> {
+    func: Func,
 }
 
-impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ForEach<Func>
+impl<'a, Func, Q, F> SystemFn<'a, (QueryData<'a, Q, F>,), ()> for ForEach<Func>
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
     for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
 {
-    fn execute(&mut self, mut data: QueryData<Q, F>) {
-        for item in &mut data.borrow() {
+    fn execute(&mut self, mut data: (QueryData<Q, F>,)) {
+        for item in &mut data.0.borrow() {
             (self.func)(item)
         }
     }
 
-    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "for_each<{}, filter: {}>",
-            type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
-            type_name::<F>()
-        )
-    }
-
     fn access(&self, _: &World) -> Vec<Access> {
         vec![]
-    }
-
-    fn name(&self) -> String {
-        format!(
-            "for_each<{}, filter: {}>",
-            type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
-            type_name::<F>()
-        )
     }
 }
 
@@ -92,59 +75,41 @@ pub struct ParForEach<F> {
 }
 
 #[cfg(feature = "parallel")]
-impl<'a, Func, Q, F> SystemFn<'a, QueryData<'a, Q, F>, ()> for ParForEach<Func>
+impl<'a, Func, Q, F> SystemFn<'a, (QueryData<'a, Q, F>,), ()> for ParForEach<Func>
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
     for<'x> <Q as Fetch<'x>>::Prepared: Send,
     for<'x> <F as Fetch<'x>>::Prepared: Send,
-    // for<'x, 'y> crate::BatchedIter<'x, 'y, Q, F>: Send,
-    // for<'x, 'y> crate::Batch<'x, <>: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
 {
-    fn execute(&mut self, mut data: QueryData<Q, F>) {
-        let mut borrow = data.borrow();
+    fn execute(&mut self, mut data: (QueryData<Q, F>,)) {
+        let mut borrow = data.0.borrow();
         borrow
             .iter_batched()
             .par_bridge()
             .for_each(|v| v.for_each(&self.func));
     }
 
-    fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "par_for_each<{}, filter: {}>",
-            type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
-            type_name::<F>()
-        )
-    }
-
     fn access(&self, _: &World) -> Vec<Access> {
         vec![]
     }
-
-    fn name(&self) -> String {
-        format!(
-            "par_for_each<{}, filter: {}>",
-            type_name::<<<Q as Fetch<'static>>::Prepared as PreparedFetch>::Item>(),
-            type_name::<F>()
-        )
-    }
 }
+
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
     for<'x> Q: Fetch<'x> + 'static,
     for<'x> F: Fetch<'x> + 'static,
 {
     /// Execute a function for each item in the query
-    pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, Query<Q, F>, ()>
+    pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, (Query<Q, F>,), ()>
     where
         for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             ForEach { func },
-            self.data.0,
+            self.data,
         )
     }
 }
@@ -158,14 +123,14 @@ where
     for<'x, 'y> crate::Batch<'x, <Q as Fetch<'y>>::Prepared, <F as Fetch<'y>>::Prepared>: Send,
 {
     /// Execute a function for each item in the query in parallel batches
-    pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, Query<Q, F>, ()>
+    pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, (Query<Q, F>,), ()>
     where
         for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             ParForEach { func },
-            self.data.0,
+            self.data,
         )
     }
 }
@@ -256,14 +221,22 @@ where
     }
 }
 
-impl<'this, F, Args, Err> SystemFn<'this, &'this SystemContext<'this>, anyhow::Result<()>>
-    for System<F, Args, Result<(), Err>>
+/// Abstraction over a system with any kind of arguments and fallibility
+#[doc(hidden)]
+pub trait DynSystem {
+    fn name(&self) -> &str;
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
+    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()>;
+    fn access(&self, world: &World) -> Vec<Access>;
+}
+
+impl<F, Args, Err> DynSystem for System<F, Args, Result<(), Err>>
 where
     Args: for<'x> SystemData<'x>,
     F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
     Err: Into<anyhow::Error>,
 {
-    fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> anyhow::Result<()> {
+    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
@@ -281,27 +254,30 @@ where
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}: ", self.name)?;
+        f.write_str("fn ")?;
+        f.write_str(&self.name)?;
+        self.data.describe(f)?;
+        f.write_str(" -> ")?;
+        f.write_str(&tynm::type_name::<std::result::Result<(), Err>>())?;
 
-        self.func.describe(f)
+        Ok(())
     }
 
     fn access(&self, world: &World) -> Vec<Access> {
         self.data.access(world)
     }
 
-    fn name(&self) -> String {
-        self.name.clone()
+    fn name(&self) -> &str {
+        &self.name
     }
 }
 
-impl<'this, F, Args> SystemFn<'this, &'this SystemContext<'this>, anyhow::Result<()>>
-    for System<F, Args, ()>
+impl<F, Args> DynSystem for System<F, Args, ()>
 where
-    Args: SystemData<'this>,
-    F: SystemFn<'this, Args::Value, ()>,
+    Args: for<'x> SystemData<'x>,
+    F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, ()>,
 {
-    fn execute(&'this mut self, ctx: &'this SystemContext<'this>) -> anyhow::Result<()> {
+    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
@@ -316,23 +292,25 @@ where
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}: ", self.name)?;
+        f.write_str("fn ")?;
+        f.write_str(&self.name)?;
+        self.data.describe(f)?;
 
-        self.func.describe(f)
+        Ok(())
     }
 
     fn access(&self, world: &World) -> Vec<Access> {
         self.data.access(world)
     }
 
-    fn name(&self) -> String {
-        self.name.clone()
+    fn name(&self) -> &str {
+        &self.name
     }
 }
 
 impl<F, Args, Ret> fmt::Debug for System<F, Args, Ret>
 where
-    Self: for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>>,
+    Self: DynSystem,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.describe(f)
@@ -355,7 +333,7 @@ impl<F, Args, Ret> System<F, Args, Ret> {
         Ret: Send + Sync + 'static,
         Args: Send + Sync + 'static,
         F: Send + Sync + 'static,
-        Self: for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>>,
+        Self: DynSystem,
     {
         BoxedSystem::new(self)
     }
@@ -545,22 +523,14 @@ impl<'a> SystemFn<'a, &'a SystemContext<'a>, anyhow::Result<()>> for NeverSystem
         panic!("This system should never be executed as it is a placeholder");
     }
 
-    fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NeverSystem")
-    }
-
     fn access(&self, _: &World) -> Vec<Access> {
         vec![]
-    }
-
-    fn name(&self) -> String {
-        "NeverSystem".to_string()
     }
 }
 
 /// A type erased system
 pub struct BoxedSystem {
-    inner: Box<dyn for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>> + Send + Sync>,
+    inner: Box<dyn DynSystem + Send + Sync>,
 }
 
 impl core::fmt::Debug for BoxedSystem {
@@ -571,12 +541,7 @@ impl core::fmt::Debug for BoxedSystem {
 
 impl BoxedSystem {
     /// Creates a new boxed system from any other kind of system
-    pub fn new(
-        system: impl for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>>
-            + Send
-            + Sync
-            + 'static,
-    ) -> Self {
+    fn new(system: impl DynSystem + Send + Sync + 'static) -> Self {
         Self {
             inner: Box::new(system),
         }
@@ -606,14 +571,14 @@ impl BoxedSystem {
     }
 
     /// Returns the boxed system's name
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> &str {
         self.inner.name()
     }
 }
 
 impl<T> From<T> for BoxedSystem
 where
-    T: for<'x> SystemFn<'x, &'x SystemContext<'x>, anyhow::Result<()>> + Send + Sync + 'static,
+    T: 'static + DynSystem + Send + Sync,
 {
     fn from(system: T) -> Self {
         Self::new(system)

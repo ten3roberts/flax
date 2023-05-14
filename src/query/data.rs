@@ -2,8 +2,8 @@ use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    All, AsBorrow, Fetch, Planar, Query, QueryStrategy, SystemAccess, SystemContext, SystemData,
-    World,
+    system::{AsBorrow, SystemAccess, SystemContext, SystemData},
+    All, Fetch, Planar, Query, QueryStrategy, World,
 };
 
 impl<Q, F, S> SystemAccess for Query<Q, F, S>
@@ -17,7 +17,9 @@ where
     }
 }
 
-/// Provides a query and a borrow of the world during system execution
+/// Combined reference to a query and a world.
+///
+/// Allow for executing a query inside a system without violating access rules.
 pub struct QueryData<'a, Q, F = All, S = Planar>
 where
     Q: for<'x> Fetch<'x> + 'static,
@@ -41,6 +43,14 @@ where
             .map_err(|_| anyhow::anyhow!(alloc::format!("Failed to borrow world for query")))?;
 
         Ok(QueryData { world, query: self })
+    }
+
+    fn describe(&self, f: &mut alloc::fmt::Formatter<'_>) -> alloc::fmt::Result {
+        f.write_str("Query<")?;
+        self.fetch.describe(f)?;
+        f.write_str(", ")?;
+        f.write_str(&tynm::type_name::<S>())?;
+        f.write_str(">")
     }
 }
 
