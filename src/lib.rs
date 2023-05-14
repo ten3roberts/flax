@@ -204,7 +204,8 @@ mod component;
 pub mod entity;
 /// Filter items yielded queries
 pub mod filter;
-mod system;
+/// System execution
+pub mod system;
 mod world;
 
 pub mod components;
@@ -255,7 +256,7 @@ pub(crate) use query::ArchetypeSearcher;
 pub use query::*;
 pub use relation::*;
 pub use schedule::*;
-pub use system::*;
+pub use system::{BoxedSystem, SharedResource, System, SystemBuilder};
 pub(crate) use vtable::*;
 pub use world::*;
 

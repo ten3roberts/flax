@@ -15,10 +15,9 @@ use core::fmt::Debug;
 use crate::archetype::Slot;
 use crate::fetch::FmtQuery;
 use crate::filter::{BatchSize, Filtered, WithRelation, WithoutRelation};
-use crate::{
-    Access, And, Component, ComponentValue, Entity, FetchItem, RelationExt, With, Without,
-};
+use crate::system::Access;
 use crate::{All, Fetch, World};
+use crate::{And, Component, ComponentValue, Entity, FetchItem, RelationExt, With, Without};
 use alloc::vec::Vec;
 
 use self::borrow::QueryBorrowState;

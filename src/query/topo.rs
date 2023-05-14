@@ -8,8 +8,10 @@ use smallvec::SmallVec;
 
 use crate::{
     fetch::{FetchAccessData, PreparedFetch},
-    Access, AccessKind, ArchetypeId, BatchedIter, ComponentValue, Entity, Fetch, PreparedArchetype,
-    QueryStrategy, RelationExt,
+    filter::Filtered,
+    system::{Access, AccessKind},
+    ArchetypeId, BatchedIter, ComponentValue, Entity, Fetch, PreparedArchetype, QueryStrategy,
+    RelationExt, World,
 };
 
 use super::{borrow::QueryBorrowState, ArchetypeSearcher};
@@ -33,7 +35,7 @@ struct State {
 }
 
 impl State {
-    fn update<'w, Q: Fetch<'w>>(&mut self, relation: Entity, world: &crate::World, fetch: &'w Q) {
+    fn update<'w, Q: Fetch<'w>>(&mut self, relation: Entity, world: &World, fetch: &'w Q) {
         self.clear();
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
@@ -144,11 +146,7 @@ where
         }
     }
 
-    fn access(
-        &self,
-        world: &'w crate::World,
-        fetch: &'w crate::filter::Filtered<Q, F>,
-    ) -> Vec<crate::Access> {
+    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<Access> {
         let mut state = State::default();
         state.update(self.relation, world, fetch);
 

@@ -17,7 +17,8 @@ use alloc::vec::Vec;
 use crate::{
     archetype::{Slice, Slot},
     fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch},
-    Access, Fetch, FetchItem,
+    system::Access,
+    Fetch, FetchItem,
 };
 
 trait CmpMethod<L> {

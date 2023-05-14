@@ -10,9 +10,10 @@ use crate::archetype::{Archetype, Change, Slot};
 use crate::fetch::{
     FetchAccessData, FetchPrepareData, PreparedFetch, ReadComponent, ReadOnlyFetch,
 };
+use crate::system::{Access, AccessKind};
 use crate::{
     archetype::{ChangeList, Slice},
-    Access, ChangeKind, Component, ComponentValue, Fetch, FetchItem,
+    ChangeKind, Component, ComponentValue, Fetch, FetchItem,
 };
 
 static EMPTY_CHANGELIST: ChangeList = ChangeList::new();
@@ -88,7 +89,7 @@ where
 
         if data.arch.has(self.component.key()) {
             v.push(Access {
-                kind: crate::AccessKind::ChangeEvent {
+                kind: AccessKind::ChangeEvent {
                     id: data.arch_id,
                     component: self.component.key(),
                 },
@@ -238,7 +239,7 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
 
     fn access(&self, data: FetchAccessData) -> Vec<Access> {
         vec![Access {
-            kind: crate::AccessKind::ChangeEvent {
+            kind: AccessKind::ChangeEvent {
                 id: data.arch_id,
                 component: self.component.key(),
             },

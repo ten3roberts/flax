@@ -6,7 +6,8 @@ use anyhow::Context;
 use itertools::Itertools;
 
 use crate::{
-    access_info, system::SystemContext, AccessInfo, BoxedSystem, CommandBuffer, System, World,
+    system::{access_info, AccessInfo, SystemContext, Verbatim},
+    BoxedSystem, CommandBuffer, System, World,
 };
 
 fn flush_system() -> BoxedSystem {
@@ -55,14 +56,14 @@ impl ScheduleBuilder {
 #[derive(Debug, Clone)]
 pub struct SystemInfo {
     name: String,
-    desc: String,
+    desc: Verbatim,
     access: AccessInfo,
 }
 
 impl SystemInfo {
     /// Returns a verbose system description
     pub fn desc(&self) -> &str {
-        &self.desc
+        &self.desc.0
     }
 
     /// Returns the system name
@@ -260,8 +261,8 @@ impl Schedule {
                 let systems = batch
                     .iter()
                     .map(|system| SystemInfo {
-                        name: system.name(),
-                        desc: alloc::format!("{system:#?}"),
+                        name: system.name().to_string(),
+                        desc: Verbatim(alloc::format!("{system:#?}")),
                         access: access_info(&system.access(world), world),
                     })
                     .collect_vec();

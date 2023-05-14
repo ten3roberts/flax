@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use crate::{
     archetype::{Archetype, Slot},
     entity::EntityLocation,
+    system::Access,
     ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 
@@ -128,7 +129,7 @@ where
         Ok(())
     }
 
-    fn access(&self, data: super::FetchAccessData) -> Vec<crate::Access> {
+    fn access(&self, data: super::FetchAccessData) -> Vec<Access> {
         let loc = self.source.resolve(data.arch, data.world);
 
         if let Some(loc) = loc {

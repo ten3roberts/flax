@@ -46,7 +46,7 @@ fn main() -> anyhow::Result<()> {
     // Since this query accessed `position`, `velocity` **and** `mass` only the
     // first group of entities will be matched
     for (pos, vel, mass) in &mut Query::new((position(), velocity(), mass())).borrow(&world) {
-        tracing::info!("pos: {pos}, vel: {vel}, mass: {mass}");
+        tracing::debug!("pos: {pos}, vel: {vel}, mass: {mass}");
     }
 
     // ANCHOR_END: full_match
@@ -55,9 +55,9 @@ fn main() -> anyhow::Result<()> {
     // Use an optional fetch to yield an `Option<T>`, works for any query
     for (pos, vel, mass) in &mut Query::new((position(), velocity(), mass().opt())).borrow(&world) {
         if mass.is_some() {
-            tracing::info!("Has mass");
+            tracing::debug!("Has mass");
         }
-        tracing::info!("pos: {pos}, vel: {vel}, mass: {mass:?}");
+        tracing::debug!("pos: {pos}, vel: {vel}, mass: {mass:?}");
     }
 
     // ANCHOR_END: opt
@@ -110,6 +110,8 @@ fn main() -> anyhow::Result<()> {
         .build();
 
     let all_ids = Query::new(entity_ids()).borrow(&world).iter().collect_vec();
+
+    tracing::info!("Schedule: {schedule:#?}");
 
     for _ in 0..10 {
         schedule

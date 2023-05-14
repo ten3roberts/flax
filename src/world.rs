@@ -1294,7 +1294,7 @@ impl World {
             if arch.has(is_static().key()) {
                 while let Some(id) = unsafe {
                     arch.pop_last(|mut info, ptr| {
-                        let mut key = &mut info.key;
+                        let key = &mut info.key;
 
                         // Modify the relations to match new components
                         key.id = *new_ids.get(&key.id).unwrap_or(&key.id);

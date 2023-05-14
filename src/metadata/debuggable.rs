@@ -80,11 +80,6 @@ impl<'a> Debug for RowValueFormatter<'a> {
         for storage in self.arch.try_borrow_all().flatten() {
             let info = storage.info();
 
-            let name = ComponentName {
-                base_name: storage.info().name(),
-                id: info.key(),
-            };
-
             if let Ok(visitor) = self.world.get(info.key().id, debuggable()) {
                 map.entry(&info, (visitor.debug_storage)(&storage, self.slot));
             } else {

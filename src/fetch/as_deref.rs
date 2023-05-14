@@ -2,7 +2,7 @@ use core::{fmt, ops::Deref};
 
 use alloc::vec::Vec;
 
-use crate::{query::ArchetypeSearcher, Fetch, FetchItem};
+use crate::{query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
 
 use super::{FmtQuery, PreparedFetch, ReadOnlyFetch};
 
@@ -43,7 +43,7 @@ where
     }
 
     #[inline]
-    fn access(&self, data: super::FetchAccessData) -> Vec<crate::Access> {
+    fn access(&self, data: super::FetchAccessData) -> Vec<Access> {
         self.0.access(data)
     }
 

@@ -6,8 +6,8 @@ use crate::{
     error::Result,
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
-    Access, AccessKind, All, ArchetypeSearcher, Entity, Error, Fetch, PreparedArchetype,
-    QueryStrategy, World,
+    system::{Access, AccessKind},
+    All, ArchetypeSearcher, Entity, Error, Fetch, PreparedArchetype, QueryStrategy, World,
 };
 
 use super::{borrow::QueryBorrowState, difference::find_missing_components};
@@ -57,7 +57,7 @@ where
         }
     }
 
-    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<crate::Access> {
+    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<Access> {
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
