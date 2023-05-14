@@ -3,6 +3,22 @@ use itertools::Itertools;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn no_changes() {
+    let mut world = World::new();
+
+    component! {
+        a: i32,
+        b: i32,
+    }
+
+    let mut query = Query::new(entity_ids()).filter(a().modified() | b().modified());
+
+    let id = Entity::builder().set(a(), 5).spawn(&mut world);
+
+    assert_eq!(query.collect_vec(&world), [id]);
+}
+
+#[test]
 #[cfg(feature = "flume")]
 fn change_detection() {
     use flax::*;
