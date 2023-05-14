@@ -1,105 +1,106 @@
 {
-  "asteroids": {
-    "cmd": "cargo run -p asteroids",
-    "kind": "term"
-  },
-  "deploy-asteroids": {
-    "cmd": "cargo make asteroids",
-    "restart": true,
-    "kind": "term"
-  },
-  "debug-asteroids": {
-    "cmd": "./target/debug/asteroids",
-    "depends_on": [
-      {
-        "cmd": "cargo build -p asteroids"
-      }
-    ],
-    "kind": "dap"
-  },
-  "check": {
-    "cmd": "cargo check --all-features --tests --examples"
-  },
-  "test-all": {
-    "cmd": "",
-    "depends_on": [
-      "test",
-      "doc",
-      "test-nostd"
-    ]
-  },
-  "test": {
-    "cmd": "cargo nextest run --all-features",
-    "kind": "term"
-  },
-  "doc": {
-    "cmd": "cargo doc --all-features --open"
-  },
-  "test-nostd": {
-    "cmd": "cargo nextest run --no-default-features",
-    "kind": "term"
-  },
-  "build": {
-    "cmd": "cargo build --examples"
-  },
-  "mdbook-build": {
-    "cmd": "mdbook build",
-    "kind": "term",
-    "cwd": "guide"
-  },
-  "mdbook-serve": {
-    "cmd": "mdbook serve --open",
-    "cwd": "guide"
-  },
-  "example-guide": {
-    "cmd": "cargo run --example guide",
-    "kind": "term",
-    "keep_open": true
-  },
-  "example-query": {
-    "cmd": "cargo run --example query",
-    "opts": {
-      "auto_close": false
+    "asteroids": {
+        "cmd": "cargo run -p asteroids",
+        "kind": "term"
     },
-    "kind": "term"
-  },
-  "example-builder": {
-    "cmd": "cargo run --example builder",
-    "opts": {
-      "auto_close": false
+    "deploy-asteroids": {
+        "cmd": "cargo make asteroids",
+        "restart": true,
+        "kind": "term"
     },
-    "kind": "term"
-  },
-  "example-query-advanced": {
-    "cmd": "cargo run --example query_advanced",
-    "opts": {
-      "auto_close": false
+    "debug-asteroids": {
+        "cmd": "./target/debug/asteroids",
+        "depends_on": [
+            {
+                "cmd": "cargo build -p asteroids"
+            }
+        ],
+        "kind": "dap"
     },
-    "kind": "term"
-  },
-  "debug-query-advanced": {
-    "cmd": "./target/debug/examples/query_advanced",
-    "kind": "dap",
-    "depends_on": [
-      {
-        "cmd": "cargo build --example query_advanced"
-      }
-    ]
-  },
-  "example-relations": {
-    "cmd": "cargo run --example relations",
-    "opts": {
-      "auto_close": false
+    "check": {
+        "cmd": "cargo check --all-features --tests --examples"
     },
-    "kind": "term"
-  },
-  "debug-relations": {
-    "cmd": "./target/debug/examples/relations",
-    "kind": "dap",
-    "depends_on": [
-      {
-        "cmd": "cargo build --example relations"
-      }
-    ]
-  }
+    "test-all": {
+        "cmd": "",
+        "depends_on": [
+            "test",
+            "doc",
+            "test-nostd"
+        ]
+    },
+    "test": {
+        "cmd": "cargo nextest run --all-features",
+        "kind": "term"
+    },
+    "doc": {
+        "cmd": "cargo doc --all-features --open"
+    },
+    "test-nostd": {
+        "cmd": "cargo nextest run --no-default-features",
+        "kind": "term"
+    },
+    "build": {
+        "cmd": "cargo build --examples"
+    },
+    "mdbook-build": {
+        "cmd": "mdbook build",
+        "kind": "term",
+        "cwd": "guide"
+    },
+    "mdbook-serve": {
+        "cmd": "mdbook serve --open",
+        "cwd": "guide"
+    },
+    "example-guide": {
+        "cmd": "cargo run --example guide",
+        "kind": "term",
+        "keep_open": true
+    },
+    "example-query": {
+        "cmd": "cargo run --example query",
+        "opts": {
+            "auto_close": false
+        },
+        "kind": "term"
+    },
+    "example-builder": {
+        "cmd": "cargo run --example builder",
+        "opts": {
+            "auto_close": false
+        },
+        "kind": "term"
+    },
+    "example-query-advanced": {
+        "cmd": "cargo run --example query_advanced",
+        "opts": {
+            "auto_close": false
+        },
+        "kind": "term"
+    },
+    "debug-query-advanced": {
+        "cmd": "cargo build --example query_advanced",
+        "kind": "dap",
+        "components": {
+            "dap": {
+                "program": "./target/debug/examples/query_advanced",
+                "adapter": "rust"
+            }
+        }
+    },
+    "example-relations": {
+        "cmd": "cargo run --example relations",
+        "opts": {
+            "auto_close": false
+        },
+        "kind": "term"
+    },
+    "debug-relations": {
+        "cmd": "./target/debug/examples/relations",
+        "kind": "dap",
+        "depends_on": [
+            {
+                "cmd": "cargo build --example relations"
+            }
+        ]
+    }
 }

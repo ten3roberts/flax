@@ -96,9 +96,9 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// The prepared version of the fetch
     type Prepared: for<'x> PreparedFetch<'x, Item = <Self as FetchItem<'x>>::Item> + 'w;
 
-    /// Prepares the fetch for an archetype.
+    /// Prepares the fetch for an archetype by acquiring borrows.
     ///
-    /// Must only be called if [`Fetch::filter_arch`] returns true
+    /// Returns `None` if the archetype does not match.
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared>;
 
     /// Rough filter to exclude or include archetypes.

@@ -67,7 +67,7 @@ where
     type Prepared = PreparedKindFilter<ReadComponent<'w, T>, AtomicRef<'w, [Change]>>;
 
     fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let changes = data.arch.changes(self.component.key()).unwrap();
+        let changes = data.arch.changes(self.component.key())?;
 
         // Make sure to enable modification tracking if it is actively used
         if self.kind.is_modified() {
