@@ -11,13 +11,13 @@ flax = { path = "../", default-features = false, features = [
     "flume",
     "derive",
 ] }
-macroquad = "0.3.8"
+macroquad = "0.3.25"
 # sapp-wasm = "=0.1.26"
 
 flume = { version = "0.10.14", default_features = false }
 rand = { version = "0.8.5", default_features = false, features = ["std_rng"] }
-tracing = "0.1.36"
-tracing-subscriber = "0.3.15"
-tracing-tree = "0.2.1"
-itertools = "0.10"
-anyhow = "1.0.70"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
+tracing-tree = "0.2.3"
+itertools = "0.10.5"
+anyhow = "1.0.71"

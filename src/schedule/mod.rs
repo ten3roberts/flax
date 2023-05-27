@@ -253,7 +253,6 @@ impl Schedule {
     /// Returns information about the current multithreaded batch partioning and system accesses.
     pub fn batch_info(&mut self, world: &mut World) -> BatchInfos {
         self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
-        use alloc::string::ToString;
 
         let batches = self
             .systems
@@ -262,7 +261,7 @@ impl Schedule {
                 let systems = batch
                     .iter()
                     .map(|system| SystemInfo {
-                        name: system.name().to_string(),
+                        name: system.name().into(),
                         desc: Verbatim(alloc::format!("{system:#?}")),
                         access: access_info(&system.access(world), world),
                     })
