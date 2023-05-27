@@ -25,7 +25,7 @@ pub struct WriteComponent<'a, T> {
 #[derive(Debug, Clone)]
 /// Mutable component fetch
 /// See [crate::Component::as_mut]
-pub struct Mutable<T: ComponentValue>(pub(crate) Component<T>);
+pub struct Mutable<T>(pub(crate) Component<T>);
 
 impl<'w, T> Fetch<'w> for Mutable<T>
 where
