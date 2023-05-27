@@ -1,9 +1,7 @@
-use core::fmt::Formatter;
-use core::ops::Deref;
-
-use alloc::vec;
 use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
+use core::fmt::Formatter;
+use core::ops::Deref;
 use itertools::Itertools;
 
 use crate::archetype::{Archetype, Change, Slot};
@@ -84,11 +82,11 @@ where
         self.component.filter_arch(arch)
     }
 
-    fn access(&self, data: crate::fetch::FetchAccessData) -> Vec<Access> {
-        let mut v = self.component.access(data);
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.component.access(data, dst);
 
         if data.arch.has(self.component.key()) {
-            v.push(Access {
+            dst.push(Access {
                 kind: AccessKind::ChangeEvent {
                     id: data.arch_id,
                     component: self.component.key(),
@@ -96,8 +94,6 @@ where
                 mutable: false,
             })
         }
-
-        v
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -237,14 +233,14 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
         true
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        vec![Access {
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        dst.push(Access {
             kind: AccessKind::ChangeEvent {
                 id: data.arch_id,
                 component: self.component.key(),
             },
             mutable: false,
-        }]
+        })
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> core::fmt::Result {

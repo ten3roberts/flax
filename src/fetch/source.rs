@@ -9,7 +9,7 @@ use crate::{
     ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 
-use super::{FetchPrepareData, PreparedFetch, ReadOnlyFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 
 pub trait FetchSource {
     fn resolve(&self, arch: &Archetype, world: &World) -> Option<EntityLocation>;
@@ -129,18 +129,19 @@ where
         Ok(())
     }
 
-    fn access(&self, data: super::FetchAccessData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         let loc = self.source.resolve(data.arch, data.world);
 
         if let Some(loc) = loc {
             let arch = data.world.archetypes.get(loc.arch_id);
-            self.fetch.access(super::FetchAccessData {
-                arch_id: loc.arch_id,
-                world: data.world,
-                arch,
-            })
-        } else {
-            Vec::new()
+            self.fetch.access(
+                FetchAccessData {
+                    arch_id: loc.arch_id,
+                    world: data.world,
+                    arch,
+                },
+                dst,
+            )
         }
     }
 }

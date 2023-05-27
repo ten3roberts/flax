@@ -140,8 +140,9 @@ where
         self.fetch.filter_arch(arch)
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        self.fetch.access(data)
+    #[inline]
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.fetch.access(data, dst)
     }
 
     fn describe(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

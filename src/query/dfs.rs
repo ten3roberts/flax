@@ -53,28 +53,25 @@ where
         DfsBorrow::new(query_state, self)
     }
 
-    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<Access> {
+    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>, dst: &mut Vec<Access>) {
         let mut state = State::default();
         state.update(world, self.relation, fetch);
 
-        state
-            .archetypes
-            .iter()
-            .flat_map(|&arch_id| {
-                let arch = world.archetypes.get(arch_id);
-                let data = FetchAccessData {
-                    world,
-                    arch,
-                    arch_id,
-                };
+        state.archetypes.iter().for_each(|&arch_id| {
+            let arch = world.archetypes.get(arch_id);
+            let data = FetchAccessData {
+                world,
+                arch,
+                arch_id,
+            };
 
-                fetch.access(data)
-            })
-            .chain([Access {
-                kind: AccessKind::World,
-                mutable: false,
-            }])
-            .collect()
+            fetch.access(data, dst);
+        });
+
+        dst.push(Access {
+            kind: AccessKind::World,
+            mutable: false,
+        });
     }
 }
 #[derive(Default, Debug)]

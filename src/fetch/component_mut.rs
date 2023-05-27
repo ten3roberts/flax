@@ -1,8 +1,6 @@
-use core::fmt::{self, Formatter};
-
-use alloc::vec;
 use alloc::vec::Vec;
 use atomic_refcell::AtomicRefMut;
+use core::fmt::{self, Formatter};
 
 use crate::{
     archetype::{Archetype, Cell, CellMutGuard, Change, Changes, Slice, Slot},
@@ -60,9 +58,9 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         if data.arch.has(self.0.key()) {
-            vec![
+            dst.extend_from_slice(&[
                 Access {
                     kind: AccessKind::Archetype {
                         id: data.arch_id,
@@ -77,9 +75,7 @@ where
                     },
                     mutable: true,
                 },
-            ]
-        } else {
-            vec![]
+            ])
         }
     }
 

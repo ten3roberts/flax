@@ -260,10 +260,14 @@ impl Schedule {
             .map(|batch| {
                 let systems = batch
                     .iter()
-                    .map(|system| SystemInfo {
-                        name: system.name().into(),
-                        desc: Verbatim(alloc::format!("{system:#?}")),
-                        access: access_info(&system.access(world), world),
+                    .map(|system| {
+                        let mut access = Vec::new();
+                        system.access(world, &mut access);
+                        SystemInfo {
+                            name: system.name().into(),
+                            desc: Verbatim(alloc::format!("{system:#?}")),
+                            access: access_info(&access, world),
+                        }
                     })
                     .collect_vec();
                 BatchInfo(systems)
@@ -280,7 +284,11 @@ impl Schedule {
         let accesses = systems
             .iter()
             .flatten()
-            .map(|v| (v.access(world)))
+            .map(|v| {
+                let mut access = Vec::new();
+                v.access(world, &mut access);
+                access
+            })
             .collect_vec();
 
         let mut deps = BTreeMap::new();

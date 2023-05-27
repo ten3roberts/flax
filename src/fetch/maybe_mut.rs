@@ -1,9 +1,6 @@
-use alloc::vec;
 use alloc::vec::Vec;
-
-use core::marker::PhantomData;
-
 use atomic_refcell::AtomicRef;
+use core::marker::PhantomData;
 
 use crate::{
     archetype::{Cell, RefMut, Slot},
@@ -11,7 +8,7 @@ use crate::{
     Component, ComponentValue, Entity, Fetch, FetchItem,
 };
 
-use super::{PreparedFetch, ReadOnlyFetch};
+use super::{FetchAccessData, PreparedFetch, ReadOnlyFetch};
 
 /// A query for conservative mutablility.
 ///
@@ -45,9 +42,9 @@ impl<'w, T: ComponentValue> Fetch<'w> for MaybeMut<T> {
         arch.has(self.0.key())
     }
 
-    fn access(&self, data: super::FetchAccessData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         if data.arch.has(self.0.key()) {
-            vec![
+            dst.extend_from_slice(&[
                 Access {
                     kind: AccessKind::Archetype {
                         id: data.arch_id,
@@ -62,9 +59,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for MaybeMut<T> {
                     },
                     mutable: true,
                 },
-            ]
-        } else {
-            vec![]
+            ])
         }
     }
 

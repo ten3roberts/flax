@@ -6,3 +6,5 @@
 - [x] Exlusive relations
 - [ ] Combine access and provide traits
 - [ ] stateless fetch
+- [ ] shedule with param
+- [ ] improve access method by supplying dst vec

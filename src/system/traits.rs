@@ -1,10 +1,10 @@
-use anyhow::anyhow;
-use core::fmt::{self, Formatter};
-use core::marker::PhantomData;
-
-use alloc::vec;
 use alloc::{string::String, vec::Vec};
+use anyhow::anyhow;
 use atomic_refcell::{AtomicRef, AtomicRefMut};
+use core::{
+    fmt::{self, Formatter},
+    marker::PhantomData,
+};
 
 use crate::system::AccessKind;
 use crate::*;
@@ -60,15 +60,13 @@ pub trait SystemData<'a>: SystemAccess {
 /// Describe an access to the world in terms of shared and unique accesses
 pub trait SystemAccess {
     /// Returns all the accesses for a system
-    fn access(&self, world: &World) -> Vec<Access>;
+    fn access(&self, world: &World, dst: &mut Vec<Access>);
 }
 
 /// A callable function
 pub trait SystemFn<'this, Args, Ret> {
     /// Execute the function
     fn execute(&'this mut self, args: Args) -> Ret;
-    /// Returns the data accesses of a system function
-    fn access(&self, world: &World) -> Vec<Access>;
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -90,20 +88,14 @@ macro_rules! tuple_impl {
                 let borrowed = ($(args.$idx.as_borrow(),)*);
                 (self)($(borrowed.$idx,)*)
             }
-
-            fn access(&self, _: &World) -> Vec<Access> {
-    Default::default()
-            }
         }
 
         impl<$($ty,)*> SystemAccess for ($($ty,)*)
         where
             $($ty: SystemAccess,)*
         {
-            fn access(&self, world: &World) -> Vec<Access> {
-                [
-                    $(self.$idx.access(&*world)),*
-                ].concat()
+            fn access(&self, world: &World, dst: &mut Vec<Access>) {
+                $(self.$idx.access(world, dst);)*
             }
         }
 
@@ -215,21 +207,21 @@ impl<'a> SystemData<'a> for Read<World> {
 }
 
 impl SystemAccess for Write<World> {
-    fn access(&self, _: &World) -> Vec<Access> {
-        vec![Access {
+    fn access(&self, _: &World, dst: &mut Vec<Access>) {
+        dst.push(Access {
             kind: AccessKind::World,
             mutable: true,
-        }]
+        });
     }
 }
 
 impl SystemAccess for Read<World> {
-    fn access(&self, _: &World) -> Vec<Access> {
-        vec![Access {
+    fn access(&self, _: &World, dst: &mut Vec<Access>) {
+        dst.push(Access {
             kind: AccessKind::World,
-            mutable: true, // Due to interior mutablity as anything can be
-                           // borrowed mut
-        }]
+            // Due to interior mutablity as anything can be borrowed mut
+            mutable: true,
+        });
     }
 }
 
@@ -247,11 +239,11 @@ impl<'a> SystemData<'a> for Write<CommandBuffer> {
 }
 
 impl SystemAccess for Write<CommandBuffer> {
-    fn access(&self, _: &World) -> Vec<Access> {
-        vec![Access {
+    fn access(&self, _: &World, dst: &mut Vec<Access>) {
+        dst.push(Access {
             kind: AccessKind::CommandBuffer,
             mutable: true,
-        }]
+        });
     }
 }
 

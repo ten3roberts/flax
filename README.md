@@ -38,6 +38,7 @@ See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/fla
 ```rust
   // Declare static components
   use flax::*;
+
   component! {
     health: f32,
     regen: f32,

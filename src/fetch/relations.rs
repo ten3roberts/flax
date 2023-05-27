@@ -5,7 +5,6 @@ use core::{
 
 use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
-use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::{
@@ -51,25 +50,21 @@ where
         true
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         let relation = self.component.key().id;
-        data.arch
-            .cells()
-            .keys()
-            .filter_map(move |k| {
-                if k.object.is_some() && k.id == relation {
-                    return Some(Access {
-                        kind: AccessKind::Archetype {
-                            id: data.arch_id,
-                            component: *k,
-                        },
-                        mutable: false,
-                    });
-                }
+        dst.extend(data.arch.cells().keys().filter_map(move |k| {
+            if k.object.is_some() && k.id == relation {
+                return Some(Access {
+                    kind: AccessKind::Archetype {
+                        id: data.arch_id,
+                        component: *k,
+                    },
+                    mutable: false,
+                });
+            }
 
-                None
-            })
-            .collect_vec()
+            None
+        }))
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {

@@ -57,11 +57,10 @@ where
         }
     }
 
-    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<Access> {
+    fn access(&self, world: &World, fetch: &Filtered<Q, F>, dst: &mut Vec<Access>) {
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
-        let mut result = Vec::new();
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
             if !fetch.filter_arch(arch) {
                 return;
@@ -73,15 +72,13 @@ where
                 arch_id,
             };
 
-            result.append(&mut fetch.access(data))
+            fetch.access(data, dst)
         });
 
-        result.push(Access {
+        dst.push(Access {
             kind: AccessKind::World,
             mutable: false,
         });
-
-        result
     }
 }
 

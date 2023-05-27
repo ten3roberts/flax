@@ -1,10 +1,7 @@
-use core::{fmt, ops::Deref};
-
-use alloc::vec::Vec;
-
+use super::{FetchAccessData, FmtQuery, PreparedFetch, ReadOnlyFetch};
 use crate::{query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
-
-use super::{FmtQuery, PreparedFetch, ReadOnlyFetch};
+use alloc::vec::Vec;
+use core::{fmt, ops::Deref};
 
 /// Dereferences the fetch item
 pub struct AsDeref<F>(pub(crate) F);
@@ -43,8 +40,8 @@ where
     }
 
     #[inline]
-    fn access(&self, data: super::FetchAccessData) -> Vec<Access> {
-        self.0.access(data)
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.0.access(data, dst)
     }
 
     #[inline]

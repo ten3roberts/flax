@@ -44,18 +44,15 @@ where
         arch.has(self.key())
     }
 
-    #[inline]
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         if data.arch.has(self.key()) {
-            vec![Access {
+            dst.push(Access {
                 kind: AccessKind::Archetype {
                     id: data.arch_id,
                     component: self.key(),
                 },
                 mutable: false,
-            }]
-        } else {
-            vec![]
+            })
         }
     }
 

@@ -36,8 +36,8 @@ where
         true
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        self.0.access(data)
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.0.access(data, dst)
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
@@ -120,8 +120,8 @@ where
         true
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        self.fetch.access(data)
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.fetch.access(data, dst)
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {

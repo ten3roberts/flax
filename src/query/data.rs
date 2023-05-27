@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    system::{AsBorrow, SystemAccess, SystemContext, SystemData},
+    system::{Access, AsBorrow, SystemAccess, SystemContext, SystemData},
     All, Fetch, Planar, Query, QueryStrategy, World,
 };
 
@@ -12,8 +12,8 @@ where
     F: 'static + for<'x> Fetch<'x>,
     S: for<'x> QueryStrategy<'x, Q, F>,
 {
-    fn access(&self, world: &World) -> Vec<crate::system::Access> {
-        self.strategy.access(world, &self.fetch)
+    fn access(&self, world: &World, dst: &mut Vec<Access>) {
+        self.strategy.access(world, &self.fetch, dst);
     }
 }
 

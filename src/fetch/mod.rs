@@ -12,11 +12,15 @@ mod relations;
 mod satisfied;
 mod source;
 
+use crate::{
+    archetype::{Archetype, Slice, Slot},
+    filter::RefFetch,
+    system::Access,
+    ArchetypeId, ArchetypeSearcher, Entity, World,
+};
+use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::fmt::{self, Formatter};
-
-use alloc::vec;
-use alloc::vec::Vec;
 
 pub use as_deref::*;
 pub use cloned::*;
@@ -30,13 +34,6 @@ pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
 pub use satisfied::Satisfied;
 pub use source::Source;
-
-use crate::filter::RefFetch;
-use crate::{
-    archetype::{Archetype, Slice, Slot},
-    system::Access,
-    ArchetypeId, ArchetypeSearcher, Entity, World,
-};
 
 #[doc(hidden)]
 pub struct FmtQuery<'r, Q>(pub &'r Q);
@@ -105,10 +102,7 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     fn filter_arch(&self, arch: &Archetype) -> bool;
 
     /// Returns which components and how will be accessed for an archetype.
-    #[inline]
-    fn access(&self, _data: FetchAccessData) -> Vec<Access> {
-        Vec::new()
-    }
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>);
 
     /// Describes the fetch in a human-readable fashion
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
@@ -197,6 +191,9 @@ impl<'w> Fetch<'w> for () {
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "()")
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 impl<'p> ReadOnlyFetch<'p> for () {
@@ -267,6 +264,9 @@ impl<'w> Fetch<'w> for EntityIds {
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("entity_ids")
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
@@ -393,12 +393,8 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            fn access(&self, data: FetchAccessData) -> Vec<Access> {
-                [
-                    $(
-                        (self.$idx).access(data),
-                    )*
-                ].concat()
+            fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+            $( (self.$idx).access(data, dst);)*
             }
 
             #[inline]
@@ -429,8 +425,8 @@ macro_rules! tuple_impl {
                 $(inner.$idx.filter_arch(arch))||*
             }
 
-            fn access(&self, data: FetchAccessData) -> Vec<Access> {
-                [ $(self.0.$idx.access(data),)* ].concat()
+            fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+                 $(self.0.$idx.access(data, dst);)*
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {

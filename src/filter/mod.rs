@@ -110,10 +110,9 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        let mut v = self.fetch.access(data);
-        v.append(&mut self.filter.access(data));
-        v
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.fetch.access(data, dst);
+        self.filter.access(data, dst);
     }
 
     #[inline]
@@ -213,10 +212,9 @@ where
         self.left.filter_arch(arch) && self.right.filter_arch(arch)
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        let mut res = self.left.access(data);
-        res.append(&mut self.right.access(data));
-        res
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.left.access(data, dst);
+        self.right.access(data, dst);
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -286,8 +284,9 @@ where
         !self.0.filter_arch(arch)
     }
 
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        self.0.access(data)
+    #[inline]
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.0.access(data, dst)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -369,6 +368,8 @@ impl<'a> Fetch<'a> for Nothing {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "false")
     }
+
+    fn access(&self, _data: FetchAccessData, _dst: &mut Vec<Access>) {}
 }
 
 /// Yields all entities
@@ -391,6 +392,8 @@ impl<'w> Fetch<'w> for All {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "true")
     }
+
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 impl<'q> PreparedFetch<'q> for All {
@@ -425,6 +428,9 @@ impl<'w> Fetch<'w> for Slice {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "slice {:?}", self)
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 impl<'q> PreparedFetch<'q> for Slice {
@@ -522,6 +528,9 @@ impl<'a> Fetch<'a> for With {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "with {}", self.name)
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 #[derive(Debug, Clone)]
@@ -555,6 +564,9 @@ impl<'w> Fetch<'w> for Without {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "without {}", self.name)
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 #[derive(Debug, Clone)]
@@ -591,6 +603,9 @@ impl<'w> Fetch<'w> for WithObject {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "with (*)({})", self.object)
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 pub(crate) struct ArchetypeFilter<F>(pub(crate) F);
@@ -622,6 +637,9 @@ impl<'w, F: Fn(&Archetype) -> bool> Fetch<'w> for ArchetypeFilter<F> {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "archetype_filter {}", &type_name::<F>())
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 #[derive(Debug, Clone)]
@@ -650,6 +668,9 @@ impl<'w> Fetch<'w> for WithRelation {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "with {}(*)", self.name)
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 #[derive(Debug, Clone)]
@@ -679,6 +700,9 @@ impl<'a> Fetch<'a> for WithoutRelation {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "without {}(*)", self.name)
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 impl<'q> FetchItem<'q> for bool {
@@ -700,14 +724,12 @@ impl<'w> Fetch<'w> for bool {
         *self
     }
 
-    #[inline(always)]
-    fn access(&self, _: FetchAccessData) -> Vec<Access> {
-        Default::default()
-    }
-
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 impl<'q> PreparedFetch<'q> for bool {
@@ -755,8 +777,8 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        (*self.0).access(data)
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        (*self.0).access(data, dst)
     }
 
     #[inline]
@@ -797,8 +819,8 @@ where
     }
 
     #[inline]
-    fn access(&self, data: FetchAccessData) -> Vec<Access> {
-        (*self).access(data)
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        (*self).access(data, dst)
     }
 
     #[inline]
@@ -851,6 +873,9 @@ impl<'w> Fetch<'w> for BatchSize {
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "batch {}", self.0)
     }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 #[doc(hidden)]

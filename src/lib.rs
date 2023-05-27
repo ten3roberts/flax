@@ -28,6 +28,7 @@
 //! ```rust
 //!   // Declare static components
 //!   use flax::*;
+//!
 //!   component! {
 //!     health: f32,
 //!     regen: f32,

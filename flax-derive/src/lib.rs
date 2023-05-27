@@ -113,8 +113,8 @@ fn derive_data_struct(
                         s.finish()
                     }
 
-                    fn access(&self, data: #crate_name::fetch::FetchAccessData) -> Vec<#crate_name::system::Access> {
-                        [ #(self.#field_names.access(data)),* ].concat()
+                    fn access(&self, data: #crate_name::fetch::FetchAccessData, dst: &mut Vec<#crate_name::system::Access>) {
+                         #(self.#field_names.access(data, dst));*
                     }
 
                     fn searcher(&self, searcher: &mut #crate_name::query::ArchetypeSearcher) {
