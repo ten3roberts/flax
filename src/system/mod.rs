@@ -258,7 +258,7 @@ where
         f.write_str(&self.name)?;
         self.data.describe(f)?;
         f.write_str(" -> ")?;
-        f.write_str(&tynm::type_name::<std::result::Result<(), Err>>())?;
+        f.write_str(&tynm::type_name::<core::result::Result<(), Err>>())?;
 
         Ok(())
     }

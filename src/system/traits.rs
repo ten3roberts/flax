@@ -38,7 +38,7 @@ impl<'a, 'b, T: 'a> AsBorrow<'a> for AtomicRefMut<'b, T> {
 }
 
 struct FmtSystemData<'a, T>(&'a T);
-impl<'a, 'w, T> std::fmt::Debug for FmtSystemData<'a, T>
+impl<'a, 'w, T> core::fmt::Debug for FmtSystemData<'a, T>
 where
     T: SystemData<'w>,
 {
