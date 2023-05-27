@@ -1,5 +1,4 @@
 use alloc::{string::String, vec::Vec};
-use anyhow::anyhow;
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use core::{
     fmt::{self, Formatter},
@@ -37,10 +36,10 @@ impl<'a, 'b, T: 'a> AsBorrow<'a> for AtomicRefMut<'b, T> {
     }
 }
 
-struct FmtSystemData<'a, T>(&'a T);
-impl<'a, 'w, T> core::fmt::Debug for FmtSystemData<'a, T>
+struct FmtSystemData<'a, S, T>(&'a S, PhantomData<T>);
+impl<'a, 'w, S, T> core::fmt::Debug for FmtSystemData<'a, S, T>
 where
-    T: SystemData<'w>,
+    S: SystemData<'w, T>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.describe(f)
@@ -48,11 +47,11 @@ where
 }
 
 /// Provider trait for data from a system execution context
-pub trait SystemData<'a>: SystemAccess {
+pub trait SystemData<'a, T>: SystemAccess {
     /// The borrow from the system context
     type Value;
     /// Get the data from the system context
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value>;
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value;
     /// Human friendly debug description
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 }
@@ -110,22 +109,19 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<'w, $($ty,)*> SystemData<'w> for ($($ty,)*)
+        impl<'w, $($ty,)* T> SystemData<'w, T> for ($($ty,)*)
         where
-            $($ty: SystemData<'w>,)*
+            $($ty: SystemData<'w, T>,)*
         {
-            type Value = ($(<$ty as SystemData<'w>>::Value,)*);
+            type Value = ($(<$ty as SystemData<'w, T>>::Value,)*);
 
-            fn acquire(&'w mut self, _ctx: &'w SystemContext<'_>) -> anyhow::Result<Self::Value> {
-                Ok(
-                    ($((self.$idx).acquire(_ctx)?,)*)
-                )
+            fn acquire(&'w mut self, _ctx: &'w SystemContext<'_, T>) -> Self::Value {
+                ($((self.$idx).acquire(_ctx),)*)
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-
                 core::fmt::Debug::fmt(&($(
-                    FmtSystemData(&self.$idx),
+                    FmtSystemData(&self.$idx, PhantomData),
                 )*), f)
 
             }
@@ -152,40 +148,15 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 
 /// Access part of the context mutably.
 #[doc(hidden)]
-pub struct Write<T>(PhantomData<T>);
+pub struct Write<T>(pub(crate) PhantomData<T>);
 #[doc(hidden)]
-pub struct Read<T>(PhantomData<T>);
+pub struct Read<T>(pub(crate) PhantomData<T>);
 
-impl<T> Write<T> {
-    pub(crate) fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<T> Read<T> {
-    pub(crate) fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<T> Default for Read<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T> Default for Write<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<'a> SystemData<'a> for Write<World> {
+impl<'a, T> SystemData<'a, T> for Write<World> {
     type Value = AtomicRefMut<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
         ctx.world_mut()
-            .map_err(|_| anyhow!("Failed to borrow world mutably"))
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -193,12 +164,11 @@ impl<'a> SystemData<'a> for Write<World> {
     }
 }
 
-impl<'a> SystemData<'a> for Read<World> {
+impl<'a, T> SystemData<'a, T> for Read<World> {
     type Value = AtomicRef<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
         ctx.world()
-            .map_err(|_| anyhow!("Failed to borrow world mutably"))
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -225,12 +195,11 @@ impl SystemAccess for Read<World> {
     }
 }
 
-impl<'a> SystemData<'a> for Write<CommandBuffer> {
+impl<'a, T> SystemData<'a, T> for Write<CommandBuffer> {
     type Value = AtomicRefMut<'a, CommandBuffer>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
         ctx.cmd_mut()
-            .map_err(|_| anyhow!("Failed to borrow commandbuffer mutably"))
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -247,8 +216,60 @@ impl SystemAccess for Write<CommandBuffer> {
     }
 }
 
+#[doc(hidden)]
+pub struct ReadContextData<T>(pub(crate) PhantomData<T>);
+
+impl<'a, T: 'a> SystemData<'a, T> for ReadContextData<T> {
+    type Value = AtomicRef<'a, T>;
+
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
+        ctx.data()
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("&")?;
+        f.write_str(&tynm::type_name::<T>())
+    }
+}
+
+impl<T> SystemAccess for ReadContextData<T> {
+    fn access(&self, _: &World, dst: &mut Vec<Access>) {
+        dst.push(Access {
+            kind: AccessKind::ContextData,
+            mutable: false,
+        });
+    }
+}
+
+#[doc(hidden)]
+pub struct WriteContextData<T>(pub(crate) PhantomData<T>);
+
+impl<'a, T: 'a> SystemData<'a, T> for WriteContextData<T> {
+    type Value = AtomicRefMut<'a, T>;
+
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
+        ctx.data_mut()
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("&mut ")?;
+        f.write_str(&tynm::type_name::<T>())
+    }
+}
+
+impl<T> SystemAccess for WriteContextData<T> {
+    fn access(&self, _: &World, dst: &mut Vec<Access>) {
+        dst.push(Access {
+            kind: AccessKind::ContextData,
+            mutable: true,
+        });
+    }
+}
+
 #[cfg(test)]
 mod test {
+
+    use core::marker::PhantomData;
 
     use alloc::string::String;
     use atomic_refcell::AtomicRefMut;
@@ -269,7 +290,9 @@ mod test {
     fn system_fn() -> anyhow::Result<()> {
         let mut world = World::new();
         let mut cmd = CommandBuffer::new();
-        let ctx = SystemContext::new(&mut world, &mut cmd);
+        #[allow(clippy::let_unit_value)]
+        let mut data = ();
+        let ctx = SystemContext::new(&mut world, &mut cmd, &mut data);
 
         let mut spawner = |w: &mut World| {
             Entity::builder()
@@ -289,13 +312,13 @@ mod test {
             assert_eq!(names, ["Neo", "Trinity"]);
         };
 
-        let data = &mut (Write::<World>::new(),);
-        let data: (AtomicRefMut<World>,) = data.acquire(&ctx).unwrap();
+        let data = &mut (Write::<World>(PhantomData),);
+        let data: (AtomicRefMut<World>,) = data.acquire(&ctx);
         SystemFn::<(AtomicRefMut<World>,), ()>::execute(&mut spawner, data);
         // (spawner).execute(data);
 
         let data = &mut (Query::new(name()),);
-        let data = data.acquire(&ctx).unwrap();
+        let data = data.acquire(&ctx);
         SystemFn::<(QueryData<_>,), ()>::execute(&mut reader, data);
         Ok(())
     }

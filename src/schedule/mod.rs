@@ -1,4 +1,4 @@
-use core::{mem, ops::Deref};
+use core::{marker::PhantomData, mem, ops::Deref};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
@@ -10,8 +10,8 @@ use crate::{
     BoxedSystem, CommandBuffer, System, World,
 };
 
-fn flush_system() -> BoxedSystem {
-    System::builder()
+fn flush_system<T: 'static + Send + Sync>() -> BoxedSystem<T> {
+    System::builder_with_data()
         .with_name("flush")
         .write::<World>()
         .write::<CommandBuffer>()
@@ -22,20 +22,28 @@ fn flush_system() -> BoxedSystem {
         .boxed()
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 /// Incrementally construct a schedule constisting of systems
-pub struct ScheduleBuilder {
-    systems: Vec<BoxedSystem>,
+pub struct ScheduleBuilder<T = ()> {
+    systems: Vec<BoxedSystem<T>>,
 }
 
-impl ScheduleBuilder {
+impl<T> Default for ScheduleBuilder<T> {
+    fn default() -> Self {
+        Self {
+            systems: Default::default(),
+        }
+    }
+}
+
+impl<T: 'static + Send + Sync> ScheduleBuilder<T> {
     /// Creates a new schedule builder
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Set the ScheduleBuilder's system
-    pub fn with_system(&mut self, system: impl Into<BoxedSystem>) -> &mut Self {
+    pub fn with_system(&mut self, system: impl Into<BoxedSystem<T>>) -> &mut Self {
         self.systems.push(system.into());
         self
     }
@@ -47,7 +55,7 @@ impl ScheduleBuilder {
     }
 
     /// Build the schedule
-    pub fn build(&mut self) -> Schedule {
+    pub fn build(&mut self) -> Schedule<T> {
         Schedule::from_systems(mem::take(&mut self.systems))
     }
 }
@@ -78,12 +86,23 @@ impl SystemInfo {
 }
 
 /// A collection of systems to run on the world
-#[derive(Default)]
-pub struct Schedule {
-    systems: Vec<Vec<BoxedSystem>>,
+pub struct Schedule<T = ()> {
+    systems: Vec<Vec<BoxedSystem<T>>>,
     cmd: CommandBuffer,
 
     archetype_gen: u32,
+    data: PhantomData<T>,
+}
+
+impl<T> Default for Schedule<T> {
+    fn default() -> Self {
+        Self {
+            systems: Default::default(),
+            cmd: Default::default(),
+            archetype_gen: Default::default(),
+            data: Default::default(),
+        }
+    }
 }
 
 /// Holds information regarding a schedule's batches
@@ -119,7 +138,7 @@ impl Deref for BatchInfo {
     }
 }
 
-impl core::fmt::Debug for Schedule {
+impl<T> core::fmt::Debug for Schedule<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Schedule")
             .field("systems", &self.systems)
@@ -128,38 +147,38 @@ impl core::fmt::Debug for Schedule {
     }
 }
 
-impl FromIterator<BoxedSystem> for Schedule {
-    fn from_iter<T: IntoIterator<Item = BoxedSystem>>(iter: T) -> Self {
+impl<T: 'static + Send + Sync> FromIterator<BoxedSystem<T>> for Schedule<T> {
+    fn from_iter<I: IntoIterator<Item = BoxedSystem<T>>>(iter: I) -> Self {
         Self::from_systems(iter.into_iter().collect_vec())
     }
 }
 
-impl<T> From<T> for Schedule
+impl<T: 'static + Send + Sync, U> From<U> for Schedule<T>
 where
-    T: IntoIterator<Item = BoxedSystem>,
+    U: IntoIterator<Item = BoxedSystem<T>>,
 {
-    fn from(v: T) -> Self {
+    fn from(v: U) -> Self {
         Self::from_systems(v.into_iter().collect_vec())
     }
 }
 
-impl Schedule {
-    /// Creates a new schedule builder
-    pub fn builder() -> ScheduleBuilder {
+impl<T: 'static + Send + Sync> Schedule<T> {
+    /// Creates a new schedule builder with a custom data type
+    pub fn builder_with_data() -> ScheduleBuilder<T> {
         ScheduleBuilder::default()
     }
-
     /// Creates a new empty schedule, prefer [Self::builder]
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Creates a schedule from a group of existing systems
-    pub fn from_systems(systems: impl Into<Vec<BoxedSystem>>) -> Self {
+    pub fn from_systems(systems: impl Into<Vec<BoxedSystem<T>>>) -> Self {
         Self {
             systems: alloc::vec![systems.into()],
             archetype_gen: 0,
             cmd: CommandBuffer::new(),
+            data: PhantomData,
         }
     }
 
@@ -171,7 +190,7 @@ impl Schedule {
 
     /// Add a new system to the schedule.
     /// Respects order.
-    pub fn with_system(mut self, system: impl Into<BoxedSystem>) -> Self {
+    pub fn with_system(mut self, system: impl Into<BoxedSystem<T>>) -> Self {
         self.archetype_gen = 0;
         let v = match self.systems.first_mut() {
             Some(v) => v,
@@ -188,66 +207,6 @@ impl Schedule {
     /// Applies the commands inside of the commandbuffer
     pub fn flush(self) -> Self {
         self.with_system(flush_system())
-    }
-
-    /// Execute all systems in the schedule sequentially on the world.
-    /// Returns the first error and aborts if the execution fails.
-    pub fn execute_seq(&mut self, world: &mut World) -> anyhow::Result<()> {
-        let ctx = SystemContext::new(world, &mut self.cmd);
-
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("execute_seq").entered();
-
-        self.systems
-            .iter_mut()
-            .flatten()
-            .try_for_each(|system| system.execute(&ctx))?;
-
-        self.cmd
-            .apply(world)
-            .context("Failed to apply commandbuffer")?;
-
-        Ok(())
-    }
-
-    #[cfg(feature = "parallel")]
-    /// Executes the systems in the schedule in parallel.
-    ///
-    /// Systems will run in an order such that changes and mutable accesses made by systems
-    /// provided
-    /// *before* are observable when the system runs.
-    ///
-    /// Systems with no dependencies between each other may run in any order, but will **not** run
-    /// before any previously provided system which it depends on.
-    ///
-    /// A dependency between two systems is given by a side effect, e.g; a component write, which
-    /// is accessed by the seconds system through a read or other side effect.
-    pub fn execute_par(&mut self, world: &mut World) -> anyhow::Result<()> {
-        use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
-
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("execute_par").entered();
-
-        let w_gen = world.archetype_gen();
-        // New archetypes
-        if self.archetype_gen != w_gen {
-            self.archetype_gen = w_gen;
-            self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
-        }
-
-        let ctx = SystemContext::new(world, &mut self.cmd);
-
-        let result = self.systems.iter_mut().try_for_each(|batch| {
-            batch
-                .par_iter_mut()
-                .try_for_each(|system| system.execute(&ctx))
-        });
-
-        self.cmd
-            .apply(world)
-            .context("Failed to apply commandbuffer")?;
-
-        result
     }
 
     /// Returns information about the current multithreaded batch partioning and system accesses.
@@ -277,10 +236,66 @@ impl Schedule {
         BatchInfos(batches)
     }
 
+    /// Same as [`Self::execute_seq`] but allows supplying short lived data available to the systems
+    ///
+    /// **Note**:
+    /// Due to current limitations in Rust, T has to be as `Fn(T): 'static` implies `T: 'static`.
+    ///
+    /// See:
+    /// - https://github.com/rust-lang/rust/issues/57325
+    /// - https://stackoverflow.com/questions/53966598/how-to-make-fnt-static-register-as-static-for-any-generic-type-argument-t
+    pub fn execute_seq_with(&mut self, world: &mut World, data: &mut T) -> anyhow::Result<()> {
+        let ctx = SystemContext::new(world, &mut self.cmd, data);
+
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("execute_seq").entered();
+
+        self.systems
+            .iter_mut()
+            .flatten()
+            .try_for_each(|system| system.execute(&ctx))?;
+
+        self.cmd
+            .apply(world)
+            .context("Failed to apply commandbuffer")?;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "parallel")]
+    /// Same as [`Self::execute_par`] but allows supplying short lived data available to the systems
+    pub fn execute_par_with(&mut self, world: &mut World, data: &mut T) -> anyhow::Result<()> {
+        use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("execute_par").entered();
+
+        let w_gen = world.archetype_gen();
+        // New archetypes
+        if self.archetype_gen != w_gen {
+            self.archetype_gen = w_gen;
+            self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
+        }
+
+        let ctx = SystemContext::new(world, &mut self.cmd, data);
+
+        let result = self.systems.iter_mut().try_for_each(|batch| {
+            batch
+                .par_iter_mut()
+                .try_for_each(|system| system.execute(&ctx))
+        });
+
+        self.cmd
+            .apply(world)
+            .context("Failed to apply commandbuffer")?;
+
+        result
+    }
+
     fn build_dependencies(
-        systems: Vec<Vec<BoxedSystem>>,
+        systems: Vec<Vec<BoxedSystem<T>>>,
         world: &mut World,
-    ) -> Vec<Vec<BoxedSystem>> {
+    ) -> Vec<Vec<BoxedSystem<T>>> {
         let accesses = systems
             .iter()
             .flatten()
@@ -332,6 +347,34 @@ impl Schedule {
         // batches
 
         topo_sort(systems, &deps)
+    }
+}
+
+impl Schedule<()> {
+    /// Creates a new schedule builder
+    pub fn builder() -> ScheduleBuilder {
+        ScheduleBuilder::default()
+    }
+    /// Execute all systems in the schedule sequentially on the world.
+    /// Returns the first error and aborts if the execution fails.
+    pub fn execute_seq(&mut self, world: &mut World) -> anyhow::Result<()> {
+        self.execute_seq_with(world, &mut ())
+    }
+
+    #[cfg(feature = "parallel")]
+    /// Executes the systems in the schedule in parallel.
+    ///
+    /// Systems will run in an order such that changes and mutable accesses made by systems
+    /// provided
+    /// *before* are observable when the system runs.
+    ///
+    /// Systems with no dependencies between each other may run in any order, but will **not** run
+    /// before any previously provided system which it depends on.
+    ///
+    /// A dependency between two systems is given by a side effect, e.g; a component write, which
+    /// is accessed by the seconds system through a read or other side effect.
+    pub fn execute_par(&mut self, world: &mut World) -> anyhow::Result<()> {
+        self.execute_par_with(world, &mut ())
     }
 }
 
@@ -469,6 +512,70 @@ mod test {
         let result: anyhow::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    #[cfg(feature = "parallel")]
+    #[cfg(feature = "std")]
+    fn schedule_context() {
+        component! {
+            a: String,
+            b: i32,
+        };
+
+        let mut world = World::new();
+
+        let id = EntityBuilder::new()
+            .set(a(), "Foo".into())
+            .set(b(), 5)
+            .spawn(&mut world);
+
+        let system_a = System::builder_with_data()
+            .with(Query::new(a()))
+            .read_context()
+            .build(
+                move |mut a: QueryBorrow<_>, cx: &String| -> anyhow::Result<()> {
+                    let _count = a.iter().count() as i32;
+
+                    assert_eq!(cx, "Foo");
+
+                    Ok(())
+                },
+            )
+            .boxed();
+
+        let system_b = System::builder_with_data()
+            .with(Query::new(b()))
+            .write_context()
+            .build(
+                move |mut query: QueryBorrow<_>, cx: &mut String| -> anyhow::Result<()> {
+                    let _item: &i32 = query.get(id).map_err(|v| v.into_anyhow())?;
+
+                    assert_eq!(cx, "Foo");
+                    *cx = "Bar".into();
+                    Ok(())
+                },
+            )
+            .boxed();
+
+        let system_c = System::builder_with_data()
+            .read_context()
+            .build(move |cx: &String| -> anyhow::Result<()> {
+                assert_eq!(cx, "Bar");
+                Ok(())
+            })
+            .boxed();
+
+        let mut schedule = Schedule::new()
+            .with_system(system_a)
+            .with_system(system_b)
+            .with_system(system_c);
+
+        let mut cx = String::from("Foo");
+        schedule.execute_par_with(&mut world, &mut cx).unwrap();
+
+        assert_eq!(cx, "Bar");
     }
 
     #[test]

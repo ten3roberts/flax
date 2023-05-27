@@ -29,7 +29,7 @@ where
     query: &'a mut Query<Q, F, S>,
 }
 
-impl<'a, Q, F, S> SystemData<'a> for Query<Q, F, S>
+impl<'a, Q, F, S, T> SystemData<'a, T> for Query<Q, F, S>
 where
     Q: 'static + for<'x> Fetch<'x>,
     F: 'static + for<'x> Fetch<'x>,
@@ -37,12 +37,10 @@ where
 {
     type Value = QueryData<'a, Q, F, S>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
-        let world = ctx
-            .world()
-            .map_err(|_| anyhow::anyhow!(alloc::format!("Failed to borrow world for query")))?;
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
+        let world = ctx.world();
 
-        Ok(QueryData { world, query: self })
+        QueryData { world, query: self }
     }
 
     fn describe(&self, f: &mut alloc::fmt::Formatter<'_>) -> alloc::fmt::Result {
