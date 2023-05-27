@@ -1,4 +1,3 @@
-use alloc::string::ToString;
 mod context;
 mod traits;
 
@@ -6,17 +5,19 @@ use crate::{
     archetype::ArchetypeInfo, util::TupleCombine, ArchetypeId, CommandBuffer, ComponentKey, Fetch,
     FetchItem, Query, QueryData, World,
 };
+use alloc::{
+    boxed::Box,
+    collections::BTreeMap,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use anyhow::Context;
-use core::any::{type_name, TypeId};
-use core::fmt;
-use core::{fmt::Formatter, marker::PhantomData};
-
-use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
-use alloc::format;
-use alloc::string::String;
-use alloc::vec;
-use alloc::vec::Vec;
+use core::{
+    any::{type_name, TypeId},
+    fmt::{self, Formatter},
+    marker::PhantomData,
+};
 
 pub use context::*;
 #[cfg(feature = "parallel")]
@@ -62,10 +63,6 @@ where
             (self.func)(item)
         }
     }
-
-    fn access(&self, _: &World) -> Vec<Access> {
-        vec![]
-    }
 }
 
 /// Execute a function for each item in the query in parallel batches
@@ -89,10 +86,6 @@ where
             .iter_batched()
             .par_bridge()
             .for_each(|v| v.for_each(&self.func));
-    }
-
-    fn access(&self, _: &World) -> Vec<Access> {
-        vec![]
     }
 }
 
@@ -227,7 +220,7 @@ pub trait DynSystem {
     fn name(&self) -> &str;
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
     fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()>;
-    fn access(&self, world: &World) -> Vec<Access>;
+    fn access(&self, world: &World, dst: &mut Vec<Access>);
 }
 
 impl<F, Args, Err> DynSystem for System<F, Args, Result<(), Err>>
@@ -263,8 +256,8 @@ where
         Ok(())
     }
 
-    fn access(&self, world: &World) -> Vec<Access> {
-        self.data.access(world)
+    fn access(&self, world: &World, dst: &mut Vec<Access>) {
+        self.data.access(world, dst)
     }
 
     fn name(&self) -> &str {
@@ -299,8 +292,8 @@ where
         Ok(())
     }
 
-    fn access(&self, world: &World) -> Vec<Access> {
-        self.data.access(world)
+    fn access(&self, world: &World, dst: &mut Vec<Access>) {
+        self.data.access(world, dst)
     }
 
     fn name(&self) -> &str {
@@ -522,10 +515,6 @@ impl<'a> SystemFn<'a, &'a SystemContext<'a>, anyhow::Result<()>> for NeverSystem
     fn execute(&'a mut self, _: &'a SystemContext<'a>) -> anyhow::Result<()> {
         panic!("This system should never be executed as it is a placeholder");
     }
-
-    fn access(&self, _: &World) -> Vec<Access> {
-        vec![]
-    }
 }
 
 /// A type erased system
@@ -566,8 +555,8 @@ impl BoxedSystem {
     }
 
     /// Returns the accesses of the system held within
-    pub fn access(&self, world: &World) -> Vec<Access> {
-        self.inner.access(world)
+    pub fn access(&self, world: &World, dst: &mut Vec<Access>) {
+        self.inner.access(world, dst)
     }
 
     /// Returns the boxed system's name

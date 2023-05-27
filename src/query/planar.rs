@@ -84,27 +84,25 @@ where
         }
     }
 
-    fn access(&self, world: &World, fetch: &Filtered<Q, F>) -> Vec<Access> {
+    fn access(&self, world: &World, fetch: &Filtered<Q, F>, dst: &mut Vec<Access>) {
         let mut result = Vec::new();
         Self::update_state(world, fetch, &mut result);
 
-        result
-            .iter()
-            .flat_map(|&arch_id| {
-                let arch = world.archetypes.get(arch_id);
-                let data = FetchAccessData {
-                    world,
-                    arch,
-                    arch_id,
-                };
+        result.iter().for_each(|&arch_id| {
+            let arch = world.archetypes.get(arch_id);
+            let data = FetchAccessData {
+                world,
+                arch,
+                arch_id,
+            };
 
-                fetch.access(data)
-            })
-            .chain([Access {
-                kind: AccessKind::World,
-                mutable: false,
-            }])
-            .collect()
+            fetch.access(data, dst)
+        });
+
+        dst.push(Access {
+            kind: AccessKind::World,
+            mutable: false,
+        });
     }
 }
 

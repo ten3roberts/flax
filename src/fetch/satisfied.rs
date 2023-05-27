@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::{
     archetype::{Slice, Slot},
     Fetch, FetchItem,
@@ -32,6 +34,8 @@ impl<'w, F: Fetch<'w>> Fetch<'w> for Satisfied<F> {
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "satisfied {:?}", FmtQuery(&self.0))
     }
+
+    fn access(&self, _: super::FetchAccessData, _: &mut Vec<crate::system::Access>) {}
 }
 
 #[doc(hidden)]

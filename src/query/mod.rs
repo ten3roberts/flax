@@ -52,7 +52,7 @@ pub trait QueryStrategy<'w, Q, F> {
     fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow;
 
     /// Returns the system access
-    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>) -> Vec<Access>;
+    fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>, dst: &mut Vec<Access>);
 }
 
 /// Represents a query and state for a given world.

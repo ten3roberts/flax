@@ -42,11 +42,11 @@ impl<T> SystemAccess for SharedResource<T>
 where
     T: Send + 'static,
 {
-    fn access(&self, _: &World) -> Vec<Access> {
-        alloc::vec![Access {
+    fn access(&self, _: &World, dst: &mut Vec<Access>) {
+        dst.push(Access {
             kind: AccessKind::External(TypeId::of::<Self>()),
             mutable: true,
-        }]
+        });
     }
 }
 

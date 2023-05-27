@@ -6,7 +6,7 @@ use crate::{
     EntityRef, Fetch, FetchItem, World,
 };
 
-use super::PreparedFetch;
+use super::{FetchAccessData, PreparedFetch};
 
 /// Access all components dynamically in a query
 pub struct EntityRefs;
@@ -39,11 +39,11 @@ impl<'w> Fetch<'w> for EntityRefs {
         true
     }
 
-    fn access(&self, _: super::FetchAccessData) -> Vec<Access> {
-        alloc::vec![Access {
+    fn access(&self, _: FetchAccessData, dst: &mut Vec<Access>) {
+        dst.push(Access {
             kind: AccessKind::World {},
             mutable: true,
-        }]
+        })
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

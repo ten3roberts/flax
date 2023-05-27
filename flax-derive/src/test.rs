@@ -98,8 +98,7 @@ fn derive_fetch_struct() {
 
     };
 
-    let output =
-        super::do_derive_fetch(Ident::new("flax_renamed", Span::call_site()), input.into());
+    let output = super::do_derive_fetch(Ident::new("flax_renamed", Span::call_site()), input);
 
     pretty_assertions::assert_eq!(output.to_string(), expected.to_string());
 }
