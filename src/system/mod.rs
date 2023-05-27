@@ -12,7 +12,6 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use anyhow::Context;
 use core::{
     any::{type_name, TypeId},
     fmt::{self, Formatter},
@@ -26,22 +25,24 @@ pub use traits::*;
 
 /// A system builder which allows incrementally adding data to a system
 /// function.
-pub struct SystemBuilder<T> {
-    data: T,
+pub struct SystemBuilder<Args, T> {
+    args: Args,
     name: Option<String>,
+    data: PhantomData<T>,
 }
 
-impl SystemBuilder<()> {
+impl<T> SystemBuilder<(), T> {
     /// Creates a new empty system builder.
     pub fn new() -> Self {
         Self {
-            data: (),
+            args: (),
             name: None,
+            data: PhantomData,
         }
     }
 }
 
-impl Default for SystemBuilder<()> {
+impl<T> Default for SystemBuilder<(), T> {
     fn default() -> Self {
         Self::new()
     }
@@ -89,26 +90,26 @@ where
     }
 }
 
-impl<Q, F> SystemBuilder<(Query<Q, F>,)>
+impl<Q, F, T> SystemBuilder<(Query<Q, F>,), T>
 where
     for<'x> Q: Fetch<'x> + 'static,
     for<'x> F: Fetch<'x> + 'static,
 {
     /// Execute a function for each item in the query
-    pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, (Query<Q, F>,), ()>
+    pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, (Query<Q, F>,), (), T>
     where
         for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             ForEach { func },
-            self.data,
+            self.args,
         )
     }
 }
 
 #[cfg(feature = "parallel")]
-impl<Q, F> SystemBuilder<(Query<Q, F>,)>
+impl<Q, F, T> SystemBuilder<(Query<Q, F>,), T>
 where
     for<'x> Q: Fetch<'x> + 'static + Send,
     for<'x> F: Fetch<'x> + 'static + Send,
@@ -116,47 +117,66 @@ where
     for<'x, 'y> crate::Batch<'x, <Q as Fetch<'y>>::Prepared, <F as Fetch<'y>>::Prepared>: Send,
 {
     /// Execute a function for each item in the query in parallel batches
-    pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, (Query<Q, F>,), ()>
+    pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, (Query<Q, F>,), (), T>
     where
         for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             ParForEach { func },
-            self.data,
+            self.args,
         )
     }
 }
 
-impl<Args> SystemBuilder<Args> {
+impl<Args, T> SystemBuilder<Args, T> {
     /// Add a new query to the system
-    pub fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight>
+    pub fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight, T>
     where
-        S: for<'x> SystemData<'x>,
+        S: for<'x> SystemData<'x, T>,
         Args: TupleCombine<S>,
     {
         SystemBuilder {
             name: self.name,
-            data: self.data.push_right(other),
+            args: self.args.push_right(other),
+            data: PhantomData,
         }
     }
 
-    /// Access data data mutably in the system
-    pub fn write<T>(self) -> SystemBuilder<Args::PushRight>
+    /// Access data mutably in the system
+    pub fn write<W>(self) -> SystemBuilder<Args::PushRight, T>
     where
-        Args: TupleCombine<Write<T>>,
-        Write<T>: for<'x> SystemData<'x>,
+        Args: TupleCombine<Write<W>>,
+        Write<W>: for<'x> SystemData<'x, T>,
     {
-        self.with(Write::<T>::default())
+        self.with(Write::<W>(PhantomData))
     }
 
-    /// Access data data mutably in the system
-    pub fn read<T>(self) -> SystemBuilder<Args::PushRight>
+    /// Access data mutably in the system
+    pub fn read<R>(self) -> SystemBuilder<Args::PushRight, T>
     where
-        Args: TupleCombine<Read<T>>,
-        Read<T>: for<'x> SystemData<'x>,
+        Args: TupleCombine<Read<R>>,
+        Read<R>: for<'x> SystemData<'x, T>,
     {
-        self.with(Read::<T>::default())
+        self.with(Read::<R>(PhantomData))
+    }
+
+    /// Access execution context data
+    pub fn read_context(self) -> SystemBuilder<Args::PushRight, T>
+    where
+        Args: TupleCombine<ReadContextData<T>>,
+        ReadContextData<T>: for<'x> SystemData<'x, T>,
+    {
+        self.with(ReadContextData::<T>(PhantomData))
+    }
+
+    /// Access execution context data mutably
+    pub fn write_context(self) -> SystemBuilder<Args::PushRight, T>
+    where
+        Args: TupleCombine<WriteContextData<T>>,
+        WriteContextData<T>: for<'x> SystemData<'x, T>,
+    {
+        self.with(WriteContextData::<T>(PhantomData))
     }
 
     /// Set the systems name
@@ -170,35 +190,35 @@ impl<Args> SystemBuilder<Args> {
     /// This is useful to avoid sharing `Arc<Mutex<_>>` and locking for each
     /// system. In addition, the resource will be taken into account for the
     /// schedule paralellization and will as such not block.
-    pub fn with_resource<T>(self, resource: SharedResource<T>) -> SystemBuilder<Args::PushRight>
+    pub fn with_resource<R>(self, resource: SharedResource<R>) -> SystemBuilder<Args::PushRight, T>
     where
-        Args: TupleCombine<SharedResource<T>>,
-        T: Send + 'static,
+        Args: TupleCombine<SharedResource<R>>,
+        R: Send + 'static,
     {
         self.with(resource)
     }
 
     /// Creates the system by suppling a function to act upon the systems data,
     /// like queries and world accesses.
-    pub fn build<Func, Ret>(self, func: Func) -> System<Func, Args, Ret>
+    pub fn build<Func, Ret>(self, func: Func) -> System<Func, Args, Ret, T>
     where
-        Args: for<'a> SystemData<'a> + 'static,
-        Func: for<'this, 'a> SystemFn<'this, <Args as SystemData<'a>>::Value, Ret>,
+        Args: for<'a> SystemData<'a, T> + 'static,
+        Func: for<'this, 'a> SystemFn<'this, <Args as SystemData<'a, T>>::Value, Ret>,
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             func,
-            self.data,
+            self.args,
         )
     }
 }
 
 /// Holds the data and an inner system satisfying all dependencies
-pub struct System<F, Args, Ret> {
+pub struct System<F, Args, Ret, T = ()> {
     name: String,
     data: Args,
     func: F,
-    _marker: PhantomData<Ret>,
+    _marker: PhantomData<(Ret, T)>,
 }
 
 struct FormatWith<F> {
@@ -216,27 +236,24 @@ where
 
 /// Abstraction over a system with any kind of arguments and fallibility
 #[doc(hidden)]
-pub trait DynSystem {
+pub trait DynSystem<T> {
     fn name(&self) -> &str;
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
-    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()>;
+    fn execute(&mut self, ctx: &SystemContext<'_, T>) -> anyhow::Result<()>;
     fn access(&self, world: &World, dst: &mut Vec<Access>);
 }
 
-impl<F, Args, Err> DynSystem for System<F, Args, Result<(), Err>>
+impl<F, Args, Err, T> DynSystem<T> for System<F, Args, Result<(), Err>, T>
 where
-    Args: for<'x> SystemData<'x>,
-    F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
+    Args: for<'x> SystemData<'x, T>,
+    F: for<'x> SystemFn<'x, <Args as SystemData<'x, T>>::Value, Result<(), Err>>,
     Err: Into<anyhow::Error>,
 {
-    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()> {
+    fn execute(&mut self, ctx: &SystemContext<'_, T>) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
-        let data = self
-            .data
-            .acquire(ctx)
-            .with_context(|| format!("Failed to bind system data for {}", self.name))?;
+        let data = self.data.acquire(ctx);
 
         let res: anyhow::Result<()> = self.func.execute(data).map_err(Into::into);
         if let Err(err) = res {
@@ -265,19 +282,16 @@ where
     }
 }
 
-impl<F, Args> DynSystem for System<F, Args, ()>
+impl<F, Args, T> DynSystem<T> for System<F, Args, (), T>
 where
-    Args: for<'x> SystemData<'x>,
-    F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, ()>,
+    Args: for<'x> SystemData<'x, T>,
+    F: for<'x> SystemFn<'x, <Args as SystemData<'x, T>>::Value, ()>,
 {
-    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()> {
+    fn execute(&mut self, ctx: &SystemContext<'_, T>) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
-        let data = self
-            .data
-            .acquire(ctx)
-            .with_context(|| format!("Failed to bind system data for {}", self.name))?;
+        let data = self.data.acquire(ctx);
 
         self.func.execute(data);
 
@@ -301,16 +315,16 @@ where
     }
 }
 
-impl<F, Args, Ret> fmt::Debug for System<F, Args, Ret>
+impl<F, Args, Ret, T> fmt::Debug for System<F, Args, Ret, T>
 where
-    Self: DynSystem,
+    Self: DynSystem<T>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.describe(f)
     }
 }
 
-impl<F, Args, Ret> System<F, Args, Ret> {
+impl<F, Args, Ret, T> System<F, Args, Ret, T> {
     pub(crate) fn new(name: String, func: F, data: Args) -> Self {
         Self {
             name,
@@ -321,39 +335,59 @@ impl<F, Args, Ret> System<F, Args, Ret> {
     }
 
     /// Convert to a type erased Send + Sync system
-    pub fn boxed(self) -> BoxedSystem
+    pub fn boxed(self) -> BoxedSystem<T>
     where
         Ret: Send + Sync + 'static,
         Args: Send + Sync + 'static,
         F: Send + Sync + 'static,
-        Self: DynSystem,
+        Self: DynSystem<T>,
+        T: 'static + Send + Sync,
     {
         BoxedSystem::new(self)
     }
 }
 
-impl System<(), (), ()> {
+impl System<(), (), (), ()> {
     /// See [crate::SystemBuilder]
-    pub fn builder() -> SystemBuilder<()> {
+    pub fn builder() -> SystemBuilder<(), ()> {
         SystemBuilder::new()
     }
 }
 
-impl<F, Args, Ret> System<F, Args, Ret> {
+impl<T> System<(), (), (), T> {
+    /// See [crate::SystemBuilder]
+    pub fn builder_with_data() -> SystemBuilder<(), T> {
+        SystemBuilder::new()
+    }
+}
+
+impl<F, Args, Ret> System<F, Args, Ret, ()> {
     /// Run the system on the world. Any commands will be applied
     pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> Ret
     where
         Ret: 'static,
-        for<'x> Args: SystemData<'x>,
-        for<'x> F: SystemFn<'x, <Args as SystemData<'x>>::Value, Ret>,
+        for<'x> Args: SystemData<'x, ()>,
+        for<'x> F: SystemFn<'x, <Args as SystemData<'x, ()>>::Value, Ret>,
+    {
+        self.run_with(world, &mut ())
+    }
+}
+
+impl<F, Args, Ret, T> System<F, Args, Ret, T> {
+    /// Run the system on the world. Any commands will be applied
+    pub fn run_with<'a>(&'a mut self, world: &'a mut World, data: &mut T) -> Ret
+    where
+        Ret: 'static,
+        for<'x> Args: SystemData<'x, T>,
+        for<'x> F: SystemFn<'x, <Args as SystemData<'x, T>>::Value, Ret>,
     {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("run_on", name = self.name).entered();
 
         let mut cmd = CommandBuffer::new();
-        let ctx = SystemContext::new(world, &mut cmd);
+        let ctx = SystemContext::new(world, &mut cmd, data);
 
-        let data = self.data.acquire(&ctx).expect("Failed to bind data");
+        let data = self.data.acquire(&ctx);
 
         let ret = self.func.execute(data);
         cmd.apply(world).expect("Failed to apply commandbuffer");
@@ -384,6 +418,8 @@ pub enum AccessKind {
     World,
     /// Borrow the commandbuffer
     CommandBuffer,
+    /// Data supplied by user in the execution context
+    ContextData,
 }
 
 impl AccessKind {
@@ -436,6 +472,7 @@ pub struct AccessInfo {
     world: Option<bool>,
     cmd: Option<bool>,
     external: Vec<TypeId>,
+    context_data: Option<bool>,
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -486,6 +523,7 @@ pub(crate) fn access_info(accesses: &[Access], world: &World) -> AccessInfo {
                     })
             }
             AccessKind::External(ty) => result.external.push(ty),
+            AccessKind::ContextData => result.context_data = Some(access.mutable),
             AccessKind::World => match result.world {
                 Some(true) => result.world = Some(true),
                 _ => result.world = Some(access.mutable),
@@ -507,44 +545,44 @@ impl Access {
     }
 }
 
-/// A system which should never be run.
-/// Is essentially a `None` variant system.
-pub(crate) struct NeverSystem;
-
-impl<'a> SystemFn<'a, &'a SystemContext<'a>, anyhow::Result<()>> for NeverSystem {
-    fn execute(&'a mut self, _: &'a SystemContext<'a>) -> anyhow::Result<()> {
-        panic!("This system should never be executed as it is a placeholder");
-    }
-}
-
 /// A type erased system
-pub struct BoxedSystem {
-    inner: Box<dyn DynSystem + Send + Sync>,
+pub struct BoxedSystem<T = ()> {
+    inner: Box<dyn DynSystem<T> + Send + Sync>,
 }
 
-impl core::fmt::Debug for BoxedSystem {
+impl<T> core::fmt::Debug for BoxedSystem<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.inner.describe(f)
     }
 }
 
-impl BoxedSystem {
+impl BoxedSystem<()> {
+    /// Same as execute but creates and applied a temporary commandbuffer
+    pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> anyhow::Result<()> {
+        self.run_with(world, &mut ())
+    }
+}
+
+impl<T> BoxedSystem<T> {
     /// Creates a new boxed system from any other kind of system
-    fn new(system: impl DynSystem + Send + Sync + 'static) -> Self {
+    fn new<S>(system: S) -> Self
+    where
+        S: DynSystem<T> + Send + Sync + 'static,
+    {
         Self {
             inner: Box::new(system),
         }
     }
 
     /// Execute the system with the provided context
-    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'a>) -> anyhow::Result<()> {
+    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'a, T>) -> anyhow::Result<()> {
         self.inner.execute(ctx)
     }
 
     /// Same as execute but creates and applied a temporary commandbuffer
-    pub fn run_on<'a>(&'a mut self, world: &'a mut World) -> anyhow::Result<()> {
+    pub fn run_with<'a>(&'a mut self, world: &'a mut World, data: &mut T) -> anyhow::Result<()> {
         let mut cmd = CommandBuffer::new();
-        let ctx = SystemContext::new(world, &mut cmd);
+        let ctx = SystemContext::new(world, &mut cmd, data);
         self.inner.execute(&ctx)?;
         Ok(())
     }
@@ -565,9 +603,10 @@ impl BoxedSystem {
     }
 }
 
-impl<T> From<T> for BoxedSystem
+/// Can't be generic over the context data here due to coherence
+impl<T> From<T> for BoxedSystem<()>
 where
-    T: 'static + DynSystem + Send + Sync,
+    T: 'static + DynSystem<()> + Send + Sync,
 {
     fn from(system: T) -> Self {
         Self::new(system)
@@ -614,7 +653,10 @@ mod test {
 
         let mut cmd = CommandBuffer::new();
 
-        let ctx = SystemContext::new(&mut world, &mut cmd);
+        #[allow(clippy::let_unit_value)]
+        let mut data = ();
+        let ctx = SystemContext::new(&mut world, &mut cmd, &mut data);
+
         system.execute(&ctx).unwrap();
 
         fallible.execute(&ctx).unwrap();
@@ -623,7 +665,7 @@ mod test {
 
         let mut boxed = fallible.boxed();
 
-        let ctx = SystemContext::new(&mut world, &mut cmd);
+        let ctx = SystemContext::new(&mut world, &mut cmd, &mut data);
         let res = boxed.execute(&ctx);
         let _ = res.unwrap_err();
     }

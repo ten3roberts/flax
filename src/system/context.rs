@@ -50,21 +50,14 @@ where
     }
 }
 
-impl<'a, T> SystemData<'a> for SharedResource<T>
+impl<'a, T, D> SystemData<'a, D> for SharedResource<T>
 where
     T: Send + 'static,
 {
     type Value = AtomicRefMut<'a, T>;
 
-    fn acquire(&'a mut self, _: &'a SystemContext<'_>) -> anyhow::Result<Self::Value> {
-        let borrow = self.try_borrow_mut().map_err(|_| {
-            anyhow::anyhow!(
-                "Failed to borrow shared resource of {}",
-                core::any::type_name::<T>()
-            )
-        })?;
-
-        Ok(borrow)
+    fn acquire(&'a mut self, _: &'a SystemContext<'_, D>) -> Self::Value {
+        self.borrow_mut()
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -76,41 +69,56 @@ where
 
 /// Holds external context for system execution.
 /// Contains the world and a commandbuffer
-pub struct SystemContext<'a> {
+pub struct SystemContext<'a, T> {
     world: AtomicRefCell<&'a mut World>,
     cmd: AtomicRefCell<&'a mut CommandBuffer>,
+    /// User supplied
+    data: AtomicRefCell<&'a mut T>,
 }
 
-impl<'a> SystemContext<'a> {
+impl<'a, T> SystemContext<'a, T> {
     /// Creates a new system context
-    pub fn new(world: &'a mut World, cmd: &'a mut CommandBuffer) -> Self {
+    pub fn new(world: &'a mut World, cmd: &'a mut CommandBuffer, data: &'a mut T) -> Self {
         Self {
             world: AtomicRefCell::new(world),
             cmd: AtomicRefCell::new(cmd),
+            data: AtomicRefCell::new(data),
         }
     }
 
     /// Access the world
-    pub fn world(&self) -> Result<AtomicRef<World>, atomic_refcell::BorrowError> {
-        let borrow = self.world.try_borrow()?;
-        Ok(AtomicRef::map(borrow, |v| *v))
+    pub fn world(&self) -> AtomicRef<World> {
+        let borrow = self.world.borrow();
+        AtomicRef::map(borrow, |v| *v)
     }
 
     /// Access the world mutably
-    pub fn world_mut(&self) -> Result<AtomicRefMut<World>, atomic_refcell::BorrowMutError> {
-        let borrow = self.world.try_borrow_mut()?;
-        Ok(AtomicRefMut::map(borrow, |v| *v))
+    pub fn world_mut(&self) -> AtomicRefMut<World> {
+        let borrow = self.world.borrow_mut();
+        AtomicRefMut::map(borrow, |v| *v)
     }
 
     /// Access the commandbuffer
-    pub fn cmd(&self) -> Result<AtomicRef<CommandBuffer>, atomic_refcell::BorrowError> {
-        let borrow = self.cmd.try_borrow()?;
-        Ok(AtomicRef::map(borrow, |v| *v))
+    pub fn cmd(&self) -> AtomicRef<CommandBuffer> {
+        let borrow = self.cmd.borrow();
+        AtomicRef::map(borrow, |v| *v)
     }
 
     /// Access the commandbuffer mutably
-    pub fn cmd_mut(&self) -> Result<AtomicRefMut<CommandBuffer>, atomic_refcell::BorrowMutError> {
-        let borrow = self.cmd.try_borrow_mut()?;
-        Ok(AtomicRefMut::map(borrow, |v| *v))
+    pub fn cmd_mut(&self) -> AtomicRefMut<CommandBuffer> {
+        let borrow = self.cmd.borrow_mut();
+        AtomicRefMut::map(borrow, |v| *v)
+    }
+
+    /// Access user provided context data
+    pub fn data(&self) -> AtomicRef<T> {
+        let borrow = self.data.borrow();
+        AtomicRef::map(borrow, |v| *v)
+    }
+
+    /// Access user provided context data mutably
+    pub fn data_mut(&self) -> AtomicRefMut<T> {
+        let borrow = self.data.borrow_mut();
+        AtomicRefMut::map(borrow, |v| *v)
     }
 }
