@@ -9,7 +9,8 @@ fn derive_fetch() {
 
     use glam::*;
 
-    use flax::Fetch;
+    use flax::{Fetch, *};
+
     #[derive(Fetch)]
     #[fetch(Debug, PartialEq)]
     struct TransformQuery {
@@ -17,8 +18,6 @@ fn derive_fetch() {
         rot: Opt<Component<Quat>>,
         scale: Opt<Component<Vec3>>,
     }
-
-    use flax::*;
 
     let mut world = World::new();
 
