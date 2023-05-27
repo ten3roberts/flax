@@ -4,4 +4,5 @@
 - [x] Archetype groups for query, iterating in order
   - Allows for dfs/bfs
 - [x] Exlusive relations
-- Combine access and provide traits
+- [ ] Combine access and provide traits
+- [ ] stateless fetch
