@@ -186,6 +186,11 @@ impl EntityBuilder {
     pub fn spawn_into(&mut self, cmd: &mut CommandBuffer) {
         cmd.spawn(core::mem::take(self));
     }
+
+    /// Returns the number of component in the builder
+    pub fn component_count(&self) -> usize {
+        self.buffer.len()
+    }
 }
 
 impl Default for EntityBuilder {
