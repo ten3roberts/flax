@@ -328,6 +328,19 @@ impl ComponentBuffer {
             storage: &mut self.storage,
         }
     }
+
+    #[inline]
+    /// Returns the number of component in the buffer
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[must_use]
+    #[inline]
+    /// Returns `true` if the buffer contains no components
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 }
 
 pub(crate) struct ComponentBufferIter<'a> {
