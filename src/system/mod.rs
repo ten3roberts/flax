@@ -669,4 +669,17 @@ mod test {
         let res = boxed.execute(&ctx);
         let _ = res.unwrap_err();
     }
+
+    #[test]
+    fn system_builder_empty() {
+        let mut a = 5;
+        let mut system = System::builder().build(|| {
+            a += 1;
+        });
+
+        let mut world = World::new();
+        system.run_on(&mut world);
+
+        assert_eq!(a, 6);
+    }
 }

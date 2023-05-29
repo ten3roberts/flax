@@ -83,9 +83,9 @@ macro_rules! tuple_impl {
             $(for<'x> $ty: AsBorrow<'x>,)*
             for<'x> Func: FnMut($(<$ty as AsBorrow<'x>>::Borrowed),*) -> Ret,
         {
-            fn execute(&'this mut self, mut args: ($($ty,)*)) -> Ret {
-                let borrowed = ($(args.$idx.as_borrow(),)*);
-                (self)($(borrowed.$idx,)*)
+            fn execute(&'this mut self, mut _args: ($($ty,)*)) -> Ret {
+                let _borrowed = ($(_args.$idx.as_borrow(),)*);
+                (self)($(_borrowed.$idx,)*)
             }
         }
 
@@ -93,8 +93,8 @@ macro_rules! tuple_impl {
         where
             $($ty: SystemAccess,)*
         {
-            fn access(&self, world: &World, dst: &mut Vec<Access>) {
-                $(self.$idx.access(world, dst);)*
+            fn access(&self, _world: &World, _dst: &mut Vec<Access>) {
+                $(self.$idx.access(_world, _dst);)*
             }
         }
 
@@ -104,6 +104,7 @@ macro_rules! tuple_impl {
         {
             type Borrowed = ($(<$ty as AsBorrow<'a>>::Borrowed,)*);
 
+            #[allow(clippy::unused_unit)]
             fn as_borrow(&'a mut self) -> Self::Borrowed {
                 ($((self.$idx).as_borrow(),)*)
             }
@@ -115,6 +116,7 @@ macro_rules! tuple_impl {
         {
             type Value = ($(<$ty as SystemData<'w, T>>::Value,)*);
 
+            #[allow(clippy::unused_unit)]
             fn acquire(&'w mut self, _ctx: &'w SystemContext<'_, T>) -> Self::Value {
                 ($((self.$idx).acquire(_ctx),)*)
             }
@@ -129,7 +131,7 @@ macro_rules! tuple_impl {
     };
 }
 
-// tuple_impl! {}
+tuple_impl! {}
 tuple_impl! { 0 => A }
 tuple_impl! { 0 => A, 1 => B }
 tuple_impl! { 0 => A, 1 => B, 2 => C }
