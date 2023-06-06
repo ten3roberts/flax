@@ -223,6 +223,8 @@ mod macros;
 mod archetypes;
 /// Subscribe to changes in the world
 pub mod events;
+/// Formatting utilities
+pub mod format;
 mod metadata;
 /// Query the world
 pub mod query;

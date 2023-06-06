@@ -5,10 +5,8 @@ use core::ptr::{self, NonNull};
 use alloc::alloc::{dealloc, handle_alloc_error, realloc};
 use alloc::collections::BTreeMap;
 
-use crate::{
-    debuggable, metadata, Component, ComponentInfo, ComponentKey, ComponentValue, Entity,
-    MissingDebug,
-};
+use crate::format::MissingDebug;
+use crate::{debuggable, metadata, Component, ComponentInfo, ComponentKey, ComponentValue, Entity};
 
 type Offset = usize;
 

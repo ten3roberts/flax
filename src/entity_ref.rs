@@ -8,7 +8,8 @@ use crate::{
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
-    Component, ComponentKey, ComponentValue, Entity, EntityFormatter, Error, RelationExt, World,
+    format::EntityFormatter,
+    Component, ComponentKey, ComponentValue, Entity, Error, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
