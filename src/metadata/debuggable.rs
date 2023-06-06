@@ -1,12 +1,9 @@
-use core::{
-    any::Any,
-    fmt::{self, Debug, Formatter},
-};
+use core::{any::Any, fmt::Debug};
 
 use crate::{
     archetype::{Slot, Storage},
     buffer::ComponentBuffer,
-    component, Archetype, ComponentInfo, ComponentKey, ComponentValue, Metadata, World,
+    component, ComponentInfo, ComponentValue, Metadata,
 };
 
 component! {

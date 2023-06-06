@@ -217,6 +217,8 @@ impl<'a> Debug for ChildrenFormatter<'a> {
 
 #[cfg(test)]
 mod tests {
+    use core::fmt::Write;
+
     use crate::{child_of, name};
 
     use super::*;
@@ -236,6 +238,10 @@ mod tests {
             .attach(child_of, Entity::builder().set(name(), "child.2".into()))
             .spawn(&mut world);
 
-        eprintln!("{:#?}", world.format_hierarchy(child_of, root));
+        let mut s = alloc::string::String::new();
+        write!(s, "{:#?}", world.format_hierarchy(child_of, root)).unwrap();
+
+        #[cfg(feature = "std")]
+        println!("{}", s)
     }
 }
