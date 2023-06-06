@@ -10,8 +10,8 @@ use crate::{
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
     system::{Access, AccessKind},
-    ArchetypeId, BatchedIter, ComponentValue, Entity, Fetch, PreparedArchetype, QueryStrategy,
-    RelationExt, World,
+    ArchetypeId, BatchedIter, ComponentValue, Entity, Fetch, FetchItem, PreparedArchetype,
+    QueryStrategy, RelationExt, World,
 };
 
 use super::{borrow::QueryBorrowState, ArchetypeSearcher};
@@ -178,6 +178,20 @@ where
     state: QueryBorrowState<'w, Q, F>,
     /// Archetypes are in topological order
     prepared: SmallVec<[PreparedArchetype<'w, Q::Prepared, F::Prepared>; 8]>,
+}
+
+impl<'w, 'q, Q, F> IntoIterator for &'q mut TopoBorrow<'w, Q, F>
+where
+    Q: Fetch<'w>,
+    F: Fetch<'w>,
+{
+    type Item = <Q as FetchItem<'q>>::Item;
+
+    type IntoIter = TopoIter<'w, 'q, Q, F>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
 }
 
 impl<'w, Q, F> TopoBorrow<'w, Q, F>

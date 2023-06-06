@@ -80,7 +80,7 @@ fn main() {
 
         let mut query = Query::new((entity_ids(), name())).with_strategy(Topo::new(child_of));
 
-        for (id, name) in query.borrow(&world).iter() {
+        for (id, name) in &mut query.borrow(&world) {
             tracing::info!(?id, ?name);
         }
 
