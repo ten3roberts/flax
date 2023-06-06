@@ -23,6 +23,7 @@ use crate::{
     error::Result,
     events::EventSubscriber,
     filter::{ArchetypeFilter, StaticFilter},
+    format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
     relation::Relation,
     *,
 };
@@ -512,10 +513,11 @@ impl World {
         let mut stack = alloc::vec![id];
 
         while let Some(id) = stack.pop() {
+            let relation_key = relation.of(id).key();
             for (_, arch) in self
                 .archetypes
                 .iter_mut()
-                .filter(|(_, arch)| arch.relations().any(|v| v == relation.of(id).key()))
+                .filter(|(_, arch)| arch.has(relation_key))
             {
                 // Remove all children of the children
                 for &id in arch.entities() {
@@ -1111,6 +1113,25 @@ impl World {
         EntitiesFormatter { world: self, ids }
     }
 
+    /// Formats a hierarchy entites formed by the specified relation
+    pub fn format_hierarchy<T: ComponentValue>(
+        &self,
+        relation: impl RelationExt<T>,
+        id: Entity,
+    ) -> HierarchyFormatter<'_> {
+        let loc = self.location(id).expect("Invalid entity");
+        let arch = self.archetypes.get(loc.arch_id);
+        let relation = relation.id();
+
+        HierarchyFormatter {
+            world: self,
+            id,
+            slot: loc.slot,
+            arch,
+            relation,
+        }
+    }
+
     /// Returns a human friendly breakdown of the archetypes in the world
     pub fn archetype_info(&self) -> BTreeMap<ArchetypeId, ArchetypeInfo> {
         self.archetypes.iter().map(|(k, v)| (k, v.info())).collect()
@@ -1393,107 +1414,6 @@ impl Migrated {
     }
 }
 
-/// Debug formats the world with the given filter.
-/// Created using [World::format_debug]
-pub struct WorldFormatter<'a, F> {
-    world: &'a World,
-    filter: F,
-}
-
-impl<'a, F> fmt::Debug for WorldFormatter<'a, F>
-where
-    F: for<'x> Fetch<'x>,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut list = f.debug_map();
-
-        let mut query = Query::new(())
-            .with_components()
-            .filter(self.filter.by_ref());
-
-        let mut query = query.borrow(self.world);
-
-        for batch in query.iter_batched() {
-            let arch = batch.arch();
-            for slot in batch.slots().iter() {
-                assert!(
-                    slot < arch.len(),
-                    "batch is larger than archetype, batch: {:?}, arch: {:?}",
-                    batch.slots(),
-                    arch.entities()
-                );
-
-                let row = RowValueFormatter {
-                    world: self.world,
-                    arch,
-                    slot,
-                };
-
-                list.entry(&arch.entity(slot).unwrap(), &row);
-            }
-        }
-
-        list.finish()
-    }
-}
-
-/// Debug formats the specified entities,
-/// Created using [World::format_entities]
-#[doc(hidden)]
-pub struct EntitiesFormatter<'a> {
-    pub(crate) world: &'a World,
-    pub(crate) ids: &'a [Entity],
-}
-
-impl<'a> fmt::Debug for EntitiesFormatter<'a> {
-    #[inline]
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut list = f.debug_map();
-
-        for &id in self.ids {
-            let Ok(loc) = self.world.location(id) else { continue };
-
-            let arch = self.world.archetypes.get(loc.arch_id);
-
-            let row = RowValueFormatter {
-                world: self.world,
-                arch,
-                slot: loc.slot,
-            };
-
-            list.entry(&id, &row);
-        }
-
-        list.finish()
-    }
-}
-
-/// Debug formats the specified entities,
-/// Created using [World::format_entities]
-#[doc(hidden)]
-pub struct EntityFormatter<'a> {
-    pub(crate) world: &'a World,
-    pub(crate) arch: &'a Archetype,
-    pub(crate) slot: Slot,
-    pub(crate) id: Entity,
-}
-
-impl<'a> fmt::Debug for EntityFormatter<'a> {
-    #[inline]
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut list = f.debug_map();
-
-        let row = RowValueFormatter {
-            world: self.world,
-            slot: self.slot,
-            arch: self.arch,
-        };
-
-        list.entry(&self.id, &row);
-
-        list.finish()
-    }
-}
 impl Default for World {
     fn default() -> Self {
         Self::new()
