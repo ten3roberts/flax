@@ -292,7 +292,7 @@ unsafe impl Send for Cell {}
 unsafe impl Sync for Cell {}
 
 impl Cell {
-    fn on_event(&mut self, all_ids: &[Entity], slots: Slice, kind: EventKind) {
+    fn on_event(&self, all_ids: &[Entity], slots: Slice, kind: EventKind) {
         let event = EventData {
             ids: &all_ids[slots.as_range()],
             key: self.info.key,
@@ -518,6 +518,31 @@ impl Archetype {
 
         cell.changes
             .get_mut()
+            .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
+
+        Some(value)
+    }
+
+    /// Get a component from the entity at `slot`
+    #[inline]
+    pub fn update<T: ComponentValue, U>(
+        &self,
+        slot: Slot,
+        component: Component<T>,
+        change_tick: u32,
+        f: impl FnOnce(&mut T) -> U,
+    ) -> Option<U> {
+        let cell = self.cells.get(&component.key())?;
+
+        // Safety
+        // Component<T>
+        let value = unsafe { &mut *(cell.storage.borrow_mut().at_mut(slot)? as *mut T) };
+        let value = (f)(value);
+
+        cell.on_event(&self.entities, Slice::single(slot), EventKind::Modified);
+
+        cell.changes
+            .borrow_mut()
             .set_modified_if_tracking(Change::new(Slice::single(slot), change_tick));
 
         Some(value)

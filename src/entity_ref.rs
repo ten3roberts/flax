@@ -41,6 +41,26 @@ impl<'a> EntityRefMut<'a> {
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
+    /// Check if the entity currently has the specified component without
+    /// borrowing.
+    pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
+        self.world
+            .archetypes
+            .get(self.loc().arch_id)
+            .has(component.key())
+    }
+
+    /// Updates a component in place
+    pub fn update<T: ComponentValue, U>(
+        &self,
+        component: Component<T>,
+        f: impl FnOnce(&mut T) -> U,
+    ) -> Option<U> {
+        let loc = self.loc();
+        let arch = self.world.archetypes.get(loc.arch_id);
+        arch.update(loc.slot, component, self.world.advance_change_tick(), f)
+    }
+
     /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
     pub fn try_get<T: ComponentValue>(
         &self,
@@ -62,15 +82,6 @@ impl<'a> EntityRefMut<'a> {
         *self
             .loc
             .get_or_init(|| self.world.location(self.id).unwrap())
-    }
-
-    /// Check if the entity currently has the specified component without
-    /// borrowing.
-    pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
-        self.world
-            .archetypes
-            .get(self.loc().arch_id)
-            .has(component.key())
     }
 
     /// Returns all relations to other entities of the specified kind
@@ -229,6 +240,16 @@ impl<'a> EntityRef<'a> {
     /// borrowing.
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
         self.arch.has(component.key())
+    }
+
+    /// Updates a component in place
+    pub fn update<T: ComponentValue, U>(
+        &self,
+        component: Component<T>,
+        f: impl FnOnce(&mut T) -> U,
+    ) -> Option<U> {
+        self.arch
+            .update(self.slot, component, self.world.advance_change_tick(), f)
     }
 
     /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
@@ -439,5 +460,51 @@ mod test {
         let _name = entity.get_mut(name()).unwrap();
 
         assert_eq!(alloc::format!("{}", entity), alloc::format!("{id}"));
+    }
+
+    #[test]
+    fn update() {
+        use alloc::string::{String, ToString};
+        component! {
+            a: String,
+            b: String,
+        }
+
+        let mut world = World::new();
+
+        let id = EntityBuilder::new()
+            .set(a(), "Foo".into())
+            .spawn(&mut world);
+
+        let entity = world.entity(id).unwrap();
+
+        assert_eq!(entity.update(a(), |v| v.push_str("Bar")), Some(()));
+        assert_eq!(entity.update(b(), |v| v.push('_')), None);
+
+        assert_eq!(entity.get(a()).as_deref(), Ok(&"FooBar".to_string()));
+        assert!(entity.get(b()).is_err());
+    }
+
+    #[test]
+    fn update_mut() {
+        use alloc::string::{String, ToString};
+        component! {
+            a: String,
+            b: String,
+        }
+
+        let mut world = World::new();
+
+        let id = EntityBuilder::new()
+            .set(a(), "Foo".into())
+            .spawn(&mut world);
+
+        let entity = world.entity_mut(id).unwrap();
+
+        assert_eq!(entity.update(a(), |v| v.push_str("Bar")), Some(()));
+        assert_eq!(entity.update(b(), |v| v.push('_')), None);
+
+        assert_eq!(entity.get(a()).as_deref(), Ok(&"FooBar".to_string()));
+        assert!(entity.get(b()).is_err());
     }
 }
