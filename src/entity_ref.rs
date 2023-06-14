@@ -1,6 +1,9 @@
-use core::{fmt::Debug, mem::MaybeUninit};
+use core::{
+    fmt::{Debug, Display},
+    mem::MaybeUninit,
+};
 
-use atomic_refcell::AtomicRef;
+use atomic_refcell::{AtomicRef, BorrowError, BorrowMutError};
 use once_cell::unsync::OnceCell;
 
 use crate::{
@@ -9,7 +12,7 @@ use crate::{
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     format::EntityFormatter,
-    Component, ComponentKey, ComponentValue, Entity, Error, RelationExt, World,
+    name, Component, ComponentKey, ComponentValue, Entity, Error, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
@@ -31,18 +34,34 @@ impl<'a> EntityRefMut<'a> {
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
-    #[inline]
-    fn loc(&self) -> EntityLocation {
-        *self
-            .loc
-            .get_or_init(|| self.world.location(self.id).unwrap())
-    }
-
     /// Access a component mutably
     pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<T>> {
         self.world
             .get_mut_at(self.loc(), component)
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+    }
+
+    /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
+    pub fn try_get<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> core::result::Result<Option<AtomicRef<T>>, BorrowError> {
+        self.world.try_get_at(self.loc(), component)
+    }
+
+    /// Attempt to concurrently access a component mutably using and fail if the component is already borrowed
+    pub fn try_get_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> core::result::Result<Option<RefMut<T>>, BorrowMutError> {
+        self.world.try_get_mut_at(self.loc(), component)
+    }
+
+    #[inline]
+    fn loc(&self) -> EntityLocation {
+        *self
+            .loc
+            .get_or_init(|| self.world.location(self.id).unwrap())
     }
 
     /// Check if the entity currently has the specified component without
@@ -192,6 +211,43 @@ pub struct EntityRef<'a> {
 }
 
 impl<'a> EntityRef<'a> {
+    /// Access a component
+    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<'a, T>> {
+        self.arch
+            .get(self.slot, component)
+            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+    }
+
+    /// Access a component mutably
+    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<'a, T>> {
+        self.arch
+            .get_mut(self.slot, component, self.world.advance_change_tick())
+            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+    }
+
+    /// Check if the entity currently has the specified component without
+    /// borrowing.
+    pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
+        self.arch.has(component.key())
+    }
+
+    /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
+    pub fn try_get<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> core::result::Result<Option<AtomicRef<T>>, BorrowError> {
+        self.arch.try_get(self.slot, component)
+    }
+
+    /// Attempt to concurrently access a component mutably using and fail if the component is already borrowed
+    pub fn try_get_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> core::result::Result<Option<RefMut<T>>, BorrowMutError> {
+        self.arch
+            .try_get_mut(self.slot, component, self.world.advance_change_tick())
+    }
+
     /// Returns all relations to other entities of the specified kind
     #[inline]
     pub fn relations<T: ComponentValue>(
@@ -213,26 +269,6 @@ impl<'a> EntityRef<'a> {
             self.slot,
             self.world.advance_change_tick(),
         )
-    }
-
-    /// Access a component
-    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<'a, T>> {
-        self.arch
-            .get(self.slot, component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
-    }
-
-    /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<'a, T>> {
-        self.arch
-            .get_mut(self.slot, component, self.world.advance_change_tick())
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
-    }
-
-    /// Check if the entity currently has the specified component without
-    /// borrowing.
-    pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
-        self.arch.has(component.key())
     }
 
     /// Returns the entity id
@@ -266,6 +302,28 @@ impl<'a> Debug for EntityRefMut<'a> {
             arch,
         }
         .fmt(f)
+    }
+}
+
+impl Display for EntityRef<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let id = self.id();
+        if let Some(name) = self.try_get(name()).ok().flatten() {
+            write!(f, "{} {id}", &*name)
+        } else {
+            write!(f, "{id}")
+        }
+    }
+}
+
+impl Display for EntityRefMut<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let id = self.id();
+        if let Some(name) = self.try_get(name()).ok().flatten() {
+            write!(f, "{} {id}", &*name)
+        } else {
+            write!(f, "{id}")
+        }
     }
 }
 
@@ -347,5 +405,39 @@ mod test {
         let pos = entity.entry(pos()).and_modify(|v| v.0 += 1.0).or_default();
 
         assert_eq!(*pos, (1.0, 0.0));
+    }
+
+    #[test]
+    fn display_borrowed() {
+        let mut world = World::new();
+
+        let id = EntityBuilder::new()
+            .set(name(), "Foo".into())
+            .spawn(&mut world);
+
+        let entity = world.entity(id).unwrap();
+
+        assert_eq!(alloc::format!("{}", entity), alloc::format!("Foo {id}"));
+
+        let _name = world.get_mut(id, name()).unwrap();
+
+        assert_eq!(alloc::format!("{}", entity), alloc::format!("{id}"));
+    }
+
+    #[test]
+    fn display_borrowed_mut() {
+        let mut world = World::new();
+
+        let id = EntityBuilder::new()
+            .set(name(), "Foo".into())
+            .spawn(&mut world);
+
+        let entity = world.entity_mut(id).unwrap();
+
+        assert_eq!(alloc::format!("{}", entity), alloc::format!("Foo {id}"));
+
+        let _name = entity.get_mut(name()).unwrap();
+
+        assert_eq!(alloc::format!("{}", entity), alloc::format!("{id}"));
     }
 }

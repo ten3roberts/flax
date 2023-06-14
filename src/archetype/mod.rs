@@ -5,7 +5,7 @@ use alloc::{
 };
 use core::{fmt::Debug, mem};
 
-use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut, BorrowError, BorrowMutError};
 use itertools::Itertools;
 
 use crate::{
@@ -179,9 +179,25 @@ impl Cell {
         &self.storage
     }
 
+    /// # Safety
+    ///
+    /// Assumes `self` is of type `T`
     pub(crate) unsafe fn get<T: ComponentValue>(&self, slot: Slot) -> Option<AtomicRef<T>> {
         let storage = self.storage.borrow();
         AtomicRef::filter_map(storage, |v| v.downcast_ref::<T>().get(slot))
+    }
+
+    /// # Safety
+    ///
+    /// Assumes `self` is of type `T`
+    pub(crate) unsafe fn try_get<T: ComponentValue>(
+        &self,
+        slot: Slot,
+    ) -> Result<Option<AtomicRef<T>>, BorrowError> {
+        let storage = self.storage.try_borrow()?;
+        Ok(AtomicRef::filter_map(storage, |v| {
+            v.downcast_ref::<T>().get(slot)
+        }))
     }
 
     #[inline]
@@ -202,6 +218,27 @@ impl Cell {
         }
     }
 
+    #[inline]
+    pub fn try_borrow_mut<'a, T: ComponentValue>(
+        &'a self,
+        entities: &'a [Entity],
+        tick: u32,
+    ) -> Result<CellMutGuard<'a, [T]>, BorrowMutError> {
+        let storage = self.storage.try_borrow_mut()?;
+        let changes = self.changes.try_borrow_mut()?;
+
+        Ok(CellMutGuard {
+            storage: AtomicRefMut::map(storage, |v| v.downcast_mut()),
+            changes,
+            cell: self,
+            ids: entities,
+            tick,
+        })
+    }
+
+    /// # Safety
+    ///
+    /// Assumes `self` is of type `T`
     pub(crate) unsafe fn get_mut<'a, T: ComponentValue>(
         &'a self,
         entities: &'a [Entity],
@@ -209,6 +246,18 @@ impl Cell {
         tick: u32,
     ) -> Option<RefMut<'a, T>> {
         RefMut::new(self.borrow_mut(entities, tick), slot)
+    }
+
+    /// # Safety
+    ///
+    /// Assumes `self` is of type `T`
+    pub(crate) unsafe fn try_get_mut<'a, T: ComponentValue>(
+        &'a self,
+        entities: &'a [Entity],
+        slot: Slot,
+        tick: u32,
+    ) -> Result<Option<RefMut<'a, T>>, BorrowMutError> {
+        Ok(RefMut::new(self.try_borrow_mut(entities, tick)?, slot))
     }
 
     // pub(crate) fn info(&self) -> ComponentInfo {
@@ -437,6 +486,21 @@ impl Archetype {
     }
 
     /// Get a component from the entity at `slot`
+    pub(crate) fn try_get_mut<T: ComponentValue>(
+        &self,
+        slot: Slot,
+        component: Component<T>,
+        tick: u32,
+    ) -> Result<Option<RefMut<T>>, BorrowMutError> {
+        let cell = match self.cell(component.key()) {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+
+        unsafe { cell.try_get_mut(&self.entities, slot, tick) }
+    }
+
+    /// Get a component from the entity at `slot`
     #[inline]
     pub fn mutate_in_place<T>(
         &mut self,
@@ -459,7 +523,7 @@ impl Archetype {
         Some(value)
     }
 
-    /// Get a component from the entity at `slot`. Assumes slot is valid.
+    /// Get a component from the entity at `slot`.
     pub fn get<T: ComponentValue>(
         &self,
         slot: Slot,
@@ -467,6 +531,19 @@ impl Archetype {
     ) -> Option<AtomicRef<T>> {
         let cell = self.cell(component.key())?;
         unsafe { cell.get(slot) }
+    }
+
+    /// Get a component from the entity at `slot`.
+    pub fn try_get<T: ComponentValue>(
+        &self,
+        slot: Slot,
+        component: Component<T>,
+    ) -> Result<Option<AtomicRef<T>>, BorrowError> {
+        let cell = match self.cell(component.key()) {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        unsafe { cell.try_get(slot) }
     }
 
     /// Insert a new entity into the archetype.

@@ -10,7 +10,7 @@ use core::{
 use once_cell::unsync::OnceCell;
 use smallvec::SmallVec;
 
-use atomic_refcell::AtomicRef;
+use atomic_refcell::{AtomicRef, BorrowError, BorrowMutError};
 use itertools::Itertools;
 
 use crate::{
@@ -816,12 +816,11 @@ impl World {
     ) -> Result<AtomicRef<T>> {
         let loc = self.location(id)?;
 
-        self.archetypes
-            .get(loc.arch_id)
-            .get(loc.slot, component)
+        self.get_at(loc, component)
             .ok_or_else(|| Error::MissingComponent(id, component.info()))
     }
 
+    #[inline]
     pub(crate) fn get_at<T: ComponentValue>(
         &self,
         EntityLocation {
@@ -831,6 +830,17 @@ impl World {
         component: Component<T>,
     ) -> Option<AtomicRef<T>> {
         self.archetypes.get(arch).get(slot, component)
+    }
+
+    pub(crate) fn try_get_at<T: ComponentValue>(
+        &self,
+        EntityLocation {
+            arch_id: arch,
+            slot,
+        }: EntityLocation,
+        component: Component<T>,
+    ) -> core::result::Result<Option<AtomicRef<T>>, BorrowError> {
+        self.archetypes.get(arch).try_get(slot, component)
     }
 
     /// Randomly access an entity's component.
@@ -857,6 +867,20 @@ impl World {
         self.archetypes
             .get(arch)
             .get_mut(slot, component, self.advance_change_tick())
+    }
+
+    /// Randomly access an entity's component.
+    pub(crate) fn try_get_mut_at<T: ComponentValue>(
+        &self,
+        EntityLocation {
+            arch_id: arch,
+            slot,
+        }: EntityLocation,
+        component: Component<T>,
+    ) -> core::result::Result<Option<RefMut<T>>, BorrowMutError> {
+        self.archetypes
+            .get(arch)
+            .try_get_mut(slot, component, self.advance_change_tick())
     }
 
     /// Returns true if the entity has the specified component.
