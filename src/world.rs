@@ -588,6 +588,26 @@ impl World {
         Ok(old)
     }
 
+    /// Updates a component in place
+    pub fn update<T: ComponentValue, U>(
+        &self,
+        id: Entity,
+        component: Component<T>,
+        f: impl FnOnce(&mut T) -> U,
+    ) -> Result<U> {
+        let change_tick = self.advance_change_tick();
+
+        let EntityLocation {
+            arch_id: src_id,
+            slot,
+        } = self.location(id)?;
+
+        self.archetypes
+            .get(src_id)
+            .update(slot, component, change_tick, f)
+            .ok_or(Error::MissingComponent(id, component.info()))
+    }
+
     #[inline]
     pub(crate) fn set_dyn(
         &mut self,
