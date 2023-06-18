@@ -41,6 +41,11 @@ impl<'a> EntityRefMut<'a> {
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
     }
 
+    /// Shorthand to copy and not use a borrowing references
+    pub fn get_copy<T: ComponentValue + Copy>(&self, component: Component<T>) -> Result<T> {
+        self.get(component).map(|v| *v)
+    }
+
     /// Check if the entity currently has the specified component without
     /// borrowing.
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
@@ -234,6 +239,11 @@ impl<'a> EntityRef<'a> {
         self.arch
             .get_mut(self.slot, component, self.world.advance_change_tick())
             .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+    }
+
+    /// Shorthand to copy and not use a borrowing references
+    pub fn get_copy<T: ComponentValue + Copy>(&self, component: Component<T>) -> Result<T> {
+        self.get(component).map(|v| *v)
     }
 
     /// Check if the entity currently has the specified component without
