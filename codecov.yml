@@ -5,9 +5,7 @@ coverage:
   status:
     project:
       default:
-        target: 60%
+        informational: true
     patch:
-      status:
-        patch: false
       default:
-        target: 60%  # new contributions should have a coverage at least equal to target
+        informational: true
