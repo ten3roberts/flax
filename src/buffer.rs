@@ -6,7 +6,8 @@ use alloc::alloc::{dealloc, handle_alloc_error, realloc};
 use alloc::collections::BTreeMap;
 
 use crate::format::MissingDebug;
-use crate::{debuggable, metadata, Component, ComponentInfo, ComponentKey, ComponentValue, Entity};
+use crate::metadata::debuggable;
+use crate::{metadata, Component, ComponentInfo, ComponentKey, ComponentValue, Entity};
 
 type Offset = usize;
 

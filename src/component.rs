@@ -15,12 +15,14 @@ use serde::{
 };
 
 use crate::{
+    archetype::ChangeKind,
     buffer::ComponentBuffer,
     entity::EntityKind,
     fetch::MaybeMut,
     filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
+    metadata::Metadata,
     vtable::{ComponentVTable, UntypedVTable},
-    ChangeKind, Entity, Metadata, Mutable, RelationExt,
+    Entity, Mutable, RelationExt,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a

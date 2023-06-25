@@ -136,7 +136,7 @@ where
         })
     }
 
-    fn filter_arch(&self, arch: &crate::Archetype) -> bool {
+    fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
         self.fetch.filter_arch(arch)
     }
 

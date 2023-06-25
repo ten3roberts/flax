@@ -14,18 +14,23 @@ use atomic_refcell::{AtomicRef, BorrowError, BorrowMutError};
 use itertools::Itertools;
 
 use crate::{
+    archetype::{Archetype, ArchetypeInfo},
     archetypes::Archetypes,
     buffer::ComponentBuffer,
+    component::dummy,
     components::{component_info, name},
-    entity::*,
+    entity::{entity_ids, Entity, EntityIndex, EntityKind, EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     events::EventSubscriber,
     filter::{ArchetypeFilter, StaticFilter},
     format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
+    is_static,
+    metadata::exclusive,
     relation::Relation,
-    *,
+    ArchetypeId, BatchSpawn, Component, ComponentInfo, ComponentKey, ComponentVTable,
+    ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
 };
 
 #[derive(Debug, Default)]
@@ -1273,7 +1278,7 @@ impl World {
     ///
     /// **Note**: The data from `other` will all be marked as `inserted`
     /// as change events do not carry over.
-    pub fn merge_with(&mut self, other: &mut World) -> Migrated {
+    pub fn merge_with(&mut self, other: &mut World) -> MigratedEntities {
         let mut archetypes = mem::replace(&mut other.archetypes, Archetypes::new());
         let mut entities = mem::take(&mut other.entities);
 
@@ -1376,7 +1381,7 @@ impl World {
                 }
             }
         }
-        Migrated { ids: new_ids }
+        MigratedEntities { ids: new_ids }
     }
 
     /// Converts all reserved entity ids into actual empty entities placed in a special archetype.
@@ -1418,11 +1423,11 @@ impl World {
 
 /// Holds the migrated components
 #[derive(Debug, Clone)]
-pub struct Migrated {
+pub struct MigratedEntities {
     ids: BTreeMap<Entity, Entity>,
 }
 
-impl Migrated {
+impl MigratedEntities {
     /// Retuns the new id if it was migrated, otherwise, returns the given id
     pub fn get(&self, id: Entity) -> Entity {
         *self.ids.get(&id).unwrap_or(&id)

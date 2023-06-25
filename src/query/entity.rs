@@ -5,12 +5,14 @@ use crate::{
     entity::EntityLocation,
     error::Result,
     fetch::{FetchAccessData, PreparedFetch},
-    filter::Filtered,
+    filter::{All, Filtered},
     system::{Access, AccessKind},
-    All, ArchetypeSearcher, Entity, Error, Fetch, PreparedArchetype, QueryStrategy, World,
+    ArchetypeSearcher, Entity, Error, Fetch, World,
 };
 
-use super::{borrow::QueryBorrowState, difference::find_missing_components};
+use super::{
+    borrow::QueryBorrowState, difference::find_missing_components, PreparedArchetype, QueryStrategy,
+};
 
 type State<'w, Q, F> = (
     EntityLocation,
@@ -122,7 +124,7 @@ mod test {
 
     use glam::{vec3, Vec3};
 
-    use crate::{component, name, FetchExt, Or, Query, System, World};
+    use crate::{component, filter::Or, name, FetchExt, Query, System, World};
 
     use super::*;
 

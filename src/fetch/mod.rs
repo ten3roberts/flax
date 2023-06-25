@@ -285,7 +285,7 @@ impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
     }
 }
 
-use crate::Or;
+use crate::filter::Or;
 
 // Implement for tuples
 macro_rules! tuple_impl {

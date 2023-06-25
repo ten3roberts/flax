@@ -10,8 +10,8 @@ use crate::fetch::{
 };
 use crate::system::{Access, AccessKind};
 use crate::{
-    archetype::{ChangeList, Slice},
-    ChangeKind, Component, ComponentValue, Fetch, FetchItem,
+    archetype::{ChangeKind, ChangeList, Slice},
+    Component, ComponentValue, Fetch, FetchItem,
 };
 
 static EMPTY_CHANGELIST: ChangeList = ChangeList::new();

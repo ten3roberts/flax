@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
-use flax::*;
+use flax::{metadata::debuggable, *};
 use glam::{vec3, Quat, Vec3};
 use itertools::Itertools;
 use rand::{rngs::StdRng, Rng, SeedableRng};

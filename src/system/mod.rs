@@ -2,8 +2,8 @@ mod context;
 mod traits;
 
 use crate::{
-    archetype::ArchetypeInfo, util::TupleCombine, ArchetypeId, CommandBuffer, ComponentKey, Fetch,
-    FetchItem, Query, QueryData, World,
+    archetype::ArchetypeInfo, query::QueryData, util::TupleCombine, ArchetypeId, CommandBuffer,
+    ComponentKey, Fetch, FetchItem, Query, World,
 };
 use alloc::{
     boxed::Box,
@@ -113,8 +113,9 @@ impl<Q, F, T> SystemBuilder<(Query<Q, F>,), T>
 where
     for<'x> Q: Fetch<'x> + 'static + Send,
     for<'x> F: Fetch<'x> + 'static + Send,
-    for<'x, 'y> crate::BatchedIter<'x, 'y, Q, F>: Send,
-    for<'x, 'y> crate::Batch<'x, <Q as Fetch<'y>>::Prepared, <F as Fetch<'y>>::Prepared>: Send,
+    for<'x, 'y> crate::query::BatchedIter<'x, 'y, Q, F>: Send,
+    for<'x, 'y> crate::query::Batch<'x, <Q as Fetch<'y>>::Prepared, <F as Fetch<'y>>::Prepared>:
+        Send,
 {
     /// Execute a function for each item in the query in parallel batches
     pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, (Query<Q, F>,), (), T>

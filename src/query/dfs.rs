@@ -3,16 +3,16 @@ use core::marker::PhantomData;
 use crate::{
     archetype::Slice,
     fetch::{FetchAccessData, PreparedFetch},
-    filter::Filtered,
+    filter::{All, Filtered},
     system::{Access, AccessKind},
-    All, ArchetypeId, Batch, ComponentKey, ComponentValue, FetchItem,
+    ArchetypeId, ComponentKey, ComponentValue, FetchItem,
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 use smallvec::SmallVec;
 
 use crate::{Entity, Fetch, RelationExt, World};
 
-use super::{borrow::QueryBorrowState, PreparedArchetype, QueryStrategy};
+use super::{borrow::QueryBorrowState, Batch, PreparedArchetype, QueryStrategy};
 
 type AdjMap = BTreeMap<Entity, SmallVec<[usize; 8]>>;
 

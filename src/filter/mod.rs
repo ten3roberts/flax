@@ -534,7 +534,7 @@ impl<'a> Fetch<'a> for With {
 }
 
 #[derive(Debug, Clone)]
-/// Opposite of [crate::Without]
+/// Opposite of [crate::filter::Without]
 pub struct Without {
     pub(crate) component: ComponentKey,
     pub(crate) name: &'static str,
@@ -674,7 +674,7 @@ impl<'w> Fetch<'w> for WithRelation {
 }
 
 #[derive(Debug, Clone)]
-/// Opposite of [crate::Without]
+/// Opposite of [crate::filter::Without]
 pub struct WithoutRelation {
     pub(crate) relation: Entity,
     pub(crate) name: &'static str,
@@ -900,8 +900,8 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        archetype::{Change, ChangeList},
-        component, ArchetypeId, ChangeKind, World,
+        archetype::{Change, ChangeKind, ChangeList},
+        component, ArchetypeId, World,
     };
 
     use super::*;

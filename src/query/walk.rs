@@ -1,8 +1,7 @@
 use crate::{
     archetype::{Slice, Slot},
-    filter::Filtered,
-    All, And, ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, PreparedArchetype,
-    RelationExt, World,
+    filter::{All, And, Filtered},
+    ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -11,7 +10,7 @@ use alloc::{
 use core::{fmt::Debug, iter::Zip, marker::PhantomData, ops::Range, slice::Iter};
 use smallvec::SmallVec;
 
-use super::borrow::QueryBorrowState;
+use super::{borrow::QueryBorrowState, PreparedArchetype};
 
 /// Allows random traversal of a graph formed by a relation
 pub struct GraphQuery<Q, F = All> {
@@ -357,7 +356,7 @@ mod test {
     use alloc::{string::String, vec, vec::Vec};
     use itertools::Itertools;
 
-    use crate::{child_of, name, Component, With};
+    use crate::{child_of, filter::With, name, Component};
 
     use super::*;
 

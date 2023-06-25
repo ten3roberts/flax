@@ -33,7 +33,7 @@ where
 mod test {
     use alloc::string::String;
 
-    use crate::{component, debuggable};
+    use crate::component;
 
     use super::*;
 

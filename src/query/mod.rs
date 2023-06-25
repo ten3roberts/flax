@@ -12,12 +12,13 @@ pub use walk::{Children, DfsIter, GraphBorrow, GraphQuery, Node};
 
 use core::fmt::Debug;
 
-use crate::archetype::Slot;
-use crate::fetch::FmtQuery;
-use crate::filter::{BatchSize, Filtered, WithRelation, WithoutRelation};
-use crate::system::Access;
-use crate::{All, Fetch, World};
-use crate::{And, Component, ComponentValue, Entity, FetchItem, RelationExt, With, Without};
+use crate::{
+    archetype::Slot,
+    fetch::FmtQuery,
+    filter::{All, And, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
+    system::Access,
+    Component, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
+};
 use alloc::vec::Vec;
 
 use self::borrow::QueryBorrowState;
@@ -302,7 +303,7 @@ where
 mod test {
     use pretty_assertions::assert_eq;
 
-    use crate::{name, Entity, Error, FetchExt, Or, Query};
+    use crate::{filter::Or, name, Entity, Error, FetchExt, Query};
 
     use super::*;
 

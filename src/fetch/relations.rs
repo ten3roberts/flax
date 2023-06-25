@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 
 use crate::{
     archetype::{Archetype, Slot},
-    dummy,
+    component::dummy,
     system::{Access, AccessKind},
     Component, ComponentValue, Entity, Fetch, FetchItem, RelationExt,
 };

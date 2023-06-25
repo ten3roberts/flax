@@ -9,7 +9,7 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Archetype, Cell, RefMut, Slot},
-    dummy,
+    component::dummy,
     entity::EntityKind,
     filter::{WithRelation, WithoutRelation},
     vtable::{ComponentVTable, UntypedVTable},

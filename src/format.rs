@@ -2,7 +2,8 @@ use core::fmt::{self, Debug, Formatter};
 
 use crate::{
     archetype::{Archetype, Slot},
-    debuggable, ComponentKey, Entity, Fetch, Query, World,
+    metadata::debuggable,
+    ComponentKey, Entity, Fetch, Query, World,
 };
 
 /// Debug formats the world with the given filter.

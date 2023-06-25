@@ -225,7 +225,8 @@ mod archetypes;
 pub mod events;
 /// Formatting utilities
 pub mod format;
-mod metadata;
+/// Component metadata used for reflection
+pub mod metadata;
 /// Query the world
 pub mod query;
 mod relation;
@@ -241,27 +242,30 @@ mod util;
 pub mod vtable;
 
 // Required due to macro
-pub(crate) use archetype::*;
-pub use archetype::{ArchetypeId, BatchSpawn};
+pub use archetype::{ArchetypeId, BatchSpawn, RefMut};
 pub use commands::CommandBuffer;
-pub use component::*;
-pub use components::*;
+pub use component::{
+    Component, ComponentFn, ComponentInfo, ComponentKey, ComponentValue, RelationFn,
+};
+pub use components::{child_of, component_info, is_static, name};
 pub use entity::{entity_ids, Entity, EntityBuilder};
-pub use entity_ref::*;
+pub use entity_ref::{EntityRef, EntityRefMut};
 pub use entry::{Entry, OccupiedEntry, VacantEntry};
 pub use error::Error;
 pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
-pub use filter::{All, And, Cmp, Nothing, Or, With, Without};
-pub use metadata::*;
+pub use metadata::{Debuggable, Exclusive};
 pub(crate) use query::ArchetypeSearcher;
-pub use query::*;
-pub use relation::*;
-pub use schedule::*;
+pub use query::{
+    Children, Dfs, DfsBorrow, DfsIter, EntityBorrow, EntityQuery, Planar, Query, QueryBorrow,
+    QueryIter, Topo,
+};
+pub use relation::{Relation, RelationExt, RelationIter, RelationIterMut};
+pub use schedule::{Schedule, ScheduleBuilder, SystemInfo};
 pub use system::{BoxedSystem, SharedResource, System, SystemBuilder};
-pub(crate) use vtable::*;
-pub use world::*;
+pub(crate) use vtable::ComponentVTable;
+pub use world::{MigratedEntities, ReservedEntityIter, World};
 
 #[cfg(feature = "derive")]
 pub use flax_derive::*;
