@@ -242,8 +242,8 @@ impl<T: 'static + Send + Sync> Schedule<T> {
     /// Due to current limitations in Rust, T has to be as `Fn(T): 'static` implies `T: 'static`.
     ///
     /// See:
-    /// - https://github.com/rust-lang/rust/issues/57325
-    /// - https://stackoverflow.com/questions/53966598/how-to-make-fnt-static-register-as-static-for-any-generic-type-argument-t
+    /// - <https://github.com/rust-lang/rust/issues/57325>
+    /// - <https://stackoverflow.com/questions/53966598/how-to-make-fnt-static-register-as-static-for-any-generic-type-argument-t>
     pub fn execute_seq_with(&mut self, world: &mut World, data: &mut T) -> anyhow::Result<()> {
         let ctx = SystemContext::new(world, &mut self.cmd, data);
 
