@@ -1,5 +1,6 @@
 use flax::{
     buffer::ComponentBuffer,
+    metadata::Metadata,
     vtable::{ComponentVTable, LazyComponentBuffer},
     *,
 };

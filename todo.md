@@ -9,3 +9,4 @@
 - [ ] shedule with param
 - [ ] lift to other param
 - [ ] improve access method by supplying dst vec
+- [ ] Parameters to metadata

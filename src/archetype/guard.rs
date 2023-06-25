@@ -68,7 +68,9 @@ impl<'a, T: ?Sized> CellMutGuard<'a, T> {
     }
 }
 
-/// A mutable reference to an entity's component
+/// A mutable reference to an entity's component with deferred change tracking.
+///
+/// A modification invent is only generated *if* if this is mutably dereferenced.
 pub struct RefMut<'a, T> {
     guard: CellMutGuard<'a, T>,
     slot: Slot,

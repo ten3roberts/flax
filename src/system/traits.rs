@@ -278,8 +278,8 @@ mod test {
     use itertools::Itertools;
 
     use crate::{
-        component, components::name, system::SystemContext, All, CommandBuffer, Component, Entity,
-        Query, QueryBorrow, QueryData, World,
+        component, components::name, filter::All, query::QueryData, system::SystemContext,
+        CommandBuffer, Component, Entity, Query, QueryBorrow, World,
     };
 
     use super::{SystemData, SystemFn, Write};

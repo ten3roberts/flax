@@ -10,11 +10,12 @@ use crate::{
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
     system::{Access, AccessKind},
-    ArchetypeId, BatchedIter, ComponentValue, Entity, Fetch, FetchItem, PreparedArchetype,
-    QueryStrategy, RelationExt, World,
+    ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 
-use super::{borrow::QueryBorrowState, ArchetypeSearcher};
+use super::{
+    borrow::QueryBorrowState, ArchetypeSearcher, BatchedIter, PreparedArchetype, QueryStrategy,
+};
 
 /// Visit entities in topological order following `relation`.
 ///

@@ -6,7 +6,11 @@ pub use de::*;
 pub use ser::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{filter::And, filter::StaticFilter, All, Component, ComponentKey, ComponentValue};
+use crate::{
+    filter::And,
+    filter::{All, StaticFilter},
+    Component, ComponentKey, ComponentValue,
+};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct ComponentSerKey {

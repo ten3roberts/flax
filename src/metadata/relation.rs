@@ -1,4 +1,6 @@
-use crate::{ComponentValue, Metadata};
+use crate::ComponentValue;
+
+use super::Metadata;
 
 component! {
     /// Mutually exclusive relation.

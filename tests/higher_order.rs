@@ -1,6 +1,10 @@
-use flax::components::{child_of, name};
-use flax::{component, debuggable, EntityBuilder, FetchExt, Query, World};
-use flax::{entity_ids, relations_like, Debuggable, Entity};
+use flax::{
+    component,
+    components::{child_of, name},
+    entity_ids,
+    metadata::debuggable,
+    relations_like, Debuggable, Entity, EntityBuilder, FetchExt, Query, World,
+};
 use itertools::Itertools;
 
 #[derive(Debug, Clone)]

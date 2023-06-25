@@ -7,13 +7,15 @@ use crate::{
     entity::EntityLocation,
     error::Result,
     fetch::{FetchAccessData, PreparedFetch},
-    filter::Filtered,
+    filter::{All, Filtered},
     system::{Access, AccessKind},
-    All, ArchetypeChunks, ArchetypeId, Batch, Entity, Error, Fetch, FetchItem, PreparedArchetype,
-    QueryStrategy, World,
+    ArchetypeId, Entity, Error, Fetch, FetchItem, World,
 };
 
-use super::{borrow::QueryBorrowState, difference::find_missing_components, ArchetypeSearcher};
+use super::{
+    borrow::QueryBorrowState, difference::find_missing_components, ArchetypeChunks,
+    ArchetypeSearcher, Batch, PreparedArchetype, QueryStrategy,
+};
 
 /// The default linear iteration strategy
 #[derive(Clone)]

@@ -3,8 +3,10 @@ use core::{any::Any, fmt::Debug};
 use crate::{
     archetype::{Slot, Storage},
     buffer::ComponentBuffer,
-    component, ComponentInfo, ComponentValue, Metadata,
+    component, ComponentInfo, ComponentValue,
 };
+
+use super::Metadata;
 
 component! {
     /// Allows visiting and debug formatting the component

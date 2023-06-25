@@ -5,6 +5,7 @@ use tracing_subscriber::{prelude::*, registry};
 
 use flax::{
     events::{EventKind, EventSubscriber},
+    filter::{All, And, With},
     *,
 };
 use macroquad::{

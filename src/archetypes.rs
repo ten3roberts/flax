@@ -4,7 +4,8 @@ use crate::{
     archetype::Archetype,
     entity::{EntityKind, EntityStore, EntityStoreIter, EntityStoreIterMut},
     events::EventSubscriber,
-    exclusive, ArchetypeId, ComponentInfo, Entity,
+    metadata::exclusive,
+    ArchetypeId, ComponentInfo, Entity,
 };
 
 // fn is_sorted<T: Ord>(v: &[T]) -> bool {

@@ -1,4 +1,4 @@
-use flax::*;
+use flax::{filter::All, *};
 use glam::{vec3, Vec3};
 use std::fmt::Write;
 use tracing_subscriber::{prelude::*, EnvFilter};

@@ -1,6 +1,6 @@
 use crate::{
-    filter::{Equal, Greater, GreaterEq, Less, LessEq},
-    Cmp, ComponentValue, Fetch, FetchItem, RelationExt,
+    filter::{Cmp, Equal, Greater, GreaterEq, Less, LessEq},
+    ComponentValue, Fetch, FetchItem, RelationExt,
 };
 
 use super::{
