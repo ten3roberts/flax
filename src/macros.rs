@@ -30,7 +30,7 @@
 /// # Metadata
 ///
 /// Metadata can be attached to any component, which allows reflection and
-/// additional info for components. Any type which implements [`crate::Metadata`] can be used.
+/// additional info for components. Any type which implements [`crate::metadata::Metadata`] can be used.
 ///
 /// The following allows the component value to be printed for the world debug
 /// formatter, and it thus recommended to add where possible.

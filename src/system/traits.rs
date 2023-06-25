@@ -11,7 +11,7 @@ use crate::*;
 use super::{Access, SystemContext};
 
 /// Allows dereferencing `AtomicRef<T>` to &T and similar "lock" types in a safe manner.
-/// Traits for guarded types like `AtomicRef`, `Mutex` or [`QueryData`](crate::QueryData).
+/// Traits for guarded types like `AtomicRef`, `Mutex` or [`QueryData`](crate::query::QueryData).
 pub trait AsBorrow<'a> {
     /// The dereference target
     type Borrowed: 'a;
