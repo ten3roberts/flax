@@ -1,8 +1,8 @@
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ten3roberts/flax/main?style=flat)](https://github.com/ten3roberts/flax/actions)
-[![Crates](https://img.shields.io/crates/v/flax?style=flat)](https://crates.io/crates/flax)
-[![Docs](https://img.shields.io/docsrs/flax?style=flat)](https://docs.rs/flax)
-[![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=flat)](https://app.codecov.io/gh/ten3roberts/flax)
-[![Guide](https://img.shields.io/badge/guide-Read%20the%20guide-blue)](https://ten3roberts.github.io/flax/guide)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ten3roberts/flax/ci.yml?style=flat-square)](https://github.com/ten3roberts/flax/actions)
+[![Crates](https://img.shields.io/crates/v/flax?style=flat-square)](https://crates.io/crates/flax)
+[![Docs](https://img.shields.io/docsrs/flax?style=flat-square)](https://docs.rs/flax)
+[![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=flat-square)](https://app.codecov.io/gh/ten3roberts/flax)
+[![Guide](https://img.shields.io/badge/guide-Read%20the%20guide-blue?style=flat-square)](https://ten3roberts.github.io/flax/guide)
 
 # Flax
 
@@ -32,6 +32,7 @@ Consider reading the [User Guide](https://ten3roberts.github.io/flax/guide)
 - [Runtime components](https://docs.rs/flax/latest/flax/struct.World.html#method.spawn_component)
 
 ## [Live Demo](https://ten3roberts.github.io/flax/asteroids)
+
 See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/flax/asteroids).
 
 [Source](https://github.com/ten3roberts/flax/blob/main/asteroids/src/main.rs)
@@ -71,6 +72,7 @@ See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/fla
 ```
 
 ## Systems
+
 Queries with logic can be abstracted into a system, and multiple systems can be
 collected into a schedule.
 
@@ -97,6 +99,7 @@ let mut schedule = Schedule::from([regen_system, despawn_system]);
 schedule.execute_par(&mut world)?;
 
 ```
+
 ## Relations
 
 Flax provides first class many-many relations between entities, which is useful for tree scene
@@ -129,7 +132,6 @@ let child1 = Entity::builder()
 
 
 ```
-
 
 ## Comparison to other ECS
 
@@ -173,11 +175,12 @@ During development of a game in school I used the `hecs` ECS. It is an awesome
 library, and the author [Ralith](https://github.com/Ralith) has been wonderful in accepting
 contributions and inquiries.
 
-Despite this, I often made subtle bugs with *similar* types. The game engine was
+Despite this, I often made subtle bugs with _similar_ types. The game engine was
 cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
 coercions in order to coexist.
 
 ## Unsafe
+
 This library makes use of unsafe for type erasure and the allocation in storage
 of ComponentBuffers and Archetypes.
 
