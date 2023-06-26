@@ -143,7 +143,11 @@ crate::component! {
     pub(crate) dummy,
 }
 
-/// Defines a strongly typed component
+/// Defines a strongly typed component.
+///
+/// Implements a *Read* fetch when used as part of a query
+///
+/// Use `.as_mut()` to get a *Write* fetch.
 pub struct Component<T> {
     key: ComponentKey,
     marker: PhantomData<T>,
