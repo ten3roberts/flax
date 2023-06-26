@@ -6,6 +6,7 @@ mod copied;
 mod entity_ref;
 mod ext;
 mod maybe_mut;
+pub mod modified;
 mod opt;
 mod read_only;
 mod relations;
