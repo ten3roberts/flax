@@ -17,6 +17,7 @@ Systems operate on the world's entities and provide the application logic.
 Consider reading the [User Guide](https://ten3roberts.github.io/flax/guide)
 
 ## Features
+
 - [Declarative component macro](https://docs.rs/flax/latest/flax/macro.component.html)
 - [Queries](https://docs.rs/flax/latest/flax/struct.Query.html)
 - [Change detection](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified)
@@ -32,6 +33,8 @@ Consider reading the [User Guide](https://ten3roberts.github.io/flax/guide)
 
 ## [Live Demo](https://ten3roberts.github.io/flax/asteroids)
 See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/flax/asteroids).
+
+[Source](https://github.com/ten3roberts/flax/blob/main/asteroids/src/main.rs)
 
 ## Example Usage
 
