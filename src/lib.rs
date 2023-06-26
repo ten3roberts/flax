@@ -13,13 +13,14 @@
 //! - [Change detection](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified)
 //! - [Query filtering](https://docs.rs/flax/latest/flax/filter/index.html)
 //! - [System execution](https://docs.rs/flax/latest/flax/system/struct.System.html)
-//! - [Multithreaded system execution through](https://docs.rs/flax/latest/flax/schedule/struct.Schedule.html)
+//! - [Multithreaded system execution](https://docs.rs/flax/latest/flax/schedule/struct.Schedule.html)
 //! - [Many to many entity relation and graphs](https://docs.rs/flax/latest/flax/macro.component.html#relations)
 //! - [Reflection through component metadata](https://docs.rs/flax/latest/flax/macro.component.html)
 //! - [Ergonomic entity builder](https://docs.rs/flax/latest/flax/struct.EntityBuilder.html)
 //! - [Serialization and deserialization](https://docs.rs/flax/latest/flax/serialize/)
 //! - [(async) event subscription](https://docs.rs/flax/latest/flax/struct.World.html#method.subscribe)
 //! - [Runtime components](https://docs.rs/flax/latest/flax/struct.World.html#method.spawn_component)
+//! - ...and more
 //!
 //! ## [Live Demo](https://ten3roberts.github.io/flax/asteroids)
 //! See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/flax/asteroids).
