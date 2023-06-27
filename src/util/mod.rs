@@ -1,6 +1,8 @@
 // Needed in macro expansion
 #![allow(unused_parens)]
 
+use crate::filter::All;
+
 /// Allows pushing onto a tuple
 pub trait TupleCombine<T> {
     /// The resulting right push
@@ -74,5 +76,19 @@ mod test {
         assert_eq!(cloned, (a, b, a as i64));
         let t = ().push_right(5);
         assert_eq!(t, (5,));
+    }
+}
+
+impl<T> TupleCombine<T> for All {
+    type PushRight = (All, T);
+
+    type PushLeft = (T, All);
+
+    fn push_right(self, value: T) -> Self::PushRight {
+        (self, value)
+    }
+
+    fn push_left(self, value: T) -> Self::PushLeft {
+        (value, self)
     }
 }

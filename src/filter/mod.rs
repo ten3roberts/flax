@@ -40,7 +40,7 @@ macro_rules! gen_bitops {
             type Output = And<Self, R>;
 
             fn bitand(self, rhs: R) -> Self::Output {
-                And::new(self, rhs)
+                And(self, rhs)
             }
         }
 
@@ -663,7 +663,7 @@ mod tests {
         let a = PreparedKindFilter::new((), changes_1.as_slice(), 1);
         let b = PreparedKindFilter::new((), changes_2.as_slice(), 2);
 
-        let filter = And { left: a, right: b };
+        let filter = And(a, b);
 
         // Use a brute force BTreeSet for solving it
         let chunks_set = slots

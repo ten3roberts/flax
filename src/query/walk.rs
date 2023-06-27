@@ -50,7 +50,7 @@ where
         GraphQuery {
             fetch: Filtered::new(
                 self.fetch.fetch,
-                And::new(self.fetch.filter, filter),
+                And(self.fetch.filter, filter),
                 self.fetch.include_components,
             ),
             relation: self.relation,

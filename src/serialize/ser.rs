@@ -86,7 +86,7 @@ where
     pub fn with_filter<G>(self, filter: G) -> SerializeBuilder<And<F, G>> {
         SerializeBuilder {
             slots: self.slots,
-            filter: And::new(self.filter, filter),
+            filter: And(self.filter, filter),
         }
     }
 

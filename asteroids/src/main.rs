@@ -1,13 +1,12 @@
 use anyhow::{Context, Result};
-use itertools::Itertools;
-use std::f32::consts::TAU;
-use tracing_subscriber::{prelude::*, registry};
-
 use flax::{
+    component, entity_ids,
     events::{EventKind, EventSubscriber},
-    filter::{All, And, With},
-    *,
+    BoxedSystem, CommandBuffer, Component, Debuggable, Entity, EntityBorrow, EntityBuilder,
+    EntityIds, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow, Schedule, SharedResource,
+    System, World,
 };
+use itertools::Itertools;
 use macroquad::{
     color::hsl_to_rgb,
     math::*,
@@ -18,8 +17,11 @@ use macroquad::{
     window::{clear_background, next_frame, screen_height, screen_width},
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use std::f32::consts::TAU;
+use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;
 
+// Declare the components that will be used.
 component! {
     position: Vec2 => [ Debuggable ],
     rotation: f32 => [ Debuggable ],
@@ -57,45 +59,6 @@ component! {
 
 }
 
-/// Macroquad has unsound race conditions, as such, use a mock shared
-/// context
-#[derive(Hash, Debug, Clone)]
-struct GraphicsContext;
-
-#[derive(Debug, Clone)]
-enum Shape {
-    Polygon { radius: f32, sides: u8 },
-    Circle { radius: f32 },
-    Triangle(Vec2, Vec2, Vec2),
-}
-
-impl Shape {
-    pub fn draw(&self, view: &Mat3, pos: Vec2, rot: f32, color: Color) {
-        match *self {
-            Shape::Circle { radius } => {
-                let pos = view.transform_point2(pos);
-                let radius = view.transform_vector2(Vec2::splat(radius)).x;
-                draw_circle(pos.x, pos.y, radius, color)
-            }
-            Shape::Polygon { radius, sides } => {
-                let pos = view.transform_point2(pos);
-                let radius = view.transform_vector2(Vec2::splat(radius)).x;
-
-                draw_poly(pos.x, pos.y, sides, radius, rot, color)
-            }
-            Shape::Triangle(v1, v2, v3) => {
-                let transform = *view * Mat3::from_scale_angle_translation(Vec2::ONE, rot, pos);
-
-                let v1 = transform.transform_point2(v1);
-                let v2 = transform.transform_point2(v2);
-                let v3 = transform.transform_point2(v3);
-
-                draw_triangle(v1, v2, v3, color)
-            }
-        }
-    }
-}
-
 #[macroquad::main("Asteroids")]
 async fn main() -> Result<()> {
     registry().with(HierarchicalLayer::default()).init();
@@ -115,6 +78,8 @@ async fn main() -> Result<()> {
     );
 
     // Setup everything required for the game logic and physics
+    //
+    // Two different schedules will run independently of each other at different rates.
     let mut physics_schedule = Schedule::builder()
         .with_system(player_system(dt))
         .with_system(camera_system(dt))
@@ -169,6 +134,7 @@ async fn main() -> Result<()> {
 
 const ASTEROID_SIZE: f32 = 40.0;
 
+/// Create the central player ship
 fn create_player() -> EntityBuilder {
     Entity::builder()
         .set_default(position())
@@ -284,6 +250,7 @@ fn create_explosion(
     })
 }
 
+/// Updates each particle in the world
 fn particle_system() -> BoxedSystem {
     System::builder()
         .with_name("particle_system")
@@ -301,6 +268,9 @@ fn particle_system() -> BoxedSystem {
         .boxed()
 }
 
+/// System which makes the camera track the player smoothly.
+///
+/// Uses two different queries, one for the player and one for the camera.
 fn camera_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with(Query::new((position(), velocity())).with(player()))
@@ -310,7 +280,7 @@ fn camera_system(dt: f32) -> BoxedSystem {
             camera().as_mut(),
         )))
         .build(
-            move |mut players: QueryBorrow<(Component<Vec2>, Component<Vec2>), And<All, With>>,
+            move |mut players: QueryBorrow<(Component<Vec2>, Component<Vec2>), _>,
                   mut cameras: QueryBorrow<(Mutable<Vec2>, Mutable<Vec2>, Mutable<Mat3>)>|
                   -> Result<()> {
                 if let Some((player_pos, player_vel)) = players.first() {
@@ -336,6 +306,44 @@ fn camera_system(dt: f32) -> BoxedSystem {
         .boxed()
 }
 
+/// Macroquad has unsound race conditions, as such, use a mock shared
+/// context
+#[derive(Hash, Debug, Clone)]
+struct GraphicsContext;
+
+#[derive(Debug, Clone)]
+enum Shape {
+    Polygon { radius: f32, sides: u8 },
+    Circle { radius: f32 },
+    Triangle(Vec2, Vec2, Vec2),
+}
+
+impl Shape {
+    pub fn draw(&self, view: &Mat3, pos: Vec2, rot: f32, color: Color) {
+        match *self {
+            Shape::Circle { radius } => {
+                let pos = view.transform_point2(pos);
+                let radius = view.transform_vector2(Vec2::splat(radius)).x;
+                draw_circle(pos.x, pos.y, radius, color)
+            }
+            Shape::Polygon { radius, sides } => {
+                let pos = view.transform_point2(pos);
+                let radius = view.transform_vector2(Vec2::splat(radius)).x;
+
+                draw_poly(pos.x, pos.y, sides, radius, rot, color)
+            }
+            Shape::Triangle(v1, v2, v3) => {
+                let transform = *view * Mat3::from_scale_angle_translation(Vec2::ONE, rot, pos);
+
+                let v1 = transform.transform_point2(v1);
+                let v2 = transform.transform_point2(v2);
+                let v3 = transform.transform_point2(v3);
+
+                draw_triangle(v1, v2, v3, color)
+            }
+        }
+    }
+}
 struct Collision {
     a: Entity,
     b: Entity,
@@ -383,6 +391,7 @@ fn lifetime_system(dt: f32) -> BoxedSystem {
         .boxed()
 }
 
+/// N-body collision system
 fn collision_system() -> BoxedSystem {
     System::builder()
         .with_name("collision_system")
@@ -468,7 +477,11 @@ const SHIP_TURN: f32 = 2.0;
 const WEAPON_COOLDOWN: f32 = 0.2;
 const PLUME_COOLDOWN: f32 = 0.02;
 
+/// Sometimes a query can grow to a very large tuple. Using a struct helps with naming the fields
+/// and refactoring.
 #[derive(Fetch)]
+// Ensures the fetch item is debuggable
+#[fetch(Debug)]
 struct PlayerQuery {
     id: EntityIds,
     player: Component<()>,
@@ -509,6 +522,7 @@ fn player_system(dt: f32) -> BoxedSystem {
                 current_plume_cooldown -= dt;
 
                 for player in &mut q {
+                    dbg!(&player);
                     *player.invincibility = (*player.invincibility - 0.02).max(0.0);
 
                     *player.difficulty = (*player.material * 0.001).max(1.0);
@@ -552,6 +566,8 @@ fn player_system(dt: f32) -> BoxedSystem {
         )
         .boxed()
 }
+
+/// Kill of out of bounds entities relative to the player
 fn despawn_out_of_bounds() -> BoxedSystem {
     System::builder()
         .with_name("despawn_out_of_bounds")
@@ -572,6 +588,7 @@ fn despawn_out_of_bounds() -> BoxedSystem {
         .boxed()
 }
 
+/// Deferred despawn dead entities (including players)
 fn despawn_dead() -> BoxedSystem {
     System::builder()
         .with_name("despawn_dead")
@@ -609,6 +626,7 @@ fn despawn_dead() -> BoxedSystem {
         .boxed()
 }
 
+/// Spawn random asteroids near the player up to a maximum concurrent count
 fn spawn_asteroids(max_count: usize) -> BoxedSystem {
     System::builder()
         .with_name("spawn_asteroids")
@@ -711,6 +729,7 @@ impl TransformQuery {
     }
 }
 
+/// Draw each entity with a shape on the screen
 fn draw_shapes() -> BoxedSystem {
     System::builder()
         .with_name("draw_asteroids")
@@ -734,6 +753,10 @@ fn draw_shapes() -> BoxedSystem {
         .boxed()
 }
 
+/// Draws the score board by querying the ecs world for the data it needs.
+///
+/// For more complex Uis, consider having a look at [`violet`](https://github.com/ten3roberts/violet)
+/// which uses `flax`
 fn draw_ui() -> BoxedSystem {
     System::builder()
         .with_name("draw_ui")
