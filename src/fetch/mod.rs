@@ -286,8 +286,6 @@ impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
     }
 }
 
-use crate::filter::Or;
-
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
@@ -402,69 +400,6 @@ macro_rules! tuple_impl {
             fn searcher(&self, searcher: &mut ArchetypeSearcher) {
                 $((self.$idx).searcher(searcher));*
             }
-        }
-
-
-        // ----- OR -----
-        impl<'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
-            type Item = ();
-        }
-
-        impl<'w, $($ty, )*> Fetch<'w> for Or<($($ty,)*)>
-        where $($ty: Fetch<'w>,)*
-        {
-            const MUTABLE: bool =  $($ty::MUTABLE )|*;
-            type Prepared       = Or<($(Option<$ty::Prepared>,)*)>;
-
-            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-                let inner = &self.0;
-                Some( Or(($(inner.$idx.prepare(data),)*)) )
-            }
-
-            fn filter_arch(&self, arch: &Archetype) -> bool {
-                let inner = &self.0;
-                $(inner.$idx.filter_arch(arch))||*
-            }
-
-            fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-                 $(self.0.$idx.access(data, dst);)*
-            }
-
-            fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                let mut s = f.debug_tuple("Or");
-                    let inner = &self.0;
-                $(
-                    s.field(&FmtQuery(&inner.$idx));
-                )*
-                s.finish()
-            }
-        }
-
-
-        impl<'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
-        where $($ty: PreparedFetch<'q>,)*
-        {
-            type Item = ();
-
-            unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-                let inner = &mut self.0;
-
-                [
-                    $( inner.$idx.filter_slots(slots)),*
-                ]
-                .into_iter()
-                .min()
-                .unwrap_or_default()
-
-            }
-
-            #[inline]
-            unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
-
-            fn set_visited(&mut self, slots: Slice) {
-                $( self.0.$idx.set_visited(slots);)*
-            }
-
         }
     };
 }
