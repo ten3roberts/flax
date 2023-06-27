@@ -1,4 +1,4 @@
-use crate::{filter::ChangeFilter, Component, ComponentValue, EntityIds, Fetch, FetchItem};
+use crate::{filter::ChangeFilter, Component, ComponentValue, Fetch, FetchItem};
 
 use super::{FmtQuery, PreparedFetch};
 
