@@ -64,7 +64,7 @@ See a live demo of asteroids using wasm [here](https://ten3roberts.github.io/fla
 
   let mut query = Query::new((health().as_mut(), regen()));
 
-  // Apply health regen for all match entites
+  // Apply health regeneration for all matched entites
   for (health, regen) in &mut query.borrow(&world) {
       *health = (*health + regen).min(100.0);
   }
@@ -134,16 +134,16 @@ let child1 = Entity::builder()
 
 ## Comparison to other ECS
 
-Compared to other ecs implementations, a component is simply another `Entity`
+Compared to other ECS implementations, a component is simply another `Entity`
 identifier to which data is attached. This means the same "type" can be added to
 an entity multiple times.
 
 A limitation of existing implementations such as [specs](https://github.com/amethyst/specs), [planck](https://github.com/jojolepro/planck_ecs/), or [hecs](https://github.com/Ralith/hecs) is that newtype wrappers need to be created to allow components of the same inner type to coexist.
 
 This leads to having to forward all trait implementations trough e.g
-`derive-more` or dereferencing the newtypes during usage.
+`derive-more` or dereferencing the *newtypes* during usage.
 
-By making components separate from the type the components can work together without deref or
+By making components separate from the type the components can work together without `deref` or
 newtype construction.
 
 ```rust
@@ -165,7 +165,7 @@ inserted as components. This fixes subtle bugs which come by having the type
 dictate the component, such as inserting an `Arc<Type>` instead of just `Type`,
 which leads to subsequent systems not finding the `Type` on the entity.
 
-Having statically declared componenents makes the rust type system disallow
+Using statically declared components makes the rust type system disallow
 these cases and catches these bugs earlier.
 
 ## Motivation
@@ -175,12 +175,12 @@ library, and the author [Ralith](https://github.com/Ralith) has been wonderful i
 contributions and inquiries.
 
 Despite this, I often made subtle bugs with *similar* types. The game engine was
-cluttered with gigantic newtypes for `Velocity`, `Position` with many deref
+cluttered with gigantic newtypes for `Velocity`, `Position` with many *deref*
 coercions in order to coexist.
 
 ## Unsafe
 This library makes use of unsafe for type erasure and the allocation in storage
-of ComponentBuffers and Archetypes.
+of `ComponentBuffer`s and `Archetype`s.
 
 <!-- cargo-sync-readme end -->
 
