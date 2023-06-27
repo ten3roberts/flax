@@ -1,4 +1,4 @@
-use crate::{filter::ChangeFilter, Component, ComponentValue, Fetch, FetchItem};
+use crate::{filter::ChangeFilter, Component, ComponentValue, EntityIds, Fetch, FetchItem};
 
 use super::{FmtQuery, PreparedFetch};
 
@@ -16,89 +16,24 @@ impl<T: ComponentValue> ModifiedFetch for Component<T> {
     }
 }
 
-impl<A: ModifiedFetch, B: ModifiedFetch> ModifiedFetch for (A, B) {
-    type Modified = Union<(A::Modified, B::Modified)>;
-    fn transform_modified(self) -> Self::Modified {
-        Union((self.0.transform_modified(), self.1.transform_modified()))
-    }
-}
-
-/// A specific kind of `or` combinator which only *or* combines the returned entities, but not the
-/// component filters. This allows the filters to return fetch items side by side like the wrapped
+/// Unionized the slot-level filter of two fetches, but requires the individual fetches to still
+/// match.
+///
+/// This allows the filters to return fetch items side by side like the wrapped
 /// fetch would, since all constituent fetches are satisfied, but not necessarily all their entities.
 ///
 /// This is most useful for change queries, where you care about about *any* change, but still
 /// require the entity to have all the components, and have them returned despite not all having
 /// changed.
 pub struct Union<T>(pub T);
-impl<'w, A: Fetch<'w>, B: Fetch<'w>> Fetch<'w> for Union<(A, B)> {
-    const MUTABLE: bool = A::MUTABLE | B::MUTABLE;
-
-    type Prepared = Union<(A::Prepared, B::Prepared)>;
-
-    fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let inner = &self.0;
-        Some(Union((inner.0.prepare(data)?, inner.1.prepare(data)?)))
-    }
-
-    fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
-        let inner = &self.0;
-        inner.0.filter_arch(arch) && inner.1.filter_arch(arch)
-    }
-
-    fn access(&self, data: super::FetchAccessData, dst: &mut Vec<crate::system::Access>) {
-        let inner = &self.0;
-        inner.0.access(data, dst);
-        inner.1.access(data, dst);
-    }
-
-    fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let inner = &self.0;
-        let mut s = f.debug_tuple("Union");
-        s.field(&FmtQuery(&inner.0));
-        s.field(&FmtQuery(&inner.1));
-
-        s.finish()
-    }
-}
-
-impl<'w, A: PreparedFetch<'w>, B: PreparedFetch<'w>> PreparedFetch<'w> for Union<(A, B)> {
-    type Item = (A::Item, B::Item);
-
-    unsafe fn fetch(&'w mut self, slot: usize) -> Self::Item {
-        let inner = &mut self.0;
-        (inner.0.fetch(slot), inner.1.fetch(slot))
-    }
-
-    unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
-        let inner = &mut self.0;
-
-        [(inner.0.filter_slots(slots)), (inner.1.filter_slots(slots))]
-            .into_iter()
-            .min()
-            .unwrap_or_default()
-    }
-
-    fn set_visited(&mut self, slots: crate::archetype::Slice) {
-        let inner = &mut self.0;
-        inner.0.set_visited(slots);
-        inner.1.set_visited(slots);
-    }
-}
-
-impl<'q, A: FetchItem<'q>, B: FetchItem<'q>> FetchItem<'q> for Union<(A, B)> {
-    type Item = (A::Item, B::Item);
-}
 
 #[cfg(test)]
 mod tests {
 
-    use alloc::string::ToString;
+    use alloc::string::{String, ToString};
     use itertools::Itertools;
 
-    use crate::{component, entity_ids, CommandBuffer, Entity, Query, World};
-
-    use super::*;
+    use crate::{component, entity_ids, CommandBuffer, Entity, FetchExt, Query, World};
 
     #[test]
     fn query_modified() {
@@ -132,7 +67,7 @@ mod tests {
             .tag(other())
             .spawn(&mut world);
 
-        let mut query = Query::new((entity_ids(), (a(), b()).transform_modified()));
+        let mut query = Query::new((entity_ids(), (a(), b()).modified()));
 
         assert_eq!(
             query.borrow(&world).iter().collect_vec(),
@@ -174,3 +109,81 @@ mod tests {
         );
     }
 }
+macro_rules! tuple_impl {
+    ($($idx: tt => $ty: ident),*) => {
+        impl<'w, $($ty: Fetch<'w>,)*> Fetch<'w> for Union<($($ty,)*)> {
+            const MUTABLE: bool = $($ty::MUTABLE )||*;
+
+            type Prepared = Union<($($ty::Prepared,)*)>;
+
+            fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
+                let inner = &self.0;
+                Some(Union(($(inner.$idx.prepare(data)?,)*)))
+            }
+
+            fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
+                let inner = &self.0;
+                $(inner.$idx.filter_arch(arch))&&*
+            }
+
+            fn access(&self, data: super::FetchAccessData, dst: &mut alloc::vec::Vec<crate::system::Access>) {
+                let inner = &self.0;
+                $(inner.$idx.access(data, dst);)*
+            }
+
+            fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let inner = &self.0;
+                let mut s = f.debug_tuple("Union");
+                $(s.field(&FmtQuery(&inner.$idx));)*
+
+                s.finish()
+            }
+        }
+
+
+        impl<'w, $($ty: PreparedFetch<'w>,)* > PreparedFetch<'w> for Union<($($ty,)*)> {
+            type Item = ($($ty::Item,)*);
+
+            unsafe fn fetch(&'w mut self, slot: usize) -> Self::Item {
+                let inner = &mut self.0;
+                ($(inner.$idx.fetch(slot), )*)
+            }
+
+            unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
+                let inner = &mut self.0;
+
+                [$(inner.$idx.filter_slots(slots)),*]
+                    .into_iter()
+                    .min()
+                    .unwrap_or_default()
+            }
+
+            fn set_visited(&mut self, slots: crate::archetype::Slice) {
+                let inner = &mut self.0;
+                $(inner.$idx.set_visited(slots);)*
+            }
+        }
+
+        impl<'q, $($ty: FetchItem<'q>,)*> FetchItem<'q> for Union<($($ty,)*)> {
+            type Item = ($($ty::Item,)*);
+        }
+
+
+        impl<$($ty: ModifiedFetch,)*> ModifiedFetch for ($($ty,)*) {
+            type Modified = Union<($($ty::Modified,)*)>;
+            fn transform_modified(self) -> Self::Modified {
+                Union(($(self.$idx.transform_modified(),)*))
+            }
+        }
+    };
+
+
+}
+
+tuple_impl! { 0 => A }
+tuple_impl! { 0 => A, 1 => B }
+tuple_impl! { 0 => A, 1 => B, 2 => C }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }

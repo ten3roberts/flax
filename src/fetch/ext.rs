@@ -7,6 +7,7 @@ use super::{
     as_deref::AsDeref,
     cloned::Cloned,
     copied::Copied,
+    modified::ModifiedFetch,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation},
     Satisfied, Source,
@@ -133,6 +134,21 @@ pub trait FetchExt: Sized {
         T: ComponentValue,
     {
         Source::new(self, FromRelation::new(relation))
+    }
+
+    /// Transform the fetch into a fetch where each constituent part tracks and yields for changes.
+    ///
+    /// This is different from E.g; `(a().modified(), b().modified())` as it implies only when
+    /// *both* `a` and `b` are modified in the same iteration, which is seldom useful.
+    ///
+    /// This means will yield *any* of `a` *or* `b` are modified.
+    ///
+    /// Works for in combination with `opt`, `copy` etc constituents.
+    fn modified(self) -> Self::Modified
+    where
+        Self: ModifiedFetch,
+    {
+        self.transform_modified()
     }
 }
 
