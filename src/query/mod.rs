@@ -15,8 +15,9 @@ use core::fmt::Debug;
 use crate::{
     archetype::Slot,
     fetch::FmtQuery,
-    filter::{All, And, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
+    filter::{All, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
     system::Access,
+    util::TupleCombine,
     Component, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 use alloc::vec::Vec;
@@ -192,11 +193,14 @@ where
 {
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<G>(self, filter: G) -> Query<Q, And<F, G>, S> {
+    pub fn filter<G>(self, filter: G) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<G>,
+    {
         Query {
             fetch: Filtered::new(
                 self.fetch.fetch,
-                And::new(self.fetch.filter, filter),
+                self.fetch.filter.push_right(filter),
                 self.fetch.include_components,
             ),
             change_tick: self.change_tick,
@@ -206,7 +210,10 @@ where
     }
 
     /// Limits the size of each batch using [`QueryBorrow::iter_batched`]
-    pub fn batch_size(self, size: Slot) -> Query<Q, And<F, BatchSize>, S> {
+    pub fn batch_size(self, size: Slot) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<BatchSize>,
+    {
         self.filter(BatchSize(size))
     }
 
@@ -214,7 +221,10 @@ where
     pub fn with_relation<T: ComponentValue>(
         self,
         rel: impl RelationExt<T>,
-    ) -> Query<Q, And<F, WithRelation>, S> {
+    ) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<WithRelation>,
+    {
         self.filter(rel.with_relation())
     }
 
@@ -222,20 +232,26 @@ where
     pub fn without_relation<T: ComponentValue>(
         self,
         rel: impl RelationExt<T>,
-    ) -> Query<Q, And<F, WithoutRelation>, S> {
+    ) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<WithoutRelation>,
+    {
         self.filter(rel.without_relation())
     }
 
     /// Shortcut for filter(without)
-    pub fn without<T: ComponentValue>(
-        self,
-        component: Component<T>,
-    ) -> Query<Q, And<F, Without>, S> {
+    pub fn without<T: ComponentValue>(self, component: Component<T>) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<Without>,
+    {
         self.filter(component.without())
     }
 
     /// Shortcut for filter(with)
-    pub fn with<T: ComponentValue>(self, component: Component<T>) -> Query<Q, And<F, With>, S> {
+    pub fn with<T: ComponentValue>(self, component: Component<T>) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<With>,
+    {
         self.filter(component.with())
     }
 

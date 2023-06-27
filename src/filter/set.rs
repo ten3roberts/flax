@@ -10,19 +10,14 @@ use core::{
     ops,
 };
 
-#[derive(Debug, Clone)]
 /// And combinator
-pub struct And<L, R> {
-    pub(crate) left: L,
-    pub(crate) right: R,
-}
-
-impl<L, R> And<L, R> {
-    /// Creates a new and filter
-    pub fn new(left: L, right: R) -> Self {
-        Self { left, right }
-    }
-}
+///
+/// **Note**: A normal tuple will and-combine and can thus be used instead.
+///
+/// The difference is that additional *bitops* such as `|` and `~` for convenience works on this type
+/// to combine it with other filters. This is because of orphan rules.
+#[derive(Debug, Clone)]
+pub struct And<L, R>(pub L, pub R);
 
 impl<'q, L, R> FetchItem<'q> for And<L, R>
 where
@@ -43,32 +38,29 @@ where
 
     #[inline]
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(And {
-            left: self.left.prepare(data)?,
-            right: self.right.prepare(data)?,
-        })
+        Some(And(self.0.prepare(data)?, self.1.prepare(data)?))
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
-        self.left.filter_arch(arch) && self.right.filter_arch(arch)
+        self.0.filter_arch(arch) && self.1.filter_arch(arch)
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-        self.left.access(data, dst);
-        self.right.access(data, dst);
+        self.0.access(data, dst);
+        self.1.access(data, dst);
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.left.describe(f)?;
+        self.0.describe(f)?;
         f.write_str(" & ")?;
-        self.right.describe(f)?;
+        self.1.describe(f)?;
 
         Ok(())
     }
 
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
-        self.left.searcher(searcher);
-        self.right.searcher(searcher);
+        self.0.searcher(searcher);
+        self.1.searcher(searcher);
     }
 }
 
@@ -81,19 +73,19 @@ where
 
     #[inline]
     unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        (self.left.fetch(slot), self.right.fetch(slot))
+        (self.0.fetch(slot), self.1.fetch(slot))
     }
 
     fn set_visited(&mut self, slots: Slice) {
-        self.left.set_visited(slots);
-        self.right.set_visited(slots);
+        self.0.set_visited(slots);
+        self.1.set_visited(slots);
     }
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        let l = self.left.filter_slots(slots);
+        let l = self.0.filter_slots(slots);
 
-        self.right.filter_slots(l)
+        self.1.filter_slots(l)
     }
 }
 
