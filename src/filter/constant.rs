@@ -41,6 +41,12 @@ impl<'q> PreparedFetch<'q> for Nothing {
     type Item = ();
 
     unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
+
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        Slice::new(slots.end, slots.end)
+    }
+
+    fn set_visited(&mut self, _slots: Slice) {}
 }
 
 /// Yields all entities
@@ -111,6 +117,7 @@ impl<'q> PreparedFetch<'q> for Slice {
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         self.intersect(&slots)
+            .unwrap_or(Slice::new(slots.end, slots.end))
     }
 }
 

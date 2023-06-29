@@ -13,13 +13,13 @@ pub struct Slice {
 
 impl Slice {
     /// Creates a new slice of entity slots.
-    #[inline]
-    pub fn new(start: Slot, end: Slot) -> Self {
+    #[inline(always)]
+    pub const fn new(start: Slot, end: Slot) -> Self {
         Self { start, end }
     }
 
     #[inline]
-    pub(crate) fn single(slot: Slot) -> Slice {
+    pub(crate) const fn single(slot: Slot) -> Slice {
         Self::new(slot, slot + 1)
     }
 
@@ -53,11 +53,15 @@ impl Slice {
 
     #[inline(always)]
     /// Returns the intersection of self and other
-    pub fn intersect(&self, other: &Self) -> Self {
-        let start = self.start.max(other.start);
+    pub fn intersect(&self, other: &Self) -> Option<Self> {
         let end = self.end.min(other.end);
+        let start = self.start.max(other.start).min(end);
 
-        Self::new(start, end)
+        if start == end {
+            None
+        } else {
+            Some(Self::new(start, end))
+        }
     }
 
     /// Returns the union of two slices if contiguous.
@@ -165,8 +169,9 @@ mod tests {
         let i = a.intersect(&b);
         let i2 = b.intersect(&a);
 
-        assert_eq!(i, Slice::new(10, 38));
-        assert_eq!(i2, Slice::new(10, 38));
+        assert_eq!(i, Some(Slice::new(10, 38)));
+        assert_eq!(i2, Some(Slice::new(10, 38)));
+        assert_eq!(Slice::new(10, 20).intersect(&Slice::new(0, 2)), None);
 
         let u = a.union(&b);
 

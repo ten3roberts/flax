@@ -181,6 +181,7 @@ where
         };
 
         cur.intersect(&slots)
+            .unwrap_or(Slice::new(slots.end, slots.end))
     }
 
     fn set_visited(&mut self, slots: Slice) {

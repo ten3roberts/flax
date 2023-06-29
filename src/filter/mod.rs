@@ -200,6 +200,7 @@ where
         if self.slots.is_empty() {
             return None;
         }
+
         while !self.slots.is_empty() {
             // Safety
             // The yielded slots are split off of `self.slots`
