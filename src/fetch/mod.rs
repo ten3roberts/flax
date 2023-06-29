@@ -30,6 +30,7 @@ pub use component_mut::*;
 pub use entity_ref::*;
 pub use ext::FetchExt;
 pub use maybe_mut::{MaybeMut, MutGuard};
+pub use modified::ModifiedFetch;
 pub use opt::*;
 pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
@@ -147,10 +148,19 @@ pub trait PreparedFetch<'q> {
         slots
     }
 
-    /// Do something for a a slice of entity slots which have been visited, such
+    /// Do something for a slice of entity slots which have been visited, such
     /// as updating change tracking for mutable queries.
     #[inline]
     fn set_visited(&mut self, _slots: Slice) {}
+}
+
+/// Allows filtering the constituent parts of a fetch using a set union
+pub trait UnionFilter<'q> {
+    // Filter the slots using a union operation of the constituent part
+    ///
+    /// # Safety
+    /// See: [`PreparedFetch::filter_slots`]
+    unsafe fn filter_union(&mut self, slots: Slice) -> Slice;
 }
 
 impl<'q, F> PreparedFetch<'q> for &'q mut F
@@ -174,6 +184,12 @@ where
 
 impl<'q> FetchItem<'q> for () {
     type Item = ();
+}
+
+impl<'q> UnionFilter<'q> for () {
+    unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
+        slots
+    }
 }
 
 impl<'w> Fetch<'w> for () {
@@ -328,45 +344,28 @@ macro_rules! tuple_impl {
 
             #[inline]
             unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
-                // let mut start = slots.start;
-
-                // while !slots.is_empty() {
-                //         let v = slots;
-
-                //     $( let v = self.$idx.filter_slots(v);)*
-
-                //     if !v.is_empty() || v.start == slots.end {
-                //         return v;
-                //     }
-
-                //     slots.start = v.start;
-                // }
-                // slots
                 $(
 
                     slots = self.$idx.filter_slots(slots);
                 )*
 
                 slots
-                // ( $(
-                //     {
-                //         let v = self.$idx.filter_slots(slots);
-                //         start = start.max(v.start);
-                //         v
-                //     },
-                // )*);
+            }
+        }
 
-                // let mut u = slots;
+        impl<'q, $($ty, )*> UnionFilter<'q> for ($($ty,)*)
+            where $($ty: PreparedFetch<'q>,)*
+        {
 
-                // // Clamp to end bound
-                // start = start.min(slots.end);
-                // slots.start = start;
-
-                // $(
-                //     u = u.intersect(&self.$idx.filter_slots(slots));
-                // )*
-
-                // u
+            #[inline]
+            unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
+                [
+                    // Don't leak union into this
+                    $( self.$idx.filter_slots(slots)),*
+                ]
+                .into_iter()
+                .min()
+                .unwrap_or_default()
             }
         }
 
@@ -393,7 +392,7 @@ macro_rules! tuple_impl {
 
             #[inline]
             fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-            $( (self.$idx).access(data, dst);)*
+                $( (self.$idx).access(data, dst);)*
             }
 
             #[inline]

@@ -1,6 +1,6 @@
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch},
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, UnionFilter},
     system::Access,
     Fetch, FetchItem,
 };
@@ -182,66 +182,69 @@ impl<T> ops::Not for Not<T> {
 /// changed.
 pub struct Union<T>(pub T);
 
+impl<'q, T> FetchItem<'q> for Union<T>
+where
+    T: FetchItem<'q>,
+{
+    type Item = T::Item;
+}
+
+impl<'w, T> Fetch<'w> for Union<T>
+where
+    T: Fetch<'w>,
+    T::Prepared: for<'q> UnionFilter<'q>,
+{
+    const MUTABLE: bool = T::MUTABLE;
+
+    type Prepared = Union<T::Prepared>;
+
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        Some(Union(self.0.prepare(data)?))
+    }
+
+    fn filter_arch(&self, arch: &Archetype) -> bool {
+        self.0.filter_arch(arch)
+    }
+
+    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+        self.0.access(data, dst)
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Union").field(&FmtQuery(&self.0)).finish()
+    }
+}
+
+impl<'q, T> UnionFilter<'q> for Union<T>
+where
+    T: UnionFilter<'q>,
+{
+    unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
+        self.0.filter_union(slots)
+    }
+}
+
+impl<'q, T> PreparedFetch<'q> for Union<T>
+where
+    T: PreparedFetch<'q> + UnionFilter<'q>,
+{
+    type Item = T::Item;
+
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+        self.0.fetch(slot)
+    }
+
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        self.filter_union(slots)
+    }
+
+    fn set_visited(&mut self, slots: Slice) {
+        self.0.set_visited(slots)
+    }
+}
+
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        // Union
-        impl<'w, $($ty: Fetch<'w>,)*> Fetch<'w> for Union<($($ty,)*)> {
-            const MUTABLE: bool = $($ty::MUTABLE )||*;
-
-            type Prepared = Union<($($ty::Prepared,)*)>;
-
-            fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-                let inner = &self.0;
-                Some(Union(($(inner.$idx.prepare(data)?,)*)))
-            }
-
-            fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
-                let inner = &self.0;
-                $(inner.$idx.filter_arch(arch))&&*
-            }
-
-            fn access(&self, data: super::FetchAccessData, dst: &mut alloc::vec::Vec<crate::system::Access>) {
-                let inner = &self.0;
-                $(inner.$idx.access(data, dst);)*
-            }
-
-            fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                let inner = &self.0;
-                let mut s = f.debug_tuple("Union");
-                $(s.field(&FmtQuery(&inner.$idx));)*
-
-                s.finish()
-            }
-        }
-
-
-        impl<'w, $($ty: PreparedFetch<'w>,)* > PreparedFetch<'w> for Union<($($ty,)*)> {
-            type Item = ($($ty::Item,)*);
-
-            unsafe fn fetch(&'w mut self, slot: usize) -> Self::Item {
-                let inner = &mut self.0;
-                ($(inner.$idx.fetch(slot), )*)
-            }
-
-            unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
-                let inner = &mut self.0;
-
-                [$(inner.$idx.filter_slots(slots)),*]
-                    .into_iter()
-                    .min()
-                    .unwrap_or_default()
-            }
-
-            fn set_visited(&mut self, slots: crate::archetype::Slice) {
-                let inner = &mut self.0;
-                $(inner.$idx.set_visited(slots);)*
-            }
-        }
-
-        impl<'q, $($ty: FetchItem<'q>,)*> FetchItem<'q> for Union<($($ty,)*)> {
-            type Item = ($($ty::Item,)*);
-        }
-
         // Or
         impl<'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
             type Item = ();
@@ -303,6 +306,23 @@ macro_rules! tuple_impl {
             }
 
         }
+
+
+        impl<'q, $($ty, )*> UnionFilter<'q> for Or<($(Option<$ty>,)*)>
+        where $($ty: PreparedFetch<'q>,)*
+        {
+            unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
+                let inner = &mut self.0;
+
+                [
+                    $( inner.$idx.filter_slots(slots)),*
+                ]
+                .into_iter()
+                .min()
+                .unwrap_or_default()
+
+            }
+        }
     };
 
 
@@ -315,3 +335,32 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
+
+#[cfg(test)]
+mod tests {
+    use itertools::Itertools;
+
+    use crate::{
+        filter::{All, FilterIter, Nothing},
+        World,
+    };
+
+    use super::*;
+
+    #[test]
+    fn union() {
+        let fetch = Union((
+            Slice::new(0, 2),
+            Nothing,
+            Slice::new(7, 16),
+            Slice::new(3, 10),
+        ));
+
+        let fetch = FilterIter::new(Slice::new(0, 100), fetch);
+
+        assert_eq!(
+            fetch.collect_vec(),
+            [Slice::new(0, 2), Slice::new(3, 10), Slice::new(10, 16)]
+        );
+    }
+}

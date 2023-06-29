@@ -159,10 +159,9 @@ let dt = 0.1;
 *pos += *vel * dt;
 ```
 
-On a further note, since the components have to be declared beforehand (not
-always true, more on that later), it limits the amount of types which can be
+On a further note, since the components have to be declared beforehand, it limits the amount of types which can be
 inserted as components. This fixes subtle bugs which come by having the type
-dictate the component, such as inserting an `Arc<Type>` instead of just `Type`,
+dictate the component, such as using an `Arc<Type>` instead of just `Type`,
 which leads to subsequent systems not finding the `Type` on the entity.
 
 Using statically declared components makes the rust type system disallow

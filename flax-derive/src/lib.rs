@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use proc_macro_crate::FoundCrate;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{Attribute, DataStruct, DeriveInput, Error, Ident, MetaList, Result, Type, Visibility};
 
 /// ```rust,ignore
@@ -77,15 +77,23 @@ fn derive_data_struct(
                 &field_types,
             );
 
-            Ok(quote! {
+            // let union_derive = derive_union(
+            //     &crate_name,
+            //     &input.vis,
+            //     name,
+            //     &item_name,
+            //     &prepared_name,
+            //     &field_names,
+            //     &field_types,
+            // );
 
+            Ok(quote! {
                 #item_derive
 
                 #prepared_derive
 
                 #[automatically_derived]
                 impl<'w> #crate_name::Fetch<'w> for #name
-                where #(#field_types: #crate_name::Fetch<'w>,)*
                 {
                     const MUTABLE: bool = #(<#field_types as #crate_name::Fetch<'w>>::MUTABLE)||*;
 
@@ -94,7 +102,7 @@ fn derive_data_struct(
                     fn prepare( &'w self, data: #crate_name::fetch::FetchPrepareData<'w>
                     ) -> Option<Self::Prepared> {
                         Some(Self::Prepared {
-                            #(#field_names: self.#field_names.prepare(data)?,)*
+                            #(#field_names: #crate_name::Fetch::prepare(&self.#field_names, data)?,)*
                         })
                     }
 
@@ -134,17 +142,43 @@ fn derive_data_struct(
     }
 }
 
-/// Derive the yielded Item type for a Fetch
-fn derive_item_struct<'a>(
+/// Implements the filtering of the struct fields using a set union
+fn derive_union(
+    crate_name: &Ident,
+    vis: &Visibility,
+    name: &Ident,
+    item_name: &Ident,
+    prepared_name: &Ident,
+    field_names: &[&Ident],
+    field_types: &[&Type],
+) -> TokenStream {
+    let union_msg = format!("The union fetch for {name}");
+    let unioned = format_ident!("{name}Union");
+
+    quote! {
+        #[doc = #union_msg]
+        #vis struct #unioned<T>(T);
+
+        #[automatically_derived]
+        impl<'q, T> #crate_name::fetch::UnionFilter<'q> for #unioned<T> where T: #crate_name::fetch::PreparedFetch<'q> {
+            unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
+                #crate_name::fetch::UnionFilter::filter_slots(&mut #crate_name::filter::Union(#(&mut self.#field_names,)*), slots)
+            }
+        }
+    }
+}
+
+/// Derive the returned Item type for a Fetch
+fn derive_item_struct(
     crate_name: &Ident,
     attrs: &Attrs,
     vis: &Visibility,
     name: &Ident,
     item_name: &Ident,
-    field_names: &[&'a Ident],
-    field_types: &[&'a Type],
+    field_names: &[&Ident],
+    field_types: &[&Type],
 ) -> TokenStream {
-    let msg = format!("The item yielded by {name}");
+    let msg = format!("The item returned by {name}");
 
     let extras = match &attrs.extras {
         Some(extras) => {
@@ -168,14 +202,14 @@ fn derive_item_struct<'a>(
     }
 }
 
-fn derive_prepared_struct<'a>(
+fn derive_prepared_struct(
     crate_name: &Ident,
     vis: &Visibility,
     name: &Ident,
     item_name: &Ident,
     prepared_name: &Ident,
-    field_names: &[&'a Ident],
-    field_types: &[&'a Type],
+    field_names: &[&Ident],
+    field_types: &[&Type],
 ) -> TokenStream {
     let msg = format!("The prepared fetch for {name}");
 
@@ -203,7 +237,7 @@ fn derive_prepared_struct<'a>(
 
             #[inline]
             fn set_visited(&mut self, slots: #crate_name::archetype::Slice) {
-                #(self.#field_names.set_visited(slots);)*
+                #(#crate_name::fetch::PreparedFetch::set_visited(&mut self.#field_names, slots);)*
             }
         }
     }
