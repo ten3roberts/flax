@@ -3,7 +3,6 @@ use proc_macro2::{Span, TokenStream};
 use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
 use syn::{
-    token::{Gt, Lt},
     Attribute, DataStruct, DeriveInput, Error, GenericParam, Generics, Ident, ImplGenerics,
     Lifetime, LifetimeParam, MetaList, Result, Type, TypeGenerics, TypeParam, Visibility,
 };
@@ -205,9 +204,6 @@ fn derive_modified(params: &Params) -> TokenStream {
         vis,
         fetch_name,
         field_names,
-        field_types,
-        attrs,
-        w_lf,
         ..
     } = params;
 
@@ -218,7 +214,7 @@ fn derive_modified(params: &Params) -> TokenStream {
         .take(params.field_types.len())
         .collect_vec();
 
-    let transformed_name = format_ident!("{}Transformed", params.fetch_name);
+    let transformed_name = format_ident!("{fetch_name}Transformed");
     let transformed_struct = quote! {
         #vis struct #transformed_name<#(#ty_generics: for<'x> #crate_name::fetch::Fetch<'x>),*>{
             #(#field_names: #ty_generics,)*
