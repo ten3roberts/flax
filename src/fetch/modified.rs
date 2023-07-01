@@ -118,6 +118,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "derive")]
     fn query_modified_struct() {
         component! {
             a: i32,
