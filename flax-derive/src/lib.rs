@@ -45,13 +45,10 @@ fn derive_data_struct(
     input: &DeriveInput,
     data: &DataStruct,
 ) -> Result<TokenStream> {
-    let name = &input.ident;
     let attrs = Attrs::get(&input.attrs)?;
 
     match data.fields {
-        syn::Fields::Named(ref fields) => {
-            let fields = &fields.named;
-
+        syn::Fields::Named(_) => {
             let params = Params::new(&crate_name, &input.vis, input, &attrs);
 
             let prepared_derive = derive_prepared_struct(&params);
@@ -90,7 +87,6 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         fetch_name,
         item_name,
         prepared_name,
-        generics,
         q_generics,
         field_names,
         field_types,
@@ -100,11 +96,11 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         ..
     } = params;
 
-    let item_ty = params.item_ty();
-    let item_impl = params.item_impl();
+    let item_ty = params.q_ty();
+    let item_impl = params.q_impl();
     let item_msg = format!("The item returned by {fetch_name}");
 
-    let prep_ty = params.prepared_ty();
+    let prep_ty = params.w_ty();
 
     let extras = match &attrs.extras {
         Some(extras) => {
@@ -114,18 +110,8 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         None => quote! {},
     };
 
-    let fetch_impl = params.fetch_impl();
-    let fetch_ty = params.fetch_ty();
-
-    let msg = format!("The item returned by {fetch_name}");
-
-    let extras = match &attrs.extras {
-        Some(extras) => {
-            let nested = &extras.tokens;
-            quote! { #[derive(#nested)]}
-        }
-        None => quote! {},
-    };
+    let fetch_impl = params.w_impl();
+    let fetch_ty = params.base_ty();
 
     quote! {
         #[doc = #item_msg]
@@ -183,40 +169,32 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
 
 fn prepend_generics(prepend: &[GenericParam], generics: &Generics) -> Generics {
     let mut generics = generics.clone();
-    generics.params = prepend
-        .into_iter()
-        .cloned()
-        .chain(generics.params)
-        .collect();
+    generics.params = prepend.iter().cloned().chain(generics.params).collect();
 
     generics
 }
 
 /// Implements the filtering of the struct fields using a set union
 fn derive_union(params: &Params) -> TokenStream {
-    let ty_generics = params.fetch_ty();
-
     let Params {
         crate_name,
-        generics,
-        w_generics,
-        q_generics,
         fetch_name,
         field_types,
         field_names,
         ..
     } = params;
 
-    let (_, fetch_ty, _) = generics.split_for_impl();
-    let (impl_generics, _, _) = q_generics.split_for_impl();
+    let impl_generics = params.q_impl();
+
+    let fetch_ty = params.base_ty();
 
     quote! {
-        // #[automatically_derived]
-        // impl #impl_generics #crate_name::fetch::UnionFilter<'q> for #fetch_name #fetch_ty where #(#field_types: for<'x> #crate_name::fetch::PreparedFetch<'x>,)* {
-        //     unsafe fn filter_union(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
-        //         #crate_name::fetch::PreparedFetch::filter_slots(&mut #crate_name::filter::Union((#(&mut self.#field_names,)*)), slots)
-        //     }
-        // }
+        #[automatically_derived]
+        impl #impl_generics #crate_name::fetch::UnionFilter<'q> for #fetch_name #fetch_ty where #(#field_types: for<'x> #crate_name::fetch::PreparedFetch<'x>,)* {
+            unsafe fn filter_union(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
+                #crate_name::fetch::PreparedFetch::filter_slots(&mut #crate_name::filter::Union((#(&mut self.#field_names,)*)), slots)
+            }
+        }
     }
 }
 
@@ -225,14 +203,7 @@ fn derive_modified(params: &Params) -> TokenStream {
     let Params {
         crate_name,
         vis,
-        fetch_name,
-        item_name,
-        prepared_name,
-        generics,
         field_names,
-        field_types,
-        w_lf,
-        q_lf,
         attrs,
         ..
     } = params;
@@ -271,7 +242,6 @@ fn derive_modified(params: &Params) -> TokenStream {
         gt_token: Some(Gt(Span::call_site())),
         where_clause: None,
     };
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let fetch = derive_fetch_struct(&transformed_params);
 
@@ -291,46 +261,6 @@ fn derive_modified(params: &Params) -> TokenStream {
     }
 }
 
-/// Derive the returned Item type for a Fetch
-fn derive_item_struct(params: &Params) -> TokenStream {
-    let Params {
-        crate_name,
-        vis,
-        fetch_name,
-        item_name,
-        prepared_name,
-        generics,
-        field_names,
-        field_types,
-        w_lf,
-        q_lf,
-        attrs,
-        ..
-    } = params;
-
-    let msg = format!("The item returned by {fetch_name}");
-
-    let extras = match &attrs.extras {
-        Some(extras) => {
-            let nested = &extras.tokens;
-            quote! { #[derive(#nested)]}
-        }
-        None => quote! {},
-    };
-
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    let item_ty = params.item_ty();
-
-    quote! {
-        #[doc = #msg]
-        #extras
-        #vis struct #item_name q_generics {
-            #(#field_names: <#field_types as #crate_name::fetch::FetchItem<#q_lf>>::Item,)*
-        }
-    }
-}
-
 fn derive_prepared_struct(params: &Params) -> TokenStream {
     let Params {
         crate_name,
@@ -338,7 +268,6 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
         fetch_name,
         item_name,
         prepared_name,
-        generics,
         field_names,
         field_types,
         w_generics,
@@ -349,10 +278,9 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
 
     let msg = format!("The prepared fetch for {fetch_name}");
 
-    let prep_impl = params.prepared_impl();
-    let fetch_ty = params.fetch_ty();
-    let prep_ty = params.prepared_ty();
-    let item_ty = params.item_ty();
+    let prep_impl = params.wq_impl();
+    let prep_ty = params.w_ty();
+    let item_ty = params.q_ty();
 
     quote! {
         #[doc = #msg]
@@ -488,27 +416,27 @@ impl<'a> Params<'a> {
         }
     }
 
-    fn item_impl(&self) -> ImplGenerics {
+    fn q_impl(&self) -> ImplGenerics {
         self.q_generics.split_for_impl().0
     }
 
-    fn prepared_impl(&self) -> ImplGenerics {
+    fn wq_impl(&self) -> ImplGenerics {
         self.wq_generics.split_for_impl().0
     }
 
-    fn fetch_impl(&self) -> ImplGenerics {
-        self.wq_generics.split_for_impl().0
+    fn w_impl(&self) -> ImplGenerics {
+        self.w_generics.split_for_impl().0
     }
 
-    fn fetch_ty(&self) -> TypeGenerics {
+    fn base_ty(&self) -> TypeGenerics {
         self.generics.split_for_impl().1
     }
 
-    fn item_ty(&self) -> TypeGenerics {
+    fn q_ty(&self) -> TypeGenerics {
         self.q_generics.split_for_impl().1
     }
 
-    fn prepared_ty(&self) -> TypeGenerics {
+    fn w_ty(&self) -> TypeGenerics {
         self.w_generics.split_for_impl().1
     }
 }
