@@ -53,11 +53,11 @@ fn derive_data_struct(
 
             let prepared_derive = derive_prepared_struct(&params);
 
+            let fetch_derive = derive_fetch_struct(&params);
+
             let union_derive = derive_union(&params);
 
             let transform_modified = derive_modified(&params);
-
-            let fetch_derive = derive_fetch_struct(&params);
 
             Ok(quote! {
                 #fetch_derive
@@ -66,7 +66,7 @@ fn derive_data_struct(
 
                 #union_derive
 
-                // #transform_modified
+                #transform_modified
             })
         }
         syn::Fields::Unnamed(_) => Err(Error::new(
@@ -127,7 +127,7 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
 
         #[automatically_derived]
         impl #fetch_impl #crate_name::Fetch<#w_lf> for #fetch_name #fetch_ty
-            where #(#field_types: #crate_name::Fetch<#w_lf>,)*
+            where #(#field_types: 'static,)*
         {
             const MUTABLE: bool = #(<#field_types as #crate_name::Fetch <#w_lf>>::MUTABLE)||*;
 
@@ -203,13 +203,16 @@ fn derive_modified(params: &Params) -> TokenStream {
     let Params {
         crate_name,
         vis,
+        fetch_name,
         field_names,
+        field_types,
         attrs,
+        w_lf,
         ..
     } = params;
 
     // Replace all the fields with generics to allow transforming into different types
-    let ty_generics = ('a'..='z')
+    let ty_generics = ('A'..='Z')
         .map(|c| format_ident!("{}", c))
         .map(|v| GenericParam::Type(TypeParam::from(v)))
         .take(params.field_types.len())
@@ -217,7 +220,7 @@ fn derive_modified(params: &Params) -> TokenStream {
 
     let transformed_name = format_ident!("{}Transformed", params.fetch_name);
     let transformed_struct = quote! {
-        #vis struct #transformed_name<#(#ty_generics),*>{
+        #vis struct #transformed_name<#(#ty_generics: for<'x> #crate_name::fetch::Fetch<'x>),*>{
             #(#field_names: #ty_generics,)*
         }
     };
@@ -225,38 +228,23 @@ fn derive_modified(params: &Params) -> TokenStream {
     let input =
         syn::parse2::<DeriveInput>(transformed_struct).expect("Generated struct is always valid");
 
-    let transformed_params = Params::new(crate_name, vis, &input, attrs);
-
-    let prepared = derive_prepared_struct(&transformed_params);
-
-    // Replace all the fields with generics to allow transforming into different types
-    let generics_params = ('a'..='z')
-        .map(|c| format_ident!("{}", c))
-        .map(|v| GenericParam::Type(TypeParam::from(v)))
-        .take(params.field_types.len())
-        .collect();
-
-    let generics = Generics {
-        lt_token: Some(Lt(Span::call_site())),
-        params: generics_params,
-        gt_token: Some(Gt(Span::call_site())),
-        where_clause: None,
-    };
+    let attrs = Attrs::default();
+    let transformed_params = Params::new(crate_name, vis, &input, &attrs);
 
     let fetch = derive_fetch_struct(&transformed_params);
 
+    let prepared = derive_prepared_struct(&transformed_params);
+
     quote! {
-        // #vis struct #transformed #ty_generics {
-        //     #(#field_names: #generics,)*
-        // }
+        #input
 
-        // #fetch
+        #fetch
 
-        // #prepared
+        #prepared
 
         // #[automatically_derived]
-        // impl #crate_name::fetch::ModifiedFetch for #name where #(#field_types: #crate_name::fetch::ModifiedFetch + for<'q> #crate_name::fetch::PreparedFetch<'q>,)* {
-        //     type Modified = #crate_name::filter::Union<#transformed<#(<#field_types as #crate_name::fetch::ModifiedFetch>::Modified,)*>>;
+        // impl #crate_name::fetch::ModifiedFetch for #fetch_name where #(#field_types: #crate_name::fetch::ModifiedFetch + for<'q> #crate_name::fetch::PreparedFetch<'q>,)* {
+        //     type Modified = #crate_name::filter::Union<#transformed_name<#(<#field_types as #crate_name::fetch::ModifiedFetch>::Modified,)*>>;
         // }
     }
 }
@@ -289,7 +277,9 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
         }
 
         #[automatically_derived]
-        impl #prep_impl #crate_name::fetch::PreparedFetch<#q_lf> for #prepared_name #prep_ty {
+        impl #prep_impl #crate_name::fetch::PreparedFetch<#q_lf> for #prepared_name #prep_ty
+            where #(#field_types: 'static,)*
+        {
             type Item = #item_name #item_ty;
 
             #[inline]
