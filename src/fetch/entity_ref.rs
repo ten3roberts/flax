@@ -16,8 +16,8 @@ pub fn entity_refs() -> EntityRefs {
     EntityRefs
 }
 
-impl FetchItem for EntityRefs {
-    type Item<'q> = EntityRef<'q>;
+impl<'q> FetchItem<'q> for EntityRefs {
+    type Item = EntityRef<'q>;
 }
 
 impl<'w> Fetch<'w> for EntityRefs {
@@ -59,11 +59,11 @@ pub struct PreparedEntityRef<'a> {
     arch: &'a Archetype,
 }
 
-impl<'w> PreparedFetch for PreparedEntityRef<'w> {
-    type Item<'q> = EntityRef<'q>;
+impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
+    type Item = EntityRef<'q>;
 
     #[inline]
-    unsafe fn fetch<'q>(&'q mut self, slot: crate::archetype::Slot) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         EntityRef {
             arch: self.arch,
             slot,

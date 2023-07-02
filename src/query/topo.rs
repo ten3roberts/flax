@@ -186,7 +186,7 @@ where
     Q: Fetch<'w>,
     F: Fetch<'w>,
 {
-    type Item = <Q as FetchItem>::Item<'q>;
+    type Item = <Q as FetchItem<'q>>::Item;
 
     type IntoIter = TopoIter<'w, 'q, Q, F>;
 
@@ -238,7 +238,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = <Q::Prepared as PreparedFetch>::Item<'q>;
+    type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {

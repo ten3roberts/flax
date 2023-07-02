@@ -10,8 +10,8 @@ use super::{FmtQuery, PreparedFetch};
 /// Yields true iff `F` would match the query
 pub struct Satisfied<F>(pub(crate) F);
 
-impl<F: FetchItem> FetchItem for Satisfied<F> {
-    type Item<'q> = bool;
+impl<'q, F: FetchItem<'q>> FetchItem<'q> for Satisfied<F> {
+    type Item = bool;
 }
 
 impl<'w, F: Fetch<'w>> Fetch<'w> for Satisfied<F> {
@@ -41,10 +41,10 @@ impl<'w, F: Fetch<'w>> Fetch<'w> for Satisfied<F> {
 #[doc(hidden)]
 pub struct PreparedSatisfied<F>(Option<F>);
 
-impl<F: PreparedFetch> PreparedFetch for PreparedSatisfied<F> {
-    type Item<'q> = bool;
+impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
+    type Item = bool;
 
-    unsafe fn fetch<'q>(&'q mut self, slot: Slot) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         if let Some(fetch) = &mut self.0 {
             !fetch.filter_slots(Slice::single(slot)).is_empty()
         } else {

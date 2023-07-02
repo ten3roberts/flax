@@ -39,19 +39,19 @@ impl<T: ComponentValue> ChangeFilter<T> {
     }
 }
 
-impl<T> FetchItem for ChangeFilter<T>
+impl<'q, T> FetchItem<'q> for ChangeFilter<T>
 where
     T: ComponentValue,
 {
-    type Item<'q> = &'q T;
+    type Item = &'q T;
 }
 
-impl<Q: ReadOnlyFetch, A> ReadOnlyFetch for PreparedChangeFilter<Q, A>
+impl<'q, Q: ReadOnlyFetch<'q>, A> ReadOnlyFetch<'q> for PreparedChangeFilter<Q, A>
 where
-    Q: PreparedFetch,
+    Q: PreparedFetch<'q>,
     A: Deref<Target = [Change]>,
 {
-    unsafe fn fetch_shared<'q>(&'q self, slot: Slot) -> Self::Item<'q> {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.fetch.fetch_shared(slot)
     }
 }
@@ -167,14 +167,15 @@ where
     }
 }
 
-impl<Q, A> PreparedFetch for PreparedChangeFilter<Q, A>
+impl<'q, Q, A> PreparedFetch<'q> for PreparedChangeFilter<Q, A>
 where
-    Q: PreparedFetch,
+    Q: PreparedFetch<'q>,
     A: Deref<Target = [Change]>,
 {
-    type Item<'q> = Q::Item<'q> where Self: 'q;
+    type Item = Q::Item;
+
     #[inline]
-    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.fetch.fetch(slot)
     }
 
@@ -217,8 +218,8 @@ impl<T: ComponentValue> RemovedFilter<T> {
     }
 }
 
-impl<T: ComponentValue> FetchItem for RemovedFilter<T> {
-    type Item<'q> = ();
+impl<'q, T: ComponentValue> FetchItem<'q> for RemovedFilter<T> {
+    type Item = ();
 }
 
 impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {

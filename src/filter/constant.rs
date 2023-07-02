@@ -11,8 +11,8 @@ use core::fmt::{self, Formatter};
 /// A filter that yields, well, nothing
 pub struct Nothing;
 
-impl FetchItem for Nothing {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for Nothing {
+    type Item = ();
 }
 
 impl<'a> Fetch<'a> for Nothing {
@@ -37,10 +37,10 @@ impl<'a> Fetch<'a> for Nothing {
     fn access(&self, _data: FetchAccessData, _dst: &mut Vec<Access>) {}
 }
 
-impl PreparedFetch for Nothing {
-    type Item<'q> = ();
+impl<'q> PreparedFetch<'q> for Nothing {
+    type Item = ();
 
-    unsafe fn fetch<'q>(&mut self, _: usize) -> Self::Item<'q> {}
+    unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.end, slots.end)
@@ -53,8 +53,8 @@ impl PreparedFetch for Nothing {
 #[derive(Debug, Clone)]
 pub struct All;
 
-impl FetchItem for All {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for All {
+    type Item = ();
 }
 
 impl<'w> Fetch<'w> for All {
@@ -77,14 +77,14 @@ impl<'w> Fetch<'w> for All {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl PreparedFetch for All {
-    type Item<'q> = ();
+impl<'q> PreparedFetch<'q> for All {
+    type Item = ();
 
-    unsafe fn fetch<'q>(&mut self, _: usize) -> Self::Item<'q> {}
+    unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
 }
 
-impl FetchItem for Slice {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for Slice {
+    type Item = ();
 }
 
 impl<'w> Fetch<'w> for Slice {
@@ -108,11 +108,11 @@ impl<'w> Fetch<'w> for Slice {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl PreparedFetch for Slice {
-    type Item<'q> = ();
+impl<'q> PreparedFetch<'q> for Slice {
+    type Item = ();
 
     #[inline]
-    unsafe fn fetch<'q>(&mut self, _: usize) -> Self::Item<'q> {}
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -121,8 +121,8 @@ impl PreparedFetch for Slice {
     }
 }
 
-impl FetchItem for bool {
-    type Item<'q> = bool;
+impl<'q> FetchItem<'q> for bool {
+    type Item = bool;
 }
 
 impl<'w> Fetch<'w> for bool {
@@ -148,11 +148,11 @@ impl<'w> Fetch<'w> for bool {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl PreparedFetch for bool {
-    type Item<'q> = bool;
+impl<'q> PreparedFetch<'q> for bool {
+    type Item = bool;
 
     #[inline]
-    unsafe fn fetch<'q>(&mut self, _: usize) -> Self::Item<'q> {
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {
         *self
     }
 }

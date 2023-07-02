@@ -182,7 +182,7 @@ where
     pub fn collect_vec<'w, T>(&'w mut self, world: &'w World) -> Vec<T>
     where
         T: 'static,
-        Q: for<'q> FetchItem<Item<'q> = T>,
+        Q: for<'q> FetchItem<'q, Item = T>,
     {
         let mut borrow = self.borrow(world);
         borrow.iter().collect()

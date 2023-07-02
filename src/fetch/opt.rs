@@ -16,8 +16,8 @@ use super::{FetchAccessData, FetchItem, ReadOnlyFetch};
 #[derive(Debug, Clone)]
 pub struct Opt<F>(pub(crate) F);
 
-impl<F: FetchItem> FetchItem for Opt<F> {
-    type Item<'q> = Option<F::Item<'q>>;
+impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
+    type Item = Option<F::Item>;
 }
 
 impl<'w, F> Fetch<'w> for Opt<F>
@@ -49,23 +49,23 @@ where
 #[doc(hidden)]
 pub struct PreparedOpt<F>(pub(crate) Option<F>);
 
-impl<'p, F> ReadOnlyFetch for PreparedOpt<F>
+impl<'p, F> ReadOnlyFetch<'p> for PreparedOpt<F>
 where
-    F: ReadOnlyFetch,
+    F: ReadOnlyFetch<'p>,
 {
-    unsafe fn fetch_shared<'q>(&'q self, slot: Slot) -> Self::Item<'q> {
+    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
         self.0.as_ref().map(|fetch| fetch.fetch_shared(slot))
     }
 }
 
-impl<F> PreparedFetch for PreparedOpt<F>
+impl<'q, F> PreparedFetch<'q> for PreparedOpt<F>
 where
-    F: PreparedFetch,
+    F: PreparedFetch<'q>,
 {
-    type Item<'q> = Option<F::Item<'q>> where Self: 'q;
+    type Item = Option<F::Item>;
 
     #[inline]
-    unsafe fn fetch<'q>(&mut self, slot: usize) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.0.as_mut().map(|fetch| fetch.fetch(slot))
     }
 
@@ -101,8 +101,8 @@ impl<F, V> OptOr<F, V> {
 
 impl<'w, F, V> Fetch<'w> for OptOr<F, V>
 where
-    F: Fetch<'w> + for<'q> FetchItem<Item<'q> = &'q V>,
-    OptOr<Option<F::Prepared>, &'w V>: PreparedFetch,
+    F: Fetch<'w> + for<'q> FetchItem<'q, Item = &'q V>,
+    for<'q> F::Prepared: PreparedFetch<'q, Item = &'q V>,
     V: ComponentValue,
 {
     const MUTABLE: bool = F::MUTABLE;
@@ -131,18 +131,18 @@ where
     }
 }
 
-impl<F: for<'q> FetchItem<Item<'q> = &'q V>, V: ComponentValue> FetchItem for OptOr<F, V> {
-    type Item<'q> = &'q V;
+impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {
+    type Item = &'q V;
 }
 
-impl<'w, F, V> PreparedFetch for OptOr<Option<F>, &'w V>
+impl<'q, 'w, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>
 where
-    for<'q> F: PreparedFetch<Item<'q> = &'q V> + 'q,
+    F: PreparedFetch<'q, Item = &'q V>,
     V: 'static,
 {
-    type Item<'q> = &'q V where Self: 'q;
+    type Item = &'q V;
 
-    unsafe fn fetch<'q>(&'q mut self, slot: crate::archetype::Slot) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         match self.fetch {
             Some(ref mut v) => v.fetch(slot),
             None => self.or,

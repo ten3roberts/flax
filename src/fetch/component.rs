@@ -9,18 +9,18 @@ pub struct ReadComponent<'a, T> {
     borrow: AtomicRef<'a, [T]>,
 }
 
-impl<'w, T: 'static> PreparedFetch for ReadComponent<'w, T> {
-    type Item<'q> = &'q T;
+impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
+    type Item = &'q T;
 
     #[inline(always)]
-    unsafe fn fetch<'q>(&'q mut self, slot: Slot) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         // Safety: bounds guaranteed by callee
         unsafe { self.borrow.get_unchecked(slot) }
     }
 }
 
-impl<'w, T: ComponentValue> ReadOnlyFetch for ReadComponent<'w, T> {
-    unsafe fn fetch_shared<'q>(&'q self, slot: Slot) -> Self::Item<'q> {
+impl<'w, 'p, T: ComponentValue> ReadOnlyFetch<'p> for ReadComponent<'w, T> {
+    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
         self.borrow.get_unchecked(slot)
     }
 }
@@ -65,6 +65,6 @@ where
     }
 }
 
-impl<T: ComponentValue> FetchItem for Component<T> {
-    type Item<'q> = &'q T;
+impl<'q, T: ComponentValue> FetchItem<'q> for Component<T> {
+    type Item = &'q T;
 }

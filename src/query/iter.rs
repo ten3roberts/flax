@@ -57,12 +57,12 @@ impl<'q, Q, F> Batch<'q, Q, F> {
 
 impl<'q, Q, F> Iterator for Batch<'q, Q, F>
 where
-    Q: PreparedFetch,
-    F: PreparedFetch,
+    Q: PreparedFetch<'q>,
+    F: PreparedFetch<'q>,
 {
-    type Item = Q::Item<'q>;
+    type Item = Q::Item;
 
-    fn next(&mut self) -> Option<Q::Item<'q>> {
+    fn next(&mut self) -> Option<Q::Item> {
         if self.pos == self.end {
             None
         } else {
@@ -76,10 +76,10 @@ where
 
 impl<'q, Q, F> Batch<'q, Q, F>
 where
-    Q: PreparedFetch,
-    F: PreparedFetch,
+    Q: PreparedFetch<'q>,
+    F: PreparedFetch<'q>,
 {
-    pub(crate) fn next_with_id(&mut self) -> Option<(Entity, Q::Item<'q>)> {
+    pub(crate) fn next_with_id(&mut self) -> Option<(Entity, Q::Item)> {
         if self.pos == self.end {
             None
         } else {
@@ -91,7 +91,7 @@ where
         }
     }
 
-    pub(crate) fn next_full(&mut self) -> Option<(Slot, Entity, Q::Item<'q>)> {
+    pub(crate) fn next_full(&mut self) -> Option<(Slot, Entity, Q::Item)> {
         if self.pos == self.end {
             None
         } else {
@@ -116,8 +116,8 @@ pub struct ArchetypeChunks<'q, Q, F> {
 
 impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
 where
-    Q: PreparedFetch,
-    F: PreparedFetch,
+    Q: PreparedFetch<'q>,
+    F: PreparedFetch<'q>,
 {
     type Item = Batch<'q, Q, F>;
 
