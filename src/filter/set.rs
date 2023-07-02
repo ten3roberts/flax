@@ -180,6 +180,9 @@ impl<T> ops::Not for Not<T> {
 /// This is most useful for change queries, where you care about about *any* change, but still
 /// require the entity to have all the components, and have them returned despite not all having
 /// changed.
+///
+/// For this to implement `Fetch`, `T::Prepared` must implement `UnionFilter`.
+#[derive(Debug, Clone)]
 pub struct Union<T>(pub T);
 
 impl<'q, T> FetchItem<'q> for Union<T>

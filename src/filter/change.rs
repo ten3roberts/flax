@@ -46,7 +46,7 @@ where
     type Item = &'q T;
 }
 
-impl<'q, Q: ReadOnlyFetch<'q>, A> ReadOnlyFetch<'q> for PreparedKindFilter<Q, A>
+impl<'q, Q: ReadOnlyFetch<'q>, A> ReadOnlyFetch<'q> for PreparedChangeFilter<Q, A>
 where
     Q: PreparedFetch<'q>,
     A: Deref<Target = [Change]>,
@@ -62,7 +62,7 @@ where
 {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedKindFilter<ReadComponent<'w, T>, AtomicRef<'w, [Change]>>;
+    type Prepared = PreparedChangeFilter<ReadComponent<'w, T>, AtomicRef<'w, [Change]>>;
 
     fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let changes = data.arch.changes(self.component.key())?;
@@ -75,7 +75,7 @@ where
         let changes = AtomicRef::map(changes, |changes| changes.get(self.kind).as_slice());
 
         let fetch = self.component.prepare(data)?;
-        Some(PreparedKindFilter::new(fetch, changes, data.old_tick))
+        Some(PreparedChangeFilter::new(fetch, changes, data.old_tick))
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -105,9 +105,8 @@ where
     }
 }
 
-#[derive(Debug)]
 #[doc(hidden)]
-pub struct PreparedKindFilter<Q, A> {
+pub struct PreparedChangeFilter<Q, A> {
     fetch: Q,
     changes: A,
     cur: Option<Slice>,
@@ -115,7 +114,14 @@ pub struct PreparedKindFilter<Q, A> {
     old_tick: u32,
 }
 
-impl<Q, A> PreparedKindFilter<Q, A>
+impl<Q, A> core::fmt::Debug for PreparedChangeFilter<Q, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PreparedChangeFilter")
+            .finish_non_exhaustive()
+    }
+}
+
+impl<Q, A> PreparedChangeFilter<Q, A>
 where
     A: Deref<Target = [Change]>,
 {
@@ -161,7 +167,7 @@ where
     }
 }
 
-impl<'q, Q, A> PreparedFetch<'q> for PreparedKindFilter<Q, A>
+impl<'q, Q, A> PreparedFetch<'q> for PreparedChangeFilter<Q, A>
 where
     Q: PreparedFetch<'q>,
     A: Deref<Target = [Change]>,
@@ -219,7 +225,7 @@ impl<'q, T: ComponentValue> FetchItem<'q> for RemovedFilter<T> {
 impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedKindFilter<(), &'a [Change]>;
+    type Prepared = PreparedChangeFilter<(), &'a [Change]>;
 
     fn prepare(&self, data: FetchPrepareData<'a>) -> Option<Self::Prepared> {
         let changes = data
@@ -227,7 +233,7 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
             .removals(self.component.key())
             .unwrap_or(&EMPTY_CHANGELIST);
 
-        Some(PreparedKindFilter::new((), changes, data.old_tick))
+        Some(PreparedChangeFilter::new((), changes, data.old_tick))
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -266,7 +272,7 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let mut filter = PreparedKindFilter::new((), &changes[..], 2);
+        let mut filter = PreparedChangeFilter::new((), &changes[..], 2);
 
         unsafe {
             assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::new(10, 10));
@@ -294,7 +300,7 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let filter = PreparedKindFilter::new((), &changes[..], 2);
+        let filter = PreparedChangeFilter::new((), &changes[..], 2);
 
         let slices = FilterIter::new(Slice::new(0, 500), filter).collect_vec();
 
@@ -318,7 +324,7 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let filter = PreparedKindFilter::new((), &changes[..], 2);
+        let filter = PreparedChangeFilter::new((), &changes[..], 2);
 
         let slices = FilterIter::new(Slice::new(25, 150), filter)
             .take(100)

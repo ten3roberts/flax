@@ -7,10 +7,9 @@ use super::{
     as_deref::AsDeref,
     cloned::Cloned,
     copied::Copied,
-    modified::ModifiedFetch,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation},
-    Satisfied, Source,
+    Modified, Satisfied, Source, TransformFetch,
 };
 
 /// Extension trait for [crate::Fetch]
@@ -143,12 +142,12 @@ pub trait FetchExt: Sized {
     ///
     /// This means will yield *any* of `a` *or* `b` are modified.
     ///
-    /// Works for in combination with `opt`, `copy` etc constituents.
-    fn modified(self) -> Self::Modified
+    /// Works with `opt`, `copy`, etc constituents.
+    fn modified(self) -> <Self as TransformFetch<Modified>>::Output
     where
-        Self: ModifiedFetch,
+        Self: TransformFetch<Modified>,
     {
-        self.transform_modified()
+        self.transform_fetch()
     }
 }
 

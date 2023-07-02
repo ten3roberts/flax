@@ -1,10 +1,13 @@
+use std::collections::BTreeSet;
+
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DataStruct, DeriveInput, Error, GenericParam, Generics, Ident, ImplGenerics,
-    Lifetime, LifetimeParam, MetaList, Result, Type, TypeGenerics, TypeParam, Visibility,
+    bracketed, parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, DataStruct,
+    DeriveInput, Error, GenericParam, Generics, Ident, ImplGenerics, Lifetime, LifetimeParam,
+    Result, Token, Type, TypeGenerics, TypeParam, Visibility,
 };
 
 /// ```rust,ignore
@@ -101,10 +104,9 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
 
     let prep_ty = params.w_ty();
 
-    let extras = match &attrs.extras {
+    let extras = match &attrs.item_derives {
         Some(extras) => {
-            let nested = &extras.tokens;
-            quote! { #[derive(#nested)]}
+            quote! { #[derive(#extras)]}
         }
         None => quote! {},
     };
@@ -180,16 +182,18 @@ fn derive_union(params: &Params) -> TokenStream {
         fetch_name,
         field_types,
         field_names,
+        prepared_name,
+        q_lf,
         ..
     } = params;
 
-    let impl_generics = params.q_impl();
+    let impl_generics = params.wq_impl();
 
-    let fetch_ty = params.base_ty();
+    let prep_ty = params.w_ty();
 
     quote! {
         #[automatically_derived]
-        impl #impl_generics #crate_name::fetch::UnionFilter<'q> for #fetch_name #fetch_ty where #(#field_types: for<'x> #crate_name::fetch::PreparedFetch<'x>,)* {
+        impl #impl_generics #crate_name::fetch::UnionFilter<#q_lf> for #prepared_name #prep_ty where #prepared_name #prep_ty: #crate_name::fetch::PreparedFetch<'q> {
             unsafe fn filter_union(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
                 #crate_name::fetch::PreparedFetch::filter_slots(&mut #crate_name::filter::Union((#(&mut self.#field_names,)*)), slots)
             }
@@ -204,6 +208,8 @@ fn derive_modified(params: &Params) -> TokenStream {
         vis,
         fetch_name,
         field_names,
+        field_types,
+        attrs,
         ..
     } = params;
 
@@ -224,12 +230,34 @@ fn derive_modified(params: &Params) -> TokenStream {
     let input =
         syn::parse2::<DeriveInput>(transformed_struct).expect("Generated struct is always valid");
 
-    let attrs = Attrs::default();
-    let transformed_params = Params::new(crate_name, vis, &input, &attrs);
+    let transformed_attrs = Attrs::default();
+    let transformed_params = Params::new(crate_name, vis, &input, &transformed_attrs);
 
     let fetch = derive_fetch_struct(&transformed_params);
 
     let prepared = derive_prepared_struct(&transformed_params);
+    let union = derive_union(&transformed_params);
+
+    let transform_modified = if attrs.transforms.contains(&TransformIdent::Modified) {
+        let trait_name =
+            quote! { #crate_name::fetch::TransformFetch<#crate_name::fetch::Modified> };
+
+        quote! {
+
+            #[automatically_derived]
+            impl #trait_name for #fetch_name
+            {
+                type Output = #crate_name::filter::Union<#transformed_name<#(<#field_types as #trait_name>::Output,)*>>;
+                fn transform_fetch(self) -> Self::Output {
+                    #crate_name::filter::Union(#transformed_name {
+                        #(#field_names: <#field_types as #trait_name>::transform_fetch(self.#field_names),)*
+                    })
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
 
     quote! {
         #input
@@ -238,10 +266,9 @@ fn derive_modified(params: &Params) -> TokenStream {
 
         #prepared
 
-        // #[automatically_derived]
-        // impl #crate_name::fetch::ModifiedFetch for #fetch_name where #(#field_types: #crate_name::fetch::ModifiedFetch + for<'q> #crate_name::fetch::PreparedFetch<'q>,)* {
-        //     type Modified = #crate_name::filter::Union<#transformed_name<#(<#field_types as #crate_name::fetch::ModifiedFetch>::Modified,)*>>;
-        // }
+        #union
+
+        #transform_modified
     }
 }
 
@@ -300,25 +327,65 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
 
 #[derive(Default)]
 struct Attrs {
-    extras: Option<MetaList>,
+    item_derives: Option<Punctuated<Ident, Token![,]>>,
+    transforms: BTreeSet<TransformIdent>,
 }
 
 impl Attrs {
     fn get(input: &[Attribute]) -> Result<Self> {
-        let mut res = Self { extras: None };
+        let mut res = Self::default();
 
         for attr in input {
-            if attr.path().is_ident("fetch") {
-                match &attr.meta {
-                    syn::Meta::List(list) => res.extras = Some(list.clone()),
-                    _ => {
-                        return Err(Error::new(
-                            Span::call_site(),
-                            "Expected a MetaList for `fetch`",
-                        ))
-                    }
-                };
+            if !attr.path().is_ident("fetch") {
+                continue;
             }
+
+            match &attr.meta {
+                syn::Meta::List(list) => {
+                    // Parse list
+
+                    list.parse_nested_meta(|meta| {
+                        // item = [Debug, PartialEq]
+                        if meta.path.is_ident("item") {
+                            let value = meta.value()?;
+                            let content;
+                            bracketed!(content in value);
+                            let content =
+                                <Punctuated<Ident, Token![,]>>::parse_terminated(&content)?;
+
+                            // let derives = syn::parse2::<MetaList>(value.to_token_stream())
+                            //     .map_err(|_| {
+                            //         Error::new(
+                            //             value.span(),
+                            //             "Expected a MetaList for item derives",
+                            //         )
+                            //     })?;
+
+                            res.item_derives = Some(content);
+                            Ok(())
+                        } else if meta.path.is_ident("transforms") {
+                            let value = meta.value()?;
+                            let content;
+                            bracketed!(content in value);
+                            let content =
+                                <Punctuated<TransformIdent, Token![,]>>::parse_terminated(
+                                    &content,
+                                )?;
+
+                            res.transforms.extend(content);
+                            Ok(())
+                        } else {
+                            Err(Error::new(meta.path.span(), "Unknown fetch attribute"))
+                        }
+                    })?;
+                }
+                _ => {
+                    return Err(Error::new(
+                        Span::call_site(),
+                        "Expected a MetaList for `fetch`",
+                    ))
+                }
+            };
         }
 
         Ok(res)
@@ -424,5 +491,24 @@ impl<'a> Params<'a> {
 
     fn w_ty(&self) -> TypeGenerics {
         self.w_generics.split_for_impl().1
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum TransformIdent {
+    Modified,
+}
+
+impl Parse for TransformIdent {
+    fn parse(input: syn::parse::ParseStream) -> Result<Self> {
+        let ident = input.parse::<Ident>()?;
+        if ident == "Modified" {
+            Ok(Self::Modified)
+        } else {
+            Err(Error::new(
+                ident.span(),
+                format!("Unknown transform {ident}"),
+            ))
+        }
     }
 }
