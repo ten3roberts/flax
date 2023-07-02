@@ -10,25 +10,26 @@ pub trait TransformFetch<Method>: for<'w> Fetch<'w> {
     /// May of may not have the same `Item`
     type Output;
     /// Transform the fetch using the provided method
-    fn transform_fetch(self) -> Self::Output;
+    fn transform_fetch(self, method: Method) -> Self::Output;
 }
 
 impl<T: ComponentValue> TransformFetch<Modified> for Component<T> {
     type Output = ChangeFilter<T>;
-    fn transform_fetch(self) -> Self::Output {
+    fn transform_fetch(self, _: Modified) -> Self::Output {
         self.modified()
     }
 }
 
 /// Marker for a fetch which has been transformed to filter modified items.
+#[derive(Debug, Clone, Copy)]
 pub struct Modified;
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         impl<$($ty: TransformFetch<Modified>,)*> TransformFetch<Modified> for ($($ty,)*) {
             type Output = Union<($($ty::Output,)*)>;
-            fn transform_fetch(self) -> Self::Output {
-                Union(($(self.$idx.transform_fetch(),)*))
+            fn transform_fetch(self, method: Modified) -> Self::Output {
+                Union(($(self.$idx.transform_fetch(method),)*))
             }
         }
     };
@@ -49,8 +50,7 @@ mod tests {
     use itertools::Itertools;
 
     use crate::{
-        component, entity_ids, filter::ChangeFilter, filter::Union, CommandBuffer, Component,
-        Entity, Fetch, FetchExt, Query, QueryBorrow, World,
+        component, entity_ids, CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
     };
 
     #[test]
@@ -167,19 +167,14 @@ mod tests {
             .tag(other())
             .spawn(&mut world);
 
-        let query = MyFetch { a: a(), b: b() }.modified();
+        let query = MyFetch { a: a(), b: b() }
+            .modified()
+            .map(|v| (*v.a, v.b.clone()));
+
         let mut query = Query::new((entity_ids(), query));
 
-        let mut collect = move |world| {
-            query
-                .borrow(world)
-                .iter()
-                .map(|(id, v)| (id, (*v.a, v.b.clone())))
-                .collect_vec()
-        };
-
         assert_eq!(
-            collect(&world),
+            query.collect_vec(&world),
             [
                 (id1, (0, "Hello".to_string())),
                 (id2, (1, "World".to_string())),
@@ -187,34 +182,28 @@ mod tests {
             ]
         );
 
-        // assert_eq!(query.borrow(&world).iter().collect_vec(), []);
+        assert_eq!(query.collect_vec(&world), []);
 
-        // // Get mut *without* a mut deref is not a change
-        // assert_eq!(*world.get_mut(id2, a()).unwrap(), 1);
+        // Get mut *without* a mut deref is not a change
+        assert_eq!(*world.get_mut(id2, a()).unwrap(), 1);
 
-        // assert_eq!(query.borrow(&world).iter().collect_vec(), []);
+        assert_eq!(query.collect_vec(&world), []);
 
-        // *world.get_mut(id2, a()).unwrap() = 5;
+        *world.get_mut(id2, a()).unwrap() = 5;
 
-        // assert_eq!(
-        //     query.borrow(&world).iter().collect_vec(),
-        //     [(id2, (&5, &"World".to_string()))]
-        // );
+        assert_eq!(query.collect_vec(&world), [(id2, (5, "World".to_string()))]);
 
-        // // Adding the required component to id3 will cause it to be picked up by the query
-        // let mut cmd = CommandBuffer::new();
-        // cmd.set(id3, a(), -1).apply(&mut world).unwrap();
+        // Adding the required component to id3 will cause it to be picked up by the query
+        let mut cmd = CommandBuffer::new();
+        cmd.set(id3, a(), -1).apply(&mut world).unwrap();
 
-        // assert_eq!(
-        //     query.borrow(&world).iter().collect_vec(),
-        //     [(id3, (&-1, &"There".to_string()))]
-        // );
+        assert_eq!(
+            query.collect_vec(&world),
+            [(id3, (-1, "There".to_string()))]
+        );
 
-        // cmd.set(id3, b(), ":P".into()).apply(&mut world).unwrap();
+        cmd.set(id3, b(), ":P".into()).apply(&mut world).unwrap();
 
-        // assert_eq!(
-        //     query.borrow(&world).iter().collect_vec(),
-        //     [(id3, (&-1, &":P".to_string()))]
-        // );
+        assert_eq!(query.collect_vec(&world), [(id3, (-1, ":P".to_string()))]);
     }
 }

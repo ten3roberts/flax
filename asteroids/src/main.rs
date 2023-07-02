@@ -481,7 +481,7 @@ const PLUME_COOLDOWN: f32 = 0.02;
 /// and refactoring.
 #[derive(Fetch)]
 // Ensures the fetch item is debuggable
-#[fetch(Debug)]
+#[fetch(item = [Debug])]
 struct PlayerQuery {
     id: EntityIds,
     player: Component<()>,
