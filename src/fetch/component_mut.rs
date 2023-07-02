@@ -89,15 +89,15 @@ where
     }
 }
 
-impl<'q, T: ComponentValue> FetchItem<'q> for Mutable<T> {
-    type Item = &'q mut T;
+impl<T: ComponentValue> FetchItem for Mutable<T> {
+    type Item<'q> = &'q mut T;
 }
 
-impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
-    type Item = &'q mut T;
+impl<'w, T: 'static> PreparedFetch for WriteComponent<'w, T> {
+    type Item<'q> = &'q mut T;
 
     #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch<'q>(&'q mut self, slot: Slot) -> Self::Item<'q> {
         // Perform a reborrow
         // Cast from a immutable to a mutable borrow as all calls to this
         // function are guaranteed to be disjoint

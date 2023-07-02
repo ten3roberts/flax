@@ -57,7 +57,7 @@ impl<'a, Func, Q, F> SystemFn<'a, (QueryData<'a, Q, F>,), ()> for ForEach<Func>
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
-    for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
+    for<'x> Func: FnMut(<Q as FetchItem>::Item<'x>),
 {
     fn execute(&mut self, mut data: (QueryData<Q, F>,)) {
         for item in &mut data.0.borrow() {
@@ -79,7 +79,7 @@ where
     for<'x> F: Fetch<'x>,
     for<'x> <Q as Fetch<'x>>::Prepared: Send,
     for<'x> <F as Fetch<'x>>::Prepared: Send,
-    for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
+    for<'x> Func: Fn(<Q as FetchItem>::Item<'x>) + Send + Sync,
 {
     fn execute(&mut self, mut data: (QueryData<Q, F>,)) {
         let mut borrow = data.0.borrow();
@@ -98,7 +98,7 @@ where
     /// Execute a function for each item in the query
     pub fn for_each<Func>(self, func: Func) -> System<ForEach<Func>, (Query<Q, F>,), (), T>
     where
-        for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
+        for<'x> Func: FnMut(<Q as FetchItem>::Item<'x>),
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
@@ -120,7 +120,7 @@ where
     /// Execute a function for each item in the query in parallel batches
     pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, (Query<Q, F>,), (), T>
     where
-        for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
+        for<'x> Func: Fn(<Q as FetchItem>::Item<'x>) + Send + Sync,
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),

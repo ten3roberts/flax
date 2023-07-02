@@ -212,7 +212,7 @@ where
     /// `visit(query, edge, value)` where `value` is the return value of the visit.
     pub fn traverse_from<V, Visit>(&mut self, root: Entity, value: &V, mut visit: Visit)
     where
-        Visit: for<'q> FnMut(<Q as FetchItem<'q>>::Item, Option<&T>, &V) -> V,
+        Visit: for<'q> FnMut(<Q as FetchItem>::Item<'q>, Option<&T>, &V) -> V,
     {
         let Ok(loc) = self.query_state.world.location(root) else {
             return;
@@ -242,7 +242,7 @@ where
     /// `visit(query, edge, value)` where `value` is the return value of the parent.
     pub fn traverse<V, Visit>(&mut self, value: &V, mut visit: Visit)
     where
-        Visit: for<'q> FnMut(<Q as FetchItem<'q>>::Item, Option<&T>, &V) -> V,
+        Visit: for<'q> FnMut(<Q as FetchItem>::Item<'q>, Option<&T>, &V) -> V,
     {
         let dfs = &self.dfs;
         let prepared = (&mut self.prepared[..]) as *mut [_] as *mut PreparedArchetype<_, _>;
@@ -274,7 +274,7 @@ where
         value: &V,
         visit: &mut Visit,
     ) where
-        Visit: for<'q> FnMut(<Q as FetchItem<'q>>::Item, Option<&T>, &V) -> V,
+        Visit: for<'q> FnMut(<Q as FetchItem>::Item<'q>, Option<&T>, &V) -> V,
         Q: 'w,
         F: 'w,
     {
@@ -353,7 +353,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
+    type Item = <Q::Prepared as PreparedFetch>::Item<'q>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {

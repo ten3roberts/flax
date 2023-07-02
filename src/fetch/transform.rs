@@ -1,4 +1,4 @@
-use crate::{filter::ChangeFilter, filter::Union, Component, ComponentValue, Fetch};
+use crate::{filter::ChangeFilter, filter::Union, Component, ComponentValue, Fetch, FetchItem};
 
 /// Allows transforming a fetch into another.
 ///
@@ -10,25 +10,26 @@ pub trait TransformFetch<Method>: for<'w> Fetch<'w> {
     /// May of may not have the same `Item`
     type Output;
     /// Transform the fetch using the provided method
-    fn transform_fetch(self) -> Self::Output;
+    fn transform_fetch(self, method: Method) -> Self::Output;
 }
 
 impl<T: ComponentValue> TransformFetch<Modified> for Component<T> {
     type Output = ChangeFilter<T>;
-    fn transform_fetch(self) -> Self::Output {
+    fn transform_fetch(self, _: Modified) -> Self::Output {
         self.modified()
     }
 }
 
 /// Marker for a fetch which has been transformed to filter modified items.
+#[derive(Debug, Clone, Copy)]
 pub struct Modified;
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         impl<$($ty: TransformFetch<Modified>,)*> TransformFetch<Modified> for ($($ty,)*) {
             type Output = Union<($($ty::Output,)*)>;
-            fn transform_fetch(self) -> Self::Output {
-                Union(($(self.$idx.transform_fetch(),)*))
+            fn transform_fetch(self, method: Modified) -> Self::Output {
+                Union(($(self.$idx.transform_fetch(method),)*))
             }
         }
     };
@@ -168,7 +169,7 @@ mod tests {
             .spawn(&mut world);
 
         let query = MyFetch { a: a(), b: b() }.modified();
-        let mut query = Query::new((entity_ids(), query));
+        let mut query = Query::new((entity_ids(), query).map(|(id, v)| (id, v.a, v.b)));
 
         let mut collect = move |world| {
             query

@@ -234,7 +234,7 @@ where
     pub fn get<'q>(
         &self,
         borrow: &'q mut GraphBorrow<'w, Q, F>,
-    ) -> Option<<Q as FetchItem<'q>>::Item>
+    ) -> Option<<Q as FetchItem>::Item<'q>>
     where
         Q: Fetch<'w>,
         F: Fetch<'w>,
