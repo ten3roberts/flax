@@ -130,7 +130,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
+    type Item = <Q::Prepared as PreparedFetch>::Item<'q>;
 
     type IntoIter = QueryIter<'w, 'q, Q, F>;
 
@@ -156,7 +156,7 @@ where
     }
 
     /// Returns the first item
-    pub fn first(&mut self) -> Option<<Q as FetchItem<'_>>::Item> {
+    pub fn first(&mut self) -> Option<<Q as FetchItem>::Item<'_>> {
         self.iter().next()
     }
 
@@ -193,7 +193,7 @@ where
     ///
     /// This is more efficient than `.iter().for_each(|v| {})` as the archetypes can be temporarily
     /// borrowed.
-    pub fn for_each(&mut self, mut func: impl FnMut(<Q as FetchItem<'_>>::Item) + Send + Sync) {
+    pub fn for_each(&mut self, mut func: impl FnMut(<Q as FetchItem>::Item<'_>) + Send + Sync) {
         self.clear_borrows();
         for &arch_id in self.archetypes {
             let arch = self.state.world.archetypes.get(arch_id);
@@ -218,7 +218,7 @@ where
     ///     .for_each(|v| v.for_each(&func))
     /// ```
     #[cfg(feature = "parallel")]
-    pub fn par_for_each(&mut self, func: impl Fn(<Q as FetchItem<'_>>::Item) + Send + Sync)
+    pub fn par_for_each(&mut self, func: impl Fn(<Q as FetchItem>::Item<'_>) + Send + Sync)
     where
         Q: Sync,
         Q::Prepared: Send,
@@ -270,7 +270,7 @@ where
     }
 
     /// Get the fetch items for an entity.
-    pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item> {
+    pub fn get(&mut self, id: Entity) -> Result<<Q::Prepared as PreparedFetch>::Item<'_>> {
         let EntityLocation { arch_id, slot } = self.state.world.location(id)?;
 
         let idx =
@@ -313,7 +313,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = <Q::Prepared as PreparedFetch<'q>>::Item;
+    type Item = <Q::Prepared as PreparedFetch>::Item<'q>;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {

@@ -19,8 +19,8 @@ use super::{FetchAccessData, PreparedFetch, ReadOnlyFetch};
 /// to the loop body, rather than the iterator.
 pub struct MaybeMut<T>(pub(crate) Component<T>);
 
-impl<'q, T: ComponentValue> FetchItem<'q> for MaybeMut<T> {
-    type Item = MutGuard<'q, T>;
+impl<T: ComponentValue> FetchItem for MaybeMut<T> {
+    type Item<'q> = MutGuard<'q, T>;
 }
 
 impl<'w, T: ComponentValue> Fetch<'w> for MaybeMut<T> {
@@ -87,11 +87,11 @@ pub struct PreparedMaybeMut<'w, T> {
     _marker: PhantomData<T>,
 }
 
-impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
-    type Item = MutGuard<'q, T>;
+impl<'w, T: ComponentValue> PreparedFetch for PreparedMaybeMut<'w, T> {
+    type Item<'q> = MutGuard<'q, T>;
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
         MutGuard {
             slot,
             cell: self.cell,
@@ -102,9 +102,9 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     }
 }
 
-impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
+impl<'w, T: ComponentValue> ReadOnlyFetch for PreparedMaybeMut<'w, T> {
     #[inline]
-    unsafe fn fetch_shared(&'q self, slot: usize) -> Self::Item {
+    unsafe fn fetch_shared<'q>(&'q self, slot: usize) -> Self::Item<'q> {
         MutGuard {
             slot,
             cell: self.cell,

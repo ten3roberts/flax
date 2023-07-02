@@ -19,12 +19,12 @@ use core::{
 #[derive(Debug, Clone)]
 pub struct And<L, R>(pub L, pub R);
 
-impl<'q, L, R> FetchItem<'q> for And<L, R>
+impl<L, R> FetchItem for And<L, R>
 where
-    L: FetchItem<'q>,
-    R: FetchItem<'q>,
+    L: FetchItem,
+    R: FetchItem,
 {
-    type Item = (L::Item, R::Item);
+    type Item<'q> = (L::Item<'q>, R::Item<'q>);
 }
 
 impl<'w, L, R> Fetch<'w> for And<L, R>
@@ -64,15 +64,15 @@ where
     }
 }
 
-impl<'q, L, R> PreparedFetch<'q> for And<L, R>
+impl<L, R> PreparedFetch for And<L, R>
 where
-    L: PreparedFetch<'q>,
-    R: PreparedFetch<'q>,
+    L: PreparedFetch,
+    R: PreparedFetch,
 {
-    type Item = (L::Item, R::Item);
+    type Item<'q> = (L::Item<'q>, R::Item<'q>) where Self: 'q;
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    unsafe fn fetch<'q>(&mut self, slot: Slot) -> Self::Item<'q> {
         (self.0.fetch(slot), self.1.fetch(slot))
     }
 
@@ -97,7 +97,7 @@ pub struct Or<T>(pub T);
 /// Negate a filter
 pub struct Not<T>(pub T);
 
-impl<'q, T> FetchItem<'q> for Not<T> {
+impl<T> FetchItem for Not<T> {
     type Item = ();
 }
 
@@ -127,14 +127,14 @@ where
     }
 }
 
-impl<'q, F> PreparedFetch<'q> for Not<Option<F>>
+impl<F> PreparedFetch for Not<Option<F>>
 where
-    F: PreparedFetch<'q>,
+    F: PreparedFetch,
 {
     type Item = ();
 
     #[inline]
-    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
+    unsafe fn fetch<'q>(&'q mut self, _: usize) -> Self::Item<'q> {}
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         if let Some(fetch) = &mut self.0 {
@@ -185,17 +185,17 @@ impl<T> ops::Not for Not<T> {
 #[derive(Debug, Clone)]
 pub struct Union<T>(pub T);
 
-impl<'q, T> FetchItem<'q> for Union<T>
+impl<T> FetchItem for Union<T>
 where
-    T: FetchItem<'q>,
+    T: FetchItem,
 {
-    type Item = T::Item;
+    type Item<'q> = T::Item<'q>;
 }
 
 impl<'w, T> Fetch<'w> for Union<T>
 where
     T: Fetch<'w>,
-    T::Prepared: for<'q> UnionFilter<'q>,
+    T::Prepared: UnionFilter,
 {
     const MUTABLE: bool = T::MUTABLE;
 
@@ -218,22 +218,22 @@ where
     }
 }
 
-impl<'q, T> UnionFilter<'q> for Union<T>
+impl<T> UnionFilter for Union<T>
 where
-    T: UnionFilter<'q>,
+    T: UnionFilter,
 {
     unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
         self.0.filter_union(slots)
     }
 }
 
-impl<'q, T> PreparedFetch<'q> for Union<T>
+impl<T> PreparedFetch for Union<T>
 where
-    T: PreparedFetch<'q> + UnionFilter<'q>,
+    T: PreparedFetch + UnionFilter,
 {
-    type Item = T::Item;
+    type Item<'q> = T::Item<'q> where Self: 'q;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch<'q>(&mut self, slot: usize) -> Self::Item<'q> {
         self.0.fetch(slot)
     }
 
@@ -249,8 +249,8 @@ where
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         // Or
-        impl<'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
-            type Item = ();
+        impl< $($ty, )*> FetchItem<> for Or<($($ty,)*)> {
+            type Item<'q> = ();
         }
 
         impl<'w, $($ty, )*> Fetch<'w> for Or<($($ty,)*)>
@@ -284,8 +284,8 @@ macro_rules! tuple_impl {
         }
 
 
-        impl<'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
-        where $($ty: PreparedFetch<'q>,)*
+        impl< $($ty, )*> PreparedFetch<> for Or<($(Option<$ty>,)*)>
+        where $($ty: PreparedFetch<>,)*
         {
             type Item = ();
 
@@ -302,7 +302,7 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
+            unsafe fn fetch<'q>(&'q mut self, _: usize) -> Self::Item<'q> {}
 
             fn set_visited(&mut self, slots: Slice) {
                 $( self.0.$idx.set_visited(slots);)*
@@ -311,8 +311,8 @@ macro_rules! tuple_impl {
         }
 
 
-        impl<'q, $($ty, )*> UnionFilter<'q> for Or<($(Option<$ty>,)*)>
-        where $($ty: PreparedFetch<'q>,)*
+        impl< $($ty, )*> UnionFilter for Or<($(Option<$ty>,)*)>
+        where $($ty: PreparedFetch,)*
         {
             unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
                 let inner = &mut self.0;

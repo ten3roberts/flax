@@ -79,18 +79,18 @@ impl<Q, S> Source<Q, S> {
     }
 }
 
-impl<'q, Q, S> FetchItem<'q> for Source<Q, S>
+impl<Q, S> FetchItem for Source<Q, S>
 where
-    Q: FetchItem<'q>,
+    Q: FetchItem,
     S: FetchSource,
 {
-    type Item = Q::Item;
+    type Item<'q> = Q::Item<'q>;
 }
 
 impl<'w, Q, S> Fetch<'w> for Source<Q, S>
 where
     Q: Fetch<'w>,
-    Q::Prepared: for<'x> ReadOnlyFetch<'x>,
+    PreparedSource<Q::Prepared>: PreparedFetch,
     S: FetchSource,
 {
     const MUTABLE: bool = Q::MUTABLE;
@@ -146,22 +146,23 @@ where
     }
 }
 
-impl<'q, Q> ReadOnlyFetch<'q> for PreparedSource<Q>
+impl<Q> ReadOnlyFetch for PreparedSource<Q>
 where
-    Q: ReadOnlyFetch<'q>,
+    Q: ReadOnlyFetch,
 {
-    unsafe fn fetch_shared(&'q self, _: crate::archetype::Slot) -> Self::Item {
+    unsafe fn fetch_shared<'q>(&'q self, _: crate::archetype::Slot) -> Self::Item<'q> {
         self.fetch.fetch_shared(self.slot)
     }
 }
 
-impl<'q, Q> PreparedFetch<'q> for PreparedSource<Q>
+impl<Q> PreparedFetch for PreparedSource<Q>
 where
-    Q: ReadOnlyFetch<'q>,
+    Q: ReadOnlyFetch,
 {
-    type Item = Q::Item;
+    type Item<'q> = Q::Item<'q> where Self: 'q;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    #[inline]
+    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
         self.fetch_shared(slot)
     }
 

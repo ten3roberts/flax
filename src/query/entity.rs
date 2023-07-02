@@ -104,7 +104,7 @@ where
     /// Returns the results of the fetch.
     ///
     /// Fails if the entity does not exist, or the fetch isn't matched.
-    pub fn get<'q>(&'q mut self) -> Result<<Q::Prepared as PreparedFetch<'q>>::Item>
+    pub fn get<'q>(&'q mut self) -> Result<<Q::Prepared as PreparedFetch>::Item<'q>>
     where
         'w: 'q,
     {

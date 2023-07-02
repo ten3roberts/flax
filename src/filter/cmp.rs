@@ -115,15 +115,17 @@ impl<F, C> Cmp<F, C> {
     }
 }
 
-impl<'q, F: FetchItem<'q>, M> FetchItem<'q> for Cmp<F, M> {
-    type Item = F::Item;
+impl<F: FetchItem, M> FetchItem for Cmp<F, M> {
+    type Item<'q> = F::Item<'q>;
 }
 
 impl<'w, F, M> Fetch<'w> for Cmp<F, M>
 where
-    F: Fetch<'w>,
-    F::Prepared: for<'x> ReadOnlyFetch<'x>,
-    M: for<'x> CmpMethod<<F::Prepared as PreparedFetch<'x>>::Item> + 'w,
+    F: Fetch<'w> + 'w,
+    F::Prepared: for<'x> ReadOnlyFetch,
+    for<'x> PreparedCmp<'w, F::Prepared, M>: PreparedFetch,
+    // M: for<'x> CmpMethod<<F::Prepared as PreparedFetch>::Item<'x>>,
+    M: 'static,
 {
     const MUTABLE: bool = F::MUTABLE;
 
@@ -159,25 +161,25 @@ pub struct PreparedCmp<'w, F, M> {
     method: &'w M,
 }
 
-impl<'p, 'w, F, M> ReadOnlyFetch<'p> for PreparedCmp<'w, F, M>
+impl<'w, F, M> ReadOnlyFetch for PreparedCmp<'w, F, M>
 where
-    F: for<'x> ReadOnlyFetch<'x>,
-    M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
+    F: for<'x> ReadOnlyFetch,
+    M: for<'x> CmpMethod<<F as PreparedFetch>::Item<'x>> + 'w,
 {
-    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+    unsafe fn fetch_shared<'q>(&'q self, slot: Slot) -> Self::Item<'q> {
         self.fetch.fetch_shared(slot)
     }
 }
 
-impl<'q, 'w, F, M> PreparedFetch<'q> for PreparedCmp<'w, F, M>
+impl<'w, F, M> PreparedFetch for PreparedCmp<'w, F, M>
 where
-    F: for<'x> ReadOnlyFetch<'x>,
-    M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
+    F: for<'x> ReadOnlyFetch,
+    M: for<'x> CmpMethod<<F as PreparedFetch>::Item<'x>> + 'w,
 {
-    type Item = <F as PreparedFetch<'q>>::Item;
+    type Item<'q> = <F as PreparedFetch>::Item<'q> where Self: 'q;
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
         self.fetch.fetch(slot)
     }
 

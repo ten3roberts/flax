@@ -17,8 +17,8 @@ impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
     #[inline]
     pub fn manual_chunk<'q>(&'q mut self, slots: Slice) -> Option<Batch<'q, Q, F>>
     where
-        Q: PreparedFetch<'q>,
-        F: PreparedFetch<'q>,
+        Q: PreparedFetch,
+        F: PreparedFetch,
     {
         let chunk = unsafe { self.fetch.filter_slots(slots) };
         if chunk.is_empty() {
@@ -85,10 +85,10 @@ struct BatchesWithId<'q, Q, F> {
 
 impl<'q, Q, F> Iterator for BatchesWithId<'q, Q, F>
 where
-    Q: PreparedFetch<'q>,
-    F: PreparedFetch<'q>,
+    Q: PreparedFetch,
+    F: PreparedFetch,
 {
-    type Item = (Entity, Q::Item);
+    type Item = (Entity, Q::Item<'q>);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {

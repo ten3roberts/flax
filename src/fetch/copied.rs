@@ -20,18 +20,18 @@ use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 /// See [crate::Component::as_mut]
 pub struct Copied<F>(pub(crate) F);
 
-impl<'q, F, V> FetchItem<'q> for Copied<F>
+impl<F, V> FetchItem for Copied<F>
 where
-    F: FetchItem<'q, Item = &'q V>,
+    F: for<'q> FetchItem<Item<'q> = &'q V>,
     V: 'static,
 {
-    type Item = V;
+    type Item<'q> = V;
 }
 
 impl<'w, F, V> Fetch<'w> for Copied<F>
 where
     F: Fetch<'w>,
-    F: for<'q> FetchItem<'q, Item = &'q V>,
+    F: for<'q> FetchItem<Item<'q> = &'q V>,
     V: 'static + Copy,
 {
     const MUTABLE: bool = F::MUTABLE;
@@ -63,16 +63,16 @@ where
     }
 }
 
-impl<'q, F, V> PreparedFetch<'q> for Copied<F>
+impl<F, V> PreparedFetch for Copied<F>
 where
-    F: PreparedFetch<'q>,
-    F::Item: Deref<Target = V>,
+    F: PreparedFetch,
+    for<'q> F::Item<'q>: Deref<Target = V>,
     V: 'static + Copy,
 {
     type Item = V;
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
         *self.0.fetch(slot)
     }
 
@@ -87,13 +87,13 @@ where
     }
 }
 
-impl<'p, F, V> ReadOnlyFetch<'p> for Copied<F>
+impl<F, V> ReadOnlyFetch for Copied<F>
 where
-    F: ReadOnlyFetch<'p>,
-    F::Item: Deref<Target = V>,
+    F: ReadOnlyFetch,
+    for<'q> F::Item<'q>: Deref<Target = V>,
     V: 'static + Copy,
 {
-    unsafe fn fetch_shared(&'p self, slot: crate::archetype::Slot) -> Self::Item {
+    unsafe fn fetch_shared<'q>(&'q self, slot: crate::archetype::Slot) -> Self::Item<'q> {
         *self.0.fetch_shared(slot)
     }
 }

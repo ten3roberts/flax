@@ -5,6 +5,7 @@ mod component_mut;
 mod copied;
 mod entity_ref;
 mod ext;
+mod map;
 mod maybe_mut;
 mod opt;
 mod read_only;
@@ -76,9 +77,9 @@ pub struct FetchPrepareData<'w> {
 }
 
 /// Trait which gives an associated `Item` fetch type
-pub trait FetchItem<'q> {
+pub trait FetchItem {
     /// The item yielded by the prepared fetch
-    type Item;
+    type Item<'q>;
 }
 
 /// A fetch describes a retrieval of data from the world and archetypes during a query.
@@ -88,12 +89,12 @@ pub trait FetchItem<'q> {
 ///
 /// The PreparedFetch can in turn control the ranges of slots which are requested by the query,
 /// e.g; filtering changed components
-pub trait Fetch<'w>: for<'q> FetchItem<'q> {
+pub trait Fetch<'w>: FetchItem {
     /// true if the fetch mutates any component and thus needs a change event
     const MUTABLE: bool;
 
     /// The prepared version of the fetch
-    type Prepared: for<'x> PreparedFetch<'x, Item = <Self as FetchItem<'x>>::Item> + 'w;
+    type Prepared: for<'x> PreparedFetch<Item<'x> = <Self as FetchItem>::Item<'x>> + 'w;
 
     /// Prepares the fetch for an archetype by acquiring borrows.
     ///
@@ -126,9 +127,11 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 }
 
 /// Borrowed state for a fetch
-pub trait PreparedFetch<'q> {
+pub trait PreparedFetch {
     /// Item returned by fetch
-    type Item: 'q;
+    type Item<'q>: 'q
+    where
+        Self: 'q;
 
     /// Fetch the item from entity at the slot in the prepared storage.
     /// # Safety
@@ -136,7 +139,7 @@ pub trait PreparedFetch<'q> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item;
+    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q>;
 
     #[inline]
     /// Filter the slots to visit
@@ -155,7 +158,7 @@ pub trait PreparedFetch<'q> {
 }
 
 /// Allows filtering the constituent parts of a fetch using a set union
-pub trait UnionFilter<'q> {
+pub trait UnionFilter {
     // Filter the slots using a union operation of the constituent part
     ///
     /// # Safety
@@ -163,13 +166,13 @@ pub trait UnionFilter<'q> {
     unsafe fn filter_union(&mut self, slots: Slice) -> Slice;
 }
 
-impl<'q, F> PreparedFetch<'q> for &'q mut F
+impl<F> PreparedFetch for &mut F
 where
-    F: PreparedFetch<'q>,
+    F: PreparedFetch,
 {
-    type Item = F::Item;
+    type Item<'q> = F::Item<'q>where F: 'q;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
         (*self).fetch(slot)
     }
 
@@ -182,11 +185,11 @@ where
     }
 }
 
-impl<'q> FetchItem<'q> for () {
+impl FetchItem for () {
     type Item = ();
 }
 
-impl<'q> UnionFilter<'q> for () {
+impl UnionFilter for () {
     unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
         slots
     }
@@ -213,24 +216,25 @@ impl<'w> Fetch<'w> for () {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl<'p> ReadOnlyFetch<'p> for () {
-    unsafe fn fetch_shared(&'p self, _: Slot) -> Self::Item {}
+impl ReadOnlyFetch for () {
+    unsafe fn fetch_shared<'q>(&'q self, _: Slot) -> Self::Item<'q> {}
 }
 
-impl<'q> PreparedFetch<'q> for () {
-    type Item = ();
+impl PreparedFetch for () {
+    type Item<'q> = ();
 
-    unsafe fn fetch(&'q mut self, _: Slot) -> Self::Item {}
+    unsafe fn fetch<'q>(&'q mut self, _: Slot) -> Self::Item<'q> {}
 }
 
-impl<'q, F> PreparedFetch<'q> for Option<F>
+impl<F> PreparedFetch for Option<F>
 where
-    F: PreparedFetch<'q>,
+    F: PreparedFetch,
 {
-    type Item = Option<F::Item>;
+    type Item<'q> = Option<F::Item<'q>>where
+        Self: 'q;
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
         self.as_mut().map(|fetch| fetch.fetch(slot))
     }
 
@@ -259,7 +263,7 @@ pub struct ReadEntities<'a> {
     entities: &'a [Entity],
 }
 
-impl<'q> FetchItem<'q> for EntityIds {
+impl FetchItem for EntityIds {
     type Item = Entity;
 }
 
@@ -286,18 +290,18 @@ impl<'w> Fetch<'w> for EntityIds {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
-    type Item = Entity;
+impl<'w> PreparedFetch for ReadEntities<'w> {
+    type Item<'q> = Entity;
 
     #[inline]
-    unsafe fn fetch(&mut self, slot: usize) -> Self::Item {
+    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
         self.entities[slot]
     }
 }
 
-impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
+impl<'w> ReadOnlyFetch for ReadEntities<'w> {
     #[inline]
-    unsafe fn fetch_shared(&self, slot: usize) -> Self::Item {
+    unsafe fn fetch_shared<'q>(&'q self, slot: usize) -> Self::Item<'q> {
         self.entities[slot]
     }
 }
@@ -305,19 +309,19 @@ impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
 // Implement for tuples
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<'q, $($ty, )*> FetchItem<'q> for ($($ty,)*)
-        where $($ty: FetchItem<'q>,)*
+        impl<$($ty, )*> FetchItem for ($($ty,)*)
+        where $($ty: FetchItem,)*
         {
-            type Item = ($($ty::Item,)*);
+            type Item<'q> = ($($ty::Item<'q>,)*);
 
         }
 
-        impl<'q, $($ty, )*> ReadOnlyFetch<'q> for ($($ty,)*)
-        where $($ty: ReadOnlyFetch<'q>,)*
+        impl<$($ty, )*> ReadOnlyFetch for ($($ty,)*)
+        where $($ty: ReadOnlyFetch,)*
         {
 
             #[inline(always)]
-            unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
+            unsafe fn fetch_shared<'q>(&'q self, slot: Slot) -> Self::Item<'q> {
                 ($(
                     (self.$idx).fetch_shared(slot),
                 )*)
@@ -325,13 +329,14 @@ macro_rules! tuple_impl {
         }
 
 
-        impl<'q, $($ty, )*> PreparedFetch<'q> for ($($ty,)*)
-            where $($ty: PreparedFetch<'q>,)*
+        impl<$($ty, )*> PreparedFetch for ($($ty,)*)
+            where $($ty: PreparedFetch,)*
         {
 
-            type Item = ($($ty::Item,)*);
+            type Item<'q> = ($($ty::Item<'q>,)*) where Self: 'q;
+
             #[inline]
-            unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+            unsafe fn fetch<'q>(&'q mut self, slot: Slot) -> Self::Item<'q> {
                 ($(
                     (self.$idx).fetch(slot),
                 )*)
@@ -353,8 +358,8 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<'q, $($ty, )*> UnionFilter<'q> for ($($ty,)*)
-            where $($ty: PreparedFetch<'q>,)*
+        impl<$($ty, )*> UnionFilter for ($($ty,)*)
+            where $($ty: PreparedFetch,)*
         {
 
             #[inline]

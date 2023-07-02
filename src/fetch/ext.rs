@@ -7,6 +7,7 @@ use super::{
     as_deref::AsDeref,
     cloned::Cloned,
     copied::Copied,
+    map::Map,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation},
     Modified, Satisfied, Source, TransformFetch,
@@ -25,7 +26,7 @@ pub trait FetchExt: Sized {
     fn opt_or<V>(self, default: V) -> OptOr<Self, V>
     where
         Self: for<'w> Fetch<'w>,
-        for<'q> Self: FetchItem<'q, Item = &'q V>,
+        for<'q> Self: FetchItem<Item<'q> = &'q V>,
     {
         OptOr::new(self, default)
     }
@@ -40,7 +41,7 @@ pub trait FetchExt: Sized {
     fn opt_or_default<V>(self) -> OptOr<Self, V>
     where
         Self: for<'w> Fetch<'w>,
-        for<'q> Self: FetchItem<'q, Item = &'q V>,
+        for<'q> Self: FetchItem<Item<'q> = &'q V>,
         V: Default,
     {
         self.opt_or(Default::default())
