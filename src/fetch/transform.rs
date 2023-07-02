@@ -137,7 +137,7 @@ mod tests {
         }
 
         #[derive(Fetch)]
-        #[fetch(item = [Debug], transforms = [Modified])]
+        #[fetch(item_derives = [Debug], transforms = [Modified])]
         struct MyFetch {
             a: Component<i32>,
             b: Component<String>,

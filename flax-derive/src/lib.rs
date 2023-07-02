@@ -13,7 +13,7 @@ use syn::{
 /// ```rust,ignore
 /// use glam::*;
 /// #[derive(Fetch)]
-/// #[fetch(Debug)]
+/// #[fetch(item_derives = [Debug], transforms = [Modified])]
 /// struct CustomFetch {
 ///     position: Component<Vec3>,
 ///     rotation: Mutable<Quat>,
@@ -144,7 +144,7 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
 
             #[inline]
             fn filter_arch(&self, arch: &#crate_name::archetype::Archetype) -> bool {
-                #(self.#field_names.filter_arch(arch))&&*
+                #(#crate_name::Fetch::filter_arch(&self.#field_names, arch))&&*
             }
 
             fn describe(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -158,11 +158,11 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
             }
 
             fn access(&self, data: #crate_name::fetch::FetchAccessData, dst: &mut Vec<#crate_name::system::Access>) {
-                 #(self.#field_names.access(data, dst));*
+                 #(#crate_name::Fetch::access(&self.#field_names, data, dst));*
             }
 
             fn searcher(&self, searcher: &mut #crate_name::query::ArchetypeSearcher) {
-                #(self.#field_names.searcher(searcher);)*
+                #(#crate_name::Fetch::searcher(&self.#field_names, searcher);)*
             }
         }
     }
@@ -306,7 +306,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             #[inline]
             unsafe fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
                 Self::Item {
-                    #(#field_names: self.#field_names.fetch(slot),)*
+                    #(#field_names: #crate_name::fetch::PreparedFetch::fetch(&mut self.#field_names, slot),)*
                 }
             }
 
@@ -344,20 +344,12 @@ impl Attrs {
 
                     list.parse_nested_meta(|meta| {
                         // item = [Debug, PartialEq]
-                        if meta.path.is_ident("item") {
+                        if meta.path.is_ident("item_derives") {
                             let value = meta.value()?;
                             let content;
                             bracketed!(content in value);
                             let content =
                                 <Punctuated<Ident, Token![,]>>::parse_terminated(&content)?;
-
-                            // let derives = syn::parse2::<MetaList>(value.to_token_stream())
-                            //     .map_err(|_| {
-                            //         Error::new(
-                            //             value.span(),
-                            //             "Expected a MetaList for item derives",
-                            //         )
-                            //     })?;
 
                             res.item_derives = Some(content);
                             Ok(())
