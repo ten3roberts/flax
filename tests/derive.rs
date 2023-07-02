@@ -12,7 +12,7 @@ fn derive_fetch() {
     use flax::{Fetch, *};
 
     #[derive(Fetch)]
-    #[fetch(Debug, PartialEq)]
+    #[fetch(item = [Debug, PartialEq])]
     struct TransformQuery {
         pos: Component<Vec3>,
         rot: Opt<Component<Quat>>,

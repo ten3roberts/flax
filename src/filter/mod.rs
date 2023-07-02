@@ -610,7 +610,7 @@ mod tests {
         changes.set(Change::new(Slice::new(784, 800), 7));
         changes.set(Change::new(Slice::new(945, 1139), 8));
 
-        let filter = PreparedKindFilter::new((), changes.as_slice(), 2);
+        let filter = PreparedChangeFilter::new((), changes.as_slice(), 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -644,8 +644,8 @@ mod tests {
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedKindFilter::new((), changes_1.as_slice(), 1);
-        let b = PreparedKindFilter::new((), changes_2.as_slice(), 2);
+        let a = PreparedChangeFilter::new((), changes_1.as_slice(), 1);
+        let b = PreparedChangeFilter::new((), changes_2.as_slice(), 2);
 
         let filter = Or((Some(a), Some(b)));
 
@@ -661,8 +661,8 @@ mod tests {
 
         // And
 
-        let a = PreparedKindFilter::new((), changes_1.as_slice(), 1);
-        let b = PreparedKindFilter::new((), changes_2.as_slice(), 2);
+        let a = PreparedChangeFilter::new((), changes_1.as_slice(), 1);
+        let b = PreparedChangeFilter::new((), changes_2.as_slice(), 2);
 
         let filter = And(a, b);
 

@@ -6,12 +6,12 @@ mod copied;
 mod entity_ref;
 mod ext;
 mod maybe_mut;
-mod modified;
 mod opt;
 mod read_only;
 mod relations;
 mod satisfied;
 mod source;
+mod transform;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
@@ -30,12 +30,12 @@ pub use component_mut::*;
 pub use entity_ref::*;
 pub use ext::FetchExt;
 pub use maybe_mut::{MaybeMut, MutGuard};
-pub use modified::ModifiedFetch;
 pub use opt::*;
 pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
 pub use satisfied::Satisfied;
 pub use source::Source;
+pub use transform::{Modified, TransformFetch};
 
 #[doc(hidden)]
 pub struct FmtQuery<'r, Q>(pub &'r Q);

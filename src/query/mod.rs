@@ -120,7 +120,10 @@ impl<Q> Query<Q, All, Planar> {
     /// [`Query::with_components`]
     ///
     /// A fetch may also contain filters
-    pub fn new(fetch: Q) -> Self {
+    pub fn new(fetch: Q) -> Self
+    where
+        Q: for<'x> Fetch<'x>,
+    {
         Self {
             fetch: Filtered::new(fetch, All, false),
             change_tick: 0,
