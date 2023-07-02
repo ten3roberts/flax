@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::{Fetch, FetchItem};
 
 use super::{FmtQuery, PreparedFetch};

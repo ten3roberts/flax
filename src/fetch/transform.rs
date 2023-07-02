@@ -49,9 +49,7 @@ mod tests {
     use alloc::string::{String, ToString};
     use itertools::Itertools;
 
-    use crate::{
-        component, entity_ids, CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
-    };
+    use crate::{component, entity_ids, CommandBuffer, Entity, FetchExt, Query, World};
 
     #[test]
     fn query_modified() {
@@ -130,6 +128,8 @@ mod tests {
     #[test]
     #[cfg(feature = "derive")]
     fn query_modified_struct() {
+        use crate::{Component, Fetch};
+
         component! {
             a: i32,
             b: String,
