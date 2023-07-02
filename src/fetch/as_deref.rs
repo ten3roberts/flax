@@ -6,18 +6,18 @@ use core::{fmt, ops::Deref};
 /// Dereferences the fetch item
 pub struct AsDeref<F>(pub(crate) F);
 
-impl<F, V> FetchItem for AsDeref<F>
+impl<'q, F, V> FetchItem<'q> for AsDeref<F>
 where
-    F: for<'q> FetchItem<Item<'q> = &'q V>,
+    F: FetchItem<'q, Item = &'q V>,
     V: 'static + Deref,
 {
-    type Item<'q> = &'q V::Target;
+    type Item = &'q V::Target;
 }
 
 impl<'w, F, V> Fetch<'w> for AsDeref<F>
 where
     F: Fetch<'w>,
-    F: for<'q> FetchItem<Item<'q> = &'q V>,
+    F: for<'q> FetchItem<'q, Item = &'q V>,
     V: 'static + Deref,
 {
     const MUTABLE: bool = F::MUTABLE;
@@ -50,14 +50,14 @@ where
     }
 }
 
-impl<F, V> PreparedFetch for AsDeref<F>
+impl<'q, F, V> PreparedFetch<'q> for AsDeref<F>
 where
-    for<'q> F: PreparedFetch<Item<'q> = &'q V> + 'q,
+    F: PreparedFetch<'q, Item = &'q V>,
     V: 'static + Deref,
 {
-    type Item<'q> = &'q V::Target where Self: 'q;
+    type Item = &'q V::Target;
 
-    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.0.fetch(slot)
     }
 
@@ -70,12 +70,12 @@ where
     }
 }
 
-impl<F, V> ReadOnlyFetch for AsDeref<F>
+impl<'q, F, V> ReadOnlyFetch<'q> for AsDeref<F>
 where
-    for<'q> F: ReadOnlyFetch<Item<'q> = &'q V> + 'q,
+    F: ReadOnlyFetch<'q, Item = &'q V>,
     V: 'static + Deref,
 {
-    unsafe fn fetch_shared<'q>(&self, slot: crate::archetype::Slot) -> Self::Item<'q> {
+    unsafe fn fetch_shared(&'q self, slot: crate::archetype::Slot) -> Self::Item {
         self.0.fetch_shared(slot)
     }
 }

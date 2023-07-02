@@ -80,11 +80,11 @@ impl<Q, F> Filtered<Q, F> {
     }
 }
 
-impl<'w, Q, F> FetchItem for Filtered<Q, F>
+impl<'w, Q, F> FetchItem<'w> for Filtered<Q, F>
 where
-    Q: FetchItem,
+    Q: FetchItem<'w>,
 {
-    type Item<'q> = Q::Item<'q>;
+    type Item = Q::Item;
 }
 
 impl<'w, Q, F> Fetch<'w> for Filtered<Q, F>
@@ -133,15 +133,15 @@ where
     }
 }
 
-impl<Q, F> PreparedFetch for Filtered<Q, F>
+impl<'q, Q, F> PreparedFetch<'q> for Filtered<Q, F>
 where
-    Q: PreparedFetch,
-    F: PreparedFetch,
+    Q: PreparedFetch<'q>,
+    F: PreparedFetch<'q>,
 {
-    type Item<'q> = Q::Item<'q> where Self: 'q;
+    type Item = Q::Item;
 
     #[inline(always)]
-    unsafe fn fetch<'q>(&'q mut self, slot: usize) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
         self.fetch.fetch(slot)
     }
 
@@ -190,9 +190,9 @@ impl<Q> FilterIter<Q> {
     }
 }
 
-impl<Q> Iterator for FilterIter<Q>
+impl<'q, Q> Iterator for FilterIter<Q>
 where
-    Q: PreparedFetch,
+    Q: PreparedFetch<'q>,
 {
     type Item = Slice;
 
@@ -224,7 +224,7 @@ where
     }
 }
 
-impl<F: PreparedFetch> FusedIterator for FilterIter<F> {}
+impl<'q, F: PreparedFetch<'q>> FusedIterator for FilterIter<F> {}
 
 #[derive(Debug, Clone)]
 /// Fetch which only yields if the entity has the specified component
@@ -233,8 +233,8 @@ pub struct With {
     pub(crate) name: &'static str,
 }
 
-impl FetchItem for With {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for With {
+    type Item = ();
 }
 
 impl<'a> Fetch<'a> for With {
@@ -269,8 +269,8 @@ pub struct Without {
     pub(crate) name: &'static str,
 }
 
-impl FetchItem for Without {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for Without {
+    type Item = ();
 }
 
 impl<'w> Fetch<'w> for Without {
@@ -304,8 +304,8 @@ pub(crate) struct WithObject {
     pub(crate) object: Entity,
 }
 
-impl FetchItem for WithObject {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for WithObject {
+    type Item = ();
 }
 
 impl<'w> Fetch<'w> for WithObject {
@@ -347,8 +347,8 @@ impl<F> core::fmt::Debug for ArchetypeFilter<F> {
     }
 }
 
-impl<F> FetchItem for ArchetypeFilter<F> {
-    type Item<'q> = ();
+impl<'q, F> FetchItem<'q> for ArchetypeFilter<F> {
+    type Item = ();
 }
 
 impl<'w, F: Fn(&Archetype) -> bool> Fetch<'w> for ArchetypeFilter<F> {
@@ -378,8 +378,8 @@ pub struct WithRelation {
     pub(crate) name: &'static str,
 }
 
-impl FetchItem for WithRelation {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for WithRelation {
+    type Item = ();
 }
 
 impl<'w> Fetch<'w> for WithRelation {
@@ -409,8 +409,8 @@ pub struct WithoutRelation {
     pub(crate) name: &'static str,
 }
 
-impl FetchItem for WithoutRelation {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for WithoutRelation {
+    type Item = ();
 }
 
 impl<'a> Fetch<'a> for WithoutRelation {
@@ -444,11 +444,11 @@ impl<'a, F> Clone for RefFetch<'a, F> {
     }
 }
 
-impl<'a, F> FetchItem for RefFetch<'a, F>
+impl<'a, 'q, F> FetchItem<'q> for RefFetch<'a, F>
 where
-    F: FetchItem,
+    F: FetchItem<'q>,
 {
-    type Item<'q> = F::Item<'q>;
+    type Item = F::Item;
 }
 
 impl<'a, 'w, F> Fetch<'w> for RefFetch<'a, F>
@@ -485,11 +485,11 @@ where
     }
 }
 
-impl<'a, F> FetchItem for &'a F
+impl<'a, 'q, F> FetchItem<'q> for &'a F
 where
-    F: FetchItem,
+    F: FetchItem<'q>,
 {
-    type Item<'q> = F::Item<'q>;
+    type Item = F::Item;
 }
 
 impl<'a, 'w, F> Fetch<'w> for &'a F
@@ -531,19 +531,19 @@ where
 #[derive(Copy, Debug, Clone)]
 pub struct BatchSize(pub(crate) Slot);
 
-impl PreparedFetch for BatchSize {
-    type Item<'q> = ();
+impl<'q> PreparedFetch<'q> for BatchSize {
+    type Item = ();
 
     #[inline]
-    unsafe fn fetch<'q>(&'q mut self, _: usize) -> Self::Item<'q> {}
+    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))
     }
 }
 
-impl FetchItem for BatchSize {
-    type Item<'q> = ();
+impl<'q> FetchItem<'q> for BatchSize {
+    type Item = ();
 }
 
 impl<'w> Fetch<'w> for BatchSize {

@@ -248,9 +248,9 @@ fn derive_modified(params: &Params) -> TokenStream {
             impl #trait_name for #fetch_name
             {
                 type Output = #crate_name::filter::Union<#transformed_name<#(<#field_types as #trait_name>::Output,)*>>;
-                fn transform_fetch(self, method: #crate_name::fetch::Modified) -> Self::Output {
+                fn transform_fetch(self) -> Self::Output {
                     #crate_name::filter::Union(#transformed_name {
-                        #(#field_names: <#field_types as #trait_name>::transform_fetch(self.#field_names, method),)*
+                        #(#field_names: <#field_types as #trait_name>::transform_fetch(self.#field_names),)*
                     })
                 }
             }
@@ -300,10 +300,10 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
         }
 
         #[automatically_derived]
-        impl #prep_impl #crate_name::fetch::PreparedFetch for #prepared_name #prep_ty
+        impl #prep_impl #crate_name::fetch::PreparedFetch<#q_lf> for #prepared_name #prep_ty
             where #(#field_types: 'static,)*
         {
-            type Item<#q_lf> = #item_name #item_ty;
+            type Item = #item_name #item_ty;
 
             #[inline]
             unsafe fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {

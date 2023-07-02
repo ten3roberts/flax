@@ -72,8 +72,8 @@ where
     }
 }
 
-impl<T: ComponentValue> FetchItem for Relations<T> {
-    type Item<'q> = RelationsIter<'q, T>;
+impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {
+    type Item = RelationsIter<'q, T>;
 }
 
 #[doc(hidden)]
@@ -81,13 +81,13 @@ pub struct PreparedRelations<'a, T> {
     borrows: SmallVec<[(Entity, AtomicRef<'a, [T]>); 4]>,
 }
 
-impl<'w, T> PreparedFetch for PreparedRelations<'w, T>
+impl<'q, 'w, T> PreparedFetch<'q> for PreparedRelations<'w, T>
 where
     T: ComponentValue,
 {
-    type Item<'q> = RelationsIter<'q, T>;
+    type Item = RelationsIter<'q, T>;
 
-    unsafe fn fetch<'q>(&'q mut self, slot: Slot) -> Self::Item<'q> {
+    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
         RelationsIter {
             borrows: self.borrows.iter(),
             slot,
@@ -101,8 +101,8 @@ pub struct RelationsIter<'a, T> {
     slot: Slot,
 }
 
-impl<'q, T> Iterator for RelationsIter<'q, T> {
-    type Item = (Entity, &'q T);
+impl<'a, T> Iterator for RelationsIter<'a, T> {
+    type Item = (Entity, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         let (id, borrow) = self.borrows.next()?;
