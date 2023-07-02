@@ -343,10 +343,7 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 mod tests {
     use itertools::Itertools;
 
-    use crate::{
-        filter::{All, FilterIter, Nothing},
-        World,
-    };
+    use crate::filter::{FilterIter, Nothing};
 
     use super::*;
 

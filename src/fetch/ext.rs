@@ -9,7 +9,7 @@ use super::{
     copied::Copied,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation},
-    Modified, Satisfied, Source, TransformFetch,
+    Map, Modified, Satisfied, Source, TransformFetch,
 };
 
 /// Extension trait for [crate::Fetch]
@@ -147,7 +147,16 @@ pub trait FetchExt: Sized {
     where
         Self: TransformFetch<Modified>,
     {
-        self.transform_fetch()
+        self.transform_fetch(Modified)
+    }
+
+    /// Map each item of the query to another type using the provided function.
+    fn map<F, T>(self, func: F) -> Map<Self, F>
+    where
+        Self: for<'x> FetchItem<'x>,
+        for<'x> F: Fn(<Self as FetchItem<'x>>::Item) -> T,
+    {
+        Map { query: self, func }
     }
 }
 

@@ -179,8 +179,6 @@ fn prepend_generics(prepend: &[GenericParam], generics: &Generics) -> Generics {
 fn derive_union(params: &Params) -> TokenStream {
     let Params {
         crate_name,
-        fetch_name,
-        field_types,
         field_names,
         prepared_name,
         q_lf,
@@ -248,9 +246,9 @@ fn derive_modified(params: &Params) -> TokenStream {
             impl #trait_name for #fetch_name
             {
                 type Output = #crate_name::filter::Union<#transformed_name<#(<#field_types as #trait_name>::Output,)*>>;
-                fn transform_fetch(self) -> Self::Output {
+                fn transform_fetch(self, method: #crate_name::fetch::Modified) -> Self::Output {
                     #crate_name::filter::Union(#transformed_name {
-                        #(#field_names: <#field_types as #trait_name>::transform_fetch(self.#field_names),)*
+                        #(#field_names: <#field_types as #trait_name>::transform_fetch(self.#field_names, method),)*
                     })
                 }
             }
