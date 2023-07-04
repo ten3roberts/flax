@@ -7,10 +7,10 @@ use crate::{
     fetch::FetchPrepareData,
     fetch::PreparedFetch,
     system::Access,
-    ComponentValue, Fetch,
+    Fetch,
 };
 
-use super::{FetchAccessData, FetchItem, ReadOnlyFetch};
+use super::{FetchAccessData, FetchItem, ReadOnlyFetch, TransformFetch};
 
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
@@ -90,20 +90,22 @@ where
 #[derive(Debug, Clone)]
 pub struct OptOr<F, V> {
     fetch: F,
-    or: V,
+    value: V,
 }
 
 impl<F, V> OptOr<F, V> {
     pub(crate) fn new(inner: F, or: V) -> Self {
-        Self { fetch: inner, or }
+        Self {
+            fetch: inner,
+            value: or,
+        }
     }
 }
 
 impl<'w, F, V> Fetch<'w> for OptOr<F, V>
 where
     F: Fetch<'w> + for<'q> FetchItem<'q, Item = &'q V>,
-    for<'q> F::Prepared: PreparedFetch<'q, Item = &'q V>,
-    V: ComponentValue,
+    V: 'static,
 {
     const MUTABLE: bool = F::MUTABLE;
 
@@ -112,7 +114,7 @@ where
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(OptOr {
             fetch: self.fetch.prepare(data),
-            or: &self.or,
+            value: &self.value,
         })
     }
 
@@ -131,21 +133,21 @@ where
     }
 }
 
-impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {
+impl<'q, F: FetchItem<'q, Item = &'q V>, V: 'static> FetchItem<'q> for OptOr<F, V> {
     type Item = &'q V;
 }
 
 impl<'q, 'w, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>
 where
     F: PreparedFetch<'q, Item = &'q V>,
-    V: 'static,
+    V: 'q,
 {
     type Item = &'q V;
 
     unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
         match self.fetch {
             Some(ref mut v) => v.fetch(slot),
-            None => self.or,
+            None => self.value,
         }
     }
 
@@ -161,6 +163,34 @@ where
     fn set_visited(&mut self, slots: Slice) {
         if let Some(fetch) = &mut self.fetch {
             fetch.set_visited(slots)
+        }
+    }
+}
+
+impl<K, F> TransformFetch<K> for Opt<F>
+where
+    F: TransformFetch<K>,
+{
+    type Output = Opt<F::Output>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        Opt(self.0.transform_fetch(method))
+    }
+}
+
+impl<K, F, V> TransformFetch<K> for OptOr<F, V>
+where
+    F: TransformFetch<K>,
+    F: for<'q> FetchItem<'q, Item = &'q V>,
+    F::Output: for<'q> FetchItem<'q, Item = &'q V>,
+    V: 'static,
+{
+    type Output = OptOr<F::Output, V>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        OptOr {
+            fetch: self.fetch.transform_fetch(method),
+            value: self.value,
         }
     }
 }
