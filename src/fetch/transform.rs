@@ -8,7 +8,7 @@ pub trait TransformFetch<Method>: for<'w> Fetch<'w> {
     /// The transformed type.
     ///
     /// May of may not have the same `Item`
-    type Output;
+    type Output: for<'w> Fetch<'w>;
     /// Transform the fetch using the provided method
     fn transform_fetch(self, method: Method) -> Self::Output;
 }
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     #[cfg(feature = "derive")]
     fn query_modified_struct() {
-        use crate::{Component, Fetch};
+        use crate::{fetch::Cloned, Component, Fetch};
 
         component! {
             a: i32,
@@ -140,7 +140,7 @@ mod tests {
         #[fetch(item_derives = [Debug], transforms = [Modified])]
         struct MyFetch {
             a: Component<i32>,
-            b: Component<String>,
+            b: Cloned<Component<String>>,
         }
 
         let mut world = World::new();
@@ -167,9 +167,12 @@ mod tests {
             .tag(other())
             .spawn(&mut world);
 
-        let query = MyFetch { a: a(), b: b() }
-            .modified()
-            .map(|v| (*v.a, v.b.clone()));
+        let query = MyFetch {
+            a: a(),
+            b: b().cloned(),
+        }
+        .modified()
+        .map(|v| (*v.a, v.b));
 
         let mut query = Query::new((entity_ids(), query));
 

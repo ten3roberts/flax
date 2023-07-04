@@ -11,7 +11,7 @@ use crate::{
     Fetch, FetchItem,
 };
 
-use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch, TransformFetch};
 
 #[derive(Debug, Clone)]
 /// Component which copied the value.
@@ -20,19 +20,21 @@ use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 /// See [crate::Component::as_mut]
 pub struct Copied<F>(pub(crate) F);
 
-impl<'q, F, V> FetchItem<'q> for Copied<F>
+impl<'q, F> FetchItem<'q> for Copied<F>
 where
-    F: FetchItem<'q, Item = &'q V>,
-    V: 'static,
+    F: FetchItem<'q>,
+    <F as FetchItem<'q>>::Item: Deref,
+    <<F as FetchItem<'q>>::Item as Deref>::Target: 'static + Copy,
 {
-    type Item = V;
+    type Item = <<F as FetchItem<'q>>::Item as Deref>::Target;
 }
 
-impl<'w, F, V> Fetch<'w> for Copied<F>
+impl<'w, F> Fetch<'w> for Copied<F>
 where
     F: Fetch<'w>,
-    F: for<'q> FetchItem<'q, Item = &'q V>,
-    V: 'static + Copy,
+    F: for<'q> FetchItem<'q>,
+    for<'q> <F as FetchItem<'q>>::Item: Deref,
+    for<'q> <<F as FetchItem<'q>>::Item as Deref>::Target: 'static + Copy,
 {
     const MUTABLE: bool = F::MUTABLE;
 
@@ -95,5 +97,18 @@ where
 {
     unsafe fn fetch_shared(&'p self, slot: crate::archetype::Slot) -> Self::Item {
         *self.0.fetch_shared(slot)
+    }
+}
+
+impl<K, F> TransformFetch<K> for Copied<F>
+where
+    F: TransformFetch<K>,
+    Copied<F>: for<'x> Fetch<'x>,
+    Copied<F::Output>: for<'x> Fetch<'x>,
+{
+    type Output = Copied<F::Output>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        Copied(self.0.transform_fetch(method))
     }
 }
