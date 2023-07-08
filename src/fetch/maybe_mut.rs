@@ -3,9 +3,9 @@ use atomic_refcell::AtomicRef;
 use core::marker::PhantomData;
 
 use crate::{
-    archetype::{Archetype, Cell, RefMut, Slot},
+    archetype::{Cell, RefMut, Slot},
     system::{Access, AccessKind},
-    Component, ComponentValue, Fetch, FetchItem,
+    Component, ComponentValue, Entity, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, PreparedFetch, ReadOnlyFetch};
@@ -33,7 +33,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for MaybeMut<T> {
         Some(PreparedMaybeMut {
             cell,
             new_tick: data.new_tick,
-            arch: data.arch,
+            entities: data.arch.entities(),
             _marker: PhantomData,
         })
     }
@@ -83,7 +83,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for MaybeMut<T> {
 pub struct PreparedMaybeMut<'w, T> {
     cell: &'w Cell,
     new_tick: u32,
-    arch: &'w Archetype,
+    entities: &'w [Entity],
     _marker: PhantomData<T>,
 }
 
@@ -96,7 +96,7 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
             slot,
             cell: self.cell,
             new_tick: self.new_tick,
-            arch: self.arch,
+            entities: self.entities,
             _marker: PhantomData,
         }
     }
@@ -109,7 +109,7 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
             slot,
             cell: self.cell,
             new_tick: self.new_tick,
-            arch: self.arch,
+            entities: self.entities,
             _marker: PhantomData,
         }
     }
@@ -120,7 +120,7 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
 /// See: [`MaybeMut`]
 pub struct MutGuard<'w, T> {
     slot: Slot,
-    arch: &'w Archetype,
+    entities: &'w [Entity],
     cell: &'w Cell,
     new_tick: u32,
     _marker: PhantomData<T>,
@@ -139,7 +139,7 @@ impl<'w, T: ComponentValue> MutGuard<'w, T> {
     pub fn write(&self) -> RefMut<T> {
         // Type is guaranteed by constructor
         self.cell
-            .get_mut(&self.arch, self.slot, self.new_tick)
+            .get_mut(self.entities, self.slot, self.new_tick)
             .unwrap()
     }
 }

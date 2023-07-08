@@ -172,7 +172,7 @@ impl<'q, 'w, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let cur = match self
             .cursor
-            .find_slice(&self.data.changes().get(self.kind), slots)
+            .find_slice(self.data.changes().get(self.kind), slots)
         {
             Some(v) => v,
             None => return Slice::new(slots.end, slots.end),
@@ -268,18 +268,18 @@ impl<'w> core::fmt::Debug for PreparedRemoveFilter<'w> {
 }
 
 impl<'q, 'w> ReadOnlyFetch<'q> for PreparedRemoveFilter<'w> {
-    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {}
+    unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
 }
 
 impl<'q, 'w> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
     type Item = ();
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {}
+    unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        let cur = match self.cursor.find_slice(&self.changes, slots) {
+        let cur = match self.cursor.find_slice(self.changes, slots) {
             Some(v) => v,
             None => return Slice::new(slots.end, slots.end),
         };
@@ -293,11 +293,7 @@ impl<'q, 'w> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
 mod test {
     use pretty_assertions::assert_eq;
 
-    use crate::{
-        archetype::{Cell, Change},
-        filter::FilterIter,
-        name,
-    };
+    use crate::{archetype::Change, filter::FilterIter};
 
     use super::*;
 
@@ -341,7 +337,7 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let mut filter = PreparedRemoveFilter {
+        let filter = PreparedRemoveFilter {
             changes: &changes[..],
             cursor: ChangeCursor::new(2),
         };
@@ -368,7 +364,7 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let mut filter = PreparedRemoveFilter {
+        let filter = PreparedRemoveFilter {
             changes: &changes[..],
             cursor: ChangeCursor::new(2),
         };
