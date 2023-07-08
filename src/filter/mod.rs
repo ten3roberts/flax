@@ -19,7 +19,7 @@ use crate::{
     ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
 };
 
-pub use change::*;
+pub use change::{ChangeFilter, RemovedFilter};
 pub use cmp::{Cmp, Equal, Greater, GreaterEq, Less, LessEq};
 pub use constant::*;
 pub use set::*;
@@ -594,7 +594,9 @@ mod tests {
 
     use crate::{
         archetype::{Change, ChangeKind, ChangeList},
-        component, ArchetypeId, World,
+        component,
+        filter::change::PreparedRemoveFilter,
+        ArchetypeId, World,
     };
 
     use super::*;
@@ -610,7 +612,7 @@ mod tests {
         changes.set(Change::new(Slice::new(784, 800), 7));
         changes.set(Change::new(Slice::new(945, 1139), 8));
 
-        let filter = PreparedChangeFilter::new((), changes.as_slice(), 2);
+        let filter = PreparedRemoveFilter::new(&changes, 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -644,8 +646,8 @@ mod tests {
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedChangeFilter::new((), changes_1.as_slice(), 1);
-        let b = PreparedChangeFilter::new((), changes_2.as_slice(), 2);
+        let a = PreparedRemoveFilter::new(changes_1.as_slice(), 1);
+        let b = PreparedRemoveFilter::new(changes_2.as_slice(), 2);
 
         let filter = Or((Some(a), Some(b)));
 
@@ -661,8 +663,8 @@ mod tests {
 
         // And
 
-        let a = PreparedChangeFilter::new((), changes_1.as_slice(), 1);
-        let b = PreparedChangeFilter::new((), changes_2.as_slice(), 2);
+        let a = PreparedRemoveFilter::new(changes_1.as_slice(), 1);
+        let b = PreparedRemoveFilter::new(changes_2.as_slice(), 2);
 
         let filter = And(a, b);
 
@@ -685,7 +687,7 @@ mod tests {
             c: u32,
         }
 
-        let archetype = Archetype::new([a().info(), b().info(), c().info()]);
+        let mut archetype = Archetype::new([a().info(), b().info(), c().info()]);
 
         let filter = (ChangeFilter::new(a(), ChangeKind::Modified)
             & ChangeFilter::new(b(), ChangeKind::Modified))

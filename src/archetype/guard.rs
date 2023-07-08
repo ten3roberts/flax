@@ -1,70 +1,114 @@
 use core::{
     fmt::Debug,
     ops::{Deref, DerefMut},
+    ptr::NonNull,
 };
 
-use atomic_refcell::AtomicRefMut;
+use atomic_refcell::{AtomicRef, AtomicRefMut};
 
 use crate::{
     events::{EventData, EventKind},
-    Entity,
+    ComponentValue, Entity,
 };
 
-use super::{Cell, Change, Changes, Slice, Slot};
+use super::{Archetype, CellData, Change, Changes, Slice, Slot};
 
-pub(crate) struct CellMutGuard<'a, T: ?Sized> {
-    pub(crate) storage: AtomicRefMut<'a, T>,
-    pub(crate) changes: AtomicRefMut<'a, Changes>,
-    pub(crate) cell: &'a Cell,
-    pub(crate) ids: &'a [Entity],
-    pub(crate) tick: u32,
+/// Type safe abstraction over a borrowed cell data
+pub(crate) struct CellMutGuard<'a, T> {
+    value: AtomicRefMut<'a, [T]>,
+    // From the refcell
+    orig: NonNull<CellData>,
 }
 
-impl<'a, T: Debug + ?Sized> Debug for CellMutGuard<'a, T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.storage.fmt(f)
+unsafe impl<'a, T> Send for CellMutGuard<'a, T> where AtomicRefMut<'a, T>: Send {}
+unsafe impl<'a, T> Sync for CellMutGuard<'a, T> where AtomicRefMut<'a, T>: Sync {}
+
+impl<'a, T: ComponentValue> CellMutGuard<'a, T> {
+    pub(super) fn new(mut value: AtomicRefMut<'a, CellData>) -> Self {
+        // Store the original pointer. This will be used when dropped
+        let orig = NonNull::from(&mut *value);
+
+        let value = AtomicRefMut::map(value, |v| v.storage.downcast_mut::<T>());
+
+        Self { value, orig }
     }
-}
 
-impl<'a, T: ?Sized> CellMutGuard<'a, T> {
-    pub(crate) fn set_modified(&mut self, slots: Slice) {
-        let event = EventData {
-            ids: &self.ids[slots.as_range()],
-            key: self.cell.info.key,
+    pub(crate) fn set_modified(&mut self, entities: &[Entity], slots: Slice, tick: u32) {
+        // SAFETY: `value` is not accessed in this function
+        let orig = unsafe { self.orig.as_mut() };
+
+        orig.on_event(EventData {
+            ids: &entities[slots.as_range()],
+            key: orig.key,
             kind: EventKind::Modified,
-        };
+        });
 
-        for handler in self.cell.subscribers.iter() {
-            handler.on_event(&event)
-        }
+        orig.changes
+            .set_modified_if_tracking(Change::new(slots, tick));
+    }
 
-        self.changes
-            .set_modified_if_tracking(Change::new(slots, self.tick));
+    pub(crate) fn changes_mut(&mut self) -> &mut Changes {
+        // SAFETY: `value` is not accessed in this function
+        let orig = unsafe { self.orig.as_mut() };
+
+        &mut orig.changes
+    }
+}
+
+impl<'w, T> Deref for CellMutGuard<'w, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<'w, T> DerefMut for CellMutGuard<'w, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+/// Type safe abstraction over a borrowed cell data
+pub(crate) struct CellGuard<'a, T> {
+    value: AtomicRef<'a, [T]>,
+    orig: NonNull<CellData>,
+}
+
+unsafe impl<'a, T> Send for CellGuard<'a, T> where AtomicRef<'a, T>: Send {}
+unsafe impl<'a, T> Sync for CellGuard<'a, T> where AtomicRef<'a, T>: Sync {}
+
+impl<'a, T: ComponentValue> CellGuard<'a, T> {
+    pub(super) fn new(value: AtomicRef<'a, CellData>) -> Self {
+        // Store the original pointer. This will be used when dropped
+        let orig = NonNull::from(&*value);
+
+        let value = AtomicRef::map(value, |v| v.storage.downcast_ref::<T>());
+
+        Self { value, orig }
     }
 
     #[inline]
-    pub(crate) fn filter_map<F, U>(self, func: F) -> Option<CellMutGuard<'a, U>>
-    where
-        F: FnOnce(&mut T) -> Option<&mut U>,
-    {
-        let storage = AtomicRefMut::filter_map(self.storage, func)?;
-        Some(CellMutGuard {
-            storage,
-            changes: self.changes,
-            cell: self.cell,
-            ids: self.ids,
-            tick: self.tick,
-        })
+    pub fn into_inner(self) -> AtomicRef<'a, [T]> {
+        self.value
     }
 
     #[inline]
-    pub(crate) fn get(&self) -> &T {
-        &self.storage
+    pub(crate) fn changes(&self) -> &Changes {
+        // SAFETY: `value` is not accessed in this function
+        unsafe { &self.orig.as_ref().changes }
     }
 
-    #[inline]
-    pub(crate) fn get_mut(&mut self) -> &mut T {
-        &mut self.storage
+    pub(crate) fn orig(&self) -> &CellData {
+        unsafe { self.orig.as_ref() }
+    }
+}
+
+impl<'w, T> Deref for CellGuard<'w, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 
@@ -72,24 +116,43 @@ impl<'a, T: ?Sized> CellMutGuard<'a, T> {
 ///
 /// A modification invent is only generated *if* if this is mutably dereferenced.
 pub struct RefMut<'a, T> {
-    guard: CellMutGuard<'a, T>,
+    value: AtomicRefMut<'a, T>,
+    // From the refcell
+    orig: *mut CellData,
+
+    archetype: &'a Archetype,
     slot: Slot,
     modified: bool,
+    tick: u32,
+}
+
+impl<'a, T: ComponentValue> RefMut<'a, T> {
+    pub(super) fn new(
+        mut value: AtomicRefMut<'a, CellData>,
+        archetype: &'a Archetype,
+        slot: Slot,
+        tick: u32,
+    ) -> Option<Self> {
+        // Store the original pointer. This will be used when dropped
+        let orig = &mut *value as *mut CellData;
+
+        let value =
+            AtomicRefMut::filter_map(value, |v| v.storage.downcast_mut::<T>().get_mut(slot))?;
+
+        Some(Self {
+            value,
+            orig,
+            archetype,
+            slot,
+            modified: false,
+            tick,
+        })
+    }
 }
 
 impl<'a, T: Debug> Debug for RefMut<'a, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.guard.fmt(f)
-    }
-}
-
-impl<'a, T> RefMut<'a, T> {
-    pub(crate) fn new(guard: CellMutGuard<'a, [T]>, slot: Slot) -> Option<Self> {
-        Some(RefMut {
-            guard: guard.filter_map(|v| v.get_mut(slot))?,
-            slot,
-            modified: false,
-        })
+        self.value.fmt(f)
     }
 }
 
@@ -98,7 +161,7 @@ impl<'a, T> Deref for RefMut<'a, T> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.guard.get()
+        &self.value
     }
 }
 
@@ -106,7 +169,7 @@ impl<'a, T> DerefMut for RefMut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        self.guard.get_mut()
+        &mut self.value
     }
 }
 
@@ -114,7 +177,14 @@ impl<'a, T> Drop for RefMut<'a, T> {
     #[inline]
     fn drop(&mut self) {
         if self.modified {
-            self.guard.set_modified(Slice::single(self.slot));
+            // SAFETY: `value` is not accessed beyond this point
+            let orig = unsafe { &mut *self.orig };
+
+            orig.set_modified(
+                &self.archetype.entities,
+                Slice::single(self.slot),
+                self.tick,
+            )
         }
     }
 }

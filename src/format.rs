@@ -135,11 +135,11 @@ impl Debug for ComponentName {
 impl<'a> Debug for RowValueFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
-        for storage in self.arch.try_borrow_all().flatten() {
-            let info = storage.info();
+        for data in self.arch.try_borrow_all().flatten() {
+            let info = data.storage.info();
 
             if let Ok(visitor) = self.world.get(info.key().id, debuggable()) {
-                map.entry(&info, (visitor.debug_storage)(&storage, self.slot));
+                map.entry(&info, (visitor.debug_storage)(&data.storage, self.slot));
             } else {
                 map.entry(&info, &MissingDebug);
             }
