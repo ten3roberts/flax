@@ -145,9 +145,9 @@ crate::component! {
 
 /// Defines a strongly typed component.
 ///
-/// Implements a *Read* fetch when used as part of a query
+/// Implements a *read only* fetch when used as part of a query
 ///
-/// Use `.as_mut()` to get a *Write* fetch.
+/// Use `.as_mut()` to acquire a *mutable* fetch.
 pub struct Component<T> {
     key: ComponentKey,
     marker: PhantomData<T>,
@@ -419,7 +419,7 @@ impl ComponentInfo {
     }
 
     #[inline]
-    pub(crate) fn is<T: ComponentValue>(&self) -> bool {
+    pub(crate) fn is<T: 'static>(&self) -> bool {
         (self.vtable.type_id)() == TypeId::of::<T>()
     }
 

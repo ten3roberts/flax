@@ -1,13 +1,9 @@
 use alloc::vec::Vec;
-use atomic_refcell::AtomicRef;
 use core::fmt::Formatter;
-use core::ops::Deref;
 use itertools::Itertools;
 
-use crate::archetype::{Archetype, Change, Slot};
-use crate::fetch::{
-    FetchAccessData, FetchPrepareData, PreparedFetch, ReadComponent, ReadOnlyFetch,
-};
+use crate::archetype::{Archetype, CellGuard, Change, Slot};
+use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 use crate::system::{Access, AccessKind};
 use crate::{
     archetype::{ChangeKind, ChangeList, Slice},
@@ -46,13 +42,9 @@ where
     type Item = &'q T;
 }
 
-impl<'q, Q: ReadOnlyFetch<'q>, A> ReadOnlyFetch<'q> for PreparedChangeFilter<Q, A>
-where
-    Q: PreparedFetch<'q>,
-    A: Deref<Target = [Change]>,
-{
+impl<'q, 'w, T: ComponentValue> ReadOnlyFetch<'q> for PreparedChangeFilter<'w, T> {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
-        self.fetch.fetch_shared(slot)
+        unsafe { self.data.get_unchecked(slot) }
     }
 }
 
@@ -62,20 +54,22 @@ where
 {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedChangeFilter<ReadComponent<'w, T>, AtomicRef<'w, [Change]>>;
+    type Prepared = PreparedChangeFilter<'w, T>;
 
     fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let changes = data.arch.changes(self.component.key())?;
+        let cell = data.arch.cell(self.component.key())?;
+        let guard = cell.borrow();
 
         // Make sure to enable modification tracking if it is actively used
         if self.kind.is_modified() {
-            changes.set_track_modified()
+            guard.changes().set_track_modified()
         }
 
-        let changes = AtomicRef::map(changes, |changes| changes.get(self.kind).as_slice());
-
-        let fetch = self.component.prepare(data)?;
-        Some(PreparedChangeFilter::new(fetch, changes, data.old_tick))
+        Some(PreparedChangeFilter {
+            data: guard,
+            kind: self.kind,
+            cursor: ChangeCursor::new(data.old_tick),
+        })
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
@@ -105,37 +99,22 @@ where
     }
 }
 
-#[doc(hidden)]
-pub struct PreparedChangeFilter<Q, A> {
-    fetch: Q,
-    changes: A,
-    cur: Option<Slice>,
+struct ChangeCursor {
     cursor: usize,
     old_tick: u32,
+    cur: Option<Slice>,
 }
 
-impl<Q, A> core::fmt::Debug for PreparedChangeFilter<Q, A> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("PreparedChangeFilter")
-            .finish_non_exhaustive()
-    }
-}
-
-impl<Q, A> PreparedChangeFilter<Q, A>
-where
-    A: Deref<Target = [Change]>,
-{
-    pub(crate) fn new(fetch: Q, changes: A, old_tick: u32) -> Self {
+impl ChangeCursor {
+    fn new(old_tick: u32) -> Self {
         Self {
-            fetch,
-            changes,
-            cur: None,
             cursor: 0,
             old_tick,
+            cur: None,
         }
     }
 
-    pub(crate) fn find_slice(&mut self, slots: Slice) -> Option<Slice> {
+    pub(crate) fn find_slice(&mut self, changes: &[Change], slots: Slice) -> Option<Slice> {
         // Short circuit
         if let Some(cur) = self.cur {
             if cur.overlaps(slots) {
@@ -143,7 +122,7 @@ where
             }
         }
 
-        let change = self.changes[self.cursor..]
+        let change = changes[self.cursor..]
             .iter()
             .filter(|v| v.tick > self.old_tick)
             .find_position(|change| change.slice.overlaps(slots));
@@ -154,7 +133,7 @@ where
             return Some(change.slice);
         }
 
-        let change = self.changes[..self.cursor]
+        let change = changes[..self.cursor]
             .iter()
             .filter(|v| v.tick > self.old_tick)
             .find_position(|change| change.slice.overlaps(slots));
@@ -167,31 +146,40 @@ where
     }
 }
 
-impl<'q, Q, A> PreparedFetch<'q> for PreparedChangeFilter<Q, A>
-where
-    Q: PreparedFetch<'q>,
-    A: Deref<Target = [Change]>,
-{
-    type Item = Q::Item;
+#[doc(hidden)]
+pub struct PreparedChangeFilter<'w, T> {
+    data: CellGuard<'w, T>,
+    kind: ChangeKind,
+    cursor: ChangeCursor,
+}
+
+impl<'w, T> core::fmt::Debug for PreparedChangeFilter<'w, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PreparedChangeFilter")
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'q, 'w, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T> {
+    type Item = &'q T;
 
     #[inline]
     unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.fetch.fetch(slot)
+        unsafe { self.data.get_unchecked(slot) }
     }
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        let cur = match self.find_slice(slots) {
+        let cur = match self
+            .cursor
+            .find_slice(&self.data.changes().get(self.kind), slots)
+        {
             Some(v) => v,
             None => return Slice::new(slots.end, slots.end),
         };
 
         cur.intersect(&slots)
             .unwrap_or(Slice::new(slots.end, slots.end))
-    }
-
-    fn set_visited(&mut self, slots: Slice) {
-        self.fetch.set_visited(slots)
     }
 }
 
@@ -221,19 +209,21 @@ impl<T: ComponentValue> RemovedFilter<T> {
 impl<'q, T: ComponentValue> FetchItem<'q> for RemovedFilter<T> {
     type Item = ();
 }
-
-impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
+impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
     const MUTABLE: bool = false;
 
-    type Prepared = PreparedChangeFilter<(), &'a [Change]>;
+    type Prepared = PreparedRemoveFilter<'w>;
 
-    fn prepare(&self, data: FetchPrepareData<'a>) -> Option<Self::Prepared> {
+    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let changes = data
             .arch
             .removals(self.component.key())
             .unwrap_or(&EMPTY_CHANGELIST);
 
-        Some(PreparedChangeFilter::new((), changes, data.old_tick))
+        Some(PreparedRemoveFilter {
+            changes,
+            cursor: ChangeCursor::new(data.old_tick),
+        })
     }
 
     fn filter_arch(&self, _: &Archetype) -> bool {
@@ -255,11 +245,59 @@ impl<'a, T: ComponentValue> Fetch<'a> for RemovedFilter<T> {
     }
 }
 
+#[doc(hidden)]
+pub struct PreparedRemoveFilter<'w> {
+    changes: &'w [Change],
+    cursor: ChangeCursor,
+}
+
+impl<'w> PreparedRemoveFilter<'w> {
+    pub fn new(changes: &'w [Change], new_tick: u32) -> Self {
+        Self {
+            changes,
+            cursor: ChangeCursor::new(new_tick),
+        }
+    }
+}
+
+impl<'w> core::fmt::Debug for PreparedRemoveFilter<'w> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PreparedRemoveFilter")
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'q, 'w> ReadOnlyFetch<'q> for PreparedRemoveFilter<'w> {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {}
+}
+
+impl<'q, 'w> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
+    type Item = ();
+
+    #[inline]
+    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {}
+
+    #[inline]
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        let cur = match self.cursor.find_slice(&self.changes, slots) {
+            Some(v) => v,
+            None => return Slice::new(slots.end, slots.end),
+        };
+
+        cur.intersect(&slots)
+            .unwrap_or(Slice::new(slots.end, slots.end))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use pretty_assertions::assert_eq;
 
-    use crate::filter::FilterIter;
+    use crate::{
+        archetype::{Cell, Change},
+        filter::FilterIter,
+        name,
+    };
 
     use super::*;
 
@@ -272,7 +310,10 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let mut filter = PreparedChangeFilter::new((), &changes[..], 2);
+        let mut filter = PreparedRemoveFilter {
+            changes: &changes[..],
+            cursor: ChangeCursor::new(2),
+        };
 
         unsafe {
             assert_eq!(filter.filter_slots(Slice::new(0, 10)), Slice::new(10, 10));
@@ -300,7 +341,10 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let filter = PreparedChangeFilter::new((), &changes[..], 2);
+        let mut filter = PreparedRemoveFilter {
+            changes: &changes[..],
+            cursor: ChangeCursor::new(2),
+        };
 
         let slices = FilterIter::new(Slice::new(0, 500), filter).collect_vec();
 
@@ -324,7 +368,10 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let filter = PreparedChangeFilter::new((), &changes[..], 2);
+        let mut filter = PreparedRemoveFilter {
+            changes: &changes[..],
+            cursor: ChangeCursor::new(2),
+        };
 
         let slices = FilterIter::new(Slice::new(25, 150), filter)
             .take(100)

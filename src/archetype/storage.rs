@@ -204,15 +204,6 @@ impl Storage {
         unsafe { core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len) }
     }
 
-    // #[inline(always)]
-    /// # Safety
-    /// The types must match
-    pub unsafe fn borrow<T: ComponentValue>(&self) -> &[T] {
-        debug_assert!(self.info.is::<T>(), "Mismatched types");
-
-        core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
-    }
-
     pub fn clear(&mut self) {
         // Drop all contained valid values
         for slot in 0..self.len {
@@ -307,10 +298,10 @@ mod test {
             storage.push(5);
             storage.push(7);
 
-            assert_eq!(storage.borrow::<i32>(), [5, 7]);
+            assert_eq!(storage.downcast_ref::<i32>(), [5, 7]);
             storage.swap_remove(0, |v| ptr::drop_in_place(v.cast::<i32>()));
 
-            assert_eq!(storage.borrow::<i32>(), [7]);
+            assert_eq!(storage.downcast_ref::<i32>(), [7]);
 
             let mut other = Storage::new(a().info());
             other.push(8);
@@ -318,7 +309,7 @@ mod test {
             other.push(10);
 
             storage.append(&mut other);
-            assert_eq!(storage.borrow::<i32>(), [7, 8, 9, 10]);
+            assert_eq!(storage.downcast_ref::<i32>(), [7, 8, 9, 10]);
         }
     }
 
