@@ -1,12 +1,11 @@
 use alloc::vec::Vec;
-use atomic_refcell::AtomicRefMut;
+
 use core::fmt::{self, Formatter};
 
 use crate::{
-    archetype::{Archetype, Cell, CellMutGuard, Change, Changes, Slice, Slot},
-    events::{EventData, EventKind},
+    archetype::{Archetype, CellMutGuard, Slice, Slot},
     system::{Access, AccessKind},
-    Component, ComponentValue, Entity, Fetch, FetchItem,
+    Component, ComponentValue, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch};

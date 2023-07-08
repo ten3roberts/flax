@@ -207,7 +207,7 @@ where
 
 /// See: [crate::RelationIter]
 pub struct RelationIterMut<'a, T> {
-    arch: &'a Archetype,
+    entites: &'a [Entity],
     cells: Range<'a, ComponentKey, Cell>,
     slot: Slot,
     change_tick: u32,
@@ -230,7 +230,7 @@ impl<'a, T: ComponentValue> RelationIterMut<'a, T> {
             slot,
             marker: PhantomData,
             change_tick,
-            arch,
+            entites: arch.entities(),
         }
     }
 }
@@ -245,7 +245,7 @@ where
         let (&key, cell) = self.cells.next()?;
         Some((
             key.object().unwrap(),
-            cell.get_mut::<T>(self.arch, self.slot, self.change_tick)
+            cell.get_mut::<T>(self.entites, self.slot, self.change_tick)
                 .unwrap(),
         ))
     }

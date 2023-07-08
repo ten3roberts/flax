@@ -11,7 +11,7 @@ use crate::{
     ComponentValue, Entity,
 };
 
-use super::{Archetype, CellData, Change, Changes, Slice, Slot};
+use super::{CellData, Change, Changes, Slice, Slot};
 
 /// Type safe abstraction over a borrowed cell data
 pub(crate) struct CellMutGuard<'a, T> {
@@ -98,10 +98,6 @@ impl<'a, T: ComponentValue> CellGuard<'a, T> {
         // SAFETY: `value` is not accessed in this function
         unsafe { &self.orig.as_ref().changes }
     }
-
-    pub(crate) fn orig(&self) -> &CellData {
-        unsafe { self.orig.as_ref() }
-    }
 }
 
 impl<'w, T> Deref for CellGuard<'w, T> {
@@ -120,7 +116,7 @@ pub struct RefMut<'a, T> {
     // From the refcell
     orig: *mut CellData,
 
-    archetype: &'a Archetype,
+    entities: &'a [Entity],
     slot: Slot,
     modified: bool,
     tick: u32,
@@ -129,7 +125,7 @@ pub struct RefMut<'a, T> {
 impl<'a, T: ComponentValue> RefMut<'a, T> {
     pub(super) fn new(
         mut value: AtomicRefMut<'a, CellData>,
-        archetype: &'a Archetype,
+        entities: &'a [Entity],
         slot: Slot,
         tick: u32,
     ) -> Option<Self> {
@@ -142,7 +138,7 @@ impl<'a, T: ComponentValue> RefMut<'a, T> {
         Some(Self {
             value,
             orig,
-            archetype,
+            entities,
             slot,
             modified: false,
             tick,
@@ -180,32 +176,7 @@ impl<'a, T> Drop for RefMut<'a, T> {
             // SAFETY: `value` is not accessed beyond this point
             let orig = unsafe { &mut *self.orig };
 
-            orig.set_modified(
-                &self.archetype.entities,
-                Slice::single(self.slot),
-                self.tick,
-            )
+            orig.set_modified(self.entities, Slice::single(self.slot), self.tick)
         }
     }
 }
-
-// pub(crate) struct UniqueRefMut<'a, T> {
-//     value: &'a mut T,
-//     slot: Slot,
-//     pub(super) cell: &'a mut Cell,
-//     pub(super) ids: &'a [Entity],
-//     pub(super) tick: u32,
-// }
-
-// impl<'a> Drop for UniqueRefMut<'a> {
-//     #[inline]
-//     fn drop(&mut self) {
-//         self.cell
-//             .on_event(self.ids, Slice::single(self.slot), EventKind::Modified);
-
-//         self.cell
-//             .changes
-//             .get_mut()
-//             .set_modified_if_tracking(Change::new(Slice::single(self.slot), self.tick));
-//     }
-// }

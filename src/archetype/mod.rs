@@ -269,11 +269,11 @@ impl Cell {
     #[inline]
     pub fn get_mut<'a, T: ComponentValue>(
         &'a self,
-        archetype: &'a Archetype,
+        entities: &'a [Entity],
         slot: Slot,
         tick: u32,
     ) -> Option<RefMut<T>> {
-        RefMut::new(self.data.borrow_mut(), archetype, slot, tick)
+        RefMut::new(self.data.borrow_mut(), entities, slot, tick)
     }
 
     #[inline]
@@ -466,7 +466,8 @@ impl Archetype {
         component: Component<T>,
         tick: u32,
     ) -> Option<RefMut<T>> {
-        self.cell(component.key())?.get_mut(&self, slot, tick)
+        self.cell(component.key())?
+            .get_mut(&self.entities, slot, tick)
     }
 
     /// Get a component from the entity at `slot`
@@ -481,7 +482,7 @@ impl Archetype {
             None => return Ok(None),
         };
 
-        Ok(cell.get_mut(&self, slot, tick))
+        Ok(cell.get_mut(&self.entities, slot, tick))
     }
 
     /// Get a component from the entity at `slot`
@@ -647,7 +648,7 @@ impl Archetype {
     pub(crate) unsafe fn extend(&mut self, src: &mut Storage, tick: u32) -> Option<()> {
         let len = self.len();
         let cell = self.cells.get_mut(&src.info().key())?;
-        let mut data = cell.data.get_mut();
+        let data = cell.data.get_mut();
 
         let slots = Slice::new(data.storage.len(), data.storage.len() + src.len());
         debug_assert!(slots.start <= len);
@@ -796,8 +797,6 @@ impl Archetype {
             let dst_cell = dst.cells.get_mut(key);
 
             if let Some(dst) = dst_cell {
-                let dst_data = dst.data.get_mut();
-
                 assert_eq!(data.storage.len(), len);
                 cell.move_all(dst, dst_slots.start);
                 // let dst_changes = dst.changes.get_mut();
@@ -819,7 +818,7 @@ impl Archetype {
             } else {
                 // Notify the subscribers that the component was removed
                 data.on_event(EventData {
-                    ids: &entities,
+                    ids: &entities[slots.as_range()],
                     key: data.key,
                     kind: EventKind::Removed,
                 });
@@ -907,6 +906,7 @@ impl Archetype {
     }
     /// Access the entities in the archetype for each slot. Entity is None if
     /// the slot is not occupied, only for the last slots.
+    #[inline]
     pub fn entities(&self) -> &[Entity] {
         self.entities.as_ref()
     }
