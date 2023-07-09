@@ -29,6 +29,7 @@ use crate::{
     is_static,
     metadata::exclusive,
     relation::Relation,
+    writer::{ComponentUpdater, ComponentWriter},
     ArchetypeId, BatchSpawn, Component, ComponentInfo, ComponentKey, ComponentVTable,
     ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
 };
@@ -203,10 +204,7 @@ impl World {
         let (loc, arch) = self.spawn_at_inner(id, arch_id)?;
 
         for (info, src) in buffer.drain() {
-            unsafe {
-                arch.push(info.key(), src, change_tick)
-                    .expect("Component not in archetype")
-            }
+            unsafe { arch.push(info.key(), src, change_tick) }
         }
 
         Ok((id, loc))
@@ -227,9 +225,7 @@ impl World {
 
         for (info, src) in buffer.drain() {
             unsafe {
-                if arch.push(info.key, src, change_tick).is_none() {
-                    info.drop(src);
-                }
+                arch.push(info.key, src, change_tick);
             }
         }
 
@@ -394,7 +390,7 @@ impl World {
 
                 // Insert the missing components
                 for &(component, data) in &new_data {
-                    dst.push(component.key, data, change_tick).unwrap();
+                    dst.push(component.key, data, change_tick);
                 }
 
                 assert_eq!(dst.entity(dst_slot), Some(id));
@@ -421,8 +417,7 @@ impl World {
     }
 
     /// Set metadata for a given component if they do not already exist
-    #[inline]
-    fn init_component(&mut self, info: ComponentInfo) {
+    pub(crate) fn init_component(&mut self, info: ComponentInfo) {
         assert!(
             info.key().id.kind().contains(EntityKind::COMPONENT),
             "Component is not a component kind id"
@@ -665,12 +660,6 @@ impl World {
             // Initialize component
             self.init_component(info);
 
-            // Ensure exclusive property
-            // if info.key.object.is_some() && self.has(info.key.id, exclusive()) {
-            //     strict_superset = false;
-            //     components.retain(|v| v.key == info.key || v.key.id != info.key.id)
-            // }
-
             // assert in order
             let (dst_id, _) = self.archetypes.find(components);
 
@@ -691,8 +680,7 @@ impl World {
 
         // Insert the missing component
         unsafe {
-            dst.push(info.key, value, change_tick)
-                .expect("Insert should not fail");
+            dst.push(info.key, value, change_tick);
         }
 
         debug_assert_eq!(dst.entity(dst_slot), Some(id));
@@ -713,6 +701,47 @@ impl World {
         *ns.get_mut(id).expect("Entity is not valid") = loc;
 
         Ok(loc)
+    }
+
+    #[inline]
+    pub(crate) fn set_impl<U: ComponentUpdater>(
+        &mut self,
+        id: Entity,
+        info: ComponentInfo,
+        updater: U,
+    ) -> Result<EntityLocation> {
+        // We know things will change either way
+        let change_tick = self.advance_change_tick();
+
+        let src_loc = self.init_location(id)?;
+
+        let src = self.archetypes.get_mut(src_loc.arch_id);
+
+        if let Some(writer) = unsafe { updater.update(src, id, src_loc.slot, change_tick) } {
+            // Move to a new archetype
+            let (dst_loc, swapped) =
+                writer.migrate(self, src_loc.arch_id, src_loc.slot, change_tick);
+
+            debug_assert_eq!(
+                self.archetypes.get(dst_loc.arch_id).entity(dst_loc.slot),
+                Some(id)
+            );
+
+            if let Some((swapped, slot)) = swapped {
+                // The last entity in src was moved into the slot occupied by id
+                let swapped_ns = self.entities.init(swapped.kind());
+                swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+            }
+            self.archetypes.prune_arch(src_loc.arch_id);
+
+            let ns = self.entities.init(id.kind());
+
+            *ns.get_mut(id).expect("Entity is not valid") = dst_loc;
+
+            Ok(dst_loc)
+        } else {
+            Ok(src_loc)
+        }
     }
 
     /// TODO benchmark with fully generic function
