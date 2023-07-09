@@ -116,7 +116,7 @@ pub struct RefMut<'a, T> {
     // From the refcell
     orig: *mut CellData,
 
-    entities: &'a [Entity],
+    id: Entity,
     slot: Slot,
     modified: bool,
     tick: u32,
@@ -125,7 +125,7 @@ pub struct RefMut<'a, T> {
 impl<'a, T: ComponentValue> RefMut<'a, T> {
     pub(super) fn new(
         mut value: AtomicRefMut<'a, CellData>,
-        entities: &'a [Entity],
+        id: Entity,
         slot: Slot,
         tick: u32,
     ) -> Option<Self> {
@@ -138,7 +138,7 @@ impl<'a, T: ComponentValue> RefMut<'a, T> {
         Some(Self {
             value,
             orig,
-            entities,
+            id,
             slot,
             modified: false,
             tick,
@@ -176,7 +176,7 @@ impl<'a, T> Drop for RefMut<'a, T> {
             // SAFETY: `value` is not accessed beyond this point
             let orig = unsafe { &mut *self.orig };
 
-            orig.set_modified(self.entities, Slice::single(self.slot), self.tick)
+            orig.set_modified(&[self.id], Slice::single(self.slot), self.tick)
         }
     }
 }

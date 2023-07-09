@@ -243,7 +243,7 @@ pub mod serialize;
 mod util;
 /// vtable implementation for dynamic dispatching
 pub mod vtable;
-mod set_traits;
+mod writer;
 
 // Required due to macro
 pub use archetype::{ArchetypeId, BatchSpawn, RefMut};

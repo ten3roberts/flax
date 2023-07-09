@@ -93,10 +93,12 @@ pub(crate) struct CellData {
 }
 
 impl CellData {
-    pub fn set_modified(&mut self, entities: &[Entity], slice: Slice, change_tick: u32) {
+    /// Sets the specified entities and slots as modified and invokes subscribers
+    /// **Note**: `ids` must be the slice of entities pointed to by `slice`
+    pub(crate) fn set_modified(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
         let component = self.key;
         self.on_event(EventData {
-            ids: &entities[slice.as_range()],
+            ids: &ids,
             key: component,
             kind: EventKind::Modified,
         });
@@ -105,10 +107,12 @@ impl CellData {
             .set_modified_if_tracking(Change::new(slice, change_tick));
     }
 
-    pub fn set_added(&mut self, entities: &[Entity], slice: Slice, change_tick: u32) {
+    /// Sets the specified entities and slots as modified and invokes subscribers
+    /// **Note**: `ids` must be the slice of entities pointed to by `slice`
+    pub(crate) fn set_added(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
         let component = self.key;
         self.on_event(EventData {
-            ids: &entities[slice.as_range()],
+            ids: &ids,
             key: component,
             kind: EventKind::Added,
         });
@@ -117,10 +121,12 @@ impl CellData {
     }
 
     /// **Note**: must be called *before* data is dropped
-    pub fn set_removed(&mut self, entities: &[Entity], slice: Slice, change_tick: u32) {
+    /// Sets the specified entities and slots as modified and invokes subscribers
+    /// **Note**: `ids` must be the slice of entities pointed to by `slice`
+    pub(crate) fn set_removed(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
         let component = self.key;
         self.on_event(EventData {
-            ids: &entities[slice.as_range()],
+            ids: &ids,
             key: component,
             kind: EventKind::Added,
         });
@@ -501,7 +507,7 @@ impl Archetype {
         let value = unsafe { data.storage.at_mut(slot)? };
         let value = (modify)(value);
 
-        data.set_modified(&self.entities, Slice::single(slot), change_tick);
+        data.set_modified(&self.entities[slot..slot], Slice::single(slot), change_tick);
 
         Some(value)
     }
@@ -524,7 +530,8 @@ impl Archetype {
         let value = unsafe { &mut *(data.storage.at_mut(slot)? as *mut T) };
         let value = (f)(value);
 
-        data.set_modified(&self.entities, Slice::single(slot), change_tick);
+        // TODO: fix deliberate bug
+        data.set_modified(&self.entities[slot..slot], Slice::single(slot), change_tick);
 
         Some(value)
     }
@@ -618,9 +625,9 @@ impl Archetype {
     /// # Safety
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
     /// The component must be Send + Sync
-    pub unsafe fn push(&mut self, component: ComponentKey, src: *mut u8, tick: u32) -> Option<()> {
+    pub unsafe fn push(&mut self, component: ComponentKey, src: *mut u8, tick: u32) {
         let len = self.len();
-        let cell = self.cells.get_mut(&component)?;
+        let cell = self.cells.get_mut(&component).unwrap();
         let data = cell.data.get_mut();
 
         let slot = data.storage.len();
@@ -635,9 +642,7 @@ impl Archetype {
             self.entities.len()
         );
 
-        data.set_added(&self.entities, Slice::single(slot), tick);
-
-        Some(())
+        data.set_added(&self.entities[slot..=slot], Slice::single(slot), tick);
     }
 
     /// Moves the components in `storage` to the not yet initialized space in a
@@ -656,7 +661,7 @@ impl Archetype {
         data.storage.append(src);
         debug_assert!(data.storage.len() <= len);
 
-        data.set_added(&self.entities, slots, tick);
+        data.set_added(&self.entities[slots.as_range()], slots, tick);
 
         Some(())
     }
