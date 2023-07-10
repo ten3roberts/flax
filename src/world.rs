@@ -29,7 +29,7 @@ use crate::{
     is_static,
     metadata::exclusive,
     relation::Relation,
-    writer::{ComponentUpdater, ComponentWriter},
+    writer::{self, ComponentUpdater, ComponentWriter},
     ArchetypeId, BatchSpawn, Component, ComponentInfo, ComponentKey, ComponentVTable,
     ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
 };
@@ -572,20 +572,9 @@ impl World {
         &mut self,
         id: Entity,
         component: Component<T>,
-        mut value: T,
+        value: T,
     ) -> Result<Option<T>> {
-        let mut old: Option<T> = None;
-
-        self.set_dyn(
-            id,
-            component.info(),
-            &mut value as *mut T as *mut u8,
-            |ptr| unsafe { old = Some(ptr.cast::<T>().read()) },
-        )?;
-
-        mem::forget(value);
-
-        Ok(old)
+        self.set_inner(id, component, value).map(|v| v.0)
     }
 
     /// Updates a component in place
@@ -707,7 +696,6 @@ impl World {
     pub(crate) fn set_impl<U: ComponentUpdater>(
         &mut self,
         id: Entity,
-        info: ComponentInfo,
         updater: U,
     ) -> Result<EntityLocation> {
         // We know things will change either way
@@ -750,20 +738,20 @@ impl World {
         &mut self,
         id: Entity,
         component: Component<T>,
-        mut value: T,
+        value: T,
     ) -> Result<(Option<T>, EntityLocation)> {
-        let mut old: Option<T> = None;
+        let mut output = None;
 
-        let loc = self.set_dyn(
+        let loc = self.set_impl(
             id,
-            component.info(),
-            &mut value as *mut T as *mut u8,
-            |ptr| unsafe { old = Some(ptr.cast::<T>().read()) },
+            writer::Replace {
+                component,
+                value,
+                output: &mut output,
+            },
         )?;
 
-        mem::forget(value);
-
-        Ok((old, loc))
+        Ok((output, loc))
     }
 
     #[inline]
