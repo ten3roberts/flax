@@ -29,7 +29,7 @@ use crate::{
     is_static,
     metadata::exclusive,
     relation::Relation,
-    writer::{self, ComponentUpdater, ComponentWriter},
+    writer::{self, ComponentUpdater, MigrateEntity},
     ArchetypeId, BatchSpawn, Component, ComponentInfo, ComponentKey, ComponentVTable,
     ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
 };

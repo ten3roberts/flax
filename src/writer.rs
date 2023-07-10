@@ -1,16 +1,18 @@
-use core::mem;
+use core::{mem, ptr};
 
 use itertools::{Either, Itertools};
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
+    buffer::ComponentBuffer,
     entity::EntityLocation,
+    metadata::exclusive,
     ArchetypeId, Component, ComponentInfo, ComponentValue, Entity, World,
 };
 
 pub(crate) trait ComponentUpdater {
     /// If returned, will be used to migrate the entity to a new archetype
-    type Writer: ComponentWriter;
+    type Writer: MigrateEntity;
 
     fn update(
         self,
@@ -21,7 +23,9 @@ pub(crate) trait ComponentUpdater {
     ) -> Option<Self::Writer>;
 }
 
-pub(crate) trait ComponentWriter {
+/// # Safety
+/// *All* components of the new slot must be initialized
+pub(crate) unsafe trait MigrateEntity {
     fn migrate(
         self,
         world: &mut World,
@@ -100,7 +104,7 @@ pub(crate) struct ReplaceWriter<T> {
     value: T,
 }
 
-impl<T: ComponentValue> ComponentWriter for ReplaceWriter<T> {
+unsafe impl<T: ComponentValue> MigrateEntity for ReplaceWriter<T> {
     fn migrate(
         self,
         world: &mut World,
@@ -137,6 +141,116 @@ impl<T: ComponentValue> ComponentWriter for ReplaceWriter<T> {
             dst.push(key, &mut value as *mut T as *mut u8, tick);
             mem::forget(value);
         }
+
+        (
+            EntityLocation {
+                slot: dst_slot,
+                arch_id: dst_id,
+            },
+            swapped,
+        )
+    }
+}
+
+pub(crate) struct Buffered<'a> {
+    pub(crate) buffer: &'a mut ComponentBuffer,
+}
+
+impl<'a> ComponentUpdater for Buffered<'a> {
+    type Writer = BufferedMigrate<'a>;
+
+    fn update(
+        self,
+        arch: &mut Archetype,
+        id: Entity,
+        slot: Slot,
+        tick: u32,
+    ) -> Option<Self::Writer> {
+        let mut exclusive_relations = Vec::new();
+        unsafe {
+            self.buffer.retain(|info, src| {
+                let key = info.key;
+                if let Some(cell) = arch.cell_mut(key) {
+                    let data = cell.data.get_mut();
+
+                    let dst = data.storage.at_mut(slot).unwrap();
+                    info.drop(dst);
+                    ptr::copy_nonoverlapping(dst as *mut (), src, info.size());
+
+                    data.set_modified(&[id], Slice::single(slot), tick);
+                    false
+                } else {
+                    // Component does not exist yet, so defer a move
+
+                    // Exclusive relation
+                    if key.object.is_some()
+                        && info.meta_ref().has(exclusive())
+                        && !exclusive_relations.contains(&key.id)
+                    {
+                        exclusive_relations.push(key.id);
+                    }
+
+                    true
+                }
+            });
+        }
+
+        if self.buffer.is_empty() {
+            eprintln!("Archetype fully matched");
+            None
+        } else {
+            // Add the existing components, making sure new exclusive relations are favored
+            let components = self
+                .buffer
+                .components()
+                .copied()
+                .chain(
+                    arch.components()
+                        .filter(|v| !exclusive_relations.contains(&v.key.id)),
+                )
+                .sorted_unstable()
+                .collect_vec();
+
+            Some(BufferedMigrate {
+                components,
+                buffer: self.buffer,
+            })
+        }
+    }
+}
+
+pub(crate) struct BufferedMigrate<'a> {
+    components: Vec<ComponentInfo>,
+    buffer: &'a mut ComponentBuffer,
+}
+
+unsafe impl<'a> MigrateEntity for BufferedMigrate<'a> {
+    fn migrate(
+        self,
+        world: &mut World,
+        src_id: ArchetypeId,
+        src_slot: Slot,
+        tick: u32,
+    ) -> (EntityLocation, Option<(Entity, Slot)>) {
+        for &info in self.buffer.components() {
+            eprintln!("Initializing component {:?}", info);
+            world.init_component(info);
+        }
+
+        let (dst_id, _) = world.archetypes.find(self.components.iter().copied());
+
+        let (src, dst) = world.archetypes.get_disjoint(src_id, dst_id).unwrap();
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, src_slot, |c, ptr| c.drop(ptr), tick) };
+
+        // Insert the missing components
+        for (info, src) in self.buffer.drain() {
+            unsafe {
+                // src moves into herer
+                dst.push(info.key, src, tick);
+            }
+        }
+
+        eprintln!("Buffer retained {} items", self.buffer.len());
 
         (
             EntityLocation {

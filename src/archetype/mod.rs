@@ -126,7 +126,7 @@ impl CellData {
     pub(crate) fn set_removed(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
         let component = self.key;
         self.on_event(EventData {
-            ids: &ids,
+            ids,
             key: component,
             kind: EventKind::Added,
         });
@@ -624,7 +624,6 @@ impl Archetype {
     }
 
     /// Push a type erased component into the new slot
-    /// `src` shall be considered moved if Some is returned.
     /// `component` must match the type of data.
     /// # Safety
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
