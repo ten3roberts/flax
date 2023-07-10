@@ -1,21 +1,18 @@
-use core::{iter::Copied, mem, ptr, slice};
+use core::mem;
 
 use itertools::{Either, Itertools};
 
 use crate::{
-    archetype::{Archetype, CellData, Slice, Slot},
-    archetypes::Archetypes,
+    archetype::{Archetype, Slot},
     entity::EntityLocation,
-    ArchetypeId, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, World,
+    ArchetypeId, Component, ComponentInfo, ComponentValue, Entity, World,
 };
 
-pub(crate) unsafe trait ComponentUpdater {
-    /// Used for filling in the missing types
+pub(crate) trait ComponentUpdater {
+    /// If returned, will be used to migrate the entity to a new archetype
     type Writer: ComponentWriter;
 
-    /// # Safety
-    /// `dst` is a valid pointer to targeted component
-    unsafe fn update(
+    fn update(
         self,
         archetype: &mut Archetype,
         id: Entity,
@@ -24,9 +21,9 @@ pub(crate) unsafe trait ComponentUpdater {
     ) -> Option<Self::Writer>;
 }
 
-pub(crate) unsafe trait ComponentWriter {
+pub(crate) trait ComponentWriter {
     fn migrate(
-        &self,
+        self,
         world: &mut World,
         src_id: ArchetypeId,
         src_slot: Slot,
@@ -39,10 +36,10 @@ struct Replace<T: ComponentValue> {
     value: T,
 }
 
-unsafe impl<T: ComponentValue> ComponentUpdater for Replace<T> {
+impl<T: ComponentValue> ComponentUpdater for Replace<T> {
     type Writer = ReplaceWriter<T>;
 
-    unsafe fn update(
+    fn update(
         self,
         arch: &mut Archetype,
         id: Entity,
@@ -98,9 +95,9 @@ struct ReplaceWriter<T> {
     value: T,
 }
 
-unsafe impl<T: ComponentValue> ComponentWriter for ReplaceWriter<T> {
+impl<T: ComponentValue> ComponentWriter for ReplaceWriter<T> {
     fn migrate(
-        &self,
+        self,
         world: &mut World,
         src_id: ArchetypeId,
         src_slot: Slot,
@@ -132,9 +129,8 @@ unsafe impl<T: ComponentValue> ComponentWriter for ReplaceWriter<T> {
         // Insert the missing component
         unsafe {
             let mut value = self.value;
-            dst.push(key, &mut self.value as *mut T as *mut u8, tick);
-
-            mem::forget(self.value);
+            dst.push(key, &mut value as *mut T as *mut u8, tick);
+            mem::forget(value);
         }
 
         (
