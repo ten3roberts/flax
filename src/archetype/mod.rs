@@ -98,7 +98,7 @@ impl CellData {
     pub(crate) fn set_modified(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
         let component = self.key;
         self.on_event(EventData {
-            ids: &ids,
+            ids,
             key: component,
             kind: EventKind::Modified,
         });
@@ -112,7 +112,7 @@ impl CellData {
     pub(crate) fn set_added(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
         let component = self.key;
         self.on_event(EventData {
-            ids: &ids,
+            ids,
             key: component,
             kind: EventKind::Added,
         });
@@ -507,7 +507,11 @@ impl Archetype {
         let value = unsafe { data.storage.at_mut(slot)? };
         let value = (modify)(value);
 
-        data.set_modified(&self.entities[slot..slot], Slice::single(slot), change_tick);
+        data.set_modified(
+            &self.entities[slot..=slot],
+            Slice::single(slot),
+            change_tick,
+        );
 
         Some(value)
     }

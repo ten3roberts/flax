@@ -717,7 +717,7 @@ impl World {
 
         let src = self.archetypes.get_mut(src_loc.arch_id);
 
-        if let Some(writer) = unsafe { updater.update(src, id, src_loc.slot, change_tick) } {
+        if let Some(writer) = updater.update(src, id, src_loc.slot, change_tick) {
             // Move to a new archetype
             let (dst_loc, swapped) =
                 writer.migrate(self, src_loc.arch_id, src_loc.slot, change_tick);
