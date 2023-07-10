@@ -340,6 +340,19 @@ impl ComponentBuffer {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Retains only the components specified by the predicate
+    /// If the closure returns true the element is removed and **not** dropped at the end of
+    /// collection
+    /// # Safety
+    /// If the passed closure returns *false* the element is considered moved and shall be handled by
+    /// the caller.
+    pub(crate) unsafe fn retain(&mut self, mut f: impl FnMut(ComponentInfo, *mut ()) -> bool) {
+        self.entries.retain(|_, (info, offset)| {
+            let ptr = unsafe { self.storage.at_mut(*offset) };
+            f(*info, ptr as *mut ())
+        })
+    }
 }
 
 pub(crate) struct ComponentBufferIter<'a> {
