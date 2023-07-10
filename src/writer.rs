@@ -3,7 +3,7 @@ use core::mem;
 use itertools::{Either, Itertools};
 
 use crate::{
-    archetype::{Archetype, Slot},
+    archetype::{Archetype, Slice, Slot},
     entity::EntityLocation,
     ArchetypeId, Component, ComponentInfo, ComponentValue, Entity, World,
 };
@@ -31,12 +31,13 @@ pub(crate) trait ComponentWriter {
     ) -> (EntityLocation, Option<(Entity, Slot)>);
 }
 
-struct Replace<T: ComponentValue> {
-    component: Component<T>,
-    value: T,
+pub(crate) struct Replace<'a, T: ComponentValue> {
+    pub(crate) component: Component<T>,
+    pub(crate) value: T,
+    pub(crate) output: &'a mut Option<T>,
 }
 
-impl<T: ComponentValue> ComponentUpdater for Replace<T> {
+impl<'a, T: ComponentValue> ComponentUpdater for Replace<'a, T> {
     type Writer = ReplaceWriter<T>;
 
     fn update(
@@ -53,6 +54,10 @@ impl<T: ComponentValue> ComponentUpdater for Replace<T> {
 
             let storage = data.storage.downcast_mut::<T>();
             let old = mem::replace(&mut storage[slot], self.value);
+
+            data.set_modified(&[id], Slice::single(slot), tick);
+
+            *self.output = Some(old);
 
             None
         } else if let Some(&dst) = arch.outgoing.get(&key) {
@@ -89,7 +94,7 @@ impl<T: ComponentValue> ComponentUpdater for Replace<T> {
     }
 }
 
-struct ReplaceWriter<T> {
+pub(crate) struct ReplaceWriter<T> {
     dst: Either<ArchetypeId, Vec<ComponentInfo>>,
     component: Component<T>,
     value: T,
