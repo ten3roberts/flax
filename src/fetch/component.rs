@@ -37,7 +37,7 @@ where
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let borrow = data.arch.borrow(self.key())?;
         Some(ReadComponent {
-            borrow: borrow.into_inner(),
+            borrow: borrow.into_slice_ref(),
         })
     }
 
