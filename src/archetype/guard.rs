@@ -14,97 +14,134 @@ use crate::{
 use super::{CellData, Change, Changes, Slice, Slot};
 
 /// Type safe abstraction over a borrowed cell data
-pub(crate) struct CellMutGuard<'a, T> {
-    value: AtomicRefMut<'a, [T]>,
+pub(crate) struct CellMutGuard<'a, T: ?Sized> {
+    data: AtomicRefMut<'a, CellData>,
     // From the refcell
-    orig: NonNull<CellData>,
+    storage: NonNull<T>,
 }
 
-unsafe impl<'a, T> Send for CellMutGuard<'a, T> where AtomicRefMut<'a, T>: Send {}
-unsafe impl<'a, T> Sync for CellMutGuard<'a, T> where AtomicRefMut<'a, T>: Sync {}
+unsafe impl<'a, T: ComponentValue> Send for CellMutGuard<'a, T> where AtomicRefMut<'a, T>: Send {}
+unsafe impl<'a, T: ComponentValue> Sync for CellMutGuard<'a, T> where AtomicRefMut<'a, T>: Sync {}
 
-impl<'a, T: ComponentValue> CellMutGuard<'a, T> {
+impl<'a, T: ComponentValue + Sized> CellMutGuard<'a, [T]> {
     pub(super) fn new(mut value: AtomicRefMut<'a, CellData>) -> Self {
-        // Store the original pointer. This will be used when dropped
-        let orig = NonNull::from(&mut *value);
+        let storage: NonNull<[T]> = NonNull::from(value.storage.downcast_mut::<T>());
 
-        let value = AtomicRefMut::map(value, |v| v.storage.downcast_mut::<T>());
-
-        Self { value, orig }
+        Self {
+            data: value,
+            storage,
+        }
     }
+}
 
+impl<'a, T: ?Sized> CellMutGuard<'a, T> {
     pub(crate) fn set_modified(&mut self, entities: &[Entity], slots: Slice, tick: u32) {
         // SAFETY: `value` is not accessed in this function
-        let orig = unsafe { self.orig.as_mut() };
-
-        orig.on_event(EventData {
+        let data = &mut *self.data;
+        data.on_event(EventData {
             ids: &entities[slots.as_range()],
-            key: orig.key,
+            key: data.key,
             kind: EventKind::Modified,
         });
 
-        orig.changes
+        data.changes
             .set_modified_if_tracking(Change::new(slots, tick));
     }
 
     pub(crate) fn changes_mut(&mut self) -> &mut Changes {
         // SAFETY: `value` is not accessed in this function
-        let orig = unsafe { self.orig.as_mut() };
 
-        &mut orig.changes
+        &mut self.data.changes
+    }
+
+    pub(crate) fn filter_map<U>(
+        mut self,
+        f: impl FnOnce(&mut T) -> Option<&mut U>,
+    ) -> Option<CellMutGuard<'a, U>> {
+        let storage = NonNull::from(f(unsafe { self.storage.as_mut() })?);
+
+        Some(CellMutGuard {
+            data: self.data,
+            storage,
+        })
     }
 }
 
-impl<'w, T> Deref for CellMutGuard<'w, T> {
-    type Target = [T];
+impl<'w, T: ?Sized> Deref for CellMutGuard<'w, T> {
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.value
+        unsafe { self.storage.as_ref() }
     }
 }
 
-impl<'w, T> DerefMut for CellMutGuard<'w, T> {
+impl<'w, T: ?Sized> DerefMut for CellMutGuard<'w, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
+        unsafe { self.storage.as_mut() }
+    }
+}
+
+impl<'a, T: Debug + ?Sized> Debug for CellMutGuard<'a, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        (*self).fmt(f)
     }
 }
 
 /// Type safe abstraction over a borrowed cell data
-pub(crate) struct CellGuard<'a, T> {
-    value: AtomicRef<'a, [T]>,
-    orig: NonNull<CellData>,
+pub(crate) struct CellGuard<'a, T: ?Sized> {
+    data: AtomicRef<'a, CellData>,
+    storage: NonNull<T>,
 }
 
-unsafe impl<'a, T> Send for CellGuard<'a, T> where AtomicRef<'a, T>: Send {}
-unsafe impl<'a, T> Sync for CellGuard<'a, T> where AtomicRef<'a, T>: Sync {}
+unsafe impl<'a, T: ComponentValue> Send for CellGuard<'a, T> where AtomicRef<'a, T>: Send {}
+unsafe impl<'a, T: ComponentValue> Sync for CellGuard<'a, T> where AtomicRef<'a, T>: Sync {}
 
-impl<'a, T: ComponentValue> CellGuard<'a, T> {
-    pub(super) fn new(value: AtomicRef<'a, CellData>) -> Self {
-        // Store the original pointer. This will be used when dropped
-        let orig = NonNull::from(&*value);
+impl<'a, T: ComponentValue + Sized> CellGuard<'a, [T]> {
+    pub(super) fn new(mut value: AtomicRef<'a, CellData>) -> Self {
+        let storage: NonNull<[T]> = NonNull::from(value.storage.downcast_ref::<T>());
 
-        let value = AtomicRef::map(value, |v| v.storage.downcast_ref::<T>());
+        Self {
+            data: value,
+            storage,
+        }
+    }
+}
 
-        Self { value, orig }
+impl<'a, T: ?Sized> CellGuard<'a, T> {
+    #[inline]
+    pub fn into_slice_ref(self) -> AtomicRef<'a, T> {
+        AtomicRef::map(self.data, |_| unsafe { self.storage.as_ref() })
     }
 
-    #[inline]
-    pub fn into_inner(self) -> AtomicRef<'a, [T]> {
-        self.value
+    pub(crate) fn filter_map<U>(
+        mut self,
+        f: impl FnOnce(&T) -> Option<&U>,
+    ) -> Option<CellGuard<'a, U>> {
+        let storage = NonNull::from(f(unsafe { self.storage.as_ref() })?);
+
+        Some(CellGuard {
+            data: self.data,
+            storage,
+        })
     }
 
     #[inline]
     pub(crate) fn changes(&self) -> &Changes {
-        // SAFETY: `value` is not accessed in this function
-        unsafe { &self.orig.as_ref().changes }
+        &self.data.changes
     }
 }
 
-impl<'w, T> Deref for CellGuard<'w, T> {
-    type Target = [T];
+impl<'a, T: Debug + ?Sized> Debug for CellGuard<'a, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        (*self).fmt(f)
+    }
+}
+
+impl<'w, T: ?Sized> Deref for CellGuard<'w, T> {
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.value
+        unsafe { self.storage.as_ref() }
     }
 }
 
@@ -112,9 +149,7 @@ impl<'w, T> Deref for CellGuard<'w, T> {
 ///
 /// A modification invent is only generated *if* if this is mutably dereferenced.
 pub struct RefMut<'a, T> {
-    value: AtomicRefMut<'a, T>,
-    // From the refcell
-    orig: *mut CellData,
+    guard: CellMutGuard<'a, T>,
 
     // All entities in the archetype
     ids: &'a [Entity],
@@ -125,20 +160,16 @@ pub struct RefMut<'a, T> {
 
 impl<'a, T: ComponentValue> RefMut<'a, T> {
     pub(super) fn new(
-        mut value: AtomicRefMut<'a, CellData>,
+        guard: CellMutGuard<'a, [T]>,
         ids: &'a [Entity],
         slot: Slot,
         tick: u32,
     ) -> Option<Self> {
         // Store the original pointer. This will be used when dropped
-        let orig = &mut *value as *mut CellData;
-
-        let value =
-            AtomicRefMut::filter_map(value, |v| v.storage.downcast_mut::<T>().get_mut(slot))?;
+        let guard = guard.filter_map(|v| v.get_mut(slot))?;
 
         Some(Self {
-            value,
-            orig,
+            guard,
             ids,
             slot,
             modified: false,
@@ -149,7 +180,7 @@ impl<'a, T: ComponentValue> RefMut<'a, T> {
 
 impl<'a, T: Debug> Debug for RefMut<'a, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.value.fmt(f)
+        self.guard.fmt(f)
     }
 }
 
@@ -158,7 +189,7 @@ impl<'a, T> Deref for RefMut<'a, T> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.value
+        &*self.guard
     }
 }
 
@@ -166,7 +197,7 @@ impl<'a, T> DerefMut for RefMut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        &mut self.value
+        &mut *self.guard
     }
 }
 
@@ -175,9 +206,7 @@ impl<'a, T> Drop for RefMut<'a, T> {
     fn drop(&mut self) {
         if self.modified {
             // SAFETY: `value` is not accessed beyond this point
-            let orig = unsafe { &mut *self.orig };
-
-            orig.set_modified(
+            self.guard.data.set_modified(
                 &self.ids[self.slot..=self.slot],
                 Slice::single(self.slot),
                 self.tick,

@@ -148,7 +148,7 @@ impl ChangeCursor {
 
 #[doc(hidden)]
 pub struct PreparedChangeFilter<'w, T> {
-    data: CellGuard<'w, T>,
+    data: CellGuard<'w, [T]>,
     kind: ChangeKind,
     cursor: ChangeCursor,
 }

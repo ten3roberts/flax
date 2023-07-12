@@ -253,22 +253,22 @@ impl Cell {
     }
 
     #[inline]
-    pub fn borrow<T: ComponentValue>(&self) -> CellGuard<T> {
+    pub fn borrow<T: ComponentValue>(&self) -> CellGuard<[T]> {
         CellGuard::new(self.data.borrow())
     }
 
     #[inline]
-    pub fn borrow_mut<T: ComponentValue>(&self) -> CellMutGuard<T> {
+    pub fn borrow_mut<T: ComponentValue>(&self) -> CellMutGuard<[T]> {
         CellMutGuard::new(self.data.borrow_mut())
     }
 
     #[inline]
-    pub fn try_borrow<T: ComponentValue>(&self) -> Result<CellGuard<T>, BorrowError> {
+    pub fn try_borrow<T: ComponentValue>(&self) -> Result<CellGuard<[T]>, BorrowError> {
         Ok(CellGuard::new(self.data.try_borrow()?))
     }
 
     #[inline]
-    pub fn try_borrow_mut<T: ComponentValue>(&self) -> Result<CellMutGuard<T>, BorrowMutError> {
+    pub fn try_borrow_mut<T: ComponentValue>(&self) -> Result<CellMutGuard<[T]>, BorrowMutError> {
         Ok(CellMutGuard::new(self.data.try_borrow_mut()?))
     }
 
@@ -279,7 +279,7 @@ impl Cell {
         slot: Slot,
         tick: u32,
     ) -> Option<RefMut<T>> {
-        RefMut::new(self.data.borrow_mut(), entities, slot, tick)
+        RefMut::new(self.borrow_mut(), entities, slot, tick)
     }
 
     #[inline]
@@ -403,7 +403,7 @@ impl Archetype {
     pub(crate) fn borrow<T: ComponentValue>(
         &self,
         component: ComponentKey,
-    ) -> Option<CellGuard<T>> {
+    ) -> Option<CellGuard<[T]>> {
         Some(self.cell(component)?.borrow())
     }
 
@@ -417,7 +417,7 @@ impl Archetype {
     pub(crate) fn borrow_mut<T: ComponentValue>(
         &self,
         component: ComponentKey,
-    ) -> Option<CellMutGuard<T>> {
+    ) -> Option<CellMutGuard<[T]>> {
         let cell = self.cell(component)?;
         let data = cell.borrow_mut();
         Some(data)

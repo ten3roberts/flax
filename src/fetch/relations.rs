@@ -30,7 +30,7 @@ where
     type Prepared = PreparedRelations<'w, T>;
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let borrows: SmallVec<[(Entity, CellGuard<T>); 4]> = {
+        let borrows: SmallVec<[_; 4]> = {
             data.arch
                 .relations_like(self.component.id())
                 .map(|(info, cell)| (info.object.unwrap(), cell.borrow()))
@@ -72,7 +72,7 @@ impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {
 
 #[doc(hidden)]
 pub struct PreparedRelations<'a, T> {
-    borrows: SmallVec<[(Entity, CellGuard<'a, T>); 4]>,
+    borrows: SmallVec<[(Entity, CellGuard<'a, [T]>); 4]>,
 }
 
 impl<'q, 'w, T> PreparedFetch<'q> for PreparedRelations<'w, T>
@@ -91,7 +91,7 @@ where
 
 /// Iterates the relation object and data for the yielded query item
 pub struct RelationsIter<'a, T> {
-    borrows: slice::Iter<'a, (Entity, CellGuard<'a, T>)>,
+    borrows: slice::Iter<'a, (Entity, CellGuard<'a, [T]>)>,
     slot: Slot,
 }
 

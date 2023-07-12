@@ -77,7 +77,7 @@ impl<'q, T: ComponentValue> FetchItem<'q> for Mutable<T> {
 
 #[doc(hidden)]
 pub struct WriteComponent<'a, T> {
-    guard: CellMutGuard<'a, T>,
+    guard: CellMutGuard<'a, [T]>,
     arch: &'a Archetype,
     tick: u32,
 }
