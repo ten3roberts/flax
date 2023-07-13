@@ -20,8 +20,8 @@ pub(crate) struct CellMutGuard<'a, T: ?Sized> {
     storage: NonNull<T>,
 }
 
-unsafe impl<'a, T: ComponentValue> Send for CellMutGuard<'a, T> where AtomicRefMut<'a, T>: Send {}
-unsafe impl<'a, T: ComponentValue> Sync for CellMutGuard<'a, T> where AtomicRefMut<'a, T>: Sync {}
+unsafe impl<'a, T: 'a + ?Sized> Send for CellMutGuard<'a, T> where for<'x> &'x mut T: Send {}
+unsafe impl<'a, T: 'a + ?Sized> Sync for CellMutGuard<'a, T> where for<'x> &'x mut T: Sync {}
 
 impl<'a, T: ComponentValue + Sized> CellMutGuard<'a, [T]> {
     pub(super) fn new(mut value: AtomicRefMut<'a, CellData>) -> Self {
@@ -83,7 +83,7 @@ impl<'w, T: ?Sized> DerefMut for CellMutGuard<'w, T> {
 
 impl<'a, T: Debug + ?Sized> Debug for CellMutGuard<'a, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        (*self).fmt(f)
+        (**self).fmt(f)
     }
 }
 
@@ -93,11 +93,11 @@ pub(crate) struct CellGuard<'a, T: ?Sized> {
     storage: NonNull<T>,
 }
 
-unsafe impl<'a, T: ComponentValue> Send for CellGuard<'a, T> where AtomicRef<'a, T>: Send {}
-unsafe impl<'a, T: ComponentValue> Sync for CellGuard<'a, T> where AtomicRef<'a, T>: Sync {}
+unsafe impl<'a, T: 'a + ?Sized> Send for CellGuard<'a, T> where for<'x> &'x T: Send {}
+unsafe impl<'a, T: 'a + ?Sized> Sync for CellGuard<'a, T> where for<'x> &'x T: Sync {}
 
 impl<'a, T: ComponentValue + Sized> CellGuard<'a, [T]> {
-    pub(super) fn new(mut value: AtomicRef<'a, CellData>) -> Self {
+    pub(super) fn new(value: AtomicRef<'a, CellData>) -> Self {
         let storage: NonNull<[T]> = NonNull::from(value.storage.downcast_ref::<T>());
 
         Self {
@@ -114,7 +114,7 @@ impl<'a, T: ?Sized> CellGuard<'a, T> {
     }
 
     pub(crate) fn filter_map<U>(
-        mut self,
+        self,
         f: impl FnOnce(&T) -> Option<&U>,
     ) -> Option<CellGuard<'a, U>> {
         let storage = NonNull::from(f(unsafe { self.storage.as_ref() })?);
@@ -133,7 +133,7 @@ impl<'a, T: ?Sized> CellGuard<'a, T> {
 
 impl<'a, T: Debug + ?Sized> Debug for CellGuard<'a, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        (*self).fmt(f)
+        (**self).fmt(f)
     }
 }
 
@@ -189,7 +189,7 @@ impl<'a, T> Deref for RefMut<'a, T> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &*self.guard
+        &self.guard
     }
 }
 
@@ -197,7 +197,7 @@ impl<'a, T> DerefMut for RefMut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        &mut *self.guard
+        &mut self.guard
     }
 }
 
