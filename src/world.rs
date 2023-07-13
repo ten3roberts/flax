@@ -27,9 +27,8 @@ use crate::{
     filter::{ArchetypeFilter, StaticFilter},
     format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
     is_static,
-    metadata::exclusive,
     relation::Relation,
-    writer::{self, ComponentUpdater, MigrateEntity},
+    writer::{self, ComponentWriter, MigrateEntity},
     ArchetypeId, BatchSpawn, Component, ComponentInfo, ComponentKey, ComponentVTable,
     ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
 };
@@ -303,115 +302,7 @@ impl World {
 
     /// Add the components stored in a component buffer to an entity
     pub fn set_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Result<()> {
-        let id: Entity = id;
-        let change_tick = self.advance_change_tick();
-
-        for &info in buffer.components() {
-            self.init_component(info);
-        }
-
-        let EntityLocation {
-            arch_id: arch,
-            slot,
-        } = self.init_location(id)?;
-
-        let mut new_data = Vec::new();
-        let mut new_components = Vec::new();
-
-        let src_id = arch;
-
-        let mut exclusive_relations = Vec::new();
-
-        for (info, ptr) in buffer.drain() {
-            let src = self.archetypes.get_mut(arch);
-
-            if let Some(()) = src.mutate_in_place(slot, info.key, change_tick, |old| {
-                // Drop old and copy the new value in
-                unsafe {
-                    info.drop(old);
-                    ptr::copy_nonoverlapping(ptr, old, info.size());
-                }
-            }) {
-            } else {
-                // Component does not exist yet, so defer a move
-
-                // Data will have a lifetime of `components`.
-
-                let key = info.key;
-
-                // Exclusive relation
-                if key.object.is_some() && self.has(key.id, exclusive()) {
-                    if exclusive_relations.contains(&key.id) {
-                        // Drop immediately
-                        unsafe { info.drop(ptr) }
-                        continue;
-                    }
-
-                    exclusive_relations.push(key.id);
-                }
-
-                new_components.push(info);
-                new_data.push((info, ptr));
-            }
-        }
-
-        if !new_data.is_empty() {
-            debug_assert_eq!(new_data.len(), new_components.len());
-            let src = self.archetypes.get_mut(arch);
-            new_components.reserve(src.cells().len());
-
-            // Add the existing components, making sure new exclusive relations are favored
-            new_components.extend(
-                src.components()
-                    .filter(|v| !exclusive_relations.contains(&v.key.id)),
-            );
-
-            new_components.sort_unstable();
-
-            // Make sure everything is in its order
-            {
-                let v = new_components.iter().sorted().cloned().collect_vec();
-                assert_eq!(
-                    new_components, v,
-                    "set_with not in order new={new_components:#?} sorted={v:#?}"
-                );
-            }
-
-            let components = new_components;
-
-            let (dst_id, _) = self.archetypes.find(components);
-
-            // Borrow disjoint
-            let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
-
-            // dst.push is called immediately
-            unsafe {
-                let (dst_slot, swapped) = src.move_to(dst, slot, |c, ptr| c.drop(ptr), change_tick);
-
-                // Insert the missing components
-                for &(component, data) in &new_data {
-                    dst.push(component.key, data, change_tick);
-                }
-
-                assert_eq!(dst.entity(dst_slot), Some(id));
-
-                if let Some((swapped, slot)) = swapped {
-                    // The last entity in src was moved into the slot occupied by id
-                    self.entities
-                        .init(swapped.kind())
-                        .get_mut(swapped)
-                        .unwrap()
-                        .slot = slot;
-                }
-
-                self.archetypes.prune_arch(src_id);
-
-                *self.location_mut(id).expect("Entity is not valid") = EntityLocation {
-                    slot: dst_slot,
-                    arch_id: dst_id,
-                };
-            }
-        }
+        self.set_impl(id, writer::Buffered::new(buffer))?;
 
         Ok(())
     }
@@ -693,11 +584,7 @@ impl World {
     }
 
     #[inline]
-    pub(crate) fn set_impl<U: ComponentUpdater>(
-        &mut self,
-        id: Entity,
-        updater: U,
-    ) -> Result<EntityLocation> {
+    fn set_impl<U: ComponentWriter>(&mut self, id: Entity, updater: U) -> Result<EntityLocation> {
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
@@ -705,7 +592,7 @@ impl World {
 
         let src = self.archetypes.get_mut(src_loc.arch_id);
 
-        if let Some(writer) = updater.update(src, id, src_loc.slot, change_tick) {
+        if let Some(writer) = updater.write(src, id, src_loc.slot, change_tick) {
             // Move to a new archetype
             let (dst_loc, swapped) =
                 writer.migrate(self, src_loc.arch_id, src_loc.slot, change_tick);

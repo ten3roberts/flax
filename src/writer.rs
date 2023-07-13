@@ -10,11 +10,15 @@ use crate::{
     ArchetypeId, Component, ComponentInfo, ComponentValue, Entity, World,
 };
 
-pub(crate) trait ComponentUpdater {
+/// Describes a modification to the components of an entity within the context of an archetype
+pub(crate) trait ComponentWriter {
     /// If returned, will be used to migrate the entity to a new archetype
     type Writer: MigrateEntity;
 
-    fn update(
+    /// Performs write operations against the target entity and archetype.
+    ///
+    /// A migration to another archetype may be induced by returning an entity migrator
+    fn write(
         self,
         archetype: &mut Archetype,
         id: Entity,
@@ -41,10 +45,10 @@ pub(crate) struct Replace<'a, T: ComponentValue> {
     pub(crate) output: &'a mut Option<T>,
 }
 
-impl<'a, T: ComponentValue> ComponentUpdater for Replace<'a, T> {
+impl<'a, T: ComponentValue> ComponentWriter for Replace<'a, T> {
     type Writer = ReplaceWriter<T>;
 
-    fn update(
+    fn write(
         self,
         arch: &mut Archetype,
         id: Entity,
@@ -156,10 +160,16 @@ pub(crate) struct Buffered<'a> {
     pub(crate) buffer: &'a mut ComponentBuffer,
 }
 
-impl<'a> ComponentUpdater for Buffered<'a> {
+impl<'a> Buffered<'a> {
+    pub(crate) fn new(buffer: &'a mut ComponentBuffer) -> Self {
+        Self { buffer }
+    }
+}
+
+impl<'a> ComponentWriter for Buffered<'a> {
     type Writer = BufferedMigrate<'a>;
 
-    fn update(
+    fn write(
         self,
         arch: &mut Archetype,
         id: Entity,
@@ -170,12 +180,14 @@ impl<'a> ComponentUpdater for Buffered<'a> {
         unsafe {
             self.buffer.retain(|info, src| {
                 let key = info.key;
+                // The component exists in the current archetype
+                // This implies that is it also satisfies any exclusive properties
                 if let Some(cell) = arch.cell_mut(key) {
                     let data = cell.data.get_mut();
 
                     let dst = data.storage.at_mut(slot).unwrap();
                     info.drop(dst);
-                    ptr::copy_nonoverlapping(dst as *mut (), src, info.size());
+                    ptr::copy_nonoverlapping(src, dst, info.size());
 
                     data.set_modified(&[id], Slice::single(slot), tick);
                     false
@@ -183,10 +195,11 @@ impl<'a> ComponentUpdater for Buffered<'a> {
                     // Component does not exist yet, so defer a move
 
                     // Exclusive relation
-                    if key.object.is_some()
-                        && info.meta_ref().has(exclusive())
-                        && !exclusive_relations.contains(&key.id)
-                    {
+                    if key.object.is_some() && info.meta_ref().has(exclusive()) {
+                        if exclusive_relations.contains(&key.id) {
+                            panic!("Multiple exclusive relations");
+                        }
+
                         exclusive_relations.push(key.id);
                     }
 

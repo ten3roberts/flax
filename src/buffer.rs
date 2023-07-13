@@ -347,10 +347,10 @@ impl ComponentBuffer {
     /// # Safety
     /// If the passed closure returns *false* the element is considered moved and shall be handled by
     /// the caller.
-    pub(crate) unsafe fn retain(&mut self, mut f: impl FnMut(ComponentInfo, *mut ()) -> bool) {
+    pub(crate) unsafe fn retain(&mut self, mut f: impl FnMut(ComponentInfo, *mut u8) -> bool) {
         self.entries.retain(|_, (info, offset)| {
             let ptr = unsafe { self.storage.at_mut(*offset) };
-            f(*info, ptr as *mut ())
+            f(*info, ptr)
         })
     }
 }
