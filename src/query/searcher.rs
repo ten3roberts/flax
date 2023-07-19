@@ -43,6 +43,7 @@ pub(crate) fn traverse_archetypes<'a>(
             result(cur, arch);
 
             for &arch_id in arch.children.values() {
+                eprintln!("Traversing child {} from {}", arch_id, cur);
                 traverse_archetypes(archetypes, arch_id, required, result);
             }
         }

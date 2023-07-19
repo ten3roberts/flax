@@ -29,7 +29,7 @@
         ]
     },
     "test": {
-        "cmd": "cargo nextest run --all-features",
+        "cmd": "cargo nextest run -j 1 --all-features",
         "kind": "term"
     },
     "test-miri": {

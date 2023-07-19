@@ -211,7 +211,7 @@ impl CommandBuffer {
                 Command::Set { id, info, offset } => unsafe {
                     let value = self.inserts.take_dyn(offset);
                     world
-                        .set_dyn(id, info, value, |v| info.drop(v.cast()))
+                        .set_dyn(id, info, value)
                         .map_err(|v| v.into_anyhow())
                         .with_context(|| format!("Failed to set component {}", info.name()))?;
                 },

@@ -1,4 +1,4 @@
-use core::{mem, ptr};
+use core::{marker::PhantomData, mem, ptr};
 
 use itertools::{Either, Itertools};
 
@@ -55,6 +55,7 @@ impl<'a, T: ComponentValue> ComponentWriter for Replace<'a, T> {
         slot: Slot,
         tick: u32,
     ) -> Option<Self::Writer> {
+        let info = self.component.info();
         let key = self.component.key();
 
         if let Some(cell) = arch.cell_mut(key) {
@@ -78,20 +79,13 @@ impl<'a, T: ComponentValue> ComponentWriter for Replace<'a, T> {
             })
         } else {
             // Oh no! The archetype is missing the component
-            //
-            // Generate a list of component infos which fully satisfy the requirements for the
-            // desired archetype to move to
-            let pivot = arch.components().take_while(|v| v.key < key).count();
 
-            // Split the components
-            // A B C [new] D E F
-            let left = arch.components().take(pivot);
-            let right = arch.components().skip(pivot);
-
-            let components = left
-                .chain([self.component.info()])
-                .chain(right)
-                .collect_vec();
+            eprintln!(
+                "Missing component: {:?} found:{:?}",
+                info,
+                arch.components().collect_vec()
+            );
+            let components = find_archetype(arch, [info], &[info.key.id]);
 
             Some(ReplaceWriter {
                 dst: Either::Right(components),
@@ -131,6 +125,12 @@ unsafe impl<T: ComponentValue> MigrateEntity for ReplaceWriter<T> {
 
                 // Add a quick edge to refer to later
                 let (src, dst) = world.archetypes.get_disjoint(src_id, dst_id).unwrap();
+
+                eprintln!(
+                    "Adding edge: {:?} -> {:?} {:?}",
+                    src_id, dst_id, self.component
+                );
+
                 src.add_outgoing(key, dst_id);
                 dst.add_incoming(key, src_id);
                 (src, dst, dst_id)
@@ -144,6 +144,123 @@ unsafe impl<T: ComponentValue> MigrateEntity for ReplaceWriter<T> {
             let mut value = self.value;
             dst.push(key, &mut value as *mut T as *mut u8, tick);
             mem::forget(value);
+        }
+
+        (
+            EntityLocation {
+                slot: dst_slot,
+                arch_id: dst_id,
+            },
+            swapped,
+        )
+    }
+}
+
+pub(crate) struct ReplaceDyn<'a> {
+    pub(crate) info: ComponentInfo,
+    pub(crate) value: *mut u8,
+    pub(crate) _marker: PhantomData<&'a mut ()>,
+}
+
+impl<'a> ComponentWriter for ReplaceDyn<'a> {
+    type Writer = ReplaceWriterDyn<'a>;
+
+    fn write(
+        self,
+        arch: &mut Archetype,
+        id: Entity,
+        slot: Slot,
+        tick: u32,
+    ) -> Option<Self::Writer> {
+        let key = self.info.key();
+
+        if let Some(cell) = arch.cell_mut(key) {
+            let data = cell.data.get_mut();
+
+            let storage = &mut data.storage;
+            unsafe {
+                let dst = storage.at_mut(slot).unwrap();
+                ptr::copy_nonoverlapping(self.value, dst, self.info.size());
+                self.info.drop(dst);
+            }
+
+            data.set_modified(&[id], Slice::single(slot), tick);
+
+            None
+        } else if let Some(&dst) = arch.outgoing.get(&key) {
+            eprintln!("Outgoing edge: {:?}", self.info);
+
+            Some(ReplaceWriterDyn {
+                dst: Either::Left(dst),
+                info: self.info,
+                value: self.value,
+                _marker: self._marker,
+            })
+        } else {
+            // Oh no! The archetype is missing the component
+
+            eprintln!(
+                "Missing component: {:?} found:{:?}",
+                self.info,
+                arch.components().collect_vec()
+            );
+            let components = find_archetype(arch, [self.info], &[self.info.key.id]);
+            eprintln!("Result: {components:?}");
+
+            Some(ReplaceWriterDyn {
+                dst: Either::Right(components),
+                info: self.info,
+                value: self.value,
+                _marker: self._marker,
+            })
+        }
+    }
+}
+
+pub(crate) struct ReplaceWriterDyn<'a> {
+    dst: Either<ArchetypeId, Vec<ComponentInfo>>,
+    info: ComponentInfo,
+    value: *mut u8,
+    _marker: PhantomData<&'a mut ()>,
+}
+
+unsafe impl<'a> MigrateEntity for ReplaceWriterDyn<'a> {
+    fn migrate(
+        self,
+        world: &mut World,
+        src_id: ArchetypeId,
+        src_slot: Slot,
+        tick: u32,
+    ) -> (EntityLocation, Option<(Entity, Slot)>) {
+        let key = self.info.key();
+
+        let (src, dst, dst_id) = match &self.dst {
+            &Either::Left(dst_id) => {
+                let (src, dst) = world.archetypes.get_disjoint(src_id, dst_id).unwrap();
+                (src, dst, dst_id)
+            }
+            Either::Right(components) => {
+                // Initialize component
+                world.init_component(self.info);
+
+                let (dst_id, _) = world.archetypes.find(components.iter().copied());
+
+                // Add a quick edge to refer to later
+                let (src, dst) = world.archetypes.get_disjoint(src_id, dst_id).unwrap();
+                eprintln!("Adding edge: {:?} -> {:?} {:?}", src_id, dst_id, self.info);
+                src.add_outgoing(key, dst_id);
+                dst.add_incoming(key, src_id);
+
+                (src, dst, dst_id)
+            }
+        };
+
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, src_slot, |c, ptr| c.drop(ptr), tick) };
+
+        // Insert the missing component
+        unsafe {
+            let value = self.value;
+            dst.push(key, value, tick);
         }
 
         (
@@ -213,16 +330,12 @@ impl<'a> ComponentWriter for Buffered<'a> {
             None
         } else {
             // Add the existing components, making sure new exclusive relations are favored
-            let components = self
-                .buffer
-                .components()
-                .copied()
-                .chain(
-                    arch.components()
-                        .filter(|v| !exclusive_relations.contains(&v.key.id)),
-                )
-                .sorted_unstable()
-                .collect_vec();
+
+            let components = find_archetype(
+                arch,
+                self.buffer.components().copied(),
+                &exclusive_relations,
+            );
 
             Some(BufferedMigrate {
                 components,
@@ -273,4 +386,17 @@ unsafe impl<'a> MigrateEntity for BufferedMigrate<'a> {
             swapped,
         )
     }
+}
+
+fn find_archetype(
+    arch: &Archetype,
+    new_components: impl IntoIterator<Item = ComponentInfo>,
+    // Subset of `new_components`
+    exclusive: &[Entity],
+) -> Vec<ComponentInfo> {
+    new_components
+        .into_iter()
+        .chain(arch.components().filter(|v| !exclusive.contains(&v.key.id)))
+        .sorted_unstable()
+        .collect_vec()
 }
