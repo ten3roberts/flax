@@ -494,91 +494,15 @@ impl World {
         id: Entity,
         info: ComponentInfo,
         value: *mut u8,
-        on_drop: impl FnOnce(*mut u8),
     ) -> Result<EntityLocation> {
-        // We know things will change either way
-        let change_tick = self.advance_change_tick();
-
-        let EntityLocation {
-            arch_id: src_id,
-            slot,
-        } = self.init_location(id)?;
-
-        let src = self.archetypes.get_mut(src_id);
-
-        // Fast track if the component already exists
-        if let Some(()) = src.mutate_in_place(slot, info.key(), change_tick, |old| {
-            // Make the caller responsible for drop or store
-            (on_drop(old));
-
-            unsafe {
-                ptr::copy_nonoverlapping(value, old, info.size());
-            }
-        }) {
-            return Ok(EntityLocation {
-                arch_id: src_id,
-                slot,
-            });
-        }
-
-        // Exclusive relations may cause the dst archetype to be a sibling rather than a child
-        // of src. Adding a strong link breaks the tree in there cases
-
-        // Pick up the entity and move it to the destination archetype
-        let dst_id = if let Some(&dst) = src.outgoing.get(&info.key()) {
-            dst
-        } else {
-            let pivot = src.components().take_while(|v| v.key < info.key()).count();
-
-            // Split the components
-            // A B C [new] D E F
-            let left = src.components().take(pivot);
-            let right = src.components().skip(pivot);
-
-            let components = left.chain(once(info)).chain(right).collect_vec();
-
-            // Initialize component
-            self.init_component(info);
-
-            // assert in order
-            let (dst_id, _) = self.archetypes.find(components);
-
-            dst_id
-        };
-
-        assert_ne!(src_id, dst_id);
-
-        // Borrow disjoint
-        let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
-
-        let (dst_slot, swapped) =
-            unsafe { src.move_to(dst, slot, |c, ptr| c.drop(ptr), change_tick) };
-
-        // Add a quick edge to refer to later
-        src.add_outgoing(info.key(), dst_id);
-        dst.add_incoming(info.key(), src_id);
-
-        // Insert the missing component
-        unsafe {
-            dst.push(info.key, value, change_tick);
-        }
-
-        debug_assert_eq!(dst.entity(dst_slot), Some(id));
-
-        if let Some((swapped, slot)) = swapped {
-            // The last entity in src was moved into the slot occupied by id
-            let swapped_ns = self.entities.init(swapped.kind());
-            swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
-        }
-        self.archetypes.prune_arch(src_id);
-
-        let ns = self.entities.init(id.kind());
-        let loc = EntityLocation {
-            slot: dst_slot,
-            arch_id: dst_id,
-        };
-
-        *ns.get_mut(id).expect("Entity is not valid") = loc;
+        let loc = self.set_impl(
+            id,
+            writer::ReplaceDyn {
+                info,
+                value,
+                _marker: core::marker::PhantomData,
+            },
+        )?;
 
         Ok(loc)
     }
@@ -592,6 +516,7 @@ impl World {
 
         let src = self.archetypes.get_mut(src_loc.arch_id);
 
+        eprintln!("loc: {src_loc:?}");
         if let Some(writer) = updater.write(src, id, src_loc.slot, change_tick) {
             // Move to a new archetype
             let (dst_loc, swapped) =

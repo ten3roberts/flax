@@ -382,7 +382,12 @@ impl Archetype {
     }
 
     pub(crate) fn add_incoming(&mut self, component: ComponentKey, dst_id: ArchetypeId) {
-        self.incoming.insert(component, dst_id);
+        debug_assert!(self.has(component), "Archetype has the incoming component");
+        let existing = self.incoming.insert(component, dst_id);
+        debug_assert!(
+            existing.is_none() || existing == Some(dst_id),
+            "Insert incoming for {component:?} => {dst_id}. Existing: {existing:?}"
+        )
     }
 
     pub(crate) fn add_outgoing(&mut self, component: ComponentKey, dst_id: ArchetypeId) {
@@ -978,9 +983,11 @@ impl Archetype {
     }
 
     pub(crate) fn remove_link(&mut self, component: ComponentKey) {
+        eprintln!("Removing link for {:?}", component);
         let linked = self.outgoing.remove(&component);
-        self.children.remove(&component);
         assert!(linked.is_some());
+
+        self.children.remove(&component);
     }
 
     /// Borrow the change list mutably
