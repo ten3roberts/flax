@@ -1,6 +1,7 @@
-use core::{marker::PhantomData, mem, ptr};
+use core::{marker::PhantomData, mem, ptr, slice};
 
 use itertools::{Either, Itertools};
+use serde::ser::SerializeTupleStruct;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
@@ -85,10 +86,15 @@ impl<'a, T: ComponentValue> ComponentWriter for Replace<'a, T> {
                 info,
                 arch.components().collect_vec()
             );
-            let components = find_archetype(arch, [info], &[info.key.id]);
+
+            let exclusive = if info.meta_ref().has(exclusive()) {
+                slice::from_ref(&info.key.id)
+            } else {
+                &[]
+            };
 
             Some(ReplaceWriter {
-                dst: Either::Right(components),
+                dst: Either::Right(find_archetype(arch, [info], exclusive)),
                 component: self.component,
                 value: self.value,
             })
@@ -97,7 +103,7 @@ impl<'a, T: ComponentValue> ComponentWriter for Replace<'a, T> {
 }
 
 pub(crate) struct ReplaceWriter<T> {
-    dst: Either<ArchetypeId, Vec<ComponentInfo>>,
+    dst: Either<ArchetypeId, (Vec<ComponentInfo>, bool)>,
     component: Component<T>,
     value: T,
 }
@@ -117,22 +123,23 @@ unsafe impl<T: ComponentValue> MigrateEntity for ReplaceWriter<T> {
                 let (src, dst) = world.archetypes.get_disjoint(src_id, dst_id).unwrap();
                 (src, dst, dst_id)
             }
-            Either::Right(components) => {
+            Either::Right((components, superset)) => {
                 // Initialize component
                 world.init_component(self.component.info());
 
                 let (dst_id, _) = world.archetypes.find(components.iter().copied());
 
                 // Add a quick edge to refer to later
+                let reserved_id = world.archetypes.reserved;
                 let (src, dst) = world.archetypes.get_disjoint(src_id, dst_id).unwrap();
 
-                eprintln!(
-                    "Adding edge: {:?} -> {:?} {:?}",
-                    src_id, dst_id, self.component
-                );
+                if *superset && src_id != reserved_id {
+                    src.add_outgoing(key, dst_id);
+                    dst.add_incoming(key, src_id);
+                } else {
+                    eprintln!("Not a superset")
+                }
 
-                src.add_outgoing(key, dst_id);
-                dst.add_incoming(key, src_id);
                 (src, dst, dst_id)
             }
         };
@@ -180,8 +187,10 @@ impl<'a> ComponentWriter for ReplaceDyn<'a> {
             let storage = &mut data.storage;
             unsafe {
                 let dst = storage.at_mut(slot).unwrap();
-                ptr::copy_nonoverlapping(self.value, dst, self.info.size());
+
                 self.info.drop(dst);
+
+                ptr::copy_nonoverlapping(self.value, dst, self.info.size());
             }
 
             data.set_modified(&[id], Slice::single(slot), tick);
@@ -204,11 +213,15 @@ impl<'a> ComponentWriter for ReplaceDyn<'a> {
                 self.info,
                 arch.components().collect_vec()
             );
-            let components = find_archetype(arch, [self.info], &[self.info.key.id]);
-            eprintln!("Result: {components:?}");
+
+            let exclusive = if self.info.meta_ref().has(exclusive()) {
+                slice::from_ref(&self.info.key.id)
+            } else {
+                &[]
+            };
 
             Some(ReplaceWriterDyn {
-                dst: Either::Right(components),
+                dst: Either::Right(find_archetype(arch, [self.info], exclusive)),
                 info: self.info,
                 value: self.value,
                 _marker: self._marker,
@@ -218,7 +231,7 @@ impl<'a> ComponentWriter for ReplaceDyn<'a> {
 }
 
 pub(crate) struct ReplaceWriterDyn<'a> {
-    dst: Either<ArchetypeId, Vec<ComponentInfo>>,
+    dst: Either<ArchetypeId, (Vec<ComponentInfo>, bool)>,
     info: ComponentInfo,
     value: *mut u8,
     _marker: PhantomData<&'a mut ()>,
@@ -239,17 +252,21 @@ unsafe impl<'a> MigrateEntity for ReplaceWriterDyn<'a> {
                 let (src, dst) = world.archetypes.get_disjoint(src_id, dst_id).unwrap();
                 (src, dst, dst_id)
             }
-            Either::Right(components) => {
+            Either::Right((components, superset)) => {
                 // Initialize component
                 world.init_component(self.info);
 
                 let (dst_id, _) = world.archetypes.find(components.iter().copied());
 
                 // Add a quick edge to refer to later
+                let reserved_id = world.archetypes.reserved;
                 let (src, dst) = world.archetypes.get_disjoint(src_id, dst_id).unwrap();
-                eprintln!("Adding edge: {:?} -> {:?} {:?}", src_id, dst_id, self.info);
-                src.add_outgoing(key, dst_id);
-                dst.add_incoming(key, src_id);
+
+                if *superset && src_id != reserved_id {
+                    eprintln!("Adding edge: {:?} -> {:?} {:?}", src_id, dst_id, self.info);
+                    src.add_outgoing(key, dst_id);
+                    dst.add_incoming(key, src_id);
+                }
 
                 (src, dst, dst_id)
             }
@@ -331,7 +348,7 @@ impl<'a> ComponentWriter for Buffered<'a> {
         } else {
             // Add the existing components, making sure new exclusive relations are favored
 
-            let components = find_archetype(
+            let (components, _) = find_archetype(
                 arch,
                 self.buffer.components().copied(),
                 &exclusive_relations,
@@ -393,10 +410,20 @@ fn find_archetype(
     new_components: impl IntoIterator<Item = ComponentInfo>,
     // Subset of `new_components`
     exclusive: &[Entity],
-) -> Vec<ComponentInfo> {
-    new_components
+) -> (Vec<ComponentInfo>, bool) {
+    let mut superset = true;
+    let res = new_components
         .into_iter()
-        .chain(arch.components().filter(|v| !exclusive.contains(&v.key.id)))
+        .chain(arch.components().filter(|v| {
+            if exclusive.contains(&v.key.id) {
+                superset = false;
+                false
+            } else {
+                true
+            }
+        }))
         .sorted_unstable()
-        .collect_vec()
+        .collect_vec();
+
+    dbg!(res, superset)
 }
