@@ -383,7 +383,9 @@ impl Archetype {
 
     pub(crate) fn add_incoming(&mut self, component: ComponentKey, dst_id: ArchetypeId) {
         debug_assert!(self.has(component), "Archetype has the incoming component");
+
         let existing = self.incoming.insert(component, dst_id);
+
         debug_assert!(
             existing.is_none() || existing == Some(dst_id),
             "Insert incoming for {component:?} => {dst_id}. Existing: {existing:?}"

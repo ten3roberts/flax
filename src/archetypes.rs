@@ -56,7 +56,11 @@ impl Archetypes {
     /// Prunes a leaf and its ancestors from empty archetypes
     pub(crate) fn prune_arch(&mut self, arch_id: ArchetypeId) -> bool {
         let arch = self.get(arch_id);
-        if arch_id == self.root || !arch.is_empty() || !arch.outgoing.is_empty() {
+        if arch_id == self.root
+            || arch_id == self.reserved
+            || !arch.is_empty()
+            || !arch.outgoing.is_empty()
+        {
             return false;
         }
 
