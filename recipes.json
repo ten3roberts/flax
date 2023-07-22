@@ -33,7 +33,7 @@
         "kind": "term"
     },
     "test-miri": {
-        "cmd": "cargo miri nextest run --no-default-features --features std,serde,flume,derive"
+        "cmd": "cargo miri nextest run -j 8 --no-default-features --features std,serde,flume,derive"
     },
     "doc": {
         "cmd": "cargo doc --all-features --open"
