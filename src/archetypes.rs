@@ -95,7 +95,7 @@ impl Archetypes {
     /// `components` must be sorted.
     ///
     /// Ensures the `exclusive` property of any relations are satisfied
-    pub(crate) fn find(
+    pub(crate) fn find_create(
         &mut self,
         components: impl IntoIterator<Item = ComponentInfo>,
     ) -> (ArchetypeId, &mut Archetype) {

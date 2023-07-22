@@ -2,9 +2,7 @@ use alloc::{borrow::ToOwned, collections::BTreeMap, sync::Arc, vec::Vec};
 use core::{
     fmt,
     fmt::Formatter,
-    iter::once,
     mem::{self, MaybeUninit},
-    ptr,
     sync::atomic::{AtomicBool, AtomicU32, Ordering, Ordering::Relaxed},
 };
 use once_cell::unsync::OnceCell;
@@ -14,7 +12,7 @@ use atomic_refcell::{AtomicRef, BorrowError, BorrowMutError};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeInfo},
+    archetype::{Archetype, ArchetypeInfo, Slot},
     archetypes::Archetypes,
     buffer::ComponentBuffer,
     component::dummy,
@@ -28,7 +26,7 @@ use crate::{
     format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
     is_static,
     relation::Relation,
-    writer::{self, ComponentWriter, MigrateEntity},
+    writer::{self, EntityWriter, Replace, ReplaceDyn, SingleComponentWriter},
     ArchetypeId, BatchSpawn, Component, ComponentInfo, ComponentKey, ComponentVTable,
     ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
 };
@@ -54,6 +52,23 @@ impl EntityStores {
     fn get(&self, kind: EntityKind) -> Option<&EntityStore> {
         self.inner.get(&kind)
     }
+}
+
+pub(crate) fn update_entity_loc(
+    world: &mut World,
+    id: Entity,
+    loc: EntityLocation,
+    swapped: Option<(Entity, Slot)>,
+) {
+    if let Some((swapped, slot)) = swapped {
+        // The last entity in src was moved into the slot occupied by id
+        let swapped_ns = world.entities.init(swapped.kind());
+        swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
+    }
+
+    let ns = world.entities.init(id.kind());
+
+    *ns.get_mut(id).expect("Entity is not valid") = loc;
 }
 
 /// Holds the entities and components of the ECS.
@@ -126,7 +141,7 @@ impl World {
 
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, arch) = self.archetypes.find(batch.components());
+        let (arch_id, arch) = self.archetypes.find_create(batch.components());
 
         let base = arch.len();
         let store = self.entities.init(EntityKind::empty());
@@ -199,7 +214,7 @@ impl World {
             self.init_component(component);
         }
 
-        let (arch_id, _) = self.archetypes.find(buffer.components().copied());
+        let (arch_id, _) = self.archetypes.find_create(buffer.components().copied());
         let (loc, arch) = self.spawn_at_inner(id, arch_id)?;
 
         for (info, src) in buffer.drain() {
@@ -218,7 +233,7 @@ impl World {
         }
 
         let change_tick = self.advance_change_tick();
-        let (arch_id, _) = self.archetypes.find(buffer.components().copied());
+        let (arch_id, _) = self.archetypes.find_create(buffer.components().copied());
 
         let (id, _, arch) = self.spawn_inner(arch_id, EntityKind::empty());
 
@@ -274,7 +289,7 @@ impl World {
         let dst_components: SmallVec<[ComponentInfo; 8]> =
             src.components().filter(|v| f(v.key())).collect();
 
-        let (dst_id, _) = self.archetypes.find(dst_components);
+        let (dst_id, _) = self.archetypes.find_create(dst_components);
 
         let (src, dst) = self.archetypes.get_disjoint(loc.arch_id, dst_id).unwrap();
 
@@ -445,7 +460,7 @@ impl World {
                 !(key.id == id || key.object == Some(id))
             });
 
-            let (dst_id, dst) = self.archetypes.find(components);
+            let (dst_id, dst) = self.archetypes.find_create(components);
 
             for (id, slot) in src.move_all(dst, change_tick) {
                 *self.location_mut(id).expect("Entity id was not valid") = EntityLocation {
@@ -495,53 +510,20 @@ impl World {
         info: ComponentInfo,
         value: *mut u8,
     ) -> Result<EntityLocation> {
-        let loc = self.set_impl(
-            id,
-            writer::ReplaceDyn {
-                info,
-                value,
-                _marker: core::marker::PhantomData,
-            },
-        )?;
+        let loc = self.set_impl(id, SingleComponentWriter::new(info, ReplaceDyn { value }))?;
 
         Ok(loc)
     }
 
     #[inline]
-    fn set_impl<U: ComponentWriter>(&mut self, id: Entity, updater: U) -> Result<EntityLocation> {
+    fn set_impl<U: EntityWriter>(&mut self, id: Entity, writer: U) -> Result<EntityLocation> {
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
         let src_loc = self.init_location(id)?;
 
-        let src = self.archetypes.get_mut(src_loc.arch_id);
-
         eprintln!("loc: {src_loc:?}");
-        if let Some(writer) = updater.write(src, id, src_loc.slot, change_tick) {
-            // Move to a new archetype
-            let (dst_loc, swapped) =
-                writer.migrate(self, src_loc.arch_id, src_loc.slot, change_tick);
-
-            debug_assert_eq!(
-                self.archetypes.get(dst_loc.arch_id).entity(dst_loc.slot),
-                Some(id)
-            );
-
-            if let Some((swapped, slot)) = swapped {
-                // The last entity in src was moved into the slot occupied by id
-                let swapped_ns = self.entities.init(swapped.kind());
-                swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
-            }
-            self.archetypes.prune_arch(src_loc.arch_id);
-
-            let ns = self.entities.init(id.kind());
-
-            *ns.get_mut(id).expect("Entity is not valid") = dst_loc;
-
-            Ok(dst_loc)
-        } else {
-            Ok(src_loc)
-        }
+        Ok(writer.write(self, id, src_loc, change_tick))
     }
 
     /// TODO benchmark with fully generic function
@@ -556,11 +538,7 @@ impl World {
 
         let loc = self.set_impl(
             id,
-            writer::Replace {
-                component,
-                value,
-                output: &mut output,
-            },
+            SingleComponentWriter::new(component.info(), Replace::new(value, &mut output)),
         )?;
 
         Ok((output, loc))
@@ -599,7 +577,7 @@ impl World {
                     .filter(|v| v.key != component.key())
                     .collect_vec();
 
-                let (dst_id, _) = self.archetypes.find(components);
+                let (dst_id, _) = self.archetypes.find_create(components);
 
                 dst_id
             }
@@ -850,7 +828,7 @@ impl World {
 
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, arch) = self.archetypes.find(batch.components());
+        let (arch_id, arch) = self.archetypes.find_create(batch.components());
 
         let base = arch.len();
         for (idx, &id) in ids.iter().enumerate() {
@@ -1347,14 +1325,18 @@ mod tests {
         let mut world = World::new();
 
         // () -> (a) -> (ab) -> (abc)
-        let (_, archetype) = world.archetypes.find([a().info(), b().info(), c().info()]);
+        let (_, archetype) = world
+            .archetypes
+            .find_create([a().info(), b().info(), c().info()]);
         assert!(!archetype.has(d().key()));
         assert!(archetype.has(a().key()));
         assert!(archetype.has(b().key()));
 
         // () -> (a) -> (ab) -> (abc)
         //                   -> (abd)
-        let (_, archetype) = world.archetypes.find([a().info(), b().info(), d().info()]);
+        let (_, archetype) = world
+            .archetypes
+            .find_create([a().info(), b().info(), d().info()]);
         assert!(archetype.has(d().key()));
         assert!(!archetype.has(c().key()));
     }
