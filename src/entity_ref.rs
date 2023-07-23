@@ -13,7 +13,7 @@ use crate::{
     error::Result,
     format::EntityFormatter,
     name,
-    writer::{Replace, SingleComponentWriter},
+    writer::{EntityWriter, Replace, SingleComponentWriter, WriteDedup},
     Component, ComponentKey, ComponentValue, Entity, Error, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
@@ -110,18 +110,28 @@ impl<'a> EntityRefMut<'a> {
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
         let mut output = None;
 
-        self.loc = OnceCell::with_value(
-            self.world
-                .set_with_writer(
-                    self.id,
-                    SingleComponentWriter::new(component.info(), Replace::new(value, &mut output)),
-                )
-                .unwrap(),
-        );
+        self.set_with_writer(SingleComponentWriter::new(
+            component.info(),
+            Replace::new(value, &mut output),
+        ));
 
         output
     }
 
+    /// Set a component for the entity.
+    ///
+    /// Does not trigger a modification event if the value is the same
+    pub fn set_dedup<T: ComponentValue + PartialEq>(&mut self, component: Component<T>, value: T) {
+        self.set_with_writer(SingleComponentWriter::new(
+            component.info(),
+            WriteDedup::new(value),
+        ));
+    }
+
+    /// Set a component for the entity
+    pub(crate) fn set_with_writer<W: EntityWriter>(&mut self, writer: W) {
+        self.loc = OnceCell::with_value(self.world.set_with_writer(self.id, writer).unwrap());
+    }
     /// Remove a component
     pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Result<T> {
         let mut res: MaybeUninit<T> = MaybeUninit::uninit();
@@ -372,7 +382,7 @@ impl Display for EntityRefMut<'_> {
 #[cfg(test)]
 mod test {
 
-    use crate::{component, components::name, is_static, EntityBuilder};
+    use crate::{component, components::name, is_static, EntityBuilder, FetchExt, Query};
 
     use super::*;
 
@@ -527,5 +537,33 @@ mod test {
 
         assert_eq!(entity.get(a()).as_deref(), Ok(&"FooBar".to_string()));
         assert!(entity.get(b()).is_err());
+    }
+
+    #[test]
+    fn set_dedup() {
+        use alloc::string::{String, ToString};
+        component! {
+            a: String,
+            b: String,
+        }
+
+        let mut world = World::new();
+
+        let mut query = Query::new(a().modified().cloned());
+
+        let id = EntityBuilder::new()
+            .set(a(), "Foo".into())
+            .spawn(&mut world);
+
+        assert_eq!(query.collect_vec(&world), ["Foo"]);
+
+        let mut entity = world.entity_mut(id).unwrap();
+        entity.set_dedup(a(), "Foo".into());
+
+        assert_eq!(query.collect_vec(&world), [""; 0]);
+        let mut entity = world.entity_mut(id).unwrap();
+        entity.set_dedup(a(), "Bar".into());
+
+        assert_eq!(query.collect_vec(&world), ["Bar"]);
     }
 }
