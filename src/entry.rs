@@ -24,7 +24,7 @@ pub struct VacantEntry<'a, T: ComponentValue> {
 impl<'a, T: ComponentValue> VacantEntry<'a, T> {
     /// Insert a value into the entry, returning a mutable reference to it
     pub fn insert(self, value: T) -> RefMut<'a, T> {
-        let (loc, value) = self
+        let (loc, _) = self
             .world
             .set_with_writer(
                 self.id,

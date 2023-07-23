@@ -1,5 +1,4 @@
 use alloc::{sync::Arc, vec::Vec};
-use itertools::Itertools;
 
 use crate::{
     archetype::Archetype,
@@ -65,21 +64,9 @@ impl Archetypes {
         }
 
         let arch = self.inner.despawn(arch_id).unwrap();
-        eprintln!(
-            "Despawned archetype: {} components: {:?}, incoming: {:?}",
-            arch_id,
-            arch.components().collect_vec(),
-            arch.incoming
-        );
-
         for (&key, &dst_id) in &arch.incoming {
             let dst = self.get_mut(dst_id);
-            eprintln!("Removing incoming link from {key}: {dst_id}");
             dst.remove_link(key);
-            eprintln!(
-                "Links: children: {:?} outgoing: {:?}",
-                dst.children, dst.outgoing
-            );
 
             self.prune_arch(dst_id);
         }
@@ -135,7 +122,6 @@ impl Archetypes {
                     let new_id = self.inner.spawn(new);
 
                     let (cur, new) = self.inner.get_disjoint(cursor, new_id).unwrap();
-                    eprintln!("Spawning child {new_id} from {cursor} for {head:?}");
                     cur.add_child(head.key, new_id);
                     new.add_incoming(head.key, cursor);
 

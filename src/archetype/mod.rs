@@ -120,20 +120,6 @@ impl CellData {
 
         self.changes.set_inserted(Change::new(slice, change_tick));
     }
-
-    /// **Note**: must be called *before* data is dropped
-    /// Sets the specified entities and slots as modified and invokes subscribers
-    /// **Note**: `ids` must be the slice of entities pointed to by `slice`
-    pub(crate) fn set_removed(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
-        let component = self.key;
-        self.on_event(EventData {
-            ids,
-            key: component,
-            kind: EventKind::Added,
-        });
-
-        self.changes.set_inserted(Change::new(slice, change_tick));
-    }
 }
 
 /// Stores a list of component values, changes, and subscribers
@@ -263,15 +249,15 @@ impl Cell {
         CellMutGuard::new(self.data.borrow_mut())
     }
 
-    #[inline]
-    pub fn try_borrow<T: ComponentValue>(&self) -> Result<CellGuard<[T]>, BorrowError> {
-        Ok(CellGuard::new(self.data.try_borrow()?))
-    }
+    // #[inline]
+    // pub fn try_borrow<T: ComponentValue>(&self) -> Result<CellGuard<[T]>, BorrowError> {
+    //     Ok(CellGuard::new(self.data.try_borrow()?))
+    // }
 
-    #[inline]
-    pub fn try_borrow_mut<T: ComponentValue>(&self) -> Result<CellMutGuard<[T]>, BorrowMutError> {
-        Ok(CellMutGuard::new(self.data.try_borrow_mut()?))
-    }
+    // #[inline]
+    // pub fn try_borrow_mut<T: ComponentValue>(&self) -> Result<CellMutGuard<[T]>, BorrowMutError> {
+    //     Ok(CellMutGuard::new(self.data.try_borrow_mut()?))
+    // }
 
     #[inline]
     pub fn get_mut<'a, T: ComponentValue>(
@@ -281,11 +267,6 @@ impl Cell {
         tick: u32,
     ) -> Option<RefMut<T>> {
         RefMut::new(self.borrow_mut(), entities, slot, tick)
-    }
-
-    #[inline]
-    pub(crate) fn info(&self) -> ComponentInfo {
-        self.info
     }
 }
 
@@ -980,7 +961,6 @@ impl Archetype {
     }
 
     pub(crate) fn remove_link(&mut self, component: ComponentKey) {
-        eprintln!("Removing link for {:?}", component);
         let linked = self.outgoing.remove(&component);
         assert!(linked.is_some());
 

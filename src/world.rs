@@ -555,7 +555,6 @@ impl World {
 
         let src_loc = self.init_location(id)?;
 
-        eprintln!("loc: {src_loc:?}");
         Ok(writer.write(self, id, src_loc, change_tick))
     }
 
