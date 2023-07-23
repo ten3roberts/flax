@@ -174,6 +174,42 @@ impl<'a, T: ComponentValue> ComponentWriter for Replace<'a, T> {
     }
 }
 
+pub(crate) struct WriteDedup<T: ComponentValue> {
+    pub(crate) value: T,
+}
+
+impl<T: ComponentValue> WriteDedup<T> {
+    pub(crate) fn new(value: T) -> Self {
+        Self { value }
+    }
+}
+
+impl<T: ComponentValue + PartialEq> ComponentWriter for WriteDedup<T> {
+    fn update(self, cell: &mut Cell, slot: Slot, id: Entity, tick: u32) {
+        let data = cell.data.get_mut();
+
+        let storage = data.storage.downcast_mut::<T>();
+        let current = &mut storage[slot];
+        if current != &self.value {
+            *current = self.value;
+
+            data.set_modified(&[id], Slice::single(slot), tick);
+        }
+    }
+
+    unsafe fn push(mut self, cell: &mut Cell, id: Entity, tick: u32) {
+        let data = cell.data.get_mut();
+
+        let slot = data.storage.len();
+
+        data.storage.extend(&mut self.value as *mut T as *mut u8, 1);
+
+        mem::forget(self.value);
+
+        data.set_added(&[id], Slice::single(slot), tick);
+    }
+}
+
 pub(crate) struct ReplaceDyn {
     pub(crate) value: *mut u8,
 }
