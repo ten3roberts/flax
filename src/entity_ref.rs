@@ -12,7 +12,9 @@ use crate::{
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::Result,
     format::EntityFormatter,
-    name, Component, ComponentKey, ComponentValue, Entity, Error, RelationExt, World,
+    name,
+    writer::{Replace, SingleComponentWriter},
+    Component, ComponentKey, ComponentValue, Entity, Error, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
@@ -106,9 +108,18 @@ impl<'a> EntityRefMut<'a> {
 
     /// Set a component for the entity
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
-        let (old, loc) = self.world.set_inner(self.id, component, value).unwrap();
-        self.loc = OnceCell::with_value(loc);
-        old
+        let mut output = None;
+
+        self.loc = OnceCell::with_value(
+            self.world
+                .set_with_writer(
+                    self.id,
+                    SingleComponentWriter::new(component.info(), Replace::new(value, &mut output)),
+                )
+                .unwrap(),
+        );
+
+        output
     }
 
     /// Remove a component

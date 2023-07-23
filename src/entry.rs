@@ -1,6 +1,10 @@
 use core::mem;
 
-use crate::{archetype::RefMut, Component, ComponentValue, Entity, World};
+use crate::{
+    archetype::RefMut,
+    writer::{Replace, SingleComponentWriter},
+    Component, ComponentValue, Entity, World,
+};
 
 /// Entry like api for an entity's component
 pub enum Entry<'a, T: ComponentValue> {
@@ -20,11 +24,20 @@ pub struct VacantEntry<'a, T: ComponentValue> {
 impl<'a, T: ComponentValue> VacantEntry<'a, T> {
     /// Insert a value into the entry, returning a mutable reference to it
     pub fn insert(self, value: T) -> RefMut<'a, T> {
-        let (old, loc) = self
+        let loc = self
             .world
-            .set_inner(self.id, self.component, value)
+            .set_with_writer(
+                self.id,
+                SingleComponentWriter::new(
+                    self.component.info(),
+                    Replace {
+                        value,
+                        output: &mut None,
+                    },
+                ),
+            )
             .expect("Entry is valid");
-        assert!(old.is_none());
+
         self.world.get_mut_at(loc, self.component).unwrap()
     }
 }

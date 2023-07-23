@@ -315,13 +315,6 @@ impl World {
         loc
     }
 
-    /// Add the components stored in a component buffer to an entity
-    pub fn set_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Result<()> {
-        self.set_impl(id, writer::Buffered::new(buffer))?;
-
-        Ok(())
-    }
-
     /// Set metadata for a given component if they do not already exist
     pub(crate) fn init_component(&mut self, info: ComponentInfo) {
         assert!(
@@ -471,18 +464,6 @@ impl World {
         }
     }
 
-    /// Set the value of a component.
-    /// If the component does not exist it will be added.
-    #[inline]
-    pub fn set<T: ComponentValue>(
-        &mut self,
-        id: Entity,
-        component: Component<T>,
-        value: T,
-    ) -> Result<Option<T>> {
-        self.set_inner(id, component, value).map(|v| v.0)
-    }
-
     /// Updates a component in place
     pub fn update<T: ComponentValue, U>(
         &self,
@@ -503,6 +484,32 @@ impl World {
             .ok_or(Error::MissingComponent(id, component.info()))
     }
 
+    /// Set the value of a component.
+    /// If the component does not exist it will be added.
+    #[inline]
+    pub fn set<T: ComponentValue>(
+        &mut self,
+        id: Entity,
+        component: Component<T>,
+        value: T,
+    ) -> Result<Option<T>> {
+        let mut output = None;
+
+        self.set_with_writer(
+            id,
+            SingleComponentWriter::new(component.info(), Replace::new(value, &mut output)),
+        )?;
+
+        Ok(output)
+    }
+
+    /// Add the components stored in a component buffer to an entity
+    pub fn set_with(&mut self, id: Entity, buffer: &mut ComponentBuffer) -> Result<()> {
+        self.set_with_writer(id, writer::Buffered::new(buffer))?;
+
+        Ok(())
+    }
+
     #[inline]
     pub(crate) fn set_dyn(
         &mut self,
@@ -510,13 +517,18 @@ impl World {
         info: ComponentInfo,
         value: *mut u8,
     ) -> Result<EntityLocation> {
-        let loc = self.set_impl(id, SingleComponentWriter::new(info, ReplaceDyn { value }))?;
+        let loc =
+            self.set_with_writer(id, SingleComponentWriter::new(info, ReplaceDyn { value }))?;
 
         Ok(loc)
     }
 
     #[inline]
-    fn set_impl<U: EntityWriter>(&mut self, id: Entity, writer: U) -> Result<EntityLocation> {
+    pub(crate) fn set_with_writer<U: EntityWriter>(
+        &mut self,
+        id: Entity,
+        writer: U,
+    ) -> Result<EntityLocation> {
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
@@ -524,24 +536,6 @@ impl World {
 
         eprintln!("loc: {src_loc:?}");
         Ok(writer.write(self, id, src_loc, change_tick))
-    }
-
-    /// TODO benchmark with fully generic function
-    #[inline]
-    pub(crate) fn set_inner<T: ComponentValue>(
-        &mut self,
-        id: Entity,
-        component: Component<T>,
-        value: T,
-    ) -> Result<(Option<T>, EntityLocation)> {
-        let mut output = None;
-
-        let loc = self.set_impl(
-            id,
-            SingleComponentWriter::new(component.info(), Replace::new(value, &mut output)),
-        )?;
-
-        Ok((output, loc))
     }
 
     #[inline]
