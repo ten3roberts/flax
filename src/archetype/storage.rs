@@ -250,6 +250,7 @@ impl Storage {
         self.cap
     }
 
+    #[inline]
     pub(crate) fn info(&self) -> ComponentInfo {
         self.info
     }

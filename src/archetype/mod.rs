@@ -10,6 +10,7 @@ use itertools::Itertools;
 
 use crate::{
     events::{EventData, EventKind, EventSubscriber},
+    writer::ComponentUpdater,
     Component, ComponentInfo, ComponentKey, ComponentValue, Entity,
 };
 
@@ -525,30 +526,24 @@ impl Archetype {
 
     /// Get a component from the entity at `slot`
     #[inline]
-    pub fn update<T: ComponentValue, U>(
+    pub(crate) fn update<T: ComponentValue, U: ComponentUpdater>(
         &self,
         slot: Slot,
         component: Component<T>,
-        change_tick: u32,
-        f: impl FnOnce(&mut T) -> U,
-    ) -> Option<U> {
+        writer: U,
+        tick: u32,
+    ) -> Option<U::Updated> {
         let cell = self.cells.get(&component.key())?;
 
         let mut data = cell.data.borrow_mut();
 
-        // Safety
-        // Component<T>
-        let value = unsafe { &mut *(data.storage.at_mut(slot)? as *mut T) };
-        let value = (f)(value);
+        let res = unsafe { writer.update(&mut data, slot, self.entities[slot], tick) };
 
-        // TODO: fix deliberate bug
-        data.set_modified(&self.entities[slot..slot], Slice::single(slot), change_tick);
-
-        Some(value)
+        Some(res)
     }
 
     /// Get a component from the entity at `slot`.
-    pub fn get<T: ComponentValue>(
+    pub(crate) fn get<T: ComponentValue>(
         &self,
         slot: Slot,
         component: Component<T>,
@@ -558,7 +553,7 @@ impl Archetype {
     }
 
     /// Get a component from the entity at `slot`.
-    pub fn try_get<T: ComponentValue>(
+    pub(crate) fn try_get<T: ComponentValue>(
         &self,
         slot: Slot,
         component: Component<T>,

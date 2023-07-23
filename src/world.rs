@@ -26,7 +26,9 @@ use crate::{
     format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
     is_static,
     relation::Relation,
-    writer::{self, EntityWriter, Replace, ReplaceDyn, SingleComponentWriter},
+    writer::{
+        self, EntityWriter, FnWriter, Replace, ReplaceDyn, SingleComponentWriter, WriteDedup,
+    },
     ArchetypeId, BatchSpawn, Component, ComponentInfo, ComponentKey, ComponentVTable,
     ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
 };
@@ -480,7 +482,27 @@ impl World {
 
         self.archetypes
             .get(src_id)
-            .update(slot, component, change_tick, f)
+            .update(slot, component, FnWriter::new(f), change_tick)
+            .ok_or(Error::MissingComponent(id, component.info()))
+    }
+
+    /// Updates a component in place
+    pub fn update_dedup<T: ComponentValue + PartialEq>(
+        &self,
+        id: Entity,
+        component: Component<T>,
+        value: T,
+    ) -> Result<()> {
+        let tick = self.advance_change_tick();
+
+        let EntityLocation {
+            arch_id: src_id,
+            slot,
+        } = self.location(id)?;
+
+        self.archetypes
+            .get(src_id)
+            .update(slot, component, WriteDedup::new(value), tick)
             .ok_or(Error::MissingComponent(id, component.info()))
     }
 
@@ -493,14 +515,13 @@ impl World {
         component: Component<T>,
         value: T,
     ) -> Result<Option<T>> {
-        let mut output = None;
-
-        self.set_with_writer(
-            id,
-            SingleComponentWriter::new(component.info(), Replace::new(value, &mut output)),
-        )?;
-
-        Ok(output)
+        Ok(self
+            .set_with_writer(
+                id,
+                SingleComponentWriter::new(component.info(), Replace::new(value)),
+            )?
+            .1
+            .left())
     }
 
     /// Add the components stored in a component buffer to an entity
@@ -517,7 +538,7 @@ impl World {
         info: ComponentInfo,
         value: *mut u8,
     ) -> Result<EntityLocation> {
-        let loc =
+        let (loc, _) =
             self.set_with_writer(id, SingleComponentWriter::new(info, ReplaceDyn { value }))?;
 
         Ok(loc)
@@ -528,7 +549,7 @@ impl World {
         &mut self,
         id: Entity,
         writer: U,
-    ) -> Result<EntityLocation> {
+    ) -> Result<(EntityLocation, U::Output)> {
         // We know things will change either way
         let change_tick = self.advance_change_tick();
 
