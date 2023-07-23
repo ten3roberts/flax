@@ -1,9 +1,9 @@
 use core::{mem, ptr, slice};
 
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 
 use crate::{
-    archetype::{Cell, Slice, Slot},
+    archetype::{CellData, Slice, Slot},
     buffer::ComponentBuffer,
     entity::EntityLocation,
     metadata::exclusive,
@@ -12,21 +12,68 @@ use crate::{
 };
 
 /// Describes a modification to the components of an entity within the context of an archetype
-pub(crate) trait ComponentWriter {
+pub(crate) trait ComponentUpdater {
+    type Updated;
     /// Performs write operations against the target entity
-    fn update(self, cell: &mut Cell, slot: Slot, id: Entity, tick: u32);
     /// # Safety
     ///
-    /// The cell **must** be extended with valid component data for the new entity
-    unsafe fn push(self, cell: &mut Cell, id: Entity, tick: u32);
+    /// The provided `data` must be of the same type as the cell data and what will be
+    /// written using `self`
+    unsafe fn update(self, data: &mut CellData, slot: Slot, id: Entity, tick: u32)
+        -> Self::Updated;
+}
+
+pub(crate) trait ComponentPusher {
+    type Pushed;
+    /// # Safety
+    ///
+    /// The cell **must** be extended with valid component data for the new entity.
+    ///
+    /// The type of `data` must match that of `self`
+    unsafe fn push(self, data: &mut CellData, id: Entity, tick: u32) -> Self::Pushed;
+}
+
+pub(crate) struct FnWriter<F, T> {
+    func: F,
+    _marker: core::marker::PhantomData<T>,
+}
+
+impl<F, T> FnWriter<F, T> {
+    pub(crate) fn new(func: F) -> Self {
+        Self {
+            func,
+            _marker: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<F, T, U> ComponentUpdater for FnWriter<F, T>
+where
+    F: FnOnce(&mut T) -> U,
+{
+    type Updated = U;
+
+    unsafe fn update(self, data: &mut CellData, slot: Slot, id: Entity, tick: u32) -> U {
+        let value = &mut *(data.storage.at_mut(slot).unwrap() as *mut T);
+        let res = (self.func)(value);
+
+        data.set_modified(&[id], Slice::single(slot), tick);
+        res
+    }
 }
 
 /// # Safety
 ///
 /// The entity must be fully initialized and all bookkepping updated
 pub unsafe trait EntityWriter {
-    fn write(self, world: &mut World, id: Entity, loc: EntityLocation, tick: u32)
-        -> EntityLocation;
+    type Output;
+    fn write(
+        self,
+        world: &mut World,
+        id: Entity,
+        loc: EntityLocation,
+        tick: u32,
+    ) -> (EntityLocation, Self::Output);
 }
 
 pub(crate) struct SingleComponentWriter<W> {
@@ -40,22 +87,29 @@ impl<W> SingleComponentWriter<W> {
     }
 }
 
-unsafe impl<W: ComponentWriter> EntityWriter for SingleComponentWriter<W> {
+unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleComponentWriter<W> {
+    type Output = Either<W::Updated, W::Pushed>;
+
     fn write(
         self,
         world: &mut World,
         id: Entity,
         src_loc: EntityLocation,
         tick: u32,
-    ) -> EntityLocation {
+    ) -> (EntityLocation, Self::Output) {
         let key = self.info.key();
 
         let arch = world.archetypes.get_mut(src_loc.arch_id);
 
         if let Some(cell) = arch.cell_mut(key) {
-            self.writer.update(cell, src_loc.slot, id, tick);
-            return src_loc;
+            let res = unsafe {
+                self.writer
+                    .update(cell.data.get_mut(), src_loc.slot, id, tick)
+            };
+
+            return (src_loc, Either::Left(res));
         }
+
         let (src, dst, dst_id) = if let Some(&dst_id) = arch.outgoing.get(&key) {
             eprintln!("Outgoing edge: {:?}", self.info);
 
@@ -106,14 +160,15 @@ unsafe impl<W: ComponentWriter> EntityWriter for SingleComponentWriter<W> {
             unsafe { src.move_to(dst, src_loc.slot, |c, ptr| c.drop(ptr), tick) };
 
         // Insert the missing component
-        unsafe {
+        let pushed = unsafe {
             let cell = dst
                 .cell_mut(key)
                 .expect("Missing component in new archetype");
 
-            cell.data.get_mut().storage.reserve(1);
-            self.writer.push(cell, id, tick);
-        }
+            let data = cell.data.get_mut();
+
+            self.writer.push(data, id, tick)
+        };
 
         let dst_loc = EntityLocation {
             arch_id: dst_id,
@@ -122,7 +177,7 @@ unsafe impl<W: ComponentWriter> EntityWriter for SingleComponentWriter<W> {
 
         update_entity_loc(world, id, dst_loc, swapped);
 
-        dst_loc
+        (dst_loc, Either::Right(pushed))
     }
 }
 
@@ -138,32 +193,33 @@ pub(crate) unsafe trait MigrateEntity {
     ) -> (EntityLocation, Option<(Entity, Slot)>);
 }
 
-pub(crate) struct Replace<'a, T: ComponentValue> {
+pub(crate) struct Replace<T: ComponentValue> {
     pub(crate) value: T,
-    pub(crate) output: &'a mut Option<T>,
 }
 
-impl<'a, T: ComponentValue> Replace<'a, T> {
-    pub(crate) fn new(value: T, output: &'a mut Option<T>) -> Self {
-        Self { value, output }
+impl<T: ComponentValue> Replace<T> {
+    pub(crate) fn new(value: T) -> Self {
+        Self { value }
     }
 }
 
-impl<'a, T: ComponentValue> ComponentWriter for Replace<'a, T> {
-    fn update(self, cell: &mut Cell, slot: Slot, id: Entity, tick: u32) {
-        let data = cell.data.get_mut();
+impl<T: ComponentValue> ComponentUpdater for Replace<T> {
+    type Updated = T;
 
+    unsafe fn update(self, data: &mut CellData, slot: Slot, id: Entity, tick: u32) -> T {
         let storage = data.storage.downcast_mut::<T>();
         let old = mem::replace(&mut storage[slot], self.value);
 
         data.set_modified(&[id], Slice::single(slot), tick);
 
-        *self.output = Some(old);
+        old
     }
+}
 
-    unsafe fn push(mut self, cell: &mut Cell, id: Entity, tick: u32) {
-        let data = cell.data.get_mut();
+impl<T: ComponentValue> ComponentPusher for Replace<T> {
+    type Pushed = ();
 
+    unsafe fn push(mut self, data: &mut CellData, id: Entity, tick: u32) {
         let slot = data.storage.len();
 
         data.storage.extend(&mut self.value as *mut T as *mut u8, 1);
@@ -171,6 +227,16 @@ impl<'a, T: ComponentValue> ComponentWriter for Replace<'a, T> {
         mem::forget(self.value);
 
         data.set_added(&[id], Slice::single(slot), tick);
+    }
+}
+
+pub(crate) struct Insert<T: ComponentValue> {
+    pub(crate) value: T,
+}
+
+impl<T: ComponentValue> Insert<T> {
+    pub(crate) fn new(value: T) -> Self {
+        Self { value }
     }
 }
 
@@ -184,10 +250,10 @@ impl<T: ComponentValue> WriteDedup<T> {
     }
 }
 
-impl<T: ComponentValue + PartialEq> ComponentWriter for WriteDedup<T> {
-    fn update(self, cell: &mut Cell, slot: Slot, id: Entity, tick: u32) {
-        let data = cell.data.get_mut();
+impl<T: ComponentValue + PartialEq> ComponentUpdater for WriteDedup<T> {
+    type Updated = ();
 
+    unsafe fn update(self, data: &mut CellData, slot: Slot, id: Entity, tick: u32) {
         let storage = data.storage.downcast_mut::<T>();
         let current = &mut storage[slot];
         if current != &self.value {
@@ -196,10 +262,12 @@ impl<T: ComponentValue + PartialEq> ComponentWriter for WriteDedup<T> {
             data.set_modified(&[id], Slice::single(slot), tick);
         }
     }
+}
 
-    unsafe fn push(mut self, cell: &mut Cell, id: Entity, tick: u32) {
-        let data = cell.data.get_mut();
+impl<T: ComponentValue + PartialEq> ComponentPusher for WriteDedup<T> {
+    type Pushed = ();
 
+    unsafe fn push(mut self, data: &mut CellData, id: Entity, tick: u32) {
         let slot = data.storage.len();
 
         data.storage.extend(&mut self.value as *mut T as *mut u8, 1);
@@ -214,12 +282,11 @@ pub(crate) struct ReplaceDyn {
     pub(crate) value: *mut u8,
 }
 
-impl ComponentWriter for ReplaceDyn {
-    fn update(self, cell: &mut Cell, slot: Slot, id: Entity, tick: u32) {
-        let info = cell.info();
+impl ComponentUpdater for ReplaceDyn {
+    type Updated = ();
 
-        let data = cell.data.get_mut();
-
+    unsafe fn update(self, data: &mut CellData, slot: Slot, id: Entity, tick: u32) {
+        let info = data.storage.info();
         unsafe {
             let dst = data.storage.at_mut(slot).unwrap();
 
@@ -230,10 +297,12 @@ impl ComponentWriter for ReplaceDyn {
 
         data.set_modified(&[id], Slice::single(slot), tick);
     }
+}
 
-    unsafe fn push(self, cell: &mut Cell, id: Entity, tick: u32) {
-        let data = cell.data.get_mut();
+impl ComponentPusher for ReplaceDyn {
+    type Pushed = ();
 
+    unsafe fn push(self, data: &mut CellData, id: Entity, tick: u32) {
         let slot = data.storage.len();
         data.storage.extend(self.value, 1);
 
@@ -241,24 +310,26 @@ impl ComponentWriter for ReplaceDyn {
     }
 }
 
-pub(crate) struct Buffered<'a> {
-    pub(crate) buffer: &'a mut ComponentBuffer,
+pub(crate) struct Buffered<'b> {
+    pub(crate) buffer: &'b mut ComponentBuffer,
 }
 
-impl<'a> Buffered<'a> {
-    pub(crate) fn new(buffer: &'a mut ComponentBuffer) -> Self {
+impl<'b> Buffered<'b> {
+    pub(crate) fn new(buffer: &'b mut ComponentBuffer) -> Self {
         Self { buffer }
     }
 }
 
-unsafe impl<'a> EntityWriter for Buffered<'a> {
+unsafe impl<'b> EntityWriter for Buffered<'b> {
+    type Output = ();
+
     fn write(
         self,
         world: &mut World,
         id: Entity,
         src_loc: EntityLocation,
         tick: u32,
-    ) -> EntityLocation {
+    ) -> (EntityLocation, ()) {
         let mut exclusive_relations = Vec::new();
 
         let arch = world.archetypes.get_mut(src_loc.arch_id);
@@ -295,7 +366,7 @@ unsafe impl<'a> EntityWriter for Buffered<'a> {
 
         if self.buffer.is_empty() {
             eprintln!("Archetype fully matched");
-            return src_loc;
+            return (src_loc, ());
         }
 
         // Add the existing components, making sure new exclusive relations are favored
@@ -335,7 +406,7 @@ unsafe impl<'a> EntityWriter for Buffered<'a> {
         update_entity_loc(world, id, dst_loc, swapped);
         world.archetypes.prune_arch(src_loc.arch_id);
 
-        dst_loc
+        (dst_loc, ())
     }
 }
 

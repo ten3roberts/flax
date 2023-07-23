@@ -24,17 +24,11 @@ pub struct VacantEntry<'a, T: ComponentValue> {
 impl<'a, T: ComponentValue> VacantEntry<'a, T> {
     /// Insert a value into the entry, returning a mutable reference to it
     pub fn insert(self, value: T) -> RefMut<'a, T> {
-        let loc = self
+        let (loc, value) = self
             .world
             .set_with_writer(
                 self.id,
-                SingleComponentWriter::new(
-                    self.component.info(),
-                    Replace {
-                        value,
-                        output: &mut None,
-                    },
-                ),
+                SingleComponentWriter::new(self.component.info(), Replace { value }),
             )
             .expect("Entry is valid");
 
