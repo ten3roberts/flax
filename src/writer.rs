@@ -1,5 +1,6 @@
 use core::{mem, ptr, slice};
 
+use alloc::vec::Vec;
 use itertools::{Either, Itertools};
 
 use crate::{
@@ -111,8 +112,6 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
         }
 
         let (src, dst, dst_id) = if let Some(&dst_id) = arch.outgoing.get(&key) {
-            eprintln!("Outgoing edge: {:?}", self.info);
-
             let (src, dst) = world
                 .archetypes
                 .get_disjoint(src_loc.arch_id, dst_id)
@@ -120,13 +119,6 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
             (src, dst, dst_id)
         } else {
             // Oh no! The archetype is missing the component
-
-            eprintln!(
-                "Missing component: {:?} found:{:?}",
-                self.info,
-                arch.components().collect_vec()
-            );
-
             let exclusive = if self.info.meta_ref().has(exclusive()) {
                 slice::from_ref(&self.info.key.id)
             } else {
@@ -149,8 +141,6 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
             if superset && src_loc.arch_id != reserved_id {
                 src.add_outgoing(key, dst_id);
                 dst.add_incoming(key, src_loc.arch_id);
-            } else {
-                eprintln!("Not a superset")
             }
 
             (src, dst, dst_id)
@@ -227,16 +217,6 @@ impl<T: ComponentValue> ComponentPusher for Replace<T> {
         mem::forget(self.value);
 
         data.set_added(&[id], Slice::single(slot), tick);
-    }
-}
-
-pub(crate) struct Insert<T: ComponentValue> {
-    pub(crate) value: T,
-}
-
-impl<T: ComponentValue> Insert<T> {
-    pub(crate) fn new(value: T) -> Self {
-        Self { value }
     }
 }
 
@@ -365,7 +345,6 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
         }
 
         if self.buffer.is_empty() {
-            eprintln!("Archetype fully matched");
             return (src_loc, ());
         }
 
@@ -377,7 +356,6 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
         );
 
         for &info in self.buffer.components() {
-            eprintln!("Initializing component {:?}", info);
             world.init_component(info);
         }
 
@@ -430,5 +408,5 @@ fn find_archetype_components(
         .sorted_unstable()
         .collect_vec();
 
-    dbg!(res, superset)
+    (res, superset)
 }

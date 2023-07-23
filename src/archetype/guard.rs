@@ -48,12 +48,6 @@ impl<'a, T: ?Sized> CellMutGuard<'a, T> {
             .set_modified_if_tracking(Change::new(slots, tick));
     }
 
-    pub(crate) fn changes_mut(&mut self) -> &mut Changes {
-        // SAFETY: `value` is not accessed in this function
-
-        &mut self.data.changes
-    }
-
     pub(crate) fn filter_map<U>(
         mut self,
         f: impl FnOnce(&mut T) -> Option<&mut U>,
@@ -111,18 +105,6 @@ impl<'a, T: ?Sized> CellGuard<'a, T> {
     #[inline]
     pub fn into_slice_ref(self) -> AtomicRef<'a, T> {
         AtomicRef::map(self.data, |_| unsafe { self.storage.as_ref() })
-    }
-
-    pub(crate) fn filter_map<U>(
-        self,
-        f: impl FnOnce(&T) -> Option<&U>,
-    ) -> Option<CellGuard<'a, U>> {
-        let storage = NonNull::from(f(unsafe { self.storage.as_ref() })?);
-
-        Some(CellGuard {
-            data: self.data,
-            storage,
-        })
     }
 
     #[inline]
