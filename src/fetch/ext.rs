@@ -9,6 +9,7 @@ use super::{
     copied::Copied,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation},
+    transform::Inserted,
     Map, Modified, Satisfied, Source, TransformFetch,
 };
 
@@ -135,7 +136,8 @@ pub trait FetchExt: Sized {
         Source::new(self, FromRelation::new(relation))
     }
 
-    /// Transform the fetch into a fetch where each constituent part tracks and yields for changes.
+    /// Transform the fetch into a fetch where each constituent part tracks and yields for
+    /// modification events.
     ///
     /// This is different from E.g; `(a().modified(), b().modified())` as it implies only when
     /// *both* `a` and `b` are modified in the same iteration, which is seldom useful.
@@ -150,6 +152,21 @@ pub trait FetchExt: Sized {
         self.transform_fetch(Modified)
     }
 
+    /// Transform the fetch into a fetch where each constituent part tracks and yields for insert
+    /// events.
+    ///
+    /// This is different from E.g; `(a().modified(), b().modified())` as it implies only when
+    /// *both* `a` and `b` are modified in the same iteration, which is seldom useful.
+    ///
+    /// This means will yield *any* of `a` *or* `b` are modified.
+    ///
+    /// Works with `opt`, `copy`, etc constituents.
+    fn inserted(self) -> <Self as TransformFetch<Inserted>>::Output
+    where
+        Self: TransformFetch<Inserted>,
+    {
+        self.transform_fetch(Inserted)
+    }
     /// Map each item of the query to another type using the provided function.
     fn map<F, T>(self, func: F) -> Map<Self, F>
     where

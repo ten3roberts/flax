@@ -261,13 +261,8 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Construct a fine grained change detection filter.
-    pub fn modified(self) -> ChangeFilter<T> {
-        ChangeFilter::new(self, ChangeKind::Modified)
-    }
-
-    /// Construct a fine grained insert detection filter.
-    pub fn inserted(self) -> ChangeFilter<T> {
-        ChangeFilter::new(self, ChangeKind::Inserted)
+    pub(crate) fn into_change_filter(self, kind: ChangeKind) -> ChangeFilter<T> {
+        ChangeFilter::new(self, kind)
     }
 
     /// Construct a fine grained component remove detection filter.

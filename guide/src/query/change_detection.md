@@ -2,7 +2,7 @@
 
 Flax tracks when a component is added, mutably accessed, or removed.
 
-Queries allow filtering on change events since the query last run.
+A query allows filtering the entities based on a change event since it last ran.
 
 - [`modified`](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) filter mutated or new components
 - [`inserted`](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) only new components
@@ -16,17 +16,13 @@ for each entity.
 
 **Note**: Tuple queries combine using `and`, which means a query with multiple `modified` or other change filtered components will only yield if **all** the annotated components changed since the last query ran.
 
-Prefer using `.filter(Or(a().modified, b().modified()))` when dealing with multiple
-change filters, or splitting up the query.
-
 ```rust
 {{ #include ../../../examples/guide/change_detection.rs:health_changes }}
 ```
 
 # Combining filters
 
-Change filters can be combined with other filters, which leads to queries which
-do even less work than that particular group member.
+Change filters can be combined with other filters, which leads to queries needing to perform even even less work.
 
 The following example creates a query which removes despawns entities when their
 health becomes `0`. Noteworthy in particular, is that this system can run in
