@@ -7,7 +7,7 @@ use alloc::collections::BTreeMap;
 
 use crate::format::MissingDebug;
 use crate::metadata::debuggable;
-use crate::{metadata, Component, ComponentInfo, ComponentKey, ComponentValue, Entity};
+use crate::{metadata, Component, ComponentDesc, ComponentKey, ComponentValue, Entity};
 
 type Offset = usize;
 
@@ -145,9 +145,9 @@ impl BufferStorage {
     /// # Safety
     /// The existing data at offset is overwritten without calling drop on the contained value.
     /// The offset is must be allocated from [`Self::allocate`] with the layout of `T`
-    pub(crate) unsafe fn write_dyn(&mut self, offset: Offset, info: ComponentInfo, data: *mut u8) {
+    pub(crate) unsafe fn write_dyn(&mut self, offset: Offset, desc: ComponentDesc, data: *mut u8) {
         let dst = self.data.as_ptr().add(offset);
-        let layout = info.layout();
+        let layout = desc.layout();
 
         assert_eq!(
             self.data.as_ptr() as usize % layout.align(),
@@ -199,7 +199,7 @@ impl Drop for BufferStorage {
 /// This is a low level building block. Prefer [EntityBuilder](crate::EntityBuilder) or [CommandBuffer](crate::CommandBuffer) instead.
 #[derive(Default)]
 pub struct ComponentBuffer {
-    entries: BTreeMap<ComponentKey, (ComponentInfo, Offset)>,
+    entries: BTreeMap<ComponentKey, (ComponentDesc, Offset)>,
     storage: BufferStorage,
 }
 
@@ -207,15 +207,15 @@ impl core::fmt::Debug for ComponentBuffer {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut s = f.debug_map();
 
-        for &(info, offset) in self.entries.values() {
-            let debugger = info.meta_ref().get(debuggable());
+        for &(desc, offset) in self.entries.values() {
+            let debugger = desc.meta_ref().get(debuggable());
             if let Some(debugger) = debugger {
                 unsafe {
                     let ptr = self.storage.at(offset);
-                    s.entry(&info.name(), debugger.debug_ptr(&ptr));
+                    s.entry(&desc.name(), debugger.debug_ptr(&ptr));
                 }
             } else {
-                s.entry(&info.name(), &MissingDebug);
+                s.entry(&desc.name(), &MissingDebug);
             }
         }
 
@@ -253,7 +253,7 @@ impl ComponentBuffer {
     }
 
     /// Returns the components in the buffer
-    pub fn components(&self) -> impl Iterator<Item = &ComponentInfo> {
+    pub fn components(&self) -> impl Iterator<Item = &ComponentDesc> {
         self.entries.values().map(|v| &v.0)
     }
 
@@ -266,18 +266,18 @@ impl ComponentBuffer {
 
     /// Set a component in the component buffer
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
-        let info = component.info();
+        let desc = component.desc();
 
-        if let Some(&(_, offset)) = self.entries.get(&info.key()) {
+        if let Some(&(_, offset)) = self.entries.get(&desc.key()) {
             unsafe { Some(self.storage.replace(offset, value)) }
         } else {
-            if info.key().is_relation() && info.meta_ref().has(metadata::exclusive()) {
-                self.drain_relations_like(info.key.id());
+            if desc.key().is_relation() && desc.meta_ref().has(metadata::exclusive()) {
+                self.drain_relations_like(desc.key.id());
             }
 
             let offset = self.storage.push(value);
 
-            self.entries.insert(info.key(), (info, offset));
+            self.entries.insert(desc.key(), (desc, offset));
 
             None
         }
@@ -288,31 +288,31 @@ impl ComponentBuffer {
         let end = ComponentKey::new(relation, Some(Entity::MAX));
 
         while let Some((&key, _)) = self.entries.range(start..=end).next() {
-            let (info, offset) = self.entries.remove(&key).unwrap();
+            let (desc, offset) = self.entries.remove(&key).unwrap();
             unsafe {
                 let ptr = self.storage.at_mut(offset);
-                info.drop(ptr);
+                desc.drop(ptr);
             }
         }
     }
 
     /// Set from a type erased component
-    pub(crate) unsafe fn set_dyn(&mut self, info: ComponentInfo, value: *mut u8) {
-        if let Some(&(_, offset)) = self.entries.get(&info.key()) {
+    pub(crate) unsafe fn set_dyn(&mut self, desc: ComponentDesc, value: *mut u8) {
+        if let Some(&(_, offset)) = self.entries.get(&desc.key()) {
             let old_ptr = self.storage.at_mut(offset);
-            info.drop(old_ptr);
+            desc.drop(old_ptr);
 
-            ptr::copy_nonoverlapping(value, old_ptr, info.size());
+            ptr::copy_nonoverlapping(value, old_ptr, desc.size());
         } else {
-            if info.key().is_relation() && info.meta_ref().has(metadata::exclusive()) {
-                self.drain_relations_like(info.key.id());
+            if desc.key().is_relation() && desc.meta_ref().has(metadata::exclusive()) {
+                self.drain_relations_like(desc.key.id());
             }
 
-            let offset = self.storage.allocate(info.layout());
+            let offset = self.storage.allocate(desc.layout());
 
-            self.storage.write_dyn(offset, info, value);
+            self.storage.write_dyn(offset, desc, value);
 
-            self.entries.insert(info.key(), (info, offset));
+            self.entries.insert(desc.key(), (desc, offset));
         }
     }
 
@@ -347,38 +347,38 @@ impl ComponentBuffer {
     /// # Safety
     /// If the passed closure returns *false* the element is considered moved and shall be handled by
     /// the caller.
-    pub(crate) unsafe fn retain(&mut self, mut f: impl FnMut(ComponentInfo, *mut u8) -> bool) {
-        self.entries.retain(|_, (info, offset)| {
+    pub(crate) unsafe fn retain(&mut self, mut f: impl FnMut(ComponentDesc, *mut u8) -> bool) {
+        self.entries.retain(|_, (desc, offset)| {
             let ptr = unsafe { self.storage.at_mut(*offset) };
-            f(*info, ptr)
+            f(*desc, ptr)
         })
     }
 }
 
 pub(crate) struct ComponentBufferIter<'a> {
-    entries: &'a mut BTreeMap<ComponentKey, (ComponentInfo, Offset)>,
+    entries: &'a mut BTreeMap<ComponentKey, (ComponentDesc, Offset)>,
     storage: &'a mut BufferStorage,
 }
 
 impl<'a> Iterator for ComponentBufferIter<'a> {
-    type Item = (ComponentInfo, *mut u8);
+    type Item = (ComponentDesc, *mut u8);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (_, (info, offset)) = self.entries.pop_first()?;
+        let (_, (desc, offset)) = self.entries.pop_first()?;
 
         unsafe {
             let data = self.storage.at_mut(offset);
-            Some((info, data))
+            Some((desc, data))
         }
     }
 }
 
 impl Drop for ComponentBuffer {
     fn drop(&mut self) {
-        for &(info, offset) in self.entries.values() {
+        for &(desc, offset) in self.entries.values() {
             unsafe {
                 let ptr = self.storage.at_mut(offset);
-                info.drop(ptr);
+                desc.drop(ptr);
             }
         }
     }
@@ -490,13 +490,13 @@ mod tests {
         let shared_2: Arc<String> = Arc::new("abc".into());
         unsafe {
             let mut shared = shared.clone();
-            buffer.set_dyn(f().info(), &mut shared as *mut _ as *mut u8);
+            buffer.set_dyn(f().desc(), &mut shared as *mut _ as *mut u8);
             mem::forget(shared)
         }
 
         unsafe {
             let mut shared = shared_2.clone();
-            buffer.set_dyn(f().info(), &mut shared as *mut _ as *mut u8);
+            buffer.set_dyn(f().desc(), &mut shared as *mut _ as *mut u8);
             mem::forget(shared)
         }
 

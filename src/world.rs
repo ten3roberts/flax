@@ -29,7 +29,7 @@ use crate::{
     writer::{
         self, EntityWriter, FnWriter, Replace, ReplaceDyn, SingleComponentWriter, WriteDedup,
     },
-    ArchetypeId, BatchSpawn, Component, ComponentInfo, ComponentKey, ComponentVTable,
+    ArchetypeId, BatchSpawn, Component, ComponentDesc, ComponentKey, ComponentVTable,
     ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
 };
 
@@ -219,8 +219,8 @@ impl World {
         let (arch_id, _) = self.archetypes.find_create(buffer.components().copied());
         let (loc, arch) = self.spawn_at_inner(id, arch_id)?;
 
-        for (info, src) in buffer.drain() {
-            unsafe { arch.push(info.key(), src, change_tick) }
+        for (desc, src) in buffer.drain() {
+            unsafe { arch.push(desc.key(), src, change_tick) }
         }
 
         Ok((id, loc))
@@ -239,9 +239,9 @@ impl World {
 
         let (id, _, arch) = self.spawn_inner(arch_id, EntityKind::empty());
 
-        for (info, src) in buffer.drain() {
+        for (desc, src) in buffer.drain() {
             unsafe {
-                arch.push(info.key, src, change_tick);
+                arch.push(desc.key, src, change_tick);
             }
         }
 
@@ -288,7 +288,7 @@ impl World {
         let src = self.archetypes.get(loc.arch_id);
         let change_tick = self.advance_change_tick();
 
-        let dst_components: SmallVec<[ComponentInfo; 8]> =
+        let dst_components: SmallVec<[ComponentDesc; 8]> =
             src.components().filter(|v| f(v.key())).collect();
 
         let (dst_id, _) = self.archetypes.find_create(dst_components);
@@ -318,20 +318,20 @@ impl World {
     }
 
     /// Set metadata for a given component if they do not already exist
-    pub(crate) fn init_component(&mut self, info: ComponentInfo) {
+    pub(crate) fn init_component(&mut self, desc: ComponentDesc) {
         assert!(
-            info.key().id.kind().contains(EntityKind::COMPONENT),
+            desc.key().id.kind().contains(EntityKind::COMPONENT),
             "Component is not a component kind id"
         );
 
-        if self.is_alive(info.key.id()) {
+        if self.is_alive(desc.key.id()) {
             return;
         }
 
-        let id = info.key().id;
-        let mut meta = info.get_meta();
-        meta.set(component_info(), info);
-        meta.set(name(), info.name().into());
+        let id = desc.key().id;
+        let mut meta = desc.get_meta();
+        meta.set(component_info(), desc);
+        meta.set(name(), desc.name().into());
 
         if id.is_static() {
             meta.set(is_static(), ());
@@ -485,7 +485,7 @@ impl World {
             .update(slot, component, FnWriter::new(f), change_tick)
             .ok_or(Error::MissingComponent(MissingComponent {
                 id,
-                info: component.info(),
+                desc: component.desc(),
             }))
     }
 
@@ -508,7 +508,7 @@ impl World {
             .update(slot, component, WriteDedup::new(value), tick)
             .ok_or(Error::MissingComponent(MissingComponent {
                 id,
-                info: component.info(),
+                desc: component.desc(),
             }))
     }
 
@@ -524,7 +524,7 @@ impl World {
         Ok(self
             .set_with_writer(
                 id,
-                SingleComponentWriter::new(component.info(), Replace::new(value)),
+                SingleComponentWriter::new(component.desc(), Replace::new(value)),
             )?
             .1
             .left())
@@ -541,11 +541,11 @@ impl World {
     pub(crate) fn set_dyn(
         &mut self,
         id: Entity,
-        info: ComponentInfo,
+        desc: ComponentDesc,
         value: *mut u8,
     ) -> Result<EntityLocation> {
         let (loc, _) =
-            self.set_with_writer(id, SingleComponentWriter::new(info, ReplaceDyn { value }))?;
+            self.set_with_writer(id, SingleComponentWriter::new(desc, ReplaceDyn { value }))?;
 
         Ok(loc)
     }
@@ -565,7 +565,7 @@ impl World {
     }
 
     #[inline]
-    pub(crate) fn remove_dyn(&mut self, id: Entity, component: ComponentInfo) -> Result<()> {
+    pub(crate) fn remove_dyn(&mut self, id: Entity, component: ComponentDesc) -> Result<()> {
         unsafe {
             self.remove_inner(id, component, |ptr| component.drop(ptr))
                 .map(|_| {})
@@ -575,7 +575,7 @@ impl World {
     pub(crate) unsafe fn remove_inner(
         &mut self,
         id: Entity,
-        component: ComponentInfo,
+        desc: ComponentDesc,
         on_drop: impl FnOnce(*mut u8),
     ) -> Result<EntityLocation> {
         let EntityLocation {
@@ -585,19 +585,16 @@ impl World {
 
         let src = self.archetypes.get(src_id);
 
-        if !src.has(component.key()) {
-            return Err(Error::MissingComponent(MissingComponent {
-                id,
-                info: component,
-            }));
+        if !src.has(desc.key()) {
+            return Err(Error::MissingComponent(MissingComponent { id, desc }));
         }
 
-        let dst_id = match src.incoming(component.key()) {
+        let dst_id = match src.incoming(desc.key()) {
             Some(dst) => dst,
             None => {
                 let components = src
                     .components()
-                    .filter(|v| v.key != component.key())
+                    .filter(|v| v.key != desc.key())
                     .collect_vec();
 
                 let (dst_id, _) = self.archetypes.find_create(components);
@@ -611,8 +608,8 @@ impl World {
         assert_ne!(src_id, dst_id);
         // Borrow disjoint
         let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
-        src.add_incoming(component.key(), dst_id);
-        dst.add_outgoing(component.key(), src_id);
+        src.add_incoming(desc.key(), dst_id);
+        dst.add_outgoing(desc.key(), src_id);
 
         // Take the value
         // This moves the differing value out of the archetype before it is
@@ -654,7 +651,7 @@ impl World {
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> Result<T> {
         let mut res: MaybeUninit<T> = MaybeUninit::uninit();
         let res = unsafe {
-            self.remove_inner(id, component.info(), |ptr| {
+            self.remove_inner(id, component.desc(), |ptr| {
                 res.write(ptr.cast::<T>().read());
             })?;
 
@@ -674,7 +671,7 @@ impl World {
         self.get_at(loc, component).ok_or_else(|| {
             Error::MissingComponent(MissingComponent {
                 id,
-                info: component.info(),
+                desc: component.desc(),
             })
         })
     }
@@ -713,7 +710,7 @@ impl World {
         self.get_mut_at(loc, component).ok_or_else(|| {
             Error::MissingComponent(MissingComponent {
                 id,
-                info: component.info(),
+                desc: component.desc(),
             })
         })
     }
@@ -906,11 +903,11 @@ impl World {
         // The id is not used by anything else
         let component = Component::new(ComponentKey::new(id, None), vtable);
 
-        let info = component.info();
+        let desc = component.desc();
 
-        let mut meta = info.get_meta();
-        meta.set(component_info(), info);
-        meta.set(crate::name(), info.name().into());
+        let mut meta = desc.get_meta();
+        meta.set(component_info(), desc);
+        meta.set(crate::name(), desc.name().into());
 
         self.set_with(id, &mut meta).unwrap();
         component
@@ -1021,7 +1018,7 @@ impl World {
 
     /// Returns a human friendly breakdown of the archetypes in the world
     pub fn archetype_info(&self) -> BTreeMap<ArchetypeId, ArchetypeInfo> {
-        self.archetypes.iter().map(|(k, v)| (k, v.info())).collect()
+        self.archetypes.iter().map(|(k, v)| (k, v.desc())).collect()
     }
 
     /// Attempt to find an alive entity given the id
@@ -1035,14 +1032,14 @@ impl World {
     pub fn find_component<T: ComponentValue>(&self, id: ComponentKey) -> Option<Component<T>> {
         let e = self.entity(id.id).ok()?;
 
-        let info = e.get(component_info()).ok()?;
+        let desc = e.get(component_info()).ok()?;
 
-        if !info.is::<T>() {
-            panic!("Attempt to construct a component from the wrong type. Found: {info:#?}");
+        if !desc.is::<T>() {
+            panic!("Attempt to construct a component from the wrong type. Found: {desc:#?}");
         }
         // Safety: the type
 
-        Some(Component::from_raw_parts(id, info.vtable))
+        Some(Component::from_raw_parts(id, desc.vtable))
     }
 
     /// Access, insert, and remove all components of an entity
@@ -1169,7 +1166,7 @@ impl World {
                 let arch = arch.drain();
                 for mut cell in arch.cells.into_values() {
                     let mut storage = cell.drain();
-                    let mut id = storage.info().key;
+                    let mut id = storage.desc().key;
 
                     // Modify the relations to match new components
                     id.id = *new_ids.get(&id.id).unwrap_or(&id.id);
@@ -1201,8 +1198,8 @@ impl World {
             // Take each entity one by one and append them to the world
             if arch.has(is_static().key()) {
                 while let Some(id) = unsafe {
-                    arch.pop_last(|mut info, ptr| {
-                        let key = &mut info.key;
+                    arch.pop_last(|mut desc, ptr| {
+                        let key = &mut desc.key;
 
                         // Modify the relations to match new components
                         key.id = *new_ids.get(&key.id).unwrap_or(&key.id);
@@ -1212,7 +1209,7 @@ impl World {
                         }
 
                         // Migrate custom components
-                        buffer.set_dyn(info, ptr);
+                        buffer.set_dyn(desc, ptr);
                     })
                 } {
                     buffer.append_to(self, id).unwrap();
@@ -1358,7 +1355,7 @@ mod tests {
         // () -> (a) -> (ab) -> (abc)
         let (_, archetype) = world
             .archetypes
-            .find_create([a().info(), b().info(), c().info()]);
+            .find_create([a().desc(), b().desc(), c().desc()]);
         assert!(!archetype.has(d().key()));
         assert!(archetype.has(a().key()));
         assert!(archetype.has(b().key()));
@@ -1367,7 +1364,7 @@ mod tests {
         //                   -> (abd)
         let (_, archetype) = world
             .archetypes
-            .find_create([a().info(), b().info(), d().info()]);
+            .find_create([a().desc(), b().desc(), d().desc()]);
         assert!(archetype.has(d().key()));
         assert!(!archetype.has(c().key()));
     }
@@ -1385,7 +1382,7 @@ mod tests {
             world.get(id, b()).as_deref(),
             Err(&Error::MissingComponent(MissingComponent {
                 id,
-                info: b().info()
+                desc: b().desc()
             }))
         );
         assert!(!world.has(id, c()));
@@ -1402,7 +1399,7 @@ mod tests {
             world.get(id, b()).as_deref(),
             Err(&Error::MissingComponent(MissingComponent {
                 id,
-                info: b().info()
+                desc: b().desc()
             }))
         );
 
@@ -1476,7 +1473,7 @@ mod tests {
             world.get(id, e()).as_deref(),
             Err(&Error::MissingComponent(MissingComponent {
                 id,
-                info: e().info()
+                desc: e().desc()
             }))
         );
 

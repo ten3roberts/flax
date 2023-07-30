@@ -9,7 +9,7 @@ use crate::{
     entity::EntityLocation,
     metadata::exclusive,
     world::update_entity_loc,
-    ArchetypeId, ComponentInfo, ComponentValue, Entity, World,
+    ArchetypeId, ComponentDesc, ComponentValue, Entity, World,
 };
 
 /// Describes a modification to the components of an entity within the context of an archetype
@@ -78,13 +78,13 @@ pub unsafe trait EntityWriter {
 }
 
 pub(crate) struct SingleComponentWriter<W> {
-    info: ComponentInfo,
+    desc: ComponentDesc,
     writer: W,
 }
 
 impl<W> SingleComponentWriter<W> {
-    pub(crate) fn new(info: ComponentInfo, writer: W) -> Self {
-        Self { info, writer }
+    pub(crate) fn new(desc: ComponentDesc, writer: W) -> Self {
+        Self { desc, writer }
     }
 }
 
@@ -98,7 +98,7 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
         src_loc: EntityLocation,
         tick: u32,
     ) -> (EntityLocation, Self::Output) {
-        let key = self.info.key();
+        let key = self.desc.key();
 
         let arch = world.archetypes.get_mut(src_loc.arch_id);
 
@@ -119,16 +119,16 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
             (src, dst, dst_id)
         } else {
             // Oh no! The archetype is missing the component
-            let exclusive = if self.info.meta_ref().has(exclusive()) {
-                slice::from_ref(&self.info.key.id)
+            let exclusive = if self.desc.meta_ref().has(exclusive()) {
+                slice::from_ref(&self.desc.key.id)
             } else {
                 &[]
             };
 
             let (components, superset) =
-                find_archetype_components(arch.components(), [self.info], exclusive);
+                find_archetype_components(arch.components(), [self.desc], exclusive);
 
-            world.init_component(self.info);
+            world.init_component(self.desc);
             let (dst_id, _) = world.archetypes.find_create(components.iter().copied());
 
             // Add a quick edge to refer to later
@@ -266,13 +266,13 @@ impl ComponentUpdater for ReplaceDyn {
     type Updated = ();
 
     unsafe fn update(self, data: &mut CellData, slot: Slot, id: Entity, tick: u32) {
-        let info = data.storage.info();
+        let desc = data.storage.desc();
         unsafe {
             let dst = data.storage.at_mut(slot).unwrap();
 
-            info.drop(dst);
+            desc.drop(dst);
 
-            ptr::copy_nonoverlapping(self.value, dst, info.size());
+            ptr::copy_nonoverlapping(self.value, dst, desc.size());
         }
 
         data.set_modified(&[id], Slice::single(slot), tick);
@@ -314,16 +314,16 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
 
         let arch = world.archetypes.get_mut(src_loc.arch_id);
         unsafe {
-            self.buffer.retain(|info, src| {
-                let key = info.key;
+            self.buffer.retain(|desc, src| {
+                let key = desc.key;
                 // The component exists in the current archetype
                 // This implies that is it also satisfies any exclusive properties
                 if let Some(cell) = arch.cell_mut(key) {
                     let data = cell.data.get_mut();
 
                     let dst = data.storage.at_mut(src_loc.slot).unwrap();
-                    info.drop(dst);
-                    ptr::copy_nonoverlapping(src, dst, info.size());
+                    desc.drop(dst);
+                    ptr::copy_nonoverlapping(src, dst, desc.size());
 
                     data.set_modified(&[id], Slice::single(src_loc.slot), tick);
                     false
@@ -331,7 +331,7 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
                     // Component does not exist yet, so defer a move
 
                     // Exclusive relation
-                    if key.object.is_some() && info.meta_ref().has(exclusive()) {
+                    if key.object.is_some() && desc.meta_ref().has(exclusive()) {
                         if exclusive_relations.contains(&key.id) {
                             panic!("Multiple exclusive relations");
                         }
@@ -355,8 +355,8 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
             &exclusive_relations,
         );
 
-        for &info in self.buffer.components() {
-            world.init_component(info);
+        for &desc in self.buffer.components() {
+            world.init_component(desc);
         }
 
         let (dst_id, _) = world.archetypes.find_create(components);
@@ -370,9 +370,9 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
             unsafe { src.move_to(dst, src_loc.slot, |c, ptr| c.drop(ptr), tick) };
 
         // Insert the missing components
-        for (info, src) in self.buffer.drain() {
+        for (desc, src) in self.buffer.drain() {
             unsafe {
-                dst.push(info.key, src, tick);
+                dst.push(desc.key, src, tick);
             }
         }
 
@@ -389,11 +389,11 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
 }
 
 fn find_archetype_components(
-    current_components: impl IntoIterator<Item = ComponentInfo>,
-    new_components: impl IntoIterator<Item = ComponentInfo>,
+    current_components: impl IntoIterator<Item = ComponentDesc>,
+    new_components: impl IntoIterator<Item = ComponentDesc>,
     // Subset of `new_components`
     exclusive: &[Entity],
-) -> (Vec<ComponentInfo>, bool) {
+) -> (Vec<ComponentDesc>, bool) {
     let mut superset = true;
     let res = new_components
         .into_iter()

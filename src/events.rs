@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::Archetype, filter::StaticFilter, ComponentInfo, ComponentKey, ComponentValue, Entity,
+    archetype::Archetype, filter::StaticFilter, ComponentDesc, ComponentKey, ComponentValue, Entity,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +50,7 @@ pub trait EventSubscriber: ComponentValue {
 
     /// Returns true if the subscriber is interested in this component
     #[inline]
-    fn matches_component(&self, _: ComponentInfo) -> bool {
+    fn matches_component(&self, _: ComponentDesc) -> bool {
         true
     }
 
@@ -164,8 +164,8 @@ where
     }
 
     #[inline]
-    fn matches_component(&self, info: ComponentInfo) -> bool {
-        self.subscriber.matches_component(info)
+    fn matches_component(&self, desc: ComponentDesc) -> bool {
+        self.subscriber.matches_component(desc)
     }
 
     #[inline]
@@ -198,8 +198,8 @@ where
     }
 
     #[inline]
-    fn matches_component(&self, info: ComponentInfo) -> bool {
-        self.subscriber.matches_component(info)
+    fn matches_component(&self, desc: ComponentDesc) -> bool {
+        self.subscriber.matches_component(desc)
     }
 
     #[inline]
@@ -229,8 +229,8 @@ where
     }
 
     #[inline]
-    fn matches_component(&self, info: ComponentInfo) -> bool {
-        self.components.contains(&info.key()) && self.subscriber.matches_component(info)
+    fn matches_component(&self, desc: ComponentDesc) -> bool {
+        self.components.contains(&desc.key()) && self.subscriber.matches_component(desc)
     }
 
     #[inline]

@@ -4,7 +4,7 @@ use alloc::{boxed::Box, format, vec::Vec};
 use anyhow::Context;
 
 use crate::{
-    buffer::MultiComponentBuffer, BatchSpawn, Component, ComponentInfo, ComponentValue, Entity,
+    buffer::MultiComponentBuffer, BatchSpawn, Component, ComponentDesc, ComponentValue, Entity,
     EntityBuilder, World,
 };
 
@@ -22,7 +22,7 @@ enum Command {
     /// Set a component for an entity
     Set {
         id: Entity,
-        info: ComponentInfo,
+        desc: ComponentDesc,
         offset: usize,
     },
     /// Despawn an entity
@@ -30,7 +30,7 @@ enum Command {
     /// Remove a component from an entity
     Remove {
         id: Entity,
-        info: ComponentInfo,
+        desc: ComponentDesc,
     },
 
     /// Execute an arbitrary function with a mutable reference to the world.
@@ -49,16 +49,16 @@ impl fmt::Debug for Command {
                 .field(&batch)
                 .field(&ids.len())
                 .finish(),
-            Self::Set { id, info, offset } => f
+            Self::Set { id, desc, offset } => f
                 .debug_struct("Set")
                 .field("id", id)
-                .field("info", info)
+                .field("desc", desc)
                 .field("offset", offset)
                 .finish(),
             Self::Despawn(arg0) => f.debug_tuple("Despawn").field(arg0).finish(),
             Self::Remove {
                 id,
-                info: component,
+                desc: component,
             } => f
                 .debug_struct("Remove")
                 .field("id", id)
@@ -108,7 +108,7 @@ impl CommandBuffer {
         let offset = self.inserts.push(value);
         self.commands.push(Command::Set {
             id,
-            info: component.info(),
+            desc: component.desc(),
             offset,
         });
 
@@ -121,7 +121,7 @@ impl CommandBuffer {
     pub fn remove<T: ComponentValue>(&mut self, id: Entity, component: Component<T>) -> &mut Self {
         self.commands.push(Command::Remove {
             id,
-            info: component.info(),
+            desc: component.desc(),
         });
 
         self
@@ -208,21 +208,21 @@ impl CommandBuffer {
                         .map_err(|v| v.into_anyhow())
                         .context("Failed to spawn entity")?;
                 }
-                Command::Set { id, info, offset } => unsafe {
+                Command::Set { id, desc, offset } => unsafe {
                     let value = self.inserts.take_dyn(offset);
                     world
-                        .set_dyn(id, info, value)
+                        .set_dyn(id, desc, value)
                         .map_err(|v| v.into_anyhow())
-                        .with_context(|| format!("Failed to set component {}", info.name()))?;
+                        .with_context(|| format!("Failed to set component {}", desc.name()))?;
                 },
                 Command::Despawn(id) => world
                     .despawn(id)
                     .map_err(|v| v.into_anyhow())
                     .context("Failed to despawn entity")?,
-                Command::Remove { id, info } => world
-                    .remove_dyn(id, info)
+                Command::Remove { id, desc } => world
+                    .remove_dyn(id, desc)
                     .map_err(|v| v.into_anyhow())
-                    .with_context(|| format!("Failed to remove component {}", info.name()))?,
+                    .with_context(|| format!("Failed to remove component {}", desc.name()))?,
                 Command::Defer(func) => {
                     func(world).context("Failed to execute deferred function")?
                 }

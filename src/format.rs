@@ -136,12 +136,12 @@ impl<'a> Debug for RowValueFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
         for data in self.arch.try_borrow_all().flatten() {
-            let info = data.storage.info();
+            let desc = data.storage.desc();
 
-            if let Ok(visitor) = self.world.get(info.key().id, debuggable()) {
-                map.entry(&info, (visitor.debug_storage)(&data.storage, self.slot));
+            if let Ok(visitor) = self.world.get(desc.key().id, debuggable()) {
+                map.entry(&desc, (visitor.debug_storage)(&data.storage, self.slot));
             } else {
-                map.entry(&info, &MissingDebug);
+                map.entry(&desc, &MissingDebug);
             }
         }
 

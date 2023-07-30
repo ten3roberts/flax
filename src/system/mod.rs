@@ -497,7 +497,7 @@ pub(crate) fn access_info(accesses: &[Access], world: &World) -> AccessInfo {
                     .archetypes
                     .entry(id)
                     .or_insert_with(|| ArchetypeAccess {
-                        arch: arch.info(),
+                        arch: arch.desc(),
                         ..Default::default()
                     })
                     .components
@@ -513,7 +513,7 @@ pub(crate) fn access_info(accesses: &[Access], world: &World) -> AccessInfo {
                     .archetypes
                     .entry(id)
                     .or_insert_with(|| ArchetypeAccess {
-                        arch: arch.info(),
+                        arch: arch.desc(),
                         ..Default::default()
                     })
                     .change_events

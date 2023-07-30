@@ -6,7 +6,7 @@ use alloc::string::String;
 use crate::component;
 use crate::Exclusive;
 
-use crate::ComponentInfo;
+use crate::ComponentDesc;
 use crate::Debuggable;
 
 component! {
@@ -22,7 +22,7 @@ component! {
     ///
     /// Added automatically to all components.
     /// This is the basis of the reflection provided by flax
-    pub component_info: ComponentInfo => [ Debuggable ],
+    pub component_info: ComponentDesc => [ Debuggable ],
 
     /// Added automatically to all STATIC entities
     pub is_static: () => [ Debuggable ],

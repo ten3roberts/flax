@@ -30,7 +30,7 @@ fn entity_builder() {
         world.get(id2, b()).as_deref(),
         Err(&Error::MissingComponent(MissingComponent {
             id: id2,
-            info: b().info()
+            desc: b().desc()
         }))
     );
 
@@ -56,7 +56,7 @@ fn entity_builder() {
         world.get(id3, relation(id2)).as_deref(),
         Err(&Error::MissingComponent(MissingComponent {
             id: id3,
-            info: relation(id2).info()
+            desc: relation(id2).desc()
         }))
     );
 
@@ -84,7 +84,7 @@ fn entity_builder_cmd() {
         world.get(id2, b()).as_deref(),
         Err(&Error::MissingComponent(MissingComponent {
             id: id2,
-            info: b().info()
+            desc: b().desc()
         }))
     );
 
@@ -108,7 +108,7 @@ fn entity_builder_cmd() {
         world.get(id3, relation(id2)).as_deref(),
         Err(&Error::MissingComponent(MissingComponent {
             id: id3,
-            info: relation(id2).info()
+            desc: relation(id2).desc()
         }))
     );
 

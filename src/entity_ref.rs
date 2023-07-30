@@ -38,7 +38,7 @@ impl<'a> EntityRefMut<'a> {
             .get_at(self.loc(), component)
             .ok_or_else(|| MissingComponent {
                 id: self.id,
-                info: component.info(),
+                desc: component.desc(),
             })
     }
 
@@ -51,7 +51,7 @@ impl<'a> EntityRefMut<'a> {
             .get_mut_at(self.loc(), component)
             .ok_or_else(|| MissingComponent {
                 id: self.id,
-                info: component.info(),
+                desc: component.desc(),
             })
     }
 
@@ -85,7 +85,7 @@ impl<'a> EntityRefMut<'a> {
         arch.update(loc.slot, component, FnWriter::new(f), tick)
             .ok_or(MissingComponent {
                 id: self.id,
-                info: component.info(),
+                desc: component.desc(),
             })
     }
 
@@ -102,7 +102,7 @@ impl<'a> EntityRefMut<'a> {
         arch.update(loc.slot, component, WriteDedup::new(value), tick)
             .ok_or(MissingComponent {
                 id: self.id,
-                info: component.info(),
+                desc: component.desc(),
             })
     }
 
@@ -147,7 +147,7 @@ impl<'a> EntityRefMut<'a> {
     /// Set a component for the entity
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
         self.set_with_writer(SingleComponentWriter::new(
-            component.info(),
+            component.desc(),
             Replace::new(value),
         ))
         .left()
@@ -158,7 +158,7 @@ impl<'a> EntityRefMut<'a> {
     /// Does not trigger a modification event if the value is the same
     pub fn set_dedup<T: ComponentValue + PartialEq>(&mut self, component: Component<T>, value: T) {
         self.set_with_writer(SingleComponentWriter::new(
-            component.info(),
+            component.desc(),
             WriteDedup::new(value),
         ));
     }
@@ -179,7 +179,7 @@ impl<'a> EntityRefMut<'a> {
         let (old, loc) = unsafe {
             let loc = self
                 .world
-                .remove_inner(self.id, component.info(), |ptr| {
+                .remove_inner(self.id, component.desc(), |ptr| {
                     res.write(ptr.cast::<T>().read());
                 })
                 .map_err(|v| v.try_into_missing_component().unwrap())?;
@@ -301,7 +301,7 @@ impl<'a> EntityRef<'a> {
             .get(self.slot, component)
             .ok_or_else(|| MissingComponent {
                 id: self.id,
-                info: component.info(),
+                desc: component.desc(),
             })
     }
 
@@ -314,7 +314,7 @@ impl<'a> EntityRef<'a> {
             .get_mut(self.slot, component, self.world.advance_change_tick())
             .ok_or_else(|| MissingComponent {
                 id: self.id,
-                info: component.info(),
+                desc: component.desc(),
             })
     }
 
@@ -485,7 +485,7 @@ mod test {
             res.as_deref(),
             Err(&MissingComponent {
                 id,
-                info: is_static().info()
+                desc: is_static().desc()
             })
         )
     }
@@ -617,7 +617,7 @@ mod test {
             entity.update(b(), |v| v.push('_')),
             Err(MissingComponent {
                 id,
-                info: b().info()
+                desc: b().desc()
             })
         );
 

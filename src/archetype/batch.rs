@@ -2,7 +2,7 @@ use core::mem;
 
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{error::Result, Component, ComponentInfo, ComponentKey, ComponentValue, Entity, Error};
+use crate::{error::Result, Component, ComponentDesc, ComponentKey, ComponentValue, Entity, Error};
 
 use super::Storage;
 
@@ -23,8 +23,8 @@ impl BatchSpawn {
     }
 
     /// Returns the components in the batch
-    pub fn components(&self) -> impl Iterator<Item = ComponentInfo> + '_ {
-        self.storage.values().map(|v| v.info())
+    pub fn components(&self) -> impl Iterator<Item = ComponentDesc> + '_ {
+        self.storage.values().map(|v| v.desc())
     }
 
     /// Returns the number of entities in the batch
@@ -45,8 +45,8 @@ impl BatchSpawn {
         component: Component<T>,
         iter: impl IntoIterator<Item = T>,
     ) -> Result<&mut Self> {
-        let info = component.info();
-        let mut storage = Storage::with_capacity(info, self.len);
+        let desc = component.desc();
+        let mut storage = Storage::with_capacity(desc, self.len);
 
         for item in iter.into_iter().take(self.len) {
             // Type gurangeed by the component
@@ -61,11 +61,11 @@ impl BatchSpawn {
 
     /// Inserts a storage directly
     pub(crate) fn append(&mut self, storage: Storage) -> Result<()> {
-        let info = storage.info();
+        let desc = storage.desc();
         if storage.len() != self.len {
             Err(Error::IncompleteBatch)
         } else {
-            self.storage.insert(info.key(), storage);
+            self.storage.insert(desc.key(), storage);
             Ok(())
         }
     }

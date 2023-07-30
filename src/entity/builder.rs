@@ -1,5 +1,5 @@
 use crate::{
-    buffer::ComponentBuffer, error::Result, CommandBuffer, Component, ComponentInfo,
+    buffer::ComponentBuffer, error::Result, CommandBuffer, Component, ComponentDesc,
     ComponentValue, Entity, RelationExt, World,
 };
 use alloc::{boxed::Box, vec::Vec};
@@ -65,8 +65,8 @@ impl EntityBuilder {
         self
     }
 
-    pub(crate) unsafe fn set_dyn(&mut self, info: ComponentInfo, value: *mut u8) -> &mut Self {
-        self.buffer.set_dyn(info, value);
+    pub(crate) unsafe fn set_dyn(&mut self, desc: ComponentDesc, value: *mut u8) -> &mut Self {
+        self.buffer.set_dyn(desc, value);
         self
     }
 
@@ -244,7 +244,7 @@ mod test {
             world.get(id, is_enemy()).as_deref(),
             Err(&Error::MissingComponent(MissingComponent {
                 id,
-                info: is_enemy().info()
+                desc: is_enemy().desc()
             }))
         );
     }

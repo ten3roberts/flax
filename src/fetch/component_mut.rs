@@ -96,17 +96,5 @@ impl<'q, 'w, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T>
     fn set_visited(&mut self, slots: Slice) {
         self.guard
             .set_modified(&self.arch.entities, slots, self.tick);
-        // let event = EventData {
-        //     ids: &self.ids[slots.as_range()],
-        //     key: self.cell.info().key,
-        //     kind: EventKind::Modified,
-        // };
-
-        // for handler in self.cell.subscribers.iter() {
-        //     handler.on_event(&event)
-        // }
-
-        // self.changes
-        //     .set_modified_if_tracking(Change::new(slots, self.tick));
     }
 }

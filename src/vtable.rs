@@ -2,29 +2,29 @@ use core::{alloc::Layout, any::TypeId, marker::PhantomData, mem, ptr::NonNull};
 
 use once_cell::sync::OnceCell;
 
-use crate::{buffer::ComponentBuffer, ComponentInfo, ComponentValue};
+use crate::{buffer::ComponentBuffer, ComponentDesc, ComponentValue};
 
 #[doc(hidden)]
 pub struct LazyComponentBuffer {
     value: OnceCell<ComponentBuffer>,
-    init: fn(ComponentInfo) -> ComponentBuffer,
+    init: fn(ComponentDesc) -> ComponentBuffer,
 }
 
 impl LazyComponentBuffer {
     /// Creates a new component buffer which can also be recreated
-    pub const fn new(init: fn(ComponentInfo) -> ComponentBuffer) -> Self {
+    pub const fn new(init: fn(ComponentDesc) -> ComponentBuffer) -> Self {
         Self {
             value: OnceCell::new(),
             init,
         }
     }
 
-    pub(crate) fn get_ref(&self, info: ComponentInfo) -> &ComponentBuffer {
-        self.value.get_or_init(|| (self.init)(info))
+    pub(crate) fn get_ref(&self, desc: ComponentDesc) -> &ComponentBuffer {
+        self.value.get_or_init(|| (self.init)(desc))
     }
 
-    pub(crate) fn get(&self, info: ComponentInfo) -> ComponentBuffer {
-        (self.init)(info)
+    pub(crate) fn get(&self, desc: ComponentDesc) -> ComponentBuffer {
+        (self.init)(desc)
     }
 }
 

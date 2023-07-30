@@ -138,7 +138,7 @@ fn entity_hierarchy() {
         entity.get(a()).as_deref(),
         Err(&MissingComponent {
             id,
-            info: a().info()
+            desc: a().desc()
         })
     );
 
