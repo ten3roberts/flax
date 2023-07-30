@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 use crate::{
     archetype::Slice,
     entity::EntityLocation,
-    error::Result,
+    error::{MissingComponent, Result},
     fetch::{FetchAccessData, PreparedFetch},
     filter::{All, Filtered},
     system::{Access, AccessKind},
@@ -276,7 +276,9 @@ where
         let idx =
             self.prepare_archetype(arch_id).ok_or_else(|| {
                 match find_missing_components(self.state.fetch, arch_id, self.state.world).next() {
-                    Some(missing) => Error::MissingComponent(id, missing),
+                    Some(missing) => {
+                        Error::MissingComponent(MissingComponent { id, info: missing })
+                    }
                     None => Error::DoesNotMatch(id),
                 }
             })?;

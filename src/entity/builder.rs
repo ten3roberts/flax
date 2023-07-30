@@ -207,7 +207,7 @@ impl From<&mut EntityBuilder> for EntityBuilder {
 
 #[cfg(test)]
 mod test {
-    use crate::*;
+    use crate::{error::MissingComponent, *};
 
     #[test]
     fn builder() {
@@ -242,7 +242,10 @@ mod test {
         assert_eq!(world.get(id, health()).as_deref(), Ok(&50.0));
         assert_eq!(
             world.get(id, is_enemy()).as_deref(),
-            Err(&Error::MissingComponent(id, is_enemy().info()))
+            Err(&Error::MissingComponent(MissingComponent {
+                id,
+                info: is_enemy().info()
+            }))
         );
     }
 }

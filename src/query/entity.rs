@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use crate::{
     archetype::Slice,
     entity::EntityLocation,
-    error::Result,
+    error::{MissingComponent, Result},
     fetch::{FetchAccessData, PreparedFetch},
     filter::{All, Filtered},
     system::{Access, AccessKind},
@@ -32,7 +32,7 @@ fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
 
     let Some(mut p) = state.prepare_fetch(loc.arch_id, arch) else {
         return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
-            Some(missing) => Err(Error::MissingComponent(id, missing)),
+            Some(missing) => Err(Error::MissingComponent(MissingComponent{id,info: missing})),
             None => Err(Error::DoesNotMatch(id)),
         }
     };
@@ -156,7 +156,10 @@ mod test {
         world.remove(id, name()).unwrap();
         assert_eq!(
             query.borrow(&world).get(),
-            Err(Error::MissingComponent(id, name().info()))
+            Err(Error::MissingComponent(MissingComponent {
+                id,
+                info: name().info()
+            }))
         );
         world.set(id, name(), "Bar".into()).unwrap();
         {
