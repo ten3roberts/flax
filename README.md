@@ -10,7 +10,7 @@
 
 Flax is a performant and easy to use Entity Component System.
 
-The world is organized by simple identifiers known as an [Entity](https://docs.rs/flax/latest/flax/entity/struct.Entity.html), which can have any number of components attached to them.
+The world is organized by simple identifiers known as an [`Entity`](https://docs.rs/flax/latest/flax/entity/struct.Entity.html), which can have any number of components attached to them.
 
 Systems operate on the world's entities and provide the application logic.
 

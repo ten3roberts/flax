@@ -91,18 +91,19 @@ fn main() {
 
     // ANCHOR: cleanup_system
 
-    let query = Query::new((entity_ids(), player().satisfied())).filter(health().le(0.0));
+    let query = Query::new((name().opt(), entity_ids(), player().satisfied()))
+        .filter(health().le(0.0).modified());
 
     let cleanup = System::builder()
         .with_name("cleanup")
         .with(query)
         .write::<CommandBuffer>()
         .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
-            for (id, is_player) in &mut q {
+            for (name, id, is_player) in &mut q {
                 if is_player {
                     tracing::info!("Player died");
                 }
-                tracing::info!(is_player, "Despawning {id}");
+                tracing::info!(name, is_player, "Despawning {id}");
                 cmd.despawn(id);
             }
         });
@@ -115,6 +116,7 @@ fn main() {
         .with_system(damage_random)
         .with_system(update_poison)
         .with_system(health_changes)
+        .flush()
         .with_system(cleanup)
         .flush();
 
@@ -122,6 +124,7 @@ fn main() {
         schedule
             .execute_par(&mut world)
             .expect("Failed to run schedule");
+
         sleep(Duration::from_millis(1000));
     }
 

@@ -6,11 +6,11 @@ use crate::{
 ///
 /// For example transforming a tuple or struct fetch into a modified filtering fetch.
 /// The generic signifies a marker to use for transforming
-pub trait TransformFetch<Method>: for<'w> Fetch<'w> {
+pub trait TransformFetch<Method> {
     /// The transformed type.
     ///
     /// May of may not have the same `Item`
-    type Output: for<'w> Fetch<'w>;
+    type Output;
     /// Transform the fetch using the provided method
     fn transform_fetch(self, method: Method) -> Self::Output;
 }
@@ -22,10 +22,10 @@ impl<T: ComponentValue> TransformFetch<Modified> for Component<T> {
     }
 }
 
-impl<T: ComponentValue> TransformFetch<Inserted> for Component<T> {
+impl<T: ComponentValue> TransformFetch<Added> for Component<T> {
     type Output = ChangeFilter<T>;
-    fn transform_fetch(self, _: Inserted) -> Self::Output {
-        self.into_change_filter(ChangeKind::Inserted)
+    fn transform_fetch(self, _: Added) -> Self::Output {
+        self.into_change_filter(ChangeKind::Added)
     }
 }
 /// Marker for a fetch which has been transformed to filter modified items.
@@ -34,7 +34,7 @@ pub struct Modified;
 
 /// Marker for a fetch which has been transformed to filter inserted items.
 #[derive(Debug, Clone, Copy)]
-pub struct Inserted;
+pub struct Added;
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
@@ -45,9 +45,9 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<$($ty: TransformFetch<Inserted>,)*> TransformFetch<Inserted> for ($($ty,)*) {
+        impl<$($ty: TransformFetch<Added>,)*> TransformFetch<Added> for ($($ty,)*) {
             type Output = Union<($($ty::Output,)*)>;
-            fn transform_fetch(self, method: Inserted) -> Self::Output {
+            fn transform_fetch(self, method: Added) -> Self::Output {
                 Union(($(self.$idx.transform_fetch(method),)*))
             }
         }
@@ -241,7 +241,7 @@ mod tests {
         }
 
         #[derive(Fetch)]
-        #[fetch(item_derives = [Debug], transforms = [Modified, Inserted])]
+        #[fetch(item_derives = [Debug], transforms = [Modified, Added])]
         struct MyFetch {
             a: Component<i32>,
             b: Cloned<Component<String>>,
@@ -275,7 +275,7 @@ mod tests {
             a: a(),
             b: b().cloned(),
         }
-        .inserted()
+        .added()
         .map(|v| (*v.a, v.b));
 
         let mut query = Query::new((entity_ids(), query));

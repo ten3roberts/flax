@@ -486,14 +486,14 @@ impl<'a> Params<'a> {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum TransformIdent {
     Modified,
-    Inserted,
+    Added,
 }
 
 impl TransformIdent {
     fn to_tokens(&self, crate_name: &Ident) -> TokenStream {
         match self {
             Self::Modified => quote!(#crate_name::fetch::transform::Modified),
-            Self::Inserted => quote!(#crate_name::fetch::transform::Inserted),
+            Self::Added => quote!(#crate_name::fetch::transform::Added),
         }
     }
 }
@@ -503,8 +503,8 @@ impl Parse for TransformIdent {
         let ident = input.parse::<Ident>()?;
         if ident == "Modified" {
             Ok(Self::Modified)
-        } else if ident == "Inserted" {
-            Ok(Self::Inserted)
+        } else if ident == "Added" {
+            Ok(Self::Added)
         } else {
             Err(Error::new(
                 ident.span(),

@@ -118,7 +118,7 @@ impl CellData {
             kind: EventKind::Added,
         });
 
-        self.changes.set_inserted(Change::new(slice, change_tick));
+        self.changes.set_added(Change::new(slice, change_tick));
     }
 }
 

@@ -1097,7 +1097,7 @@ impl World {
     ///
     /// `other` will be left empty
     ///
-    /// **Note**: The data from `other` will all be marked as `inserted`
+    /// **Note**: The data from `other` will all be marked as *added*
     /// as change events do not carry over.
     pub fn merge_with(&mut self, other: &mut World) -> MigratedEntities {
         let mut archetypes = mem::replace(&mut other.archetypes, Archetypes::new());

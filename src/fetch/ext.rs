@@ -9,7 +9,7 @@ use super::{
     copied::Copied,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation},
-    transform::Inserted,
+    transform::Added,
     Map, Modified, Satisfied, Source, TransformFetch,
 };
 
@@ -161,11 +161,11 @@ pub trait FetchExt: Sized {
     /// This means will yield *any* of `a` *or* `b` are modified.
     ///
     /// Works with `opt`, `copy`, etc constituents.
-    fn inserted(self) -> <Self as TransformFetch<Inserted>>::Output
+    fn added(self) -> <Self as TransformFetch<Added>>::Output
     where
-        Self: TransformFetch<Inserted>,
+        Self: TransformFetch<Added>,
     {
-        self.transform_fetch(Inserted)
+        self.transform_fetch(Added)
     }
     /// Map each item of the query to another type using the provided function.
     fn map<F, T>(self, func: F) -> Map<Self, F>
