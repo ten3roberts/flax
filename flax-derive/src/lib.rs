@@ -59,7 +59,7 @@ fn derive_data_struct(
 
             let union_derive = derive_union(&params);
 
-            let transform_modified = derive_modified(&params);
+            let transforms_derive = derive_transform(&params);
 
             Ok(quote! {
                 #fetch_derive
@@ -68,7 +68,7 @@ fn derive_data_struct(
 
                 #union_derive
 
-                #transform_modified
+                #transforms_derive
             })
         }
         syn::Fields::Unnamed(_) => Err(Error::new(
@@ -200,7 +200,7 @@ fn derive_union(params: &Params) -> TokenStream {
 }
 
 /// Implements the filtering of the struct fields using a set union
-fn derive_modified(params: &Params) -> TokenStream {
+fn derive_transform(params: &Params) -> TokenStream {
     let Params {
         crate_name,
         vis,
@@ -236,9 +236,10 @@ fn derive_modified(params: &Params) -> TokenStream {
     let prepared = derive_prepared_struct(&transformed_params);
     let union = derive_union(&transformed_params);
 
-    let transform_modified = if attrs.transforms.contains(&TransformIdent::Modified) {
-        let trait_name =
-            quote! { #crate_name::fetch::TransformFetch<#crate_name::fetch::Modified> };
+    let transforms = attrs.transforms.iter().map(|method| {
+        let method = method.to_tokens(crate_name);
+
+        let trait_name = quote! { #crate_name::fetch::TransformFetch<#method> };
 
         quote! {
 
@@ -246,16 +247,14 @@ fn derive_modified(params: &Params) -> TokenStream {
             impl #trait_name for #fetch_name
             {
                 type Output = #crate_name::filter::Union<#transformed_name<#(<#field_types as #trait_name>::Output,)*>>;
-                fn transform_fetch(self, method: #crate_name::fetch::Modified) -> Self::Output {
+                fn transform_fetch(self, method: #method) -> Self::Output {
                     #crate_name::filter::Union(#transformed_name {
                         #(#field_names: <#field_types as #trait_name>::transform_fetch(self.#field_names, method),)*
                     })
                 }
             }
         }
-    } else {
-        quote! {}
-    };
+    }).collect_vec();
 
     quote! {
         #input
@@ -266,7 +265,7 @@ fn derive_modified(params: &Params) -> TokenStream {
 
         #union
 
-        #transform_modified
+        #(#transforms)*
     }
 }
 
@@ -487,6 +486,16 @@ impl<'a> Params<'a> {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum TransformIdent {
     Modified,
+    Inserted,
+}
+
+impl TransformIdent {
+    fn to_tokens(&self, crate_name: &Ident) -> TokenStream {
+        match self {
+            Self::Modified => quote!(#crate_name::fetch::transform::Modified),
+            Self::Inserted => quote!(#crate_name::fetch::transform::Inserted),
+        }
+    }
 }
 
 impl Parse for TransformIdent {
@@ -494,6 +503,8 @@ impl Parse for TransformIdent {
         let ident = input.parse::<Ident>()?;
         if ident == "Modified" {
             Ok(Self::Modified)
+        } else if ident == "Inserted" {
+            Ok(Self::Inserted)
         } else {
             Err(Error::new(
                 ident.span(),
