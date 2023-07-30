@@ -40,7 +40,7 @@ This combinator is useful when writing systems which may need to operate on enti
 
 Every time a component is modified, either through [`World::get_mut`](https://docs.rs/flax/latest/flax/struct.World#method.get_mut), or a query, a `Modified` event is added to the affected entities.
 
-Similarly, `set` when the component did not previously exist, and new entities will create an `Inserted` event.
+Similarly, `set` when the component did not previously exist, and new entities will create an `Added` event.
 
 `Removal` events are created by
 [`World::remove`](https://docs.rs/flax/latest/flax/struct.World#method.remove).

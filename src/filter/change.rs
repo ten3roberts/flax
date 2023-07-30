@@ -13,7 +13,7 @@ use crate::{
 static EMPTY_CHANGELIST: ChangeList = ChangeList::new();
 
 #[derive(Clone)]
-/// Filter which only yields modified or inserted components
+/// Filter which only yields for change events
 pub struct ChangeFilter<T> {
     component: Component<T>,
     kind: ChangeKind,

@@ -698,7 +698,7 @@ mod tests {
             .changes_mut(a().key())
             .unwrap()
             .set_modified(Change::new(Slice::new(9, 80), 2))
-            .set_inserted(Change::new(Slice::new(65, 83), 4))
+            .set_added(Change::new(Slice::new(65, 83), 4))
             .get(ChangeKind::Modified)
             .as_changed_set(1);
 

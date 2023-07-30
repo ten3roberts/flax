@@ -16,7 +16,9 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Slice, Slot},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch},
+    fetch::{
+        FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch, TransformFetch,
+    },
     system::Access,
     Fetch, FetchItem,
 };
@@ -208,6 +210,20 @@ where
     #[inline]
     fn set_visited(&mut self, slots: Slice) {
         self.fetch.set_visited(slots)
+    }
+}
+
+impl<K, F, C> TransformFetch<K> for Cmp<F, C>
+where
+    F: TransformFetch<K>,
+{
+    type Output = Cmp<F::Output, C>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        Cmp {
+            fetch: self.fetch.transform_fetch(method),
+            method: self.method,
+        }
     }
 }
 

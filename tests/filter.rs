@@ -68,7 +68,7 @@ fn filters() {
 
     // Construct a new interted query
 
-    let mut query = Query::new(a().cloned()).filter(a().inserted());
+    let mut query = Query::new(a().cloned()).filter(a().added());
 
     let items = query
         .borrow(&world)
