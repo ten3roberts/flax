@@ -30,7 +30,7 @@ impl Error {
         return anyhow::Error::new(self);
     }
 
-    pub(crate) fn try_into_missing_component(self) -> std::result::Result<MissingComponent, Self> {
+    pub(crate) fn try_into_missing_component(self) -> core::result::Result<MissingComponent, Self> {
         if let Self::MissingComponent(v) = self {
             Ok(v)
         } else {
