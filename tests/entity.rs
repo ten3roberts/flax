@@ -70,7 +70,10 @@ fn entity_ref() {
 #[test]
 #[cfg(feature = "flume")]
 fn entity_hierarchy() {
-    use flax::events::{Event, EventSubscriber};
+    use flax::{
+        error::MissingComponent,
+        events::{Event, EventSubscriber},
+    };
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
@@ -133,7 +136,10 @@ fn entity_hierarchy() {
     assert_eq!(entity.get(name()).as_deref(), Ok(&"root".to_string()));
     assert_eq!(
         entity.get(a()).as_deref(),
-        Err(&flax::Error::MissingComponent(id, a().info()))
+        Err(&MissingComponent {
+            id,
+            info: a().info()
+        })
     );
 
     assert_eq!(rx.drain().collect_vec(), []);

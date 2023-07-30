@@ -20,7 +20,7 @@ use crate::{
     entity::{entity_ids, Entity, EntityIndex, EntityKind, EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
-    error::Result,
+    error::{MissingComponent, Result},
     events::EventSubscriber,
     filter::{ArchetypeFilter, StaticFilter},
     format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
@@ -483,7 +483,10 @@ impl World {
         self.archetypes
             .get(src_id)
             .update(slot, component, FnWriter::new(f), change_tick)
-            .ok_or(Error::MissingComponent(id, component.info()))
+            .ok_or(Error::MissingComponent(MissingComponent {
+                id,
+                info: component.info(),
+            }))
     }
 
     /// Updates a component in place
@@ -503,7 +506,10 @@ impl World {
         self.archetypes
             .get(src_id)
             .update(slot, component, WriteDedup::new(value), tick)
-            .ok_or(Error::MissingComponent(id, component.info()))
+            .ok_or(Error::MissingComponent(MissingComponent {
+                id,
+                info: component.info(),
+            }))
     }
 
     /// Set the value of a component.
@@ -580,7 +586,10 @@ impl World {
         let src = self.archetypes.get(src_id);
 
         if !src.has(component.key()) {
-            return Err(Error::MissingComponent(id, component));
+            return Err(Error::MissingComponent(MissingComponent {
+                id,
+                info: component,
+            }));
         }
 
         let dst_id = match src.incoming(component.key()) {
@@ -662,8 +671,12 @@ impl World {
     ) -> Result<AtomicRef<T>> {
         let loc = self.location(id)?;
 
-        self.get_at(loc, component)
-            .ok_or_else(|| Error::MissingComponent(id, component.info()))
+        self.get_at(loc, component).ok_or_else(|| {
+            Error::MissingComponent(MissingComponent {
+                id,
+                info: component.info(),
+            })
+        })
     }
 
     #[inline]
@@ -697,8 +710,12 @@ impl World {
     ) -> Result<RefMut<T>> {
         let loc = self.location(id)?;
 
-        self.get_mut_at(loc, component)
-            .ok_or_else(|| Error::MissingComponent(id, component.info()))
+        self.get_mut_at(loc, component).ok_or_else(|| {
+            Error::MissingComponent(MissingComponent {
+                id,
+                info: component.info(),
+            })
+        })
     }
 
     /// Randomly access an entity's component.
@@ -1366,7 +1383,10 @@ mod tests {
         assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
         assert_eq!(
             world.get(id, b()).as_deref(),
-            Err(&Error::MissingComponent(id, b().info()))
+            Err(&Error::MissingComponent(MissingComponent {
+                id,
+                info: b().info()
+            }))
         );
         assert!(!world.has(id, c()));
 
@@ -1380,7 +1400,10 @@ mod tests {
         assert_eq!(world.get(id, a()).as_deref(), Ok(&65));
         assert_eq!(
             world.get(id, b()).as_deref(),
-            Err(&Error::MissingComponent(id, b().info()))
+            Err(&Error::MissingComponent(MissingComponent {
+                id,
+                info: b().info()
+            }))
         );
 
         assert!(!world.has(id, c()));
@@ -1451,7 +1474,10 @@ mod tests {
         assert_eq!(world.get(id, c()).as_deref(), Ok(&"Foo".into()));
         assert_eq!(
             world.get(id, e()).as_deref(),
-            Err(&Error::MissingComponent(id, e().info()))
+            Err(&Error::MissingComponent(MissingComponent {
+                id,
+                info: e().info()
+            }))
         );
 
         world.despawn(id).unwrap();

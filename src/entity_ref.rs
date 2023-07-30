@@ -10,11 +10,11 @@ use crate::{
     archetype::{Archetype, RefMut, Slot},
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
-    error::Result,
+    error::MissingComponent,
     format::EntityFormatter,
     name,
     writer::{EntityWriter, FnWriter, Replace, SingleComponentWriter, WriteDedup},
-    Component, ComponentKey, ComponentValue, Entity, Error, RelationExt, World,
+    Component, ComponentKey, ComponentValue, Entity, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
@@ -30,21 +30,36 @@ pub struct EntityRefMut<'a> {
 
 impl<'a> EntityRefMut<'a> {
     /// Access a component
-    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
+    pub fn get<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<AtomicRef<T>, MissingComponent> {
         self.world
             .get_at(self.loc(), component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+            .ok_or_else(|| MissingComponent {
+                id: self.id,
+                info: component.info(),
+            })
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<T>> {
+    pub fn get_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<RefMut<T>, MissingComponent> {
         self.world
             .get_mut_at(self.loc(), component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+            .ok_or_else(|| MissingComponent {
+                id: self.id,
+                info: component.info(),
+            })
     }
 
     /// Shorthand to copy and not use a borrowing references
-    pub fn get_copy<T: ComponentValue + Copy>(&self, component: Component<T>) -> Result<T> {
+    pub fn get_copy<T: ComponentValue + Copy>(
+        &self,
+        component: Component<T>,
+    ) -> Result<T, MissingComponent> {
         self.get(component).map(|v| *v)
     }
 
@@ -62,12 +77,16 @@ impl<'a> EntityRefMut<'a> {
         &self,
         component: Component<T>,
         f: impl FnOnce(&mut T) -> U,
-    ) -> Option<U> {
+    ) -> Result<U, MissingComponent> {
         let loc = self.loc();
         let arch = self.world.archetypes.get(loc.arch_id);
         let tick = self.world.advance_change_tick();
 
         arch.update(loc.slot, component, FnWriter::new(f), tick)
+            .ok_or(MissingComponent {
+                id: self.id,
+                info: component.info(),
+            })
     }
 
     /// Updates a component in place
@@ -75,12 +94,16 @@ impl<'a> EntityRefMut<'a> {
         &self,
         component: Component<T>,
         value: T,
-    ) -> Option<()> {
+    ) -> Result<(), MissingComponent> {
         let loc = self.loc();
         let arch = self.world.archetypes.get(loc.arch_id);
         let tick = self.world.advance_change_tick();
 
         arch.update(loc.slot, component, WriteDedup::new(value), tick)
+            .ok_or(MissingComponent {
+                id: self.id,
+                info: component.info(),
+            })
     }
 
     /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
@@ -148,12 +171,18 @@ impl<'a> EntityRefMut<'a> {
     }
 
     /// Remove a component
-    pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Result<T> {
+    pub fn remove<T: ComponentValue>(
+        &mut self,
+        component: Component<T>,
+    ) -> Result<T, MissingComponent> {
         let mut res: MaybeUninit<T> = MaybeUninit::uninit();
         let (old, loc) = unsafe {
-            let loc = self.world.remove_inner(self.id, component.info(), |ptr| {
-                res.write(ptr.cast::<T>().read());
-            })?;
+            let loc = self
+                .world
+                .remove_inner(self.id, component.info(), |ptr| {
+                    res.write(ptr.cast::<T>().read());
+                })
+                .map_err(|v| v.try_into_missing_component().unwrap())?;
             (res.assume_init(), loc)
         };
 
@@ -264,21 +293,36 @@ pub struct EntityRef<'a> {
 
 impl<'a> EntityRef<'a> {
     /// Access a component
-    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<'a, T>> {
+    pub fn get<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<AtomicRef<'a, T>, MissingComponent> {
         self.arch
             .get(self.slot, component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+            .ok_or_else(|| MissingComponent {
+                id: self.id,
+                info: component.info(),
+            })
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<'a, T>> {
+    pub fn get_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<RefMut<'a, T>, MissingComponent> {
         self.arch
             .get_mut(self.slot, component, self.world.advance_change_tick())
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+            .ok_or_else(|| MissingComponent {
+                id: self.id,
+                info: component.info(),
+            })
     }
 
     /// Shorthand to copy and not use a borrowing references
-    pub fn get_copy<T: ComponentValue + Copy>(&self, component: Component<T>) -> Result<T> {
+    pub fn get_copy<T: ComponentValue + Copy>(
+        &self,
+        component: Component<T>,
+    ) -> Result<T, MissingComponent> {
         self.get(component).map(|v| *v)
     }
 
@@ -439,7 +483,10 @@ mod test {
 
         assert_eq!(
             res.as_deref(),
-            Err(&Error::MissingComponent(id, is_static().info()))
+            Err(&MissingComponent {
+                id,
+                info: is_static().info()
+            })
         )
     }
 
@@ -565,8 +612,14 @@ mod test {
 
         let entity = world.entity_mut(id).unwrap();
 
-        assert_eq!(entity.update(a(), |v| v.push_str("Bar")), Some(()));
-        assert_eq!(entity.update(b(), |v| v.push('_')), None);
+        assert_eq!(entity.update(a(), |v| v.push_str("Bar")), Ok(()));
+        assert_eq!(
+            entity.update(b(), |v| v.push('_')),
+            Err(MissingComponent {
+                id,
+                info: b().info()
+            })
+        );
 
         assert_eq!(entity.get(a()).as_deref(), Ok(&"FooBar".to_string()));
         assert!(entity.get(b()).is_err());
@@ -617,12 +670,12 @@ mod test {
         assert_eq!(query.collect_vec(&world), ["Foo"]);
 
         let entity = world.entity_mut(id).unwrap();
-        entity.update_dedup(a(), "Foo".into());
+        let _ = entity.update_dedup(a(), "Foo".into());
 
         assert!(query.collect_vec(&world).is_empty());
 
         let entity = world.entity_mut(id).unwrap();
-        entity.update_dedup(a(), "Bar".into());
+        let _ = entity.update_dedup(a(), "Bar".into());
 
         assert_eq!(query.collect_vec(&world), ["Bar"]);
     }

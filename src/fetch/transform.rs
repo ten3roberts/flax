@@ -1,5 +1,5 @@
 use crate::{
-    archetype::ChangeKind, filter::ChangeFilter, filter::Union, Component, ComponentValue, Fetch,
+    archetype::ChangeKind, filter::ChangeFilter, filter::Union, Component, ComponentValue,
 };
 
 /// Allows transforming a fetch into another.

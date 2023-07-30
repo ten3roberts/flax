@@ -1,5 +1,6 @@
 use flax::{
     buffer::ComponentBuffer,
+    error::MissingComponent,
     metadata::Metadata,
     vtable::{ComponentVTable, LazyComponentBuffer},
     *,
@@ -32,6 +33,9 @@ fn custom_component() {
 
     assert_eq!(
         world.get(id, position).as_deref(),
-        Err(&Error::MissingComponent(id, position.info())),
+        Err(&Error::MissingComponent(MissingComponent {
+            id,
+            info: position.info()
+        })),
     );
 }

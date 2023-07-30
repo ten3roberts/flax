@@ -1,6 +1,6 @@
 extern crate alloc;
 use alloc::string::String;
-use flax::{component, CommandBuffer, Entity, Error, Exclusive, World};
+use flax::{component, error::MissingComponent, CommandBuffer, Entity, Error, Exclusive, World};
 use std::sync::Arc;
 
 component! {
@@ -28,7 +28,10 @@ fn entity_builder() {
     assert_eq!(world.get(id2, a()).as_deref(), Ok(&2));
     assert_eq!(
         world.get(id2, b()).as_deref(),
-        Err(&Error::MissingComponent(id2, b().info()))
+        Err(&Error::MissingComponent(MissingComponent {
+            id: id2,
+            info: b().info()
+        }))
     );
 
     let value = Arc::new(());
@@ -51,7 +54,10 @@ fn entity_builder() {
     assert_eq!(world.get(id3, relation(id1)).as_deref(), Ok(&value));
     assert_eq!(
         world.get(id3, relation(id2)).as_deref(),
-        Err(&Error::MissingComponent(id3, relation(id2).info()))
+        Err(&Error::MissingComponent(MissingComponent {
+            id: id3,
+            info: relation(id2).info()
+        }))
     );
 
     world.despawn(id3).unwrap();
@@ -76,7 +82,10 @@ fn entity_builder_cmd() {
     assert_eq!(world.get(id2, a()).as_deref(), Ok(&2));
     assert_eq!(
         world.get(id2, b()).as_deref(),
-        Err(&Error::MissingComponent(id2, b().info()))
+        Err(&Error::MissingComponent(MissingComponent {
+            id: id2,
+            info: b().info()
+        }))
     );
 
     let value = Arc::new(());
@@ -97,7 +106,10 @@ fn entity_builder_cmd() {
     assert_eq!(world.get(id3, relation(id1)).as_deref(), Ok(&value));
     assert_eq!(
         world.get(id3, relation(id2)).as_deref(),
-        Err(&Error::MissingComponent(id3, relation(id2).info()))
+        Err(&Error::MissingComponent(MissingComponent {
+            id: id3,
+            info: relation(id2).info()
+        }))
     );
 
     assert_eq!(Arc::strong_count(&value), 2);

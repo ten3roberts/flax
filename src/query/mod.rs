@@ -322,7 +322,7 @@ where
 mod test {
     use pretty_assertions::assert_eq;
 
-    use crate::{filter::Or, name, Entity, Error, FetchExt, Query};
+    use crate::{error::MissingComponent, filter::Or, name, Entity, Error, FetchExt, Query};
 
     use super::*;
 
@@ -396,7 +396,10 @@ mod test {
 
         assert_eq!(
             borrow.get(id4),
-            Err(Error::MissingComponent(id4, b().info()))
+            Err(Error::MissingComponent(MissingComponent {
+                id: id4,
+                info: b().info()
+            }))
         );
     }
 
