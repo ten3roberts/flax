@@ -33,7 +33,7 @@ where
         let borrows: SmallVec<[_; 4]> = {
             data.arch
                 .relations_like(self.component.id())
-                .map(|(info, cell)| (info.object.unwrap(), cell.borrow()))
+                .map(|(desc, cell)| (desc.object.unwrap(), cell.borrow()))
                 .collect()
         };
 

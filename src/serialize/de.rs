@@ -8,7 +8,7 @@ use serde::{
 
 use crate::{
     archetype::{BatchSpawn, Storage},
-    Component, ComponentInfo, ComponentValue, Entity, EntityBuilder, World,
+    Component, ComponentDesc, ComponentValue, Entity, EntityBuilder, World,
 };
 
 use super::{RowFields, SerializeFormat, WorldFields};
@@ -19,14 +19,14 @@ struct Slot {
     deser_col: fn(
         deserializer: &mut dyn erased_serde::Deserializer,
         len: usize,
-        component: ComponentInfo,
+        component: ComponentDesc,
     ) -> erased_serde::Result<Storage>,
     deser_one: fn(
         deserializer: &mut dyn erased_serde::Deserializer,
-        component: ComponentInfo,
+        component: ComponentDesc,
         builder: &mut EntityBuilder,
     ) -> erased_serde::Result<()>,
-    info: ComponentInfo,
+    desc: ComponentDesc,
 }
 
 /// [ T, T, T ]
@@ -43,7 +43,7 @@ impl<'a, 'de> DeserializeSeed<'de> for DeserializeStorage<'a> {
         D: Deserializer<'de>,
     {
         let mut deserializer = <dyn erased_serde::Deserializer>::erase(deserializer);
-        let storage = (self.slot.deser_col)(&mut deserializer, self.len, self.slot.info)
+        let storage = (self.slot.deser_col)(&mut deserializer, self.len, self.slot.desc)
             .map_err(de::Error::custom)?;
 
         Ok(storage)
@@ -80,10 +80,10 @@ impl DeserializeBuilder {
         fn deser_col<T: ComponentValue + for<'x> Deserialize<'x>>(
             deserializer: &mut dyn erased_serde::Deserializer,
             len: usize,
-            info: ComponentInfo,
+            desc: ComponentDesc,
         ) -> erased_serde::Result<Storage> {
             deserializer.deserialize_seq(StorageVisitor::<T> {
-                info,
+                desc,
                 cap: len,
                 _marker: PhantomData,
             })
@@ -91,11 +91,11 @@ impl DeserializeBuilder {
 
         fn deser_one<T: ComponentValue + for<'x> Deserialize<'x>>(
             deserializer: &mut dyn erased_serde::Deserializer,
-            info: ComponentInfo,
+            desc: ComponentDesc,
             builder: &mut EntityBuilder,
         ) -> erased_serde::Result<()> {
             let value = T::deserialize(deserializer)?;
-            builder.set(info.downcast(), value);
+            builder.set(desc.downcast(), value);
             Ok(())
         }
 
@@ -106,7 +106,7 @@ impl DeserializeBuilder {
             Slot {
                 deser_col: deser_col::<T>,
                 deser_one: deser_one::<T>,
-                info: component.info(),
+                desc: component.desc(),
             },
         );
         self
@@ -315,7 +315,7 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeComponent<'a> {
         D: Deserializer<'de>,
     {
         let mut deserializer = <dyn erased_serde::Deserializer>::erase(deserializer);
-        (self.slot.deser_one)(&mut deserializer, self.slot.info, self.builder)
+        (self.slot.deser_one)(&mut deserializer, self.slot.desc, self.builder)
             .map_err(de::Error::custom)?;
 
         Ok(())
@@ -576,7 +576,7 @@ impl<'de, 'a> Visitor<'de> for StoragesVisitor<'a> {
 
 /// Visit a single column of component values
 struct StorageVisitor<T: ComponentValue> {
-    info: ComponentInfo,
+    desc: ComponentDesc,
     cap: usize,
     _marker: PhantomData<T>,
 }
@@ -592,7 +592,7 @@ impl<'de, T: ComponentValue + de::Deserialize<'de>> Visitor<'de> for StorageVisi
     where
         A: SeqAccess<'de>,
     {
-        let mut storage = Storage::with_capacity(self.info, self.cap);
+        let mut storage = Storage::with_capacity(self.desc, self.cap);
 
         while let Some(item) = seq.next_element::<T>()? {
             unsafe { storage.push(item) }

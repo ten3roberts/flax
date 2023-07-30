@@ -687,7 +687,7 @@ mod tests {
             c: u32,
         }
 
-        let mut archetype = Archetype::new([a().info(), b().info(), c().info()]);
+        let mut archetype = Archetype::new([a().desc(), b().desc(), c().desc()]);
 
         let filter = (ChangeFilter::new(a(), ChangeKind::Modified)
             & ChangeFilter::new(b(), ChangeKind::Modified))

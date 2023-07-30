@@ -1,6 +1,6 @@
 use core::iter::Peekable;
 
-use crate::{component_info, ArchetypeId, ComponentInfo, Fetch, World};
+use crate::{component_info, ArchetypeId, ComponentDesc, Fetch, World};
 
 /// Returns all items in left not in right
 struct SetDifference<T, L: Iterator<Item = T>, R: Iterator<Item = T>> {
@@ -47,7 +47,7 @@ pub(crate) fn find_missing_components<'q, 'a, Q>(
     fetch: &Q,
     arch_id: ArchetypeId,
     world: &'a World,
-) -> impl Iterator<Item = ComponentInfo> + 'a
+) -> impl Iterator<Item = ComponentDesc> + 'a
 where
     Q: Fetch<'a>,
 {

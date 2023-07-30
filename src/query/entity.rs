@@ -32,7 +32,7 @@ fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
 
     let Some(mut p) = state.prepare_fetch(loc.arch_id, arch) else {
         return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
-            Some(missing) => Err(Error::MissingComponent(MissingComponent{id,info: missing})),
+            Some(missing) => Err(Error::MissingComponent(MissingComponent{id,desc: missing})),
             None => Err(Error::DoesNotMatch(id)),
         }
     };
@@ -158,7 +158,7 @@ mod test {
             query.borrow(&world).get(),
             Err(Error::MissingComponent(MissingComponent {
                 id,
-                info: name().info()
+                desc: name().desc()
             }))
         );
         world.set(id, name(), "Bar".into()).unwrap();

@@ -3,7 +3,7 @@ use core::{any::Any, fmt::Debug};
 use crate::{
     archetype::{Slot, Storage},
     buffer::ComponentBuffer,
-    component, ComponentInfo, ComponentValue,
+    component, ComponentDesc, ComponentValue,
 };
 
 use super::Metadata;
@@ -36,7 +36,7 @@ impl<T> Metadata<T> for Debuggable
 where
     T: Sized + core::fmt::Debug + ComponentValue,
 {
-    fn attach(_: ComponentInfo, buffer: &mut ComponentBuffer) {
+    fn attach(_: ComponentDesc, buffer: &mut ComponentBuffer) {
         buffer.set(
             debuggable(),
             Debuggable {

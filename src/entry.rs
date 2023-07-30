@@ -28,7 +28,7 @@ impl<'a, T: ComponentValue> VacantEntry<'a, T> {
             .world
             .set_with_writer(
                 self.id,
-                SingleComponentWriter::new(self.component.info(), Replace { value }),
+                SingleComponentWriter::new(self.component.desc(), Replace { value }),
             )
             .expect("Entry is valid");
 

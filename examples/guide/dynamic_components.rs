@@ -10,9 +10,9 @@ fn main() -> anyhow::Result<()> {
 
     let mut world = World::new();
 
-    let position: Component<Vec2> = world.spawn_component("position", |info| {
+    let position: Component<Vec2> = world.spawn_component("position", |desc| {
         let mut buf = ComponentBuffer::new();
-        <Debug as MetaData<Vec2>>::attach(info, &mut buf);
+        <Debug as MetaData<Vec2>>::attach(desc, &mut buf);
         buf
     });
 
@@ -39,9 +39,9 @@ fn main() -> anyhow::Result<()> {
         distance: f32,
     }
 
-    let child_of = world.spawn_relation::<RelationData>("child_of", |info| {
+    let child_of = world.spawn_relation::<RelationData>("child_of", |desc| {
         let mut buf = ComponentBuffer::new();
-        <Debug as MetaData<RelationData>>::attach(info, &mut buf);
+        <Debug as MetaData<RelationData>>::attach(desc, &mut buf);
         buf
     });
 

@@ -277,7 +277,7 @@ where
             self.prepare_archetype(arch_id).ok_or_else(|| {
                 match find_missing_components(self.state.fetch, arch_id, self.state.world).next() {
                     Some(missing) => {
-                        Error::MissingComponent(MissingComponent { id, info: missing })
+                        Error::MissingComponent(MissingComponent { id, desc: missing })
                     }
                     None => Error::DoesNotMatch(id),
                 }

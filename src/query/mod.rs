@@ -398,7 +398,7 @@ mod test {
             borrow.get(id4),
             Err(Error::MissingComponent(MissingComponent {
                 id: id4,
-                info: b().info()
+                desc: b().desc()
             }))
         );
     }

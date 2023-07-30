@@ -11,9 +11,9 @@ use glam::{vec2, Vec2};
 fn custom_component() {
     let mut world = World::new();
 
-    static META: LazyComponentBuffer = LazyComponentBuffer::new(|info| {
+    static META: LazyComponentBuffer = LazyComponentBuffer::new(|desc| {
         let mut buf = ComponentBuffer::new();
-        <Debuggable as Metadata<Vec2>>::attach(info, &mut buf);
+        <Debuggable as Metadata<Vec2>>::attach(desc, &mut buf);
         buf
     });
 
@@ -35,7 +35,7 @@ fn custom_component() {
         world.get(id, position).as_deref(),
         Err(&Error::MissingComponent(MissingComponent {
             id,
-            info: position.info()
+            desc: position.desc()
         })),
     );
 }

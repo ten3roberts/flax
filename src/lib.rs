@@ -249,7 +249,7 @@ mod writer;
 pub use archetype::{ArchetypeId, BatchSpawn, RefMut};
 pub use commands::CommandBuffer;
 pub use component::{
-    Component, ComponentFn, ComponentInfo, ComponentKey, ComponentValue, RelationFn,
+    Component, ComponentDesc, ComponentFn, ComponentKey, ComponentValue, RelationFn,
 };
 pub use components::{child_of, component_info, is_static, name};
 pub use entity::{entity_ids, Entity, EntityBuilder};

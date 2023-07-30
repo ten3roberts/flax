@@ -1,6 +1,6 @@
 use crate::buffer::ComponentBuffer;
 use crate::components::name;
-use crate::{ComponentInfo, ComponentValue};
+use crate::{ComponentDesc, ComponentValue};
 mod debuggable;
 mod relation;
 
@@ -13,7 +13,7 @@ pub use relation::*;
 /// components.
 pub trait Metadata<T: ComponentValue> {
     /// Attach the metadata to the component buffer
-    fn attach(info: ComponentInfo, buffer: &mut ComponentBuffer);
+    fn attach(desc: ComponentDesc, buffer: &mut ComponentBuffer);
 }
 
 #[derive(Debug, Clone)]
@@ -24,8 +24,8 @@ impl<T> Metadata<T> for Name
 where
     T: ComponentValue,
 {
-    fn attach(info: ComponentInfo, buffer: &mut ComponentBuffer) {
-        buffer.set(name(), info.name().into());
+    fn attach(desc: ComponentDesc, buffer: &mut ComponentBuffer) {
+        buffer.set(name(), desc.name().into());
     }
 }
 

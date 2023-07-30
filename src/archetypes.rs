@@ -5,7 +5,7 @@ use crate::{
     entity::{EntityKind, EntityStore, EntityStoreIter, EntityStoreIterMut},
     events::EventSubscriber,
     metadata::exclusive,
-    ArchetypeId, ComponentInfo, Entity,
+    ArchetypeId, ComponentDesc, Entity,
 };
 
 // fn is_sorted<T: Ord>(v: &[T]) -> bool {
@@ -84,7 +84,7 @@ impl Archetypes {
     /// Ensures the `exclusive` property of any relations are satisfied
     pub(crate) fn find_create(
         &mut self,
-        components: impl IntoIterator<Item = ComponentInfo>,
+        components: impl IntoIterator<Item = ComponentDesc>,
     ) -> (ArchetypeId, &mut Archetype) {
         let mut cursor = self.root;
 

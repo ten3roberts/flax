@@ -1,6 +1,6 @@
 use core::fmt::Display;
 
-use crate::{ComponentInfo, Entity};
+use crate::{ComponentDesc, Entity};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -51,7 +51,7 @@ pub struct MissingComponent {
     /// The entity which did not have the component
     pub id: Entity,
     /// The missing component
-    pub info: ComponentInfo,
+    pub desc: ComponentDesc,
 }
 
 /// Result alias for [crate::error::Result]
@@ -87,7 +87,7 @@ impl Display for MissingComponent {
         write!(
             f,
             "Entity {} does not have the component {:?}",
-            self.id, self.info
+            self.id, self.desc
         )
     }
 }

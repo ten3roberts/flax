@@ -11,7 +11,7 @@ use itertools::Itertools;
 use crate::{
     events::{EventData, EventKind, EventSubscriber},
     writer::ComponentUpdater,
-    Component, ComponentInfo, ComponentKey, ComponentValue, Entity,
+    Component, ComponentDesc, ComponentKey, ComponentValue, Entity,
 };
 
 /// Unique archetype id
@@ -61,7 +61,7 @@ impl StorageInfo {
 #[derive(Default, Clone)]
 pub struct ArchetypeInfo {
     storage: Vec<StorageInfo>,
-    components: Vec<ComponentInfo>,
+    components: Vec<ComponentDesc>,
     entities: usize,
 }
 
@@ -81,7 +81,7 @@ impl ArchetypeInfo {
     }
 
     /// Returns the components in the archetype
-    pub fn components(&self) -> &[ComponentInfo] {
+    pub fn components(&self) -> &[ComponentDesc] {
         self.components.as_ref()
     }
 }
@@ -125,19 +125,19 @@ impl CellData {
 /// Stores a list of component values, changes, and subscribers
 pub(crate) struct Cell {
     pub(crate) data: AtomicRefCell<CellData>,
-    info: ComponentInfo,
+    desc: ComponentDesc,
 }
 
 impl Cell {
-    pub(crate) fn new(info: ComponentInfo) -> Self {
+    pub(crate) fn new(desc: ComponentDesc) -> Self {
         Self {
             data: AtomicRefCell::new(CellData {
-                storage: Storage::new(info),
+                storage: Storage::new(desc),
                 changes: Changes::new(),
                 subscribers: Vec::new(),
-                key: info.key,
+                key: desc.key,
             }),
-            info,
+            desc,
         }
     }
 
@@ -182,12 +182,12 @@ impl Cell {
     }
 
     /// Move a slot out of the cell by swapping with the last
-    fn take(&mut self, slot: Slot, mut on_move: impl FnMut(ComponentInfo, *mut u8)) {
+    fn take(&mut self, slot: Slot, mut on_move: impl FnMut(ComponentDesc, *mut u8)) {
         let data = self.data.get_mut();
 
         let last = data.storage.len() - 1;
 
-        data.storage.swap_remove(slot, |p| on_move(self.info, p));
+        data.storage.swap_remove(slot, |p| on_move(self.desc, p));
         data.changes.swap_remove(slot, last, |_, _| {});
     }
 
@@ -195,26 +195,16 @@ impl Cell {
     fn clear(&mut self) {
         let data = self.data.get_mut();
 
-        // if !storage.is_empty() {
-        //     // Notify removed
-        //     for v in self.subscribers.iter() {
-        //         v.on_change(self.info, ChangeKind::Removed)
-        //     }
-        // }
-
         data.storage.clear();
         data.changes.clear();
-
-        // Notify subscribers
     }
 
     /// Drain the values in the cell.
     pub(crate) fn drain(&mut self) -> Storage {
         let data = self.data.get_mut();
-        let storage = mem::replace(&mut data.storage, Storage::new(self.info));
+        let storage = mem::replace(&mut data.storage, Storage::new(self.desc));
         data.changes.clear();
 
-        // Notify subscribers
         storage
     }
 
@@ -316,14 +306,14 @@ impl Archetype {
     /// Assumes `components` are sorted by id.
     pub(crate) fn new<I>(components: I) -> Self
     where
-        I: IntoIterator<Item = ComponentInfo>,
+        I: IntoIterator<Item = ComponentDesc>,
     {
         let cells = components
             .into_iter()
-            .map(|info| {
-                let key = info.key();
+            .map(|desc| {
+                let key = desc.key();
 
-                (key, Cell::new(info))
+                (key, Cell::new(desc))
             })
             .collect();
 
@@ -427,14 +417,14 @@ impl Archetype {
     }
 
     /// Returns human friendly debug info
-    pub fn info(&self) -> ArchetypeInfo {
+    pub fn desc(&self) -> ArchetypeInfo {
         let (components, storage) = self
             .cells
             .values()
             .map(|v| {
                 let data = v.data.borrow();
                 (
-                    v.info,
+                    v.desc,
                     StorageInfo {
                         cap: data.storage.capacity(),
                         len: data.storage.len(),
@@ -558,9 +548,9 @@ impl Archetype {
         buffer: &mut crate::buffer::ComponentBuffer,
     ) -> Slot {
         let slot = self.allocate(id);
-        for (info, src) in buffer.drain() {
+        for (desc, src) in buffer.drain() {
             unsafe {
-                let data = self.cells.get_mut(&info.key).unwrap().data.get_mut();
+                let data = self.cells.get_mut(&desc.key).unwrap().data.get_mut();
 
                 data.storage.extend(src, 1);
             }
@@ -638,7 +628,7 @@ impl Archetype {
     /// must point to a currently uninitialized region in the archetype.
     pub(crate) unsafe fn extend(&mut self, src: &mut Storage, tick: u32) -> Option<()> {
         let len = self.len();
-        let cell = self.cells.get_mut(&src.info().key())?;
+        let cell = self.cells.get_mut(&src.desc().key())?;
         let data = cell.data.get_mut();
 
         let slots = Slice::new(data.storage.len(), data.storage.len() + src.len());
@@ -665,7 +655,7 @@ impl Archetype {
         &mut self,
         dst: &mut Self,
         slot: Slot,
-        mut on_drop: impl FnMut(ComponentInfo, *mut u8),
+        mut on_drop: impl FnMut(ComponentDesc, *mut u8),
         tick: u32,
     ) -> (Slot, Option<(Entity, Slot)>) {
         let id = self.entity(slot).expect("Invalid entity");
@@ -720,7 +710,7 @@ impl Archetype {
     pub unsafe fn take(
         &mut self,
         slot: Slot,
-        mut on_move: impl FnMut(ComponentInfo, *mut u8),
+        mut on_move: impl FnMut(ComponentDesc, *mut u8),
     ) -> Option<(Entity, Slot)> {
         let id = self.entity(slot).expect("Invalid entity");
 
@@ -756,7 +746,7 @@ impl Archetype {
     /// the `on_take` function.
     pub(crate) unsafe fn pop_last(
         &mut self,
-        on_take: impl FnMut(ComponentInfo, *mut u8),
+        on_take: impl FnMut(ComponentDesc, *mut u8),
     ) -> Option<Entity> {
         let last = self.last();
         if let Some(last) = last {
@@ -882,13 +872,13 @@ impl Archetype {
     }
 
     /// Get a reference to the archetype's components.
-    pub(crate) fn components(&self) -> impl Iterator<Item = ComponentInfo> + '_ {
-        self.cells.values().map(|v| v.info)
+    pub(crate) fn components(&self) -> impl Iterator<Item = ComponentDesc> + '_ {
+        self.cells.values().map(|v| v.desc)
     }
 
     #[allow(dead_code)]
     pub(crate) fn component_names(&self) -> impl Iterator<Item = &str> {
-        self.cells.values().map(|v| v.info.name())
+        self.cells.values().map(|v| v.desc.name())
     }
 
     /// Returns a iterator which attempts to borrows each storage in the archetype
@@ -929,8 +919,8 @@ impl Archetype {
         &mut self.entities
     }
 
-    pub(crate) fn component(&self, key: ComponentKey) -> Option<ComponentInfo> {
-        self.cell(key).map(|v| v.info)
+    pub(crate) fn component(&self, key: ComponentKey) -> Option<ComponentDesc> {
+        self.cell(key).map(|v| v.desc)
     }
 
     /// Add a new subscriber. The subscriber must be interested in this archetype
@@ -938,7 +928,7 @@ impl Archetype {
         // For component changes
         for cell in self.cells.values_mut() {
             let data = cell.data.get_mut();
-            if s.matches_component(cell.info) {
+            if s.matches_component(cell.desc) {
                 data.subscribers.push(s.clone());
             }
 
@@ -1005,9 +995,9 @@ mod tests {
     #[test]
     pub fn test_archetype() {
         let mut arch = Archetype::new([
-            ComponentInfo::of(a()),
-            ComponentInfo::of(b()),
-            ComponentInfo::of(c()),
+            ComponentDesc::of(a()),
+            ComponentDesc::of(b()),
+            ComponentDesc::of(c()),
         ]);
 
         let shared = Arc::new("abc".to_string());
