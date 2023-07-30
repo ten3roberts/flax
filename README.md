@@ -8,7 +8,7 @@
 
 <!-- cargo-sync-readme start -->
 
-Flax is a performant and easy to use Entity Component System.
+Flax is a performant and ergonomic Entity Component System.
 
 The world is organized by simple identifiers known as an [`Entity`](https://docs.rs/flax/latest/flax/entity/struct.Entity.html), which can have any number of components attached to them.
 
