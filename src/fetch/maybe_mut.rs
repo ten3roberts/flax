@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
-use core::marker::PhantomData;
+use core::{marker::PhantomData, ops::Range};
 
 use crate::{
     archetype::{Cell, RefMut, Slot},
@@ -87,16 +87,34 @@ pub struct PreparedMaybeMut<'w, T> {
     _marker: PhantomData<T>,
 }
 
+struct Batch<'a> {
+    cell: &'a Cell,
+    new_tick: u32,
+    ids: &'a [Entity],
+    slot: Slot,
+}
+
 impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     type Item = MutGuard<'q, T>;
+    type Batch = Batch<'q>;
 
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        MutGuard {
-            slot,
+    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+        Batch {
             cell: self.cell,
             new_tick: self.new_tick,
-            entities: self.entities,
+            ids: self.entities,
+            slot: slots.start,
+        }
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        let slot = batch.slot;
+        batch.slot += 1;
+        MutGuard {
+            slot,
+            cell: batch.cell,
+            new_tick: batch.new_tick,
+            id: batch.ids[slot],
             _marker: PhantomData,
         }
     }
@@ -109,7 +127,7 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
             slot,
             cell: self.cell,
             new_tick: self.new_tick,
-            entities: self.entities,
+            id: self.entities[slot],
             _marker: PhantomData,
         }
     }
@@ -120,7 +138,7 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
 /// See: [`MaybeMut`]
 pub struct MutGuard<'w, T> {
     slot: Slot,
-    entities: &'w [Entity],
+    id: Entity,
     cell: &'w Cell,
     new_tick: u32,
     _marker: PhantomData<T>,
@@ -139,7 +157,7 @@ impl<'w, T: ComponentValue> MutGuard<'w, T> {
     pub fn write(&self) -> RefMut<T> {
         // Type is guaranteed by constructor
         self.cell
-            .get_mut(self.entities, self.slot, self.new_tick)
+            .get_mut(self.id, self.slot, self.new_tick)
             .unwrap()
     }
 }

@@ -1,3 +1,5 @@
+use core::slice;
+
 use atomic_refcell::AtomicRef;
 
 use crate::{archetype::Slot, system::AccessKind, Component, ComponentValue};
@@ -12,10 +14,20 @@ pub struct ReadComponent<'a, T> {
 impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     type Item = &'q T;
 
-    #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        // Safety: bounds guaranteed by callee
-        unsafe { self.borrow.get_unchecked(slot) }
+    // #[inline(always)]
+    // unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    //     // Safety: bounds guaranteed by callee
+    //     unsafe { self.borrow.get_unchecked(slot) }
+    // }
+
+    type Batch = slice::Iter<'q, T>;
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        self.borrow[slots.as_range()].iter()
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        batch.next().unwrap()
     }
 }
 
@@ -37,7 +49,7 @@ where
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let borrow = data.arch.borrow(self.key())?;
         Some(ReadComponent {
-            borrow: borrow.into_slice_ref(),
+            borrow: borrow.into_inner(),
         })
     }
 

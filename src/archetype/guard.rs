@@ -35,17 +35,10 @@ impl<'a, T: ComponentValue + Sized> CellMutGuard<'a, [T]> {
 }
 
 impl<'a, T: ?Sized> CellMutGuard<'a, T> {
-    pub(crate) fn set_modified(&mut self, entities: &[Entity], slots: Slice, tick: u32) {
+    pub(crate) fn set_modified(&mut self, ids: &[Entity], slots: Slice, tick: u32) {
         // SAFETY: `value` is not accessed in this function
         let data = &mut *self.data;
-        data.on_event(EventData {
-            ids: &entities[slots.as_range()],
-            key: data.key,
-            kind: EventKind::Modified,
-        });
-
-        data.changes
-            .set_modified_if_tracking(Change::new(slots, tick));
+        data.set_modified(ids, slots, tick)
     }
 
     pub(crate) fn filter_map<U>(
@@ -59,25 +52,23 @@ impl<'a, T: ?Sized> CellMutGuard<'a, T> {
             storage,
         })
     }
-}
 
-impl<'w, T: ?Sized> Deref for CellMutGuard<'w, T> {
-    type Target = T;
+    pub(crate) fn storage(&self) -> NonNull<T> {
+        self.storage
+    }
 
-    fn deref(&self) -> &Self::Target {
+    pub(crate) fn get(&self) -> &T {
         unsafe { self.storage.as_ref() }
     }
-}
 
-impl<'w, T: ?Sized> DerefMut for CellMutGuard<'w, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
+    pub(crate) fn get_mut(&mut self) -> &mut T {
         unsafe { self.storage.as_mut() }
     }
 }
 
 impl<'a, T: Debug + ?Sized> Debug for CellMutGuard<'a, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        (**self).fmt(f)
+        (*self.get()).fmt(f)
     }
 }
 
@@ -103,7 +94,7 @@ impl<'a, T: ComponentValue + Sized> CellGuard<'a, [T]> {
 
 impl<'a, T: ?Sized> CellGuard<'a, T> {
     #[inline]
-    pub fn into_slice_ref(self) -> AtomicRef<'a, T> {
+    pub(crate) fn into_inner(self) -> AtomicRef<'a, T> {
         AtomicRef::map(self.data, |_| unsafe { self.storage.as_ref() })
     }
 
@@ -111,19 +102,15 @@ impl<'a, T: ?Sized> CellGuard<'a, T> {
     pub(crate) fn changes(&self) -> &Changes {
         &self.data.changes
     }
+
+    pub(crate) fn get(&self) -> &T {
+        unsafe { self.storage.as_ref() }
+    }
 }
 
 impl<'a, T: Debug + ?Sized> Debug for CellGuard<'a, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        (**self).fmt(f)
-    }
-}
-
-impl<'w, T: ?Sized> Deref for CellGuard<'w, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.storage.as_ref() }
+        (*self.get()).fmt(f)
     }
 }
 
@@ -133,8 +120,7 @@ impl<'w, T: ?Sized> Deref for CellGuard<'w, T> {
 pub struct RefMut<'a, T> {
     guard: CellMutGuard<'a, T>,
 
-    // All entities in the archetype
-    ids: &'a [Entity],
+    id: Entity,
     slot: Slot,
     modified: bool,
     tick: u32,
@@ -143,7 +129,7 @@ pub struct RefMut<'a, T> {
 impl<'a, T: ComponentValue> RefMut<'a, T> {
     pub(super) fn new(
         guard: CellMutGuard<'a, [T]>,
-        ids: &'a [Entity],
+        id: Entity,
         slot: Slot,
         tick: u32,
     ) -> Option<Self> {
@@ -152,7 +138,7 @@ impl<'a, T: ComponentValue> RefMut<'a, T> {
 
         Some(Self {
             guard,
-            ids,
+            id,
             slot,
             modified: false,
             tick,
@@ -171,7 +157,7 @@ impl<'a, T> Deref for RefMut<'a, T> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.guard
+        &self.guard.get()
     }
 }
 
@@ -179,7 +165,7 @@ impl<'a, T> DerefMut for RefMut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        &mut self.guard
+        &mut self.guard.get_mut()
     }
 }
 
@@ -188,11 +174,9 @@ impl<'a, T> Drop for RefMut<'a, T> {
     fn drop(&mut self) {
         if self.modified {
             // SAFETY: `value` is not accessed beyond this point
-            self.guard.data.set_modified(
-                &self.ids[self.slot..=self.slot],
-                Slice::single(self.slot),
-                self.tick,
-            )
+            self.guard
+                .data
+                .set_modified(&[self.id], Slice::single(self.slot), self.tick)
         }
     }
 }

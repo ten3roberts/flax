@@ -37,8 +37,10 @@ impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
     #[inline]
     pub fn chunks(&mut self) -> ArchetypeChunks<Q, F> {
         ArchetypeChunks {
-            iter: FilterIter::new(self.arch.slots(), &mut self.fetch),
+            fetch: &mut self.fetch as *mut _,
+            slots: self.arch.slots(),
             arch: self.arch,
+            _marker: core::marker::PhantomData,
         }
     }
 }

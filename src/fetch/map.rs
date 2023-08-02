@@ -63,16 +63,17 @@ where
 {
     type Item = T;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        (self.func)(self.query.fetch(slot))
+    type Batch = (&'q F, Q::Batch);
+
+    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+        todo!()
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        (batch.0)(Q::fetch_next(&mut batch.1))
     }
 
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.query.filter_slots(slots)
-    }
-
-    #[inline]
-    fn set_visited(&mut self, slots: crate::archetype::Slice) {
-        self.query.set_visited(slots)
     }
 }

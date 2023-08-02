@@ -1,8 +1,10 @@
+use core::ptr::NonNull;
+
 use crate::{
     archetype::{Archetype, Slice, Slot},
     fetch::PreparedFetch,
     filter::{FilterIter, Filtered},
-    Entity,
+    Entity, Fetch,
 };
 
 /// Iterates over a chunk of entities, specified by a predicate.
@@ -111,23 +113,59 @@ where
 /// filters.
 pub struct ArchetypeChunks<'q, Q, F> {
     pub(crate) arch: &'q Archetype,
-    pub(crate) iter: FilterIter<&'q mut Filtered<Q, F>>,
+    pub(crate) fetch: *mut Filtered<Q, F>,
+    pub(crate) slots: Slice,
+    pub(crate) _marker: core::marker::PhantomData<&'q mut ()>,
 }
 
-impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
+unsafe impl<'q, Q: 'q, F: 'q> Sync for ArchetypeChunks<'q, Q, F> where &'q mut Filtered<Q, F>: Sync {}
+unsafe impl<'q, Q: 'q, F: 'q> Send for ArchetypeChunks<'q, Q, F> where &'q mut Filtered<Q, F>: Send {}
+
+impl<'q, Q, F> ArchetypeChunks<'q, Q, F>
 where
     Q: PreparedFetch<'q>,
     F: PreparedFetch<'q>,
+{
+    fn next_slice(slots: &mut Slice, fetch: &mut Filtered<Q, F>) -> Option<Slice> {
+        if slots.is_empty() {
+            return None;
+        }
+
+        while !slots.is_empty() {
+            // Safety
+            // The yielded slots are split off of `self.slots`
+            let cur = unsafe { fetch.filter_slots(*slots) };
+
+            let (_l, m, r) = slots
+                .split_with(&cur)
+                .expect("Return value of filter must be a subset of `slots");
+
+            assert_eq!(cur, m);
+
+            *slots = r;
+
+            if !m.is_empty() {
+                return Some(m);
+            }
+        }
+
+        None
+    }
+}
+impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
+where
+    Q: 'q + PreparedFetch<'q>,
+    F: 'q + PreparedFetch<'q>,
 {
     type Item = Batch<'q, Q, F>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        // Get the next chunk
-        let chunk = self.iter.next()?;
-
         // Fetch will never change and all calls are disjoint
-        let fetch = unsafe { &mut *(self.iter.fetch as *mut Filtered<Q, F>) };
+        let fetch = unsafe { &mut *self.fetch };
+
+        // Get the next chunk
+        let chunk = Self::next_slice(&mut self.slots, fetch)?;
 
         // Set the chunk as visited
         fetch.set_visited(chunk);

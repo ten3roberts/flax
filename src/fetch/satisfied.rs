@@ -43,12 +43,28 @@ pub struct PreparedSatisfied<F>(Option<F>);
 
 impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
     type Item = bool;
+    type Batch = bool;
 
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        if let Some(fetch) = &mut self.0 {
-            !fetch.filter_slots(Slice::single(slot)).is_empty()
-        } else {
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        let res = self.0.filter_slots(slots);
+        if res.is_empty() {
             false
+        } else {
+            true
+        }
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        *batch
+    }
+
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        let res = self.0.filter_slots(slots);
+
+        if res.is_empty() {
+            Slice::new(slots.start, (slots.start + 1).min(slots.end))
+        } else {
+            res
         }
     }
 }

@@ -71,20 +71,14 @@ where
     V: 'static + Clone,
 {
     type Item = V;
+    type Batch = F::Batch;
 
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.0.fetch(slot).clone()
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        self.0.create_batch(slots)
     }
 
-    #[inline]
-    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        self.0.filter_slots(slots)
-    }
-
-    #[inline]
-    fn set_visited(&mut self, slots: Slice) {
-        self.0.set_visited(slots)
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        F::fetch_next(batch).clone()
     }
 }
 

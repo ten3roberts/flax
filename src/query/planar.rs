@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::{iter::Flatten, slice::IterMut};
+use core::{iter::Flatten, ptr::NonNull, slice::IterMut};
 use smallvec::SmallVec;
 
 use crate::{
@@ -323,6 +323,37 @@ where
     }
 }
 
+// struct SlicePtrIter<T> {
+//     ptr: *mut T,
+//     count: usize,
+// }
+
+// impl<T> SlicePtrIter<T> {
+//     fn new(slice: *mut [T]) -> Self {
+//         Self {
+//             ptr: slice.as_mut_ptr(),
+//             count: slice.len,
+//         }
+//     }
+// }
+
+// impl<T> Iterator for SlicePtrIter<T> {
+//     type Item = *mut T;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         if self.count == 0 {
+//             return None;
+//         }
+
+//         self.count -= 1;
+//         let old = self.ptr;
+//         unsafe {
+//             self.ptr = self.ptr.add(1);
+//         }
+//         Some(old)
+//     }
+// }
+
 /// An iterator which yields disjoint continuous slices for each matched archetype
 /// and filter predicate.
 pub struct BatchedIter<'w, 'q, Q, F>
@@ -368,7 +399,11 @@ where
                 }
             }
 
-            let p = self.archetypes.next()?;
+            let p = unsafe {
+                &mut *(self.archetypes.next()?
+                    as *mut PreparedArchetype<'w, Q::Prepared, F::Prepared>)
+            };
+
             self.current = Some(p.chunks());
         }
     }
