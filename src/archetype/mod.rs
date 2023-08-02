@@ -252,11 +252,11 @@ impl Cell {
     #[inline]
     pub fn get_mut<'a, T: ComponentValue>(
         &'a self,
-        entities: &'a [Entity],
+        id: Entity,
         slot: Slot,
         tick: u32,
     ) -> Option<RefMut<T>> {
-        RefMut::new(self.borrow_mut(), entities, slot, tick)
+        RefMut::new(self.borrow_mut(), id, slot, tick)
     }
 }
 
@@ -452,7 +452,7 @@ impl Archetype {
         tick: u32,
     ) -> Option<RefMut<T>> {
         self.cell(component.key())?
-            .get_mut(&self.entities, slot, tick)
+            .get_mut(self.entities[slot], slot, tick)
     }
 
     /// Get a component from the entity at `slot`
@@ -467,7 +467,7 @@ impl Archetype {
             None => return Ok(None),
         };
 
-        Ok(cell.get_mut(&self.entities, slot, tick))
+        Ok(cell.get_mut(self.entities[slot], slot, tick))
     }
 
     /// Get a component from the entity at `slot`

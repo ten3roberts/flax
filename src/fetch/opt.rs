@@ -1,6 +1,7 @@
 use core::fmt::{self, Formatter};
 
 use alloc::vec::Vec;
+use itertools::Either;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
@@ -63,11 +64,7 @@ where
     F: PreparedFetch<'q>,
 {
     type Item = Option<F::Item>;
-
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.0.as_mut().map(|fetch| fetch.fetch(slot))
-    }
+    type Batch = Option<F::Batch>;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -78,11 +75,12 @@ where
         }
     }
 
-    #[inline]
-    fn set_visited(&mut self, slots: Slice) {
-        if let Some(fetch) = &mut self.0 {
-            fetch.set_visited(slots)
-        }
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        self.0.as_mut().map(|v| v.create_batch(slots))
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        batch.as_mut().map(|v| F::fetch_next(v))
     }
 }
 
@@ -143,13 +141,7 @@ where
     V: 'q,
 {
     type Item = &'q V;
-
-    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
-        match self.fetch {
-            Some(ref mut v) => v.fetch(slot),
-            None => self.value,
-        }
-    }
+    type Batch = Either<F::Batch, &'q V>;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -160,9 +152,17 @@ where
         }
     }
 
-    fn set_visited(&mut self, slots: Slice) {
-        if let Some(fetch) = &mut self.fetch {
-            fetch.set_visited(slots)
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        match self.fetch {
+            Some(ref mut v) => Either::Left(v.create_batch(slots)),
+            None => Either::Right(self.value),
+        }
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        match batch {
+            Either::Left(v) => F::fetch_next(v),
+            Either::Right(v) => v,
         }
     }
 }

@@ -1,9 +1,11 @@
+use core::{iter::Enumerate, slice};
+
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::Archetype,
+    archetype::{Archetype, Slot},
     system::{Access, AccessKind},
-    EntityRef, Fetch, FetchItem, World,
+    Entity, EntityRef, Fetch, FetchItem, World,
 };
 
 use super::{FetchAccessData, PreparedFetch};
@@ -59,16 +61,33 @@ pub struct PreparedEntityRef<'a> {
     arch: &'a Archetype,
 }
 
+pub struct Batch<'a> {
+    pub(crate) world: &'a World,
+    pub(crate) arch: &'a Archetype,
+    pub(crate) slot: Slot,
+}
+
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
+    type Batch = Batch<'q>;
+
+    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+        Batch {
+            world: self.world,
+            arch: self.arch,
+            slot: slots.start,
+        }
+    }
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        let slot = batch.slot;
+
         EntityRef {
-            arch: self.arch,
+            arch: batch.arch,
+            world: batch.world,
             slot,
-            id: self.arch.entities()[slot],
-            world: self.world,
+            id: batch.arch.entities[slot],
         }
     }
 }

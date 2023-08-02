@@ -57,16 +57,18 @@ where
 {
     type Item = &'q V::Target;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.0.fetch(slot)
-    }
+    type Batch = F::Batch;
 
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.0.filter_slots(slots)
     }
 
-    fn set_visited(&mut self, slots: crate::archetype::Slice) {
-        self.0.set_visited(slots)
+    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+        self.0.create_batch(slots)
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        F::fetch_next(batch)
     }
 }
 

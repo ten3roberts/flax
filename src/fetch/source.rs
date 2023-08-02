@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::{Archetype, Slot},
+    archetype::{Archetype, Slice, Slot},
     entity::EntityLocation,
     system::Access,
     ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
@@ -161,12 +161,19 @@ where
 {
     type Item = Q::Item;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.fetch_shared(slot)
-    }
-
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.fetch.filter_slots(slots)
+    }
+
+    type Batch = Q::Item;
+
+    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+        let mut batch = self.fetch.create_batch(Slice::single(self.slot));
+        Q::fetch_next(&mut batch)
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        *batch
     }
 }
 

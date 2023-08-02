@@ -1,6 +1,9 @@
 use alloc::vec::Vec;
 
-use core::fmt::{self, Formatter};
+use core::{
+    fmt::{self, Formatter},
+    slice,
+};
 
 use crate::{
     archetype::{Archetype, CellMutGuard, Slice, Slot},
@@ -84,17 +87,34 @@ pub struct WriteComponent<'a, T> {
 
 impl<'q, 'w, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T> {
     type Item = &'q mut T;
+    type Batch = slice::IterMut<'q, T>;
 
-    #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        // Perform a reborrow
-        // Cast from a immutable to a mutable borrow as all calls to this
-        // function are guaranteed to be disjoint
-        unsafe { &mut *(self.guard.get_unchecked_mut(slot) as *mut T) }
+    // #[inline(always)]
+    // unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    //     // Perform a reborrow
+    //     // Cast from a immutable to a mutable borrow as all calls to this
+    //     // function are guaranteed to be disjoint
+    //     unsafe { &mut *(self.guard.get_unchecked_mut(slot) as *mut T) }
+    // }
+
+    // fn set_visited(&mut self, slots: Slice) {
+    //     self.guard
+    //         .set_modified(&self.arch.entities, slots, self.tick);
+    // }
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        self.guard
+            .set_modified(&self.arch.entities[slots.as_range()], slots, self.tick);
+
+        // Convert directly into a non-overlapping subslice without reading the whole slice
+        let ptr = (self.guard.storage().as_ptr() as *mut T).add(slots.start);
+
+        let slice = slice::from_raw_parts_mut(ptr, slots.len());
+        slice.iter_mut()
     }
 
-    fn set_visited(&mut self, slots: Slice) {
-        self.guard
-            .set_modified(&self.arch.entities, slots, self.tick);
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        // TODO: raw stepping slice access
+        batch.next().unwrap()
     }
 }

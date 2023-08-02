@@ -75,15 +75,32 @@ pub struct PreparedRelations<'a, T> {
     borrows: SmallVec<[(Entity, CellGuard<'a, [T]>); 4]>,
 }
 
+pub struct Batch<'a, T> {
+    borrows: &'a [(Entity, CellGuard<'a, [T]>)],
+    slot: Slot,
+}
+
 impl<'q, 'w, T> PreparedFetch<'q> for PreparedRelations<'w, T>
 where
     T: ComponentValue,
 {
     type Item = RelationsIter<'q, T>;
 
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    type Batch = Batch<'q, T>;
+
+    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+        Batch {
+            borrows: &self.borrows,
+            slot: slots.start,
+        }
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        let slot = batch.slot;
+        batch.slot += 1;
+
         RelationsIter {
-            borrows: self.borrows.iter(),
+            borrows: batch.borrows.iter(),
             slot,
         }
     }
@@ -100,7 +117,7 @@ impl<'a, T> Iterator for RelationsIter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let (id, borrow) = self.borrows.next()?;
-        let borrow = &borrow[self.slot];
+        let borrow = &borrow.get()[self.slot];
         Some((*id, borrow))
     }
 }
