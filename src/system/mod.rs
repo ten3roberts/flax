@@ -112,10 +112,10 @@ where
 #[cfg(feature = "parallel")]
 impl<Q, F, T> SystemBuilder<(Query<Q, F>,), T>
 where
-    for<'x> Q: Fetch<'x> + 'static + Send,
-    for<'x> F: Fetch<'x> + 'static + Send,
-    for<'x, 'y> crate::query::BatchedIter<'x, 'y, Q, F>: Send,
-    for<'x, 'y> crate::query::Batch<'x, <Q as Fetch<'y>>::Prepared>: Send,
+    for<'x> Q: 'static + Fetch<'x> + Send,
+    for<'x> F: 'static + Fetch<'x> + Send,
+    for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Batch: Send,
+    // for<'x, 'y> crate::query::Batch<'y, <Q as Fetch<'x>>::Prepared>: Send,
 {
     /// Execute a function for each item in the query in parallel batches
     pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, (Query<Q, F>,), (), T>
