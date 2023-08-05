@@ -103,6 +103,7 @@ impl<'a, T: ?Sized> CellGuard<'a, T> {
         &self.data.changes
     }
 
+    #[inline]
     pub(crate) fn get(&self) -> &T {
         unsafe { self.storage.as_ref() }
     }

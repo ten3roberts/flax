@@ -156,11 +156,23 @@ mod tests {
         }
 
         #[derive(Fetch)]
-        #[fetch(item_derives = [Debug], transforms = [Modified])]
+        // #[fetch(item_derives = [Debug], transforms = [Modified])]
         struct MyFetch {
             a: Component<i32>,
             b: Cloned<Component<String>>,
         }
+
+        // #[automatically_derived]
+        // impl<'w, 'q> crate::fetch::PreparedFetch<'q> for PreparedMyFetch<'w>
+        // where
+        //     Component<i32>: 'static,
+        //     Cloned<Component<String>>: 'static,
+        // {
+        //     type Item = MyFetchItem<'q>;
+        //     type Batch = (
+        //         <<Component<i32> as Fetch<'w>>::Prepared as crate::fetch::PreparedFetch<'q>>::Batch,
+        //     );
+        // }
 
         let mut world = World::new();
 
@@ -309,5 +321,113 @@ mod tests {
             query.collect_vec(&world),
             [(id3, (-1, "There".to_string()))]
         );
+    }
+
+    fn test_derive_parse() {
+        use crate::{fetch::Cloned, Component, Fetch};
+
+        // #[derive(Fetch)]
+        struct MyFetch {
+            a: Component<i32>,
+            b: Cloned<Component<String>>,
+        }
+        ///The item returned by MyFetch
+        struct MyFetchItem<'q> {
+            a: <Component<i32> as crate::fetch::FetchItem<'q>>::Item,
+            b: <Cloned<Component<String>> as crate::fetch::FetchItem<'q>>::Item,
+        }
+        impl<'q> crate::fetch::FetchItem<'q> for MyFetch {
+            type Item = MyFetchItem<'q>;
+        }
+        #[automatically_derived]
+        impl<'w> crate::Fetch<'w> for MyFetch
+        where
+            Component<i32>: 'static,
+            Cloned<Component<String>>: 'static,
+        {
+            const MUTABLE: bool = <Component<i32> as crate::Fetch<'w>>::MUTABLE
+                || <Cloned<Component<String>> as crate::Fetch<'w>>::MUTABLE;
+            type Prepared = PreparedMyFetch<'w>;
+            #[inline]
+            fn prepare(
+                &'w self,
+                data: crate::fetch::FetchPrepareData<'w>,
+            ) -> Option<Self::Prepared> {
+                Some(Self::Prepared {
+                    a: crate::Fetch::prepare(&self.a, data)?,
+                    b: crate::Fetch::prepare(&self.b, data)?,
+                })
+            }
+            #[inline]
+            fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
+                crate::Fetch::filter_arch(&self.a, arch) && crate::Fetch::filter_arch(&self.b, arch)
+            }
+            fn describe(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut s = f.debug_struct("MyFetch");
+                s.field("a", &crate::fetch::FmtQuery(&self.a));
+                s.field("b", &crate::fetch::FmtQuery(&self.b));
+                s.finish()
+            }
+            fn access(
+                &self,
+                data: crate::fetch::FetchAccessData,
+                dst: &mut Vec<crate::system::Access>,
+            ) {
+                crate::Fetch::access(&self.a, data, dst);
+                crate::Fetch::access(&self.b, data, dst)
+            }
+            fn searcher(&self, searcher: &mut crate::query::ArchetypeSearcher) {
+                crate::Fetch::searcher(&self.a, searcher);
+                crate::Fetch::searcher(&self.b, searcher);
+            }
+        }
+        ///The prepared fetch for MyFetch
+        struct PreparedMyFetch<'w> {
+            a: <Component<i32> as crate::Fetch<'w>>::Prepared,
+            b: <Cloned<Component<String>> as crate::Fetch<'w>>::Prepared,
+        }
+        #[automatically_derived]
+        impl<'w, 'q> crate::fetch::PreparedFetch<'q> for PreparedMyFetch<'w>
+        where
+            Component<i32>: 'static,
+            Cloned<Component<String>>: 'static,
+        {
+            type Item = MyFetchItem<'q>;
+            type Batch = (
+                    <<Component<
+                        i32,
+                    > as crate::fetch::Fetch<
+                        'w,
+                    >>::Prepared as crate::fetch::PreparedFetch<'q>>::Batch,
+                    <<Cloned<
+                        Component<String>,
+                    > as crate::fetch::Fetch<
+                        'w,
+                    >>::Prepared as crate::fetch::PreparedFetch<'q>>::Batch,
+                );
+            #[inline]
+            unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+                Self::Item {
+                    a: <<Component<i32> as crate::fetch::Fetch<'w>>::Prepared
+                        as crate::fetch::PreparedFetch<'q>
+                        > ::fetch_next(&mut batch.0),
+                    b: todo!()
+                }
+            }
+            #[inline]
+            unsafe fn filter_slots(
+                &mut self,
+                slots: crate::archetype::Slice,
+            ) -> crate::archetype::Slice {
+                crate::fetch::PreparedFetch::filter_slots(&mut (&mut self.a, &mut self.b), slots)
+            }
+            #[inline]
+            unsafe fn create_batch(&mut self, slots: crate::archetype::Slice) -> Self::Batch {
+                (
+                    crate::fetch::PreparedFetch::create_batch(&mut self.a, slots),
+                    crate::fetch::PreparedFetch::create_batch(&mut self.b, slots),
+                )
+            }
+        }
     }
 }

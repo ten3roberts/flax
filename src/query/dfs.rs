@@ -269,7 +269,7 @@ where
         // Uses a raw pointer to be able to recurse inside the loop
         // Alternative: release all borrows and borrow/prepare each fetch inside the loop
         prepared: *mut PreparedArchetype<Q::Prepared, F::Prepared>,
-        chunk: &mut Batch<Q::Prepared, F::Prepared>,
+        chunk: &mut Batch<Q::Prepared>,
         edge: Option<&[T]>,
         value: &V,
         visit: &mut Visit,
@@ -314,7 +314,7 @@ where
     'w: 'q,
 {
     pub(crate) prepared: &'q mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
-    pub(crate) stack: SmallVec<[Batch<'q, Q::Prepared, F::Prepared>; 8]>,
+    pub(crate) stack: SmallVec<[Batch<'q, Q::Prepared>; 8]>,
 
     pub(crate) adj: &'q AdjMap,
 }
@@ -405,7 +405,10 @@ mod test {
                     .tag(tree())
                     .spawn(&mut world)
             })
-            .collect_vec() else { unreachable!() };
+            .collect_vec()
+        else {
+            unreachable!()
+        };
 
         world.set(b, child_of(a), ()).unwrap();
         world.set(c, child_of(b), ()).unwrap();
@@ -434,10 +437,13 @@ mod test {
                     .tag(tree())
                     .spawn(&mut world);
 
-                    all.insert(id);
+                all.insert(id);
                 id
             })
-            .collect_vec() else { unreachable!() };
+            .collect_vec()
+        else {
+            unreachable!()
+        };
 
         world.set(i, other(), ()).unwrap();
 
