@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::{iter::Flatten, ptr::NonNull, slice::IterMut};
+use core::{iter::Flatten, slice::IterMut};
 use smallvec::SmallVec;
 
 use crate::{
@@ -287,7 +287,7 @@ where
         // guarantees this borrow is unique
         let p = &mut self.prepared[idx];
         let mut chunk = p
-            .manual_chunk(Slice::single(slot))
+            .create_batch(Slice::single(slot))
             .ok_or(Error::Filtered(id))?;
 
         let item = chunk.next().unwrap();
@@ -366,6 +366,7 @@ where
     pub(crate) current: Option<ArchetypeChunks<'q, Q::Prepared, F::Prepared>>,
 }
 
+/// Iterates over archetypes, yielding batches
 impl<'q, 'w, Q, F> BatchedIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
@@ -388,7 +389,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = Batch<'q, Q::Prepared, F::Prepared>;
+    type Item = Batch<'q, Q::Prepared>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {

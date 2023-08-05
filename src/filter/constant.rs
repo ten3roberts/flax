@@ -39,14 +39,16 @@ impl<'a> Fetch<'a> for Nothing {
 
 impl<'q> PreparedFetch<'q> for Nothing {
     type Item = ();
-
-    unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
+    type Batch = ();
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.end, slots.end)
     }
 
-    fn set_visited(&mut self, _slots: Slice) {}
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+
+    #[inline]
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
 
 /// Yields all entities
@@ -80,7 +82,12 @@ impl<'w> Fetch<'w> for All {
 impl<'q> PreparedFetch<'q> for All {
     type Item = ();
 
-    unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
+    type Batch = ();
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+
+    #[inline]
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for Slice {
@@ -110,15 +117,17 @@ impl<'w> Fetch<'w> for Slice {
 
 impl<'q> PreparedFetch<'q> for Slice {
     type Item = ();
-
-    #[inline]
-    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
+    type Batch = ();
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         self.intersect(&slots)
             .unwrap_or(Slice::new(slots.end, slots.end))
     }
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for bool {
@@ -151,8 +160,14 @@ impl<'w> Fetch<'w> for bool {
 impl<'q> PreparedFetch<'q> for bool {
     type Item = bool;
 
-    #[inline]
-    unsafe fn fetch(&mut self, _: usize) -> Self::Item {
+    type Batch = bool;
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
         *self
+    }
+
+    #[inline]
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        *batch
     }
 }

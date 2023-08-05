@@ -6,8 +6,8 @@ use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
 use syn::{
     bracketed, parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, DataStruct,
-    DeriveInput, Error, GenericParam, Generics, Ident, ImplGenerics, Lifetime, LifetimeParam,
-    Result, Token, Type, TypeGenerics, TypeParam, Visibility,
+    DeriveInput, Error, GenericParam, Generics, Ident, ImplGenerics, Index, Lifetime,
+    LifetimeParam, Result, Token, Type, TypeGenerics, TypeParam, Visibility,
 };
 
 /// ```rust,ignore
@@ -88,8 +88,10 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         vis,
         fetch_name,
         item_name,
+        batch_name,
         prepared_name,
         q_generics,
+        wq_generics,
         field_names,
         field_types,
         w_lf,
@@ -120,6 +122,10 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         #vis struct #item_name #q_generics {
             #(#field_names: <#field_types as #crate_name::fetch::FetchItem<#q_lf>>::Item,)*
         }
+
+        // #vis struct #batch_name #wq_generics {
+        //     #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>::Prepared> as #crate_name::fetch::PreparedFetch<#q_lf>>::Batch,)*
+        // }
 
         // #[automatically_derived]
         impl #item_impl #crate_name::fetch::FetchItem<#q_lf> for #fetch_name #fetch_ty {
@@ -275,10 +281,12 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
         vis,
         fetch_name,
         item_name,
+        batch_name,
         prepared_name,
         field_names,
         field_types,
         w_generics,
+        wq_generics,
         w_lf,
         q_lf,
         ..
@@ -289,6 +297,9 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
     let prep_impl = params.wq_impl();
     let prep_ty = params.w_ty();
     let item_ty = params.q_ty();
+    let batch_ty = params.wq_ty();
+
+    let field_idx = (0..field_names.len()).map(Index::from).collect_vec();
 
     quote! {
         #[doc = #msg]
@@ -301,11 +312,12 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             where #(#field_types: 'static,)*
         {
             type Item = #item_name #item_ty;
+            type Batch = (#(<<#field_types as #crate_name::fetch::Fetch<#w_lf>>::Prepared as #crate_name::fetch::PreparedFetch<#q_lf>>::Batch,)*);
 
             #[inline]
-            unsafe fn fetch(&'q mut self, slot: #crate_name::archetype::Slot) -> Self::Item {
+            unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
                 Self::Item {
-                    #(#field_names: #crate_name::fetch::PreparedFetch::fetch(&mut self.#field_names, slot),)*
+                    #(#field_names: #crate_name::fetch::PreparedFetch::fetch_next(&mut batch.#field_idx),)*
                 }
             }
 
@@ -315,8 +327,10 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             }
 
             #[inline]
-            fn set_visited(&mut self, slots: #crate_name::archetype::Slice) {
-                #(#crate_name::fetch::PreparedFetch::set_visited(&mut self.#field_names, slots);)*
+            unsafe fn create_batch(&mut self, slots: #crate_name::archetype::Slice) -> Self::Batch {
+                (
+                    #(#crate_name::fetch::PreparedFetch::create_batch(&mut self.#field_names, slots),)*
+                )
             }
         }
     }
@@ -388,6 +402,7 @@ struct Params<'a> {
 
     fetch_name: Ident,
     item_name: Ident,
+    batch_name: Ident,
     prepared_name: Ident,
 
     generics: &'a Generics,
@@ -440,6 +455,7 @@ impl<'a> Params<'a> {
             field_types,
             attrs,
             item_name: format_ident!("{fetch_name}Item"),
+            batch_name: format_ident!("{fetch_name}Batch"),
             prepared_name: format_ident!("Prepared{fetch_name}"),
             fetch_name,
             w_generics: prepend_generics(&[GenericParam::Lifetime(w_lf.clone())], &input.generics),
@@ -476,6 +492,10 @@ impl<'a> Params<'a> {
 
     fn q_ty(&self) -> TypeGenerics {
         self.q_generics.split_for_impl().1
+    }
+
+    fn wq_ty(&self) -> TypeGenerics {
+        self.wq_generics.split_for_impl().1
     }
 
     fn w_ty(&self) -> TypeGenerics {

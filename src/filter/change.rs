@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt::Formatter;
+use core::slice;
 use itertools::Itertools;
 
 use crate::archetype::{Archetype, CellGuard, Change, Slot};
@@ -44,7 +45,7 @@ where
 
 impl<'q, 'w, T: ComponentValue> ReadOnlyFetch<'q> for PreparedChangeFilter<'w, T> {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
-        unsafe { self.data.get_unchecked(slot) }
+        unsafe { self.data.get().get_unchecked(slot) }
     }
 }
 
@@ -162,10 +163,11 @@ impl<'w, T> core::fmt::Debug for PreparedChangeFilter<'w, T> {
 
 impl<'q, 'w, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T> {
     type Item = &'q T;
+    type Batch = slice::Iter<'q, T>;
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        unsafe { self.data.get_unchecked(slot) }
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        batch.next().unwrap()
     }
 
     #[inline]
@@ -180,6 +182,10 @@ impl<'q, 'w, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
 
         cur.intersect(&slots)
             .unwrap_or(Slice::new(slots.end, slots.end))
+    }
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        self.data.get()[slots.as_range()].iter()
     }
 }
 
@@ -273,9 +279,7 @@ impl<'q, 'w> ReadOnlyFetch<'q> for PreparedRemoveFilter<'w> {
 
 impl<'q, 'w> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
     type Item = ();
-
-    #[inline]
-    unsafe fn fetch(&'q mut self, _: usize) -> Self::Item {}
+    type Batch = ();
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -287,6 +291,10 @@ impl<'q, 'w> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
         cur.intersect(&slots)
             .unwrap_or(Slice::new(slots.end, slots.end))
     }
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
 
 #[cfg(test)]

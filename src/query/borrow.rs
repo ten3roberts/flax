@@ -1,7 +1,7 @@
 use crate::{
     archetype::{Archetype, Slice},
     fetch::{FetchPrepareData, PreparedFetch},
-    filter::{FilterIter, Filtered},
+    filter::Filtered,
     ArchetypeId, Entity, Fetch, World,
 };
 
@@ -15,23 +15,23 @@ pub(crate) struct PreparedArchetype<'w, Q, F> {
 
 impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
     #[inline]
-    pub fn manual_chunk<'q>(&'q mut self, slots: Slice) -> Option<Batch<'q, Q, F>>
+    pub fn create_batch<'q>(&'q mut self, slots: Slice) -> Option<Batch<'q, Q>>
     where
         Q: PreparedFetch<'q>,
         F: PreparedFetch<'q>,
     {
-        let chunk = unsafe { self.fetch.filter_slots(slots) };
-        if chunk.is_empty() {
+        let slots = unsafe { self.fetch.filter_slots(slots) };
+        if slots.is_empty() {
             return None;
         }
 
         // Fetch will never change and all calls are disjoint
         let fetch = unsafe { &mut *(&mut self.fetch as *mut Filtered<Q, F>) };
 
-        // Set the chunk as visited
-        fetch.set_visited(chunk);
-        let chunk = Batch::new(self.arch, fetch, chunk);
-        Some(chunk)
+        let batch = unsafe { fetch.create_batch(slots) };
+
+        let batch = Batch::new(self.arch, batch, slots);
+        Some(batch)
     }
 
     #[inline]
@@ -80,9 +80,10 @@ where
     }
 }
 
-struct BatchesWithId<'q, Q, F> {
+struct BatchesWithId<'q, Q: PreparedFetch<'q>, F> {
     chunks: ArchetypeChunks<'q, Q, F>,
-    current: Option<Batch<'q, Q, F>>,
+    // The current batch
+    current: Option<Batch<'q, Q>>,
 }
 
 impl<'q, Q, F> Iterator for BatchesWithId<'q, Q, F>

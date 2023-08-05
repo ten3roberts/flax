@@ -140,20 +140,20 @@ where
 {
     type Item = Q::Item;
 
-    #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.fetch.fetch(slot)
-    }
-
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.fetch.filter_slots(slots);
         self.filter.filter_slots(l)
     }
 
-    #[inline]
-    fn set_visited(&mut self, slots: Slice) {
-        self.fetch.set_visited(slots)
+    type Batch = Q::Batch;
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        self.fetch.create_batch(slots)
+    }
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        Q::fetch_next(batch)
     }
 }
 
@@ -533,13 +533,15 @@ pub struct BatchSize(pub(crate) Slot);
 
 impl<'q> PreparedFetch<'q> for BatchSize {
     type Item = ();
-
-    #[inline]
-    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
+    type Batch = ();
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))
     }
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for BatchSize {

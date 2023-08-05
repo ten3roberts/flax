@@ -19,7 +19,7 @@ use crate::{
     fetch::{
         FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch, TransformFetch,
     },
-    system::Access,
+    system::{Access, ParForEach},
     Fetch, FetchItem,
 };
 
@@ -171,17 +171,12 @@ where
     }
 }
 
-impl<'q, 'w, F, M> PreparedFetch<'q> for PreparedCmp<'w, F, M>
+impl<'q, 'w, Q, M> PreparedFetch<'q> for PreparedCmp<'w, Q, M>
 where
-    F: for<'x> ReadOnlyFetch<'x>,
-    M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
+    Q: for<'x> ReadOnlyFetch<'x>,
+    M: for<'x> CmpMethod<<Q as PreparedFetch<'x>>::Item> + 'w,
 {
-    type Item = <F as PreparedFetch<'q>>::Item;
-
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.fetch.fetch(slot)
-    }
+    type Item = <Q as PreparedFetch<'q>>::Item;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -207,9 +202,15 @@ where
         }
     }
 
+    type Batch = <Q as PreparedFetch<'q>>::Batch;
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        self.fetch.create_batch(slots)
+    }
+
     #[inline]
-    fn set_visited(&mut self, slots: Slice) {
-        self.fetch.set_visited(slots)
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        Q::fetch_next(batch)
     }
 }
 

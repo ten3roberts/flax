@@ -1,5 +1,5 @@
 use crate::{
-    archetype::{Archetype, Slice, Slot},
+    archetype::{Archetype, Slice},
     fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, UnionFilter},
     system::Access,
     Fetch, FetchItem,
@@ -72,20 +72,21 @@ where
     type Item = (L::Item, R::Item);
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        (self.0.fetch(slot), self.1.fetch(slot))
-    }
-
-    fn set_visited(&mut self, slots: Slice) {
-        self.0.set_visited(slots);
-        self.1.set_visited(slots);
-    }
-
-    #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let l = self.0.filter_slots(slots);
 
         self.1.filter_slots(l)
+    }
+
+    type Batch = (L::Batch, R::Batch);
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        (self.0.create_batch(slots), self.1.create_batch(slots))
+    }
+
+    #[inline]
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        (L::fetch_next(&mut batch.0), R::fetch_next(&mut batch.1))
     }
 }
 
@@ -134,7 +135,6 @@ where
     type Item = ();
 
     #[inline]
-    unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         if let Some(fetch) = &mut self.0 {
@@ -145,6 +145,12 @@ where
             slots
         }
     }
+
+    type Batch = ();
+
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
 
 impl<R, T> ops::BitOr<R> for Not<T> {
@@ -233,16 +239,21 @@ where
 {
     type Item = T::Item;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.0.fetch(slot)
-    }
-
+    #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         self.filter_union(slots)
     }
 
-    fn set_visited(&mut self, slots: Slice) {
-        self.0.set_visited(slots)
+    type Batch = T::Batch;
+
+    #[inline]
+    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        self.0.create_batch(slots)
+    }
+
+    #[inline]
+    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+        T::fetch_next(batch)
     }
 }
 
@@ -288,6 +299,7 @@ macro_rules! tuple_impl {
         where $($ty: PreparedFetch<'q>,)*
         {
             type Item = ();
+            type Batch = ();
 
             unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
                 let inner = &mut self.0;
@@ -302,11 +314,9 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
+            unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 
-            fn set_visited(&mut self, slots: Slice) {
-                $( self.0.$idx.set_visited(slots);)*
-            }
+            unsafe fn create_batch(&mut self, slots: Slice) -> Self::Batch {}
 
         }
 
