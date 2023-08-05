@@ -225,7 +225,7 @@ where
         // Fetch will never change and all calls are disjoint
         let p = unsafe { &mut *prepared.add(arch_index) };
 
-        if let Some(mut chunk) = p.manual_chunk(Slice::single(loc.slot)) {
+        if let Some(mut chunk) = p.create_batch(Slice::single(loc.slot)) {
             Self::traverse_batch(
                 self.query_state.world,
                 dfs,
@@ -296,7 +296,7 @@ where
                         dfs,
                         prepared,
                         &mut chunk,
-                        edge.as_deref(),
+                        edge.as_ref().map(|v| v.get()),
                         &value,
                         visit,
                     )
@@ -341,7 +341,7 @@ where
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
         let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
-        if let Some(chunk) = p.manual_chunk(slice) {
+        if let Some(chunk) = p.create_batch(slice) {
             self.stack.push(chunk)
         }
     }

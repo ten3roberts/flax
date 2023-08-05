@@ -317,7 +317,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             #[inline]
             unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
                 Self::Item {
-                    #(#field_names: #crate_name::fetch::PreparedFetch::fetch_next(&mut batch.#field_idx),)*
+                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::fetch_next(&mut batch.#field_idx),)*
                 }
             }
 
@@ -327,7 +327,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             }
 
             #[inline]
-            unsafe fn create_batch(&mut self, slots: #crate_name::archetype::Slice) -> Self::Batch {
+            unsafe fn create_batch(&'q mut self, slots: #crate_name::archetype::Slice) -> Self::Batch {
                 (
                     #(#crate_name::fetch::PreparedFetch::create_batch(&mut self.#field_names, slots),)*
                 )

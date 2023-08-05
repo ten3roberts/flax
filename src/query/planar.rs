@@ -222,6 +222,7 @@ where
     where
         Q: Sync,
         Q::Prepared: Send,
+        for<'x> <Q::Prepared as PreparedFetch<'x>>::Batch: Send,
         F: Sync,
         F::Prepared: Send,
     {

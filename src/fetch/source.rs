@@ -148,7 +148,7 @@ where
 
 impl<'q, Q> ReadOnlyFetch<'q> for PreparedSource<Q>
 where
-    Q: ReadOnlyFetch<'q>,
+    Q: 'q + ReadOnlyFetch<'q>,
 {
     unsafe fn fetch_shared(&'q self, _: crate::archetype::Slot) -> Self::Item {
         self.fetch.fetch_shared(self.slot)
@@ -173,7 +173,7 @@ where
     }
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
-        *batch
+        todo!()
     }
 }
 

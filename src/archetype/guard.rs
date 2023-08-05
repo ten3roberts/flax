@@ -166,7 +166,7 @@ impl<'a, T> DerefMut for RefMut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.modified = true;
-        &mut self.guard.get_mut()
+        self.guard.get_mut()
     }
 }
 

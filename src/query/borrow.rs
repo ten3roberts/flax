@@ -88,8 +88,8 @@ struct BatchesWithId<'q, Q: PreparedFetch<'q>, F> {
 
 impl<'q, Q, F> Iterator for BatchesWithId<'q, Q, F>
 where
-    Q: PreparedFetch<'q>,
-    F: PreparedFetch<'q>,
+    Q: 'q + PreparedFetch<'q>,
+    F: 'q + PreparedFetch<'q>,
 {
     type Item = (Entity, Q::Item);
 
