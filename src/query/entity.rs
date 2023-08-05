@@ -32,9 +32,12 @@ fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
 
     let Some(mut p) = state.prepare_fetch(loc.arch_id, arch) else {
         return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
-            Some(missing) => Err(Error::MissingComponent(MissingComponent{id,desc: missing})),
+            Some(missing) => Err(Error::MissingComponent(MissingComponent {
+                id,
+                desc: missing,
+            })),
             None => Err(Error::DoesNotMatch(id)),
-        }
+        };
     };
 
     // Safety
@@ -111,8 +114,10 @@ where
         match &mut self.prepared {
             Ok((loc, p)) => {
                 // self is a mutable reference, so this is the only reference to the slot
-                p.fetch.set_visited(Slice::single(loc.slot));
-                unsafe { Ok(p.fetch.fetch(loc.slot)) }
+                unsafe {
+                    let mut batch = p.fetch.create_batch(Slice::single(loc.slot));
+                    Ok(<Q::Prepared>::fetch_next(&mut batch))
+                }
             }
             Err(e) => Err(e.clone()),
         }

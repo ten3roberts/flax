@@ -438,9 +438,10 @@ impl<'a> Fetch<'a> for WithoutRelation {
 pub struct RefFetch<'a, F>(pub(crate) &'a F);
 
 impl<'a, F> Copy for RefFetch<'a, F> {}
+
 impl<'a, F> Clone for RefFetch<'a, F> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 

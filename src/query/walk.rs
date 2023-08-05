@@ -203,6 +203,7 @@ pub struct Node<'w, Q, F> {
 }
 
 impl<'w, Q, F> Clone for Node<'w, Q, F> {
+    #[inline]
     fn clone(&self) -> Self {
         Self {
             id: self.id,
@@ -214,8 +215,6 @@ impl<'w, Q, F> Clone for Node<'w, Q, F> {
         }
     }
 }
-
-impl<'w, Q, F> Copy for Node<'w, Q, F> {}
 
 impl<'w, Q, F> Debug for Node<'w, Q, F> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -267,7 +266,7 @@ where
 
     /// Traverse the current subtree including the current node in depth-first order.
     pub fn dfs(&self) -> DfsIter<'w, Q, F> {
-        let stack = smallvec::smallvec![*self];
+        let stack = smallvec::smallvec![self.clone()];
 
         DfsIter {
             stack,

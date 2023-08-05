@@ -2,8 +2,8 @@ mod context;
 mod traits;
 
 use crate::{
-    archetype::ArchetypeInfo, query::QueryData, util::TupleCombine, ArchetypeId, CommandBuffer,
-    ComponentKey, Fetch, FetchItem, Query, World,
+    archetype::ArchetypeInfo, fetch::PreparedFetch, query::QueryData, util::TupleCombine,
+    ArchetypeId, CommandBuffer, ComponentKey, Fetch, FetchItem, Query, World,
 };
 use alloc::{
     boxed::Box,
@@ -79,6 +79,7 @@ where
     for<'x> F: Fetch<'x>,
     for<'x> <Q as Fetch<'x>>::Prepared: Send,
     for<'x> <F as Fetch<'x>>::Prepared: Send,
+    for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Batch: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
 {
     fn execute(&mut self, mut data: (QueryData<Q, F>,)) {

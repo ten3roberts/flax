@@ -87,7 +87,7 @@ pub struct PreparedMaybeMut<'w, T> {
     _marker: PhantomData<T>,
 }
 
-struct Batch<'a> {
+pub struct Batch<'a> {
     cell: &'a Cell,
     new_tick: u32,
     ids: &'a [Entity],

@@ -166,12 +166,9 @@ impl<T> PartialEq for Component<T> {
 impl<T> Copy for Component<T> {}
 
 impl<T> Clone for Component<T> {
+    #[inline]
     fn clone(&self) -> Self {
-        Self {
-            key: self.key,
-            vtable: self.vtable,
-            marker: PhantomData,
-        }
+        *self
     }
 }
 
@@ -385,7 +382,7 @@ impl<T: ComponentValue> From<Component<T>> for ComponentDesc {
 
 impl PartialOrd for ComponentDesc {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.key.partial_cmp(&other.key)
+        Some(self.cmp(other))
     }
 }
 
