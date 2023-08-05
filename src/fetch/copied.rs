@@ -81,6 +81,10 @@ where
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
         *F::fetch_next(batch)
     }
+
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        self.0.filter_slots(slots)
+    }
 }
 
 impl<'p, F, V> ReadOnlyFetch<'p> for Copied<F>

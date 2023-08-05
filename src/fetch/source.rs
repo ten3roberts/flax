@@ -165,7 +165,7 @@ where
         self.fetch.filter_slots(slots)
     }
 
-    type Batch = Q::Item;
+    type Batch = Q::Batch;
 
     unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
         let mut batch = self.fetch.create_batch(Slice::single(self.slot));

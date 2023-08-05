@@ -89,20 +89,12 @@ impl<'q, 'w, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T>
     type Item = &'q mut T;
     type Batch = slice::IterMut<'q, T>;
 
-    // #[inline(always)]
-    // unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-    //     // Perform a reborrow
-    //     // Cast from a immutable to a mutable borrow as all calls to this
-    //     // function are guaranteed to be disjoint
-    //     unsafe { &mut *(self.guard.get_unchecked_mut(slot) as *mut T) }
-    // }
-
-    // fn set_visited(&mut self, slots: Slice) {
-    //     self.guard
-    //         .set_modified(&self.arch.entities, slots, self.tick);
-    // }
-
     unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+        eprintln!(
+            "Modified {:?} {}",
+            &self.arch.entities[slots.as_range()],
+            self.tick,
+        );
         self.guard
             .set_modified(&self.arch.entities[slots.as_range()], slots, self.tick);
 

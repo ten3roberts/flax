@@ -97,6 +97,7 @@ impl CellData {
     /// Sets the specified entities and slots as modified and invokes subscribers
     /// **Note**: `ids` must be the slice of entities pointed to by `slice`
     pub(crate) fn set_modified(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
+        debug_assert_eq!(ids.len(), slice.len());
         let component = self.key;
         self.on_event(EventData {
             ids,
