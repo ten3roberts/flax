@@ -14,7 +14,7 @@ use crate::{
 
 use super::{
     borrow::QueryBorrowState, difference::find_missing_components, ArchetypeChunks,
-    ArchetypeSearcher, Batch, PreparedArchetype, QueryStrategy,
+    ArchetypeSearcher, Chunk, PreparedArchetype, QueryStrategy,
 };
 
 /// The default linear iteration strategy
@@ -288,7 +288,7 @@ where
         // guarantees this borrow is unique
         let p = &mut self.prepared[idx];
         let mut chunk = p
-            .create_batch(Slice::single(slot))
+            .create_chunk(Slice::single(slot))
             .ok_or(Error::Filtered(id))?;
 
         let item = chunk.next().unwrap();
@@ -368,7 +368,7 @@ where
 }
 
 /// Iterates over archetypes, yielding batches
-impl<'q, 'w, Q, F> BatchedIter<'w, 'q, Q, F>
+impl<'w, 'q, Q, F> BatchedIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
@@ -390,7 +390,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = Batch<'q, Q::Prepared>;
+    type Item = Chunk<'q, Q::Prepared>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {

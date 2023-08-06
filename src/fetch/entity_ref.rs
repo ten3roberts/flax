@@ -1,11 +1,9 @@
-use core::{iter::Enumerate, slice};
-
 use alloc::vec::Vec;
 
 use crate::{
     archetype::{Archetype, Slot},
     system::{Access, AccessKind},
-    Entity, EntityRef, Fetch, FetchItem, World,
+    EntityRef, Fetch, FetchItem, World,
 };
 
 use super::{FetchAccessData, PreparedFetch};
@@ -71,7 +69,7 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
     type Batch = Batch<'q>;
 
-    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
         Batch {
             world: self.world,
             arch: self.arch,

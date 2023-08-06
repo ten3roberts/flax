@@ -13,11 +13,11 @@ pub trait ReadOnlyFetch<'q>: PreparedFetch<'q> {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item;
 }
 
-impl<'p, F> ReadOnlyFetch<'p> for Option<F>
+impl<'q, F> ReadOnlyFetch<'q> for Option<F>
 where
-    F: ReadOnlyFetch<'p>,
+    F: ReadOnlyFetch<'q>,
 {
-    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.as_ref().map(|fetch| fetch.fetch_shared(slot))
     }
 }

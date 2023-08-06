@@ -19,7 +19,7 @@ use crate::{
     fetch::{
         FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch, TransformFetch,
     },
-    system::{Access, ParForEach},
+    system::Access,
     Fetch, FetchItem,
 };
 
@@ -161,17 +161,17 @@ pub struct PreparedCmp<'w, F, M> {
     method: &'w M,
 }
 
-impl<'p, 'w, F, M> ReadOnlyFetch<'p> for PreparedCmp<'w, F, M>
+impl<'w, 'q, F, M> ReadOnlyFetch<'q> for PreparedCmp<'w, F, M>
 where
     F: for<'x> ReadOnlyFetch<'x>,
     M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
 {
-    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.fetch.fetch_shared(slot)
     }
 }
 
-impl<'q, 'w, Q, M> PreparedFetch<'q> for PreparedCmp<'w, Q, M>
+impl<'w, 'q, Q, M> PreparedFetch<'q> for PreparedCmp<'w, Q, M>
 where
     Q: for<'x> ReadOnlyFetch<'x>,
     M: for<'x> CmpMethod<<Q as PreparedFetch<'x>>::Item> + 'w,
@@ -204,8 +204,8 @@ where
 
     type Batch = <Q as PreparedFetch<'q>>::Batch;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-        self.fetch.create_batch(slots)
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+        self.fetch.create_chunk(slots)
     }
 
     #[inline]

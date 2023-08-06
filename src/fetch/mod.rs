@@ -133,7 +133,7 @@ pub trait PreparedFetch<'q> {
     type Item: 'q;
     type Batch: 'q;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch;
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch;
 
     /// Fetch the item from entity at the slot in the prepared storage.
     /// # Safety
@@ -155,7 +155,7 @@ pub trait PreparedFetch<'q> {
 }
 
 /// Allows filtering the constituent parts of a fetch using a set union
-pub trait UnionFilter<'q> {
+pub trait UnionFilter {
     // Filter the slots using a union operation of the constituent part
     ///
     /// # Safety
@@ -170,8 +170,8 @@ where
     type Item = F::Item;
     type Batch = F::Batch;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-        (*self).create_batch(slots)
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+        (*self).create_chunk(slots)
     }
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
@@ -187,7 +187,7 @@ impl<'q> FetchItem<'q> for () {
     type Item = ();
 }
 
-impl<'q> UnionFilter<'q> for () {
+impl UnionFilter for () {
     unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
         slots
     }
@@ -214,8 +214,8 @@ impl<'w> Fetch<'w> for () {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl<'p> ReadOnlyFetch<'p> for () {
-    unsafe fn fetch_shared(&'p self, _: Slot) -> Self::Item {}
+impl<'q> ReadOnlyFetch<'q> for () {
+    unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
 }
 
 impl<'q> PreparedFetch<'q> for () {
@@ -223,7 +223,7 @@ impl<'q> PreparedFetch<'q> for () {
 
     type Batch = ();
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
@@ -235,9 +235,9 @@ where
     type Item = Option<F::Item>;
     type Batch = Option<F::Batch>;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
         if let Some(fetch) = self {
-            Some(fetch.create_batch(slots))
+            Some(fetch.create_chunk(slots))
         } else {
             None
         }
@@ -301,7 +301,7 @@ impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
 
     type Batch = slice::Iter<'q, Entity>;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
         self.entities[slots.as_range()].iter()
     }
 
@@ -355,8 +355,8 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-                ($((self.$idx).create_batch(slots),)*)
+            unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+                ($((self.$idx).create_chunk(slots),)*)
             }
 
             #[inline]
@@ -370,7 +370,7 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<'q, $($ty, )*> UnionFilter<'q> for ($($ty,)*)
+        impl<'q, $($ty, )*> UnionFilter for ($($ty,)*)
             where $($ty: PreparedFetch<'q>,)*
         {
 

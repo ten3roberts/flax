@@ -5,7 +5,7 @@ use crate::{
     ArchetypeId, Entity, Fetch, World,
 };
 
-use super::{ArchetypeChunks, Batch};
+use super::{ArchetypeChunks, Chunk};
 
 pub(crate) struct PreparedArchetype<'w, Q, F> {
     pub(crate) arch_id: ArchetypeId,
@@ -15,7 +15,7 @@ pub(crate) struct PreparedArchetype<'w, Q, F> {
 
 impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
     #[inline]
-    pub fn create_batch<'q>(&'q mut self, slots: Slice) -> Option<Batch<'q, Q>>
+    pub fn create_chunk<'q>(&'q mut self, slots: Slice) -> Option<Chunk<'q, Q>>
     where
         Q: PreparedFetch<'q>,
         F: PreparedFetch<'q>,
@@ -28,9 +28,9 @@ impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
         // Fetch will never change and all calls are disjoint
         let fetch = unsafe { &mut *(&mut self.fetch as *mut Filtered<Q, F>) };
 
-        let batch = unsafe { fetch.create_batch(slots) };
+        let batch = unsafe { fetch.create_chunk(slots) };
 
-        let batch = Batch::new(self.arch, batch, slots);
+        let batch = Chunk::new(self.arch, batch, slots);
         Some(batch)
     }
 
@@ -40,7 +40,6 @@ impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
             fetch: &mut self.fetch as *mut _,
             slots: self.arch.slots(),
             arch: self.arch,
-            _marker: core::marker::PhantomData,
         }
     }
 }
@@ -83,7 +82,7 @@ where
 struct BatchesWithId<'q, Q: PreparedFetch<'q>, F> {
     chunks: ArchetypeChunks<'q, Q, F>,
     // The current batch
-    current: Option<Batch<'q, Q>>,
+    current: Option<Chunk<'q, Q>>,
 }
 
 impl<'q, Q, F> Iterator for BatchesWithId<'q, Q, F>

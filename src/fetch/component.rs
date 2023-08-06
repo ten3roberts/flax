@@ -11,7 +11,7 @@ pub struct ReadComponent<'a, T> {
     borrow: AtomicRef<'a, [T]>,
 }
 
-impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
+impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     type Item = &'q T;
 
     // #[inline(always)]
@@ -22,7 +22,7 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
 
     type Batch = slice::Iter<'q, T>;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
         self.borrow[slots.as_range()].iter()
     }
 
@@ -31,8 +31,8 @@ impl<'q, 'w, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     }
 }
 
-impl<'w, 'p, T: ComponentValue> ReadOnlyFetch<'p> for ReadComponent<'w, T> {
-    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for ReadComponent<'w, T> {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.borrow.get_unchecked(slot)
     }
 }

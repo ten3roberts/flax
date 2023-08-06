@@ -80,7 +80,7 @@ pub struct Batch<'a, T> {
     slot: Slot,
 }
 
-impl<'q, 'w, T> PreparedFetch<'q> for PreparedRelations<'w, T>
+impl<'w, 'q, T> PreparedFetch<'q> for PreparedRelations<'w, T>
 where
     T: ComponentValue,
 {
@@ -88,7 +88,7 @@ where
 
     type Batch = Batch<'q, T>;
 
-    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
         Batch {
             borrows: &self.borrows,
             slot: slots.start,

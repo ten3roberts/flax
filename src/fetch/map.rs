@@ -65,7 +65,7 @@ where
 
     type Batch = (&'q F, Q::Batch);
 
-    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
         todo!()
     }
 
