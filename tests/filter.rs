@@ -263,7 +263,7 @@ fn sparse_or() {
         .boxed();
 
     let mut schedule = Schedule::from([system_a, system_b]);
-    let batches = schedule.batch_info(&mut world);
+    let batches = schedule.batch_info(&world);
     assert_eq!(batches.len(), 2);
 }
 
@@ -326,6 +326,6 @@ fn sparse_and() {
         .boxed();
 
     let mut schedule = Schedule::from([system_a, system_b]);
-    let batches = schedule.batch_info(&mut world);
+    let batches = schedule.batch_info(&world);
     assert_eq!(batches.len(), 1);
 }

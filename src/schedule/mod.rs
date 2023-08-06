@@ -210,7 +210,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
     }
 
     /// Returns information about the current multithreaded batch partioning and system accesses.
-    pub fn batch_info(&mut self, world: &mut World) -> BatchInfos {
+    pub fn batch_info(&mut self, world: &World) -> BatchInfos {
         self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
 
         let batches = self
@@ -294,7 +294,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     fn build_dependencies(
         systems: Vec<Vec<BoxedSystem<T>>>,
-        world: &mut World,
+        world: &World,
     ) -> Vec<Vec<BoxedSystem<T>>> {
         let accesses = systems
             .iter()

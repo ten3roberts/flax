@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 use core::fmt::Formatter;
-use core::slice;
 use itertools::Itertools;
 
 use crate::archetype::{Archetype, CellGuard, Change, Slot};
 use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 use crate::system::{Access, AccessKind};
+use crate::util::Ptr;
 use crate::{
     archetype::{ChangeKind, ChangeList, Slice},
     Component, ComponentValue, Fetch, FetchItem,
@@ -50,7 +50,7 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedChangeFilter<'w, T
 
     #[inline]
     unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
-        chunk.as_slice().get_unchecked(slot)
+        chunk.add(slot).as_ref()
     }
 }
 
@@ -168,11 +168,17 @@ impl<'w, T> core::fmt::Debug for PreparedChangeFilter<'w, T> {
 
 impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T> {
     type Item = &'q T;
-    type Chunk = slice::Iter<'q, T>;
+    type Chunk = Ptr<'q, T>;
+
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+        Ptr::new(self.data.get()[slots.as_range()].as_ptr())
+    }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        chunk.next().unwrap()
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+        let old = chunk.as_ptr();
+        chunk.advance(1);
+        &*old
     }
 
     #[inline]
@@ -187,10 +193,6 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
 
         cur.intersect(&slots)
             .unwrap_or(Slice::new(slots.end, slots.end))
-    }
-
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
-        self.data.get()[slots.as_range()].iter()
     }
 }
 
@@ -283,7 +285,7 @@ impl<'q, 'w> ReadOnlyFetch<'q> for PreparedRemoveFilter<'w> {
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
 
     #[inline]
-    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {}
+    unsafe fn fetch_shared_chunk(_: &Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
@@ -301,9 +303,11 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
             .unwrap_or(Slice::new(slots.end, slots.end))
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 #[cfg(test)]

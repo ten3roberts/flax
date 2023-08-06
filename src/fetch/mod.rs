@@ -18,11 +18,12 @@ use crate::{
     archetype::{Archetype, Slice, Slot},
     filter::RefFetch,
     system::Access,
+    util::Ptr,
     ArchetypeId, ArchetypeSearcher, Entity, World,
 };
 use alloc::vec::Vec;
+use core::fmt::Debug;
 use core::fmt::{self, Formatter};
-use core::{fmt::Debug, slice};
 
 pub use as_deref::*;
 pub use cloned::*;
@@ -131,8 +132,14 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 pub trait PreparedFetch<'q> {
     /// Item returned by fetch
     type Item: 'q;
+    /// A chunk accessing a disjoint set of the borrow sequentially
     type Chunk: 'q;
 
+    /// Creates a chunk to access a slice of the borrow
+    ///
+    /// # Safety
+    ///
+    /// `slots` must be disjoint to all other currently existing chunks
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk;
 
     /// Fetch the item from entity at the slot in the prepared storage.
@@ -141,7 +148,8 @@ pub trait PreparedFetch<'q> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item;
+    /// Repeated calls must use increasing adjacent values for `slot`
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item;
 
     #[inline]
     /// Filter the slots to visit
@@ -174,8 +182,8 @@ where
         (*self).create_chunk(slots)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        F::fetch_next(chunk)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_next(chunk, slot)
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -230,7 +238,7 @@ impl<'q> PreparedFetch<'q> for () {
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 // impl<'q, F> PreparedFetch<'q> for Option<F>
@@ -296,14 +304,16 @@ impl<'w> Fetch<'w> for EntityIds {
 impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
     type Item = Entity;
 
-    type Chunk = slice::Iter<'q, Entity>;
+    type Chunk = Ptr<'q, Entity>;
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
-        self.entities[slots.as_range()].iter()
+        Ptr::new(self.entities[slots.as_range()].as_ptr())
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        *chunk.next().unwrap()
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+        let old = chunk.as_ptr();
+        *chunk = chunk.add(1);
+        *old
     }
 }
 
@@ -312,8 +322,9 @@ impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
     unsafe fn fetch_shared(&self, slot: usize) -> Self::Item {
         self.entities[slot]
     }
+
     unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
-        chunk.as_slice()[slot]
+        *chunk.add(slot).as_ref()
     }
 }
 
@@ -355,9 +366,9 @@ macro_rules! tuple_impl {
             type Chunk = ($($ty::Chunk,)*);
 
             #[inline]
-            unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+            unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
                 ($(
-                    $ty::fetch_next(&mut chunk.$idx),
+                    $ty::fetch_next(&mut chunk.$idx, slot),
                 )*)
             }
 

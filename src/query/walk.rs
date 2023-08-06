@@ -242,7 +242,8 @@ where
 
         let p = &mut borrow.prepared[index];
 
-        p.create_chunk(Slice::single(self.slot))?.next()
+        // Safety: &mut borrow
+        unsafe { p.create_chunk(Slice::single(self.slot))? }.next()
     }
 
     /// Traverse the immediate children of the current node.

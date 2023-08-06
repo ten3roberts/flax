@@ -152,8 +152,8 @@ where
         self.fetch.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        Q::fetch_next(chunk)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        Q::fetch_next(chunk, slot)
     }
 }
 
@@ -550,7 +550,7 @@ impl<'q> PreparedFetch<'q> for BatchSize {
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for BatchSize {

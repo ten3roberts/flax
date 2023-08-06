@@ -1,13 +1,11 @@
 use alloc::vec::Vec;
 
-use core::{
-    fmt::{self, Formatter},
-    slice,
-};
+use core::fmt::{self, Formatter};
 
 use crate::{
-    archetype::{Archetype, CellMutGuard, Slice},
+    archetype::{Archetype, CellMutGuard, Slice, Slot},
     system::{Access, AccessKind},
+    util::PtrMut,
     Component, ComponentValue, Fetch, FetchItem,
 };
 
@@ -87,22 +85,21 @@ pub struct WriteComponent<'a, T> {
 
 impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T> {
     type Item = &'q mut T;
-    type Chunk = slice::IterMut<'q, T>;
+    type Chunk = PtrMut<'q, T>;
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.guard
             .set_modified(&self.arch.entities[slots.as_range()], slots, self.tick);
 
         // Convert directly into a non-overlapping subslice without reading the whole slice
-        let ptr = (self.guard.storage().as_ptr() as *mut T).add(slots.start);
-
-        let slice = slice::from_raw_parts_mut(ptr, slots.len());
-        slice.iter_mut()
+        PtrMut::new((self.guard.storage().as_ptr() as *mut T).add(slots.start))
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        // TODO: raw stepping slice access
-        chunk.next().unwrap()
+    // See: <https://godbolt.org/z/8fWa136b9>
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+        let old = chunk.as_ptr();
+        chunk.advance(1);
+        &mut *old
     }
 }

@@ -1,8 +1,6 @@
-use core::slice;
-
 use atomic_refcell::AtomicRef;
 
-use crate::{archetype::Slot, system::AccessKind, Component, ComponentValue};
+use crate::{archetype::Slot, system::AccessKind, util::Ptr, Component, ComponentValue};
 
 use super::{read_only::ReadOnlyFetch, *};
 
@@ -14,16 +12,19 @@ pub struct ReadComponent<'a, T> {
 impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     type Item = &'q T;
 
-    type Chunk = slice::Iter<'q, T>;
+    type Chunk = Ptr<'q, T>;
 
     #[inline]
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
-        self.borrow[slots.as_range()].iter()
+        Ptr::new(self.borrow[slots.as_range()].as_ptr())
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        chunk.next().unwrap()
+    // See: <https://godbolt.org/z/8fWa136b9>
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+        let old = chunk.as_ptr();
+        chunk.advance(1);
+        &*old
     }
 }
 
@@ -35,7 +36,7 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for ReadComponent<'w, T> {
 
     #[inline]
     unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
-        &chunk.as_slice()[slot]
+        chunk.add(slot).as_ref()
     }
 }
 

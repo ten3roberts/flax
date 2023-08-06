@@ -213,8 +213,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        Q::fetch_next(chunk)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        Q::fetch_next(chunk, slot)
     }
 }
 

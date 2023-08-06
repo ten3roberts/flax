@@ -83,8 +83,8 @@ where
         self.0.as_mut().map(|v| v.create_chunk(slots))
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        chunk.as_mut().map(|v| F::fetch_next(v))
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        chunk.as_mut().map(|v| F::fetch_next(v, slot))
     }
 }
 
@@ -163,9 +163,9 @@ where
         }
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
         match chunk {
-            Either::Left(v) => F::fetch_next(v),
+            Either::Left(v) => F::fetch_next(v, slot),
             Either::Right(v) => v,
         }
     }

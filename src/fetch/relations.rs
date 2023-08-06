@@ -77,7 +77,6 @@ pub struct PreparedRelations<'a, T> {
 
 pub struct Batch<'a, T> {
     borrows: &'a [(Entity, CellGuard<'a, [T]>)],
-    slot: Slot,
 }
 
 impl<'w, 'q, T> PreparedFetch<'q> for PreparedRelations<'w, T>
@@ -88,17 +87,13 @@ where
 
     type Chunk = Batch<'q, T>;
 
-    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
+    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             borrows: &self.borrows,
-            slot: slots.start,
         }
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        let slot = chunk.slot;
-        chunk.slot += 1;
-
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
         RelationsIter {
             borrows: chunk.borrows.iter(),
             slot,

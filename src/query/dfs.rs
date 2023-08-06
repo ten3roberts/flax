@@ -222,10 +222,10 @@ where
         let prepared = (&mut self.prepared[..]) as *mut [_] as *mut PreparedArchetype<_, _>;
         let arch_index = *dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
 
-        // Fetch will never change and all calls are disjoint
+        // Fetch will never change and all calls are disjoint as the graph is acyclic
         let p = unsafe { &mut *prepared.add(arch_index) };
 
-        if let Some(mut chunk) = p.create_chunk(Slice::single(loc.slot)) {
+        if let Some(mut chunk) = unsafe { p.create_chunk(Slice::single(loc.slot)) } {
             Self::traverse_batch(
                 self.query_state.world,
                 dfs,

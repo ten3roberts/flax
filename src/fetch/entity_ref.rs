@@ -59,33 +59,30 @@ pub struct PreparedEntityRef<'a> {
     arch: &'a Archetype,
 }
 
+#[doc(hidden)]
 pub struct Batch<'a> {
     pub(crate) world: &'a World,
     pub(crate) arch: &'a Archetype,
-    pub(crate) slot: Slot,
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
     type Chunk = Batch<'q>;
 
-    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
+    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             world: self.world,
             arch: self.arch,
-            slot: slots.start,
         }
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        let slot = chunk.slot;
-
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
         EntityRef {
             arch: chunk.arch,
             world: chunk.world,
             slot,
-            id: chunk.arch.entities[slot],
+            id: *chunk.arch.entities.get_unchecked(slot),
         }
     }
 }

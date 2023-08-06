@@ -1,5 +1,5 @@
 use super::{FetchAccessData, FmtQuery, PreparedFetch, ReadOnlyFetch};
-use crate::{query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
+use crate::{archetype::Slot, query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
 use alloc::vec::Vec;
 use core::{fmt, ops::Deref};
 
@@ -67,8 +67,9 @@ where
         self.0.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        F::fetch_next(chunk)
+    #[inline]
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_next(chunk, slot)
     }
 }
 

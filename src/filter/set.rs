@@ -1,6 +1,6 @@
 use crate::{
-    archetype::{Archetype, Slice},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, Opt, PreparedFetch, UnionFilter},
+    archetype::{Archetype, Slice, Slot},
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, UnionFilter},
     system::Access,
     Fetch, FetchItem,
 };
@@ -85,8 +85,11 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        (L::fetch_next(&mut chunk.0), R::fetch_next(&mut chunk.1))
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        (
+            L::fetch_next(&mut chunk.0, slot),
+            R::fetch_next(&mut chunk.1, slot),
+        )
     }
 }
 
@@ -148,9 +151,11 @@ where
 
     type Chunk = ();
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 impl<R, T> ops::BitOr<R> for Not<T> {
@@ -252,8 +257,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        T::fetch_next(chunk)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        T::fetch_next(chunk, slot)
     }
 }
 
@@ -315,7 +320,7 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
+            unsafe fn fetch_next(_: &mut Self::Chunk, _:Slot) -> Self::Item {}
 
             #[inline]
             unsafe fn create_chunk(&mut self, _: Slice) -> Self::Chunk {}

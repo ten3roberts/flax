@@ -307,9 +307,9 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             type Chunk = (#(<<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::Chunk,)*);
 
             #[inline]
-            unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+            unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: #crate_name::archetype::Slot) -> Self::Item {
                 Self::Item {
-                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::fetch_next(&mut chunk.#field_idx),)*
+                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::fetch_next(&mut chunk.#field_idx, slot),)*
                 }
             }
 

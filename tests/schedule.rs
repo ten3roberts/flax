@@ -71,7 +71,7 @@ fn schedule_granularity() {
         .with_system(ce_system())
         .build();
 
-    let batches = schedule.batch_info(&mut world);
+    let batches = schedule.batch_info(&world);
 
     assert_eq!(batches.len(), 1);
 
@@ -83,7 +83,7 @@ fn schedule_granularity() {
     batch.set(e(), repeat(0.0)).unwrap();
     batch.spawn(&mut world);
 
-    let batches = schedule.batch_info(&mut world);
+    let batches = schedule.batch_info(&world);
     let names = batches.to_names();
 
     assert_eq!(batches.len(), 2, "{names:#?}");

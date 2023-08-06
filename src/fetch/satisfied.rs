@@ -1,6 +1,9 @@
 use alloc::vec::Vec;
 
-use crate::{archetype::Slice, Fetch, FetchItem};
+use crate::{
+    archetype::{Slice, Slot},
+    Fetch, FetchItem,
+};
 
 use super::{FmtQuery, PreparedFetch};
 
@@ -52,7 +55,7 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
         }
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
         *chunk
     }
 

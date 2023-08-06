@@ -251,8 +251,8 @@ impl Cell {
     // }
 
     #[inline]
-    pub fn get_mut<'a, T: ComponentValue>(
-        &'a self,
+    pub fn get_mut<T: ComponentValue>(
+        &self,
         id: Entity,
         slot: Slot,
         tick: u32,
