@@ -6,12 +6,9 @@ use core::{
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
-use crate::{
-    events::{EventData, EventKind},
-    ComponentValue, Entity,
-};
+use crate::{ComponentValue, Entity};
 
-use super::{CellData, Change, Changes, Slice, Slot};
+use super::{CellData, Changes, Slice, Slot};
 
 /// Type safe abstraction over a borrowed cell data
 pub(crate) struct CellMutGuard<'a, T: ?Sized> {

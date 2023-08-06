@@ -9,7 +9,7 @@ pub trait PeekableFetch<'p> {
     /// # Safety
     /// A peek of the same slot should not alias with a reference returned by
     /// [`PreparedFetch::fetch`].
-    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek;
+    unsafe fn peek(&'q self, slot: Slot) -> Self::Peek;
 }
 
 impl<'p, F> PeekableFetch<'p> for Option<F>
@@ -18,7 +18,7 @@ where
 {
     type Peek = Option<F::Peek>;
 
-    unsafe fn peek(&'p self, slot: Slot) -> Self::Peek {
+    unsafe fn peek(&'q self, slot: Slot) -> Self::Peek {
         self.as_ref().map(|fetch| fetch.peek(slot))
     }
 }

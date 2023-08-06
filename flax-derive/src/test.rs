@@ -21,7 +21,7 @@ fn derive_fetch_struct() {
         }
 
         #[automatically_derived]
-        impl<'q> flax_renamed::fetch::FetchItem<'q> for Foo {
+        impl<'w, 'q> flax_renamed::fetch::FetchItem<'q> for Foo {
             type Item = FooItem<'q>;
         }
 

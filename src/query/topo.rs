@@ -270,7 +270,10 @@ mod test {
                     .set(name(), i.to_string())
                     .spawn(&mut world)
             })
-            .collect_vec() else {unreachable!()};
+            .collect_vec()
+        else {
+            unreachable!()
+        };
 
         // Intentionally scrambled order as alphabetical order causes the input to already be
         // sorted.
@@ -342,7 +345,10 @@ mod test {
                     .tag(tree())
                     .spawn(&mut world)
             })
-            .collect_vec() else {unreachable!()};
+            .collect_vec()
+        else {
+            unreachable!()
+        };
 
         //   d ----*     a
         //   |     |

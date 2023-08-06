@@ -45,7 +45,7 @@ impl<'q> PreparedFetch<'q> for Nothing {
         Slice::new(slots.end, slots.end)
     }
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
 
     #[inline]
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
@@ -84,7 +84,7 @@ impl<'q> PreparedFetch<'q> for All {
 
     type Batch = ();
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
 
     #[inline]
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
@@ -125,12 +125,12 @@ impl<'q> PreparedFetch<'q> for Slice {
             .unwrap_or(Slice::new(slots.end, slots.end))
     }
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
 
-impl<'q> FetchItem<'q> for bool {
+impl<'w, 'q> FetchItem<'q> for bool {
     type Item = bool;
 }
 
@@ -162,7 +162,7 @@ impl<'q> PreparedFetch<'q> for bool {
 
     type Batch = bool;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
         *self
     }
 

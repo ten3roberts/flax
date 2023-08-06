@@ -1,9 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{
-    archetype::{Slice, Slot},
-    Fetch, FetchItem,
-};
+use crate::{archetype::Slice, Fetch, FetchItem};
 
 use super::{FmtQuery, PreparedFetch};
 
@@ -45,7 +42,7 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
     type Item = bool;
     type Batch = bool;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
         let res = self.0.filter_slots(slots);
         if res.is_empty() {
             false

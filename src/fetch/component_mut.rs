@@ -6,7 +6,7 @@ use core::{
 };
 
 use crate::{
-    archetype::{Archetype, CellMutGuard, Slice, Slot},
+    archetype::{Archetype, CellMutGuard, Slice},
     system::{Access, AccessKind},
     Component, ComponentValue, Fetch, FetchItem,
 };
@@ -85,11 +85,11 @@ pub struct WriteComponent<'a, T> {
     tick: u32,
 }
 
-impl<'q, 'w, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T> {
+impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T> {
     type Item = &'q mut T;
     type Batch = slice::IterMut<'q, T>;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
         eprintln!(
             "Modified {:?} {}",
             &self.arch.entities[slots.as_range()],

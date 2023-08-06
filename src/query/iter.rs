@@ -1,22 +1,20 @@
-use core::ptr::NonNull;
-
 use crate::{
     archetype::{Archetype, Slice, Slot},
     fetch::PreparedFetch,
-    filter::{FilterIter, Filtered},
-    Entity, Fetch,
+    filter::{next_slice, Filtered},
+    Entity,
 };
 
 /// Iterates over a chunk of entities, specified by a predicate.
 /// In essence, this is the unflattened version of [crate::QueryIter].
-pub struct Batch<'q, Q: PreparedFetch<'q>> {
+pub struct Chunk<'q, Q: PreparedFetch<'q>> {
     arch: &'q Archetype,
     fetch: Q::Batch,
     pos: Slot,
     end: Slot,
 }
 
-impl<'q, Q: PreparedFetch<'q>> core::fmt::Debug for Batch<'q, Q> {
+impl<'q, Q: PreparedFetch<'q>> core::fmt::Debug for Chunk<'q, Q> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Batch")
             .field("pos", &self.pos)
@@ -25,7 +23,7 @@ impl<'q, Q: PreparedFetch<'q>> core::fmt::Debug for Batch<'q, Q> {
     }
 }
 
-impl<'q, Q: PreparedFetch<'q>> Batch<'q, Q> {
+impl<'q, Q: PreparedFetch<'q>> Chunk<'q, Q> {
     pub(crate) fn new(arch: &'q Archetype, batch: Q::Batch, slice: Slice) -> Self {
         Self {
             arch,
@@ -57,7 +55,7 @@ impl<'q, Q: PreparedFetch<'q>> Batch<'q, Q> {
     }
 }
 
-impl<'q, Q> Iterator for Batch<'q, Q>
+impl<'q, Q> Iterator for Chunk<'q, Q>
 where
     Q: PreparedFetch<'q>,
 {
@@ -75,7 +73,7 @@ where
     }
 }
 
-impl<'q, Q> Batch<'q, Q>
+impl<'q, Q> Chunk<'q, Q>
 where
     Q: PreparedFetch<'q>,
 {
@@ -111,7 +109,6 @@ pub struct ArchetypeChunks<'q, Q, F> {
     pub(crate) arch: &'q Archetype,
     pub(crate) fetch: *mut Filtered<Q, F>,
     pub(crate) slots: Slice,
-    pub(crate) _marker: core::marker::PhantomData<&'q mut ()>,
 }
 
 unsafe impl<'q, Q: 'q, F: 'q> Sync for ArchetypeChunks<'q, Q, F> where &'q mut Filtered<Q, F>: Sync {}
@@ -148,12 +145,13 @@ where
         None
     }
 }
+
 impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
 where
     Q: 'q + PreparedFetch<'q>,
     F: 'q + PreparedFetch<'q>,
 {
-    type Item = Batch<'q, Q>;
+    type Item = Chunk<'q, Q>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -161,11 +159,11 @@ where
         let fetch = unsafe { &mut *self.fetch };
 
         // Get the next chunk
-        let slots = Self::next_slice(&mut self.slots, fetch)?;
+        let slots = next_slice(&mut self.slots, fetch)?;
 
         // Disjoing chunk
-        let batch = unsafe { fetch.create_batch(slots) };
-        let batch = Batch::new(self.arch, batch, slots);
+        let batch = unsafe { fetch.create_chunk(slots) };
+        let batch = Chunk::new(self.arch, batch, slots);
 
         Some(batch)
     }

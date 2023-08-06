@@ -88,7 +88,6 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         vis,
         fetch_name,
         item_name,
-        batch_name,
         prepared_name,
         q_generics,
         wq_generics,
@@ -187,7 +186,6 @@ fn derive_union(params: &Params) -> TokenStream {
         crate_name,
         field_names,
         prepared_name,
-        q_lf,
         ..
     } = params;
 
@@ -197,7 +195,7 @@ fn derive_union(params: &Params) -> TokenStream {
 
     quote! {
         #[automatically_derived]
-        impl #impl_generics #crate_name::fetch::UnionFilter<#q_lf> for #prepared_name #prep_ty where #prepared_name #prep_ty: #crate_name::fetch::PreparedFetch<'q> {
+        impl #impl_generics #crate_name::fetch::UnionFilter for #prepared_name #prep_ty where #prepared_name #prep_ty: #crate_name::fetch::PreparedFetch<'q> {
             unsafe fn filter_union(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
                 #crate_name::fetch::PreparedFetch::filter_slots(&mut #crate_name::filter::Union((#(&mut self.#field_names,)*)), slots)
             }
@@ -281,14 +279,10 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
         vis,
         fetch_name,
         item_name,
-        batch_name,
         prepared_name,
         field_names,
         field_types,
         w_generics,
-        wq_generics,
-        w_lf,
-        q_lf,
         ..
     } = params;
 
@@ -297,22 +291,21 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
     let prep_impl = params.wq_impl();
     let prep_ty = params.w_ty();
     let item_ty = params.q_ty();
-    let batch_ty = params.wq_ty();
 
     let field_idx = (0..field_names.len()).map(Index::from).collect_vec();
 
     quote! {
         #[doc = #msg]
         #vis struct #prepared_name #w_generics {
-            #(#field_names: <#field_types as #crate_name::Fetch <#w_lf>>::Prepared,)*
+            #(#field_names: <#field_types as #crate_name::Fetch <'w>>::Prepared,)*
         }
 
         #[automatically_derived]
-        impl #prep_impl #crate_name::fetch::PreparedFetch<#q_lf> for #prepared_name #prep_ty
+        impl #prep_impl #crate_name::fetch::PreparedFetch<'q> for #prepared_name #prep_ty
             where #(#field_types: 'static,)*
         {
             type Item = #item_name #item_ty;
-            type Batch = (#(<<#field_types as #crate_name::fetch::Fetch<#w_lf>>::Prepared as #crate_name::fetch::PreparedFetch<#q_lf>>::Batch,)*);
+            type Batch = (#(<<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::Batch,)*);
 
             #[inline]
             unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
@@ -327,9 +320,9 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             }
 
             #[inline]
-            unsafe fn create_batch(&'q mut self, slots: #crate_name::archetype::Slice) -> Self::Batch {
+            unsafe fn create_chunk(&'q mut self, slots: #crate_name::archetype::Slice) -> Self::Batch {
                 (
-                    #(#crate_name::fetch::PreparedFetch::create_batch(&mut self.#field_names, slots),)*
+                    #(#crate_name::fetch::PreparedFetch::create_chunk(&mut self.#field_names, slots),)*
                 )
             }
         }
@@ -402,7 +395,6 @@ struct Params<'a> {
 
     fetch_name: Ident,
     item_name: Ident,
-    batch_name: Ident,
     prepared_name: Ident,
 
     generics: &'a Generics,
@@ -455,7 +447,6 @@ impl<'a> Params<'a> {
             field_types,
             attrs,
             item_name: format_ident!("{fetch_name}Item"),
-            batch_name: format_ident!("{fetch_name}Batch"),
             prepared_name: format_ident!("Prepared{fetch_name}"),
             fetch_name,
             w_generics: prepend_generics(&[GenericParam::Lifetime(w_lf.clone())], &input.generics),

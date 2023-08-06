@@ -285,7 +285,7 @@ where
         (old_tick, new_tick)
     }
 
-    /// Borrow the world for the query.
+    /// Borrow data in the world for the query.
     ///
     /// The returned value holds the borrows of the query fetch. As such, all
     /// references from iteration or using [QueryBorrow::get`] will have a

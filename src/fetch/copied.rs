@@ -74,8 +74,8 @@ where
     type Item = V;
     type Batch = F::Batch;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-        self.0.create_batch(slots)
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+        self.0.create_chunk(slots)
     }
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
@@ -87,13 +87,13 @@ where
     }
 }
 
-impl<'p, F, V> ReadOnlyFetch<'p> for Copied<F>
+impl<'q, F, V> ReadOnlyFetch<'q> for Copied<F>
 where
-    F: ReadOnlyFetch<'p>,
+    F: ReadOnlyFetch<'q>,
     F::Item: Deref<Target = V>,
     V: 'static + Copy,
 {
-    unsafe fn fetch_shared(&'p self, slot: crate::archetype::Slot) -> Self::Item {
+    unsafe fn fetch_shared(&'q self, slot: crate::archetype::Slot) -> Self::Item {
         *self.0.fetch_shared(slot)
     }
 }

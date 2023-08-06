@@ -242,7 +242,7 @@ where
 
         let p = &mut borrow.prepared[index];
 
-        p.create_batch(Slice::single(self.slot))?.next()
+        p.create_chunk(Slice::single(self.slot))?.next()
     }
 
     /// Traverse the immediate children of the current node.

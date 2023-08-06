@@ -148,8 +148,8 @@ where
 
     type Batch = Q::Batch;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-        self.fetch.create_batch(slots)
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+        self.fetch.create_chunk(slots)
     }
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
@@ -197,31 +197,37 @@ where
     type Item = Slice;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.slots.is_empty() {
-            return None;
-        }
-
-        while !self.slots.is_empty() {
-            // Safety
-            // The yielded slots are split off of `self.slots`
-            let cur = unsafe { self.fetch.filter_slots(self.slots) };
-
-            let (_l, m, r) = self
-                .slots
-                .split_with(&cur)
-                .expect("Return value of filter must be a subset of `slots");
-
-            assert_eq!(cur, m);
-
-            self.slots = r;
-
-            if !m.is_empty() {
-                return Some(m);
-            }
-        }
-
-        None
+        next_slice(&mut self.slots, &mut self.fetch)
     }
+}
+
+pub(crate) fn next_slice<'a, Q: PreparedFetch<'a>>(
+    slots: &mut Slice,
+    fetch: &mut Q,
+) -> Option<Slice> {
+    if slots.is_empty() {
+        return None;
+    }
+
+    while !slots.is_empty() {
+        // Safety
+        // The yielded slots are split off of `self.slots`
+        let cur = unsafe { fetch.filter_slots(*slots) };
+
+        let (_l, m, r) = slots
+            .split_with(&cur)
+            .expect("Return value of filter must be a subset of `slots");
+
+        assert_eq!(cur, m);
+
+        *slots = r;
+
+        if !m.is_empty() {
+            return Some(m);
+        }
+    }
+
+    None
 }
 
 impl<'q, F: PreparedFetch<'q>> FusedIterator for FilterIter<F> {}
@@ -269,7 +275,7 @@ pub struct Without {
     pub(crate) name: &'static str,
 }
 
-impl<'q> FetchItem<'q> for Without {
+impl<'w, 'q> FetchItem<'q> for Without {
     type Item = ();
 }
 
@@ -540,7 +546,7 @@ impl<'q> PreparedFetch<'q> for BatchSize {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))
     }
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }

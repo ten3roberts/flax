@@ -73,8 +73,8 @@ where
     type Item = V;
     type Batch = F::Batch;
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-        self.0.create_batch(slots)
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+        self.0.create_chunk(slots)
     }
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {

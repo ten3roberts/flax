@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 use atomic_refcell::AtomicRef;
-use core::{marker::PhantomData, ops::Range};
+use core::marker::PhantomData;
 
 use crate::{
     archetype::{Cell, RefMut, Slot},
@@ -98,7 +98,7 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     type Item = MutGuard<'q, T>;
     type Batch = Batch<'q>;
 
-    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
         Batch {
             cell: self.cell,
             new_tick: self.new_tick,

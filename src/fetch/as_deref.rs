@@ -63,8 +63,8 @@ where
         self.0.filter_slots(slots)
     }
 
-    unsafe fn create_batch(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
-        self.0.create_batch(slots)
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+        self.0.create_chunk(slots)
     }
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {

@@ -50,11 +50,11 @@ where
 #[doc(hidden)]
 pub struct PreparedOpt<F>(pub(crate) Option<F>);
 
-impl<'p, F> ReadOnlyFetch<'p> for PreparedOpt<F>
+impl<'q, F> ReadOnlyFetch<'q> for PreparedOpt<F>
 where
-    F: ReadOnlyFetch<'p>,
+    F: ReadOnlyFetch<'q>,
 {
-    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.0.as_ref().map(|fetch| fetch.fetch_shared(slot))
     }
 }
@@ -75,8 +75,8 @@ where
         }
     }
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-        self.0.as_mut().map(|v| v.create_batch(slots))
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+        self.0.as_mut().map(|v| v.create_chunk(slots))
     }
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
@@ -135,7 +135,7 @@ impl<'q, F: FetchItem<'q, Item = &'q V>, V: 'static> FetchItem<'q> for OptOr<F, 
     type Item = &'q V;
 }
 
-impl<'q, 'w, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>
+impl<'w, 'q, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>
 where
     F: PreparedFetch<'q, Item = &'q V>,
     V: 'q,
@@ -152,9 +152,9 @@ where
         }
     }
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
         match self.fetch {
-            Some(ref mut v) => Either::Left(v.create_batch(slots)),
+            Some(ref mut v) => Either::Left(v.create_chunk(slots)),
             None => Either::Right(self.value),
         }
     }

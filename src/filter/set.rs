@@ -80,8 +80,8 @@ where
 
     type Batch = (L::Batch, R::Batch);
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-        (self.0.create_batch(slots), self.1.create_batch(slots))
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+        (self.0.create_chunk(slots), self.1.create_chunk(slots))
     }
 
     #[inline]
@@ -148,7 +148,7 @@ where
 
     type Batch = ();
 
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
 
     unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 }
@@ -201,7 +201,7 @@ where
 impl<'w, T> Fetch<'w> for Union<T>
 where
     T: Fetch<'w>,
-    T::Prepared: for<'q> UnionFilter<'q>,
+    T::Prepared: UnionFilter,
 {
     const MUTABLE: bool = T::MUTABLE;
 
@@ -224,9 +224,9 @@ where
     }
 }
 
-impl<'q, T> UnionFilter<'q> for Union<T>
+impl<T> UnionFilter for Union<T>
 where
-    T: UnionFilter<'q>,
+    T: UnionFilter,
 {
     unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
         self.0.filter_union(slots)
@@ -235,7 +235,7 @@ where
 
 impl<'q, T> PreparedFetch<'q> for Union<T>
 where
-    T: PreparedFetch<'q> + UnionFilter<'q>,
+    T: PreparedFetch<'q> + UnionFilter,
 {
     type Item = T::Item;
 
@@ -247,8 +247,8 @@ where
     type Batch = T::Batch;
 
     #[inline]
-    unsafe fn create_batch(&'q mut self, slots: Slice) -> Self::Batch {
-        self.0.create_batch(slots)
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+        self.0.create_chunk(slots)
     }
 
     #[inline]
@@ -260,7 +260,7 @@ where
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         // Or
-        impl<'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
+        impl<'w, 'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
             type Item = ();
         }
 
@@ -295,8 +295,8 @@ macro_rules! tuple_impl {
         }
 
 
-        impl<'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
-        where $($ty: PreparedFetch<'q>,)*
+        impl<'w, 'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
+        where 'w: 'q, $($ty: PreparedFetch<'q>,)*
         {
             type Item = ();
             type Batch = ();
@@ -316,12 +316,11 @@ macro_rules! tuple_impl {
             #[inline]
             unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
 
-            unsafe fn create_batch(&mut self, slots: Slice) -> Self::Batch {}
+            unsafe fn create_chunk(&mut self, slots: Slice) -> Self::Batch {}
 
         }
 
-
-        impl<'q, $($ty, )*> UnionFilter<'q> for Or<($(Option<$ty>,)*)>
+        impl<'q, $($ty, )*> UnionFilter for Or<($(Option<$ty>,)*)>
         where $($ty: PreparedFetch<'q>,)*
         {
             unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
