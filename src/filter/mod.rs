@@ -152,8 +152,8 @@ where
         self.fetch.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        Q::fetch_next(batch)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        Q::fetch_next(chunk)
     }
 }
 

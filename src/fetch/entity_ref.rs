@@ -78,14 +78,14 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        let slot = batch.slot;
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        let slot = chunk.slot;
 
         EntityRef {
-            arch: batch.arch,
-            world: batch.world,
+            arch: chunk.arch,
+            world: chunk.world,
             slot,
-            id: batch.arch.entities[slot],
+            id: chunk.arch.entities[slot],
         }
     }
 }

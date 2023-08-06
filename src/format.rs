@@ -31,7 +31,7 @@ where
             for slot in batch.slots().iter() {
                 assert!(
                     slot < arch.len(),
-                    "batch is larger than archetype, batch: {:?}, arch: {:?}",
+                    "batch is larger than archetype, chunk: {:?}, arch: {:?}",
                     batch.slots(),
                     arch.entities()
                 );

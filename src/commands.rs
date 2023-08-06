@@ -149,15 +149,15 @@ impl CommandBuffer {
     }
 
     /// Spawn a new batch with the given components of the builder
-    pub fn spawn_batch(&mut self, batch: impl Into<BatchSpawn>) -> &mut Self {
-        self.commands.push(Command::SpawnBatch(batch.into()));
+    pub fn spawn_batch(&mut self, chunk: impl Into<BatchSpawn>) -> &mut Self {
+        self.commands.push(Command::SpawnBatch(chunk.into()));
 
         self
     }
 
     /// Spawn a new batch with the given components of the builder
-    pub fn spawn_batch_at(&mut self, ids: Vec<Entity>, batch: impl Into<BatchSpawn>) -> &mut Self {
-        self.commands.push(Command::SpawnBatchAt(batch.into(), ids));
+    pub fn spawn_batch_at(&mut self, ids: Vec<Entity>, chunk: impl Into<BatchSpawn>) -> &mut Self {
+        self.commands.push(Command::SpawnBatchAt(chunk.into(), ids));
 
         self
     }

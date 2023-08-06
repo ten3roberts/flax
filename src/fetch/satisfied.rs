@@ -53,8 +53,8 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        *batch
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        *chunk
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {

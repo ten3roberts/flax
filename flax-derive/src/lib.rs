@@ -90,7 +90,6 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         item_name,
         prepared_name,
         q_generics,
-        wq_generics,
         field_names,
         field_types,
         w_lf,
@@ -308,9 +307,9 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             type Chunk = (#(<<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::Chunk,)*);
 
             #[inline]
-            unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
+            unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
                 Self::Item {
-                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::fetch_next(&mut batch.#field_idx),)*
+                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::fetch_next(&mut chunk.#field_idx),)*
                 }
             }
 
@@ -483,10 +482,6 @@ impl<'a> Params<'a> {
 
     fn q_ty(&self) -> TypeGenerics {
         self.q_generics.split_for_impl().1
-    }
-
-    fn wq_ty(&self) -> TypeGenerics {
-        self.wq_generics.split_for_impl().1
     }
 
     fn w_ty(&self) -> TypeGenerics {

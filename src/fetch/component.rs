@@ -22,8 +22,8 @@ impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        batch.next().unwrap()
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        chunk.next().unwrap()
     }
 }
 
@@ -34,8 +34,8 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for ReadComponent<'w, T> {
     }
 
     #[inline]
-    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
-        &batch.as_slice()[slot]
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        &chunk.as_slice()[slot]
     }
 }
 

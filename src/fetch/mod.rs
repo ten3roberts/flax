@@ -141,7 +141,7 @@ pub trait PreparedFetch<'q> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item;
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item;
 
     #[inline]
     /// Filter the slots to visit
@@ -174,8 +174,8 @@ where
         (*self).create_chunk(slots)
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        F::fetch_next(batch)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        F::fetch_next(chunk)
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -253,7 +253,7 @@ impl<'q> PreparedFetch<'q> for () {
 //         }
 //     }
 
-//     unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
+//     unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
 //         batch.as_mut().map(|fetch| F::fetch_next(fetch))
 //     }
 // }
@@ -302,8 +302,8 @@ impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
         self.entities[slots.as_range()].iter()
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        *batch.next().unwrap()
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        *chunk.next().unwrap()
     }
 }
 
@@ -312,8 +312,8 @@ impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
     unsafe fn fetch_shared(&self, slot: usize) -> Self::Item {
         self.entities[slot]
     }
-    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
-        batch.as_slice()[slot]
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        chunk.as_slice()[slot]
     }
 }
 
@@ -355,9 +355,9 @@ macro_rules! tuple_impl {
             type Chunk = ($($ty::Chunk,)*);
 
             #[inline]
-            unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
+            unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
                 ($(
-                    $ty::fetch_next(&mut batch.$idx),
+                    $ty::fetch_next(&mut chunk.$idx),
                 )*)
             }
 

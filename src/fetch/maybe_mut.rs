@@ -107,14 +107,14 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        let slot = batch.slot;
-        batch.slot += 1;
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        let slot = chunk.slot;
+        chunk.slot += 1;
         MutGuard {
             slot,
-            cell: batch.cell,
-            new_tick: batch.new_tick,
-            id: batch.ids[slot],
+            cell: chunk.cell,
+            new_tick: chunk.new_tick,
+            id: chunk.ids[slot],
             _marker: PhantomData,
         }
     }
@@ -132,12 +132,12 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
         }
     }
 
-    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
         MutGuard {
             slot,
-            cell: batch.cell,
-            new_tick: batch.new_tick,
-            id: batch.ids[slot],
+            cell: chunk.cell,
+            new_tick: chunk.new_tick,
+            id: chunk.ids[slot],
             _marker: PhantomData,
         }
     }
