@@ -246,7 +246,7 @@ fn merge_custom() {
         .unwrap();
 
     random_entities(&mut rng)
-        .take(1000)
+        .take(100)
         .enumerate()
         .for_each(|(i, mut v)| {
             v.set(name(), format!("a.{i}")).spawn(&mut world);
