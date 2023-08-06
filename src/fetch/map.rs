@@ -66,7 +66,7 @@ where
     type Chunk = (&'q F, Q::Chunk);
 
     unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
-        todo!()
+        (self.func, self.query.create_chunk(slots))
     }
 
     unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {

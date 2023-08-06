@@ -1,6 +1,6 @@
 use crate::{
     archetype::{Archetype, Slice},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, UnionFilter},
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, Opt, PreparedFetch, UnionFilter},
     system::Access,
     Fetch, FetchItem,
 };
@@ -303,9 +303,10 @@ macro_rules! tuple_impl {
 
             unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
                 let inner = &mut self.0;
+                let end = Slice::new(slots.end, slots.end);
 
                 [
-                    $( inner.$idx.filter_slots(slots)),*
+                    $( inner.$idx.as_mut().map(|v| v.filter_slots(slots)).unwrap_or(end)),*
                 ]
                 .into_iter()
                 .min()
@@ -326,14 +327,14 @@ macro_rules! tuple_impl {
         {
             unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
                 let inner = &mut self.0;
+                let end = Slice::new(slots.end, slots.end);
 
                 [
-                    $( inner.$idx.filter_slots(slots)),*
+                    $( inner.$idx.as_mut().map(|v| v.filter_slots(slots)).unwrap_or(end)),*
                 ]
                 .into_iter()
                 .min()
                 .unwrap_or_default()
-
             }
         }
     };
