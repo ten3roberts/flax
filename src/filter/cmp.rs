@@ -169,6 +169,10 @@ where
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.fetch.fetch_shared(slot)
     }
+
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_shared_chunk(batch, slot)
+    }
 }
 
 impl<'w, 'q, Q, M> PreparedFetch<'q> for PreparedCmp<'w, Q, M>
@@ -202,14 +206,14 @@ where
         }
     }
 
-    type Batch = <Q as PreparedFetch<'q>>::Batch;
+    type Chunk = <Q as PreparedFetch<'q>>::Chunk;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.fetch.create_chunk(slots)
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         Q::fetch_next(batch)
     }
 }

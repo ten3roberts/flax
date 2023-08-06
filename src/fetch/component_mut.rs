@@ -87,9 +87,9 @@ pub struct WriteComponent<'a, T> {
 
 impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T> {
     type Item = &'q mut T;
-    type Batch = slice::IterMut<'q, T>;
+    type Chunk = slice::IterMut<'q, T>;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         eprintln!(
             "Modified {:?} {}",
             &self.arch.entities[slots.as_range()],
@@ -105,7 +105,8 @@ impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T>
         slice.iter_mut()
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    #[inline]
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         // TODO: raw stepping slice access
         batch.next().unwrap()
     }

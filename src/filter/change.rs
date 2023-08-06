@@ -47,6 +47,11 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedChangeFilter<'w, T
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         unsafe { self.data.get().get_unchecked(slot) }
     }
+
+    #[inline]
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
+        batch.as_slice().get_unchecked(slot)
+    }
 }
 
 impl<'w, T> Fetch<'w> for ChangeFilter<T>
@@ -163,10 +168,10 @@ impl<'w, T> core::fmt::Debug for PreparedChangeFilter<'w, T> {
 
 impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T> {
     type Item = &'q T;
-    type Batch = slice::Iter<'q, T>;
+    type Chunk = slice::Iter<'q, T>;
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         batch.next().unwrap()
     }
 
@@ -184,7 +189,7 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
             .unwrap_or(Slice::new(slots.end, slots.end))
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.data.get()[slots.as_range()].iter()
     }
 }
@@ -274,12 +279,16 @@ impl<'w> core::fmt::Debug for PreparedRemoveFilter<'w> {
 }
 
 impl<'q, 'w> ReadOnlyFetch<'q> for PreparedRemoveFilter<'w> {
+    #[inline]
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
+
+    #[inline]
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
     type Item = ();
-    type Batch = ();
+    type Chunk = ();
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -292,9 +301,9 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
             .unwrap_or(Slice::new(slots.end, slots.end))
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
 }
 
 #[cfg(test)]

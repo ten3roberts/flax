@@ -14,26 +14,28 @@ pub struct ReadComponent<'a, T> {
 impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     type Item = &'q T;
 
-    // #[inline(always)]
-    // unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-    //     // Safety: bounds guaranteed by callee
-    //     unsafe { self.borrow.get_unchecked(slot) }
-    // }
+    type Chunk = slice::Iter<'q, T>;
 
-    type Batch = slice::Iter<'q, T>;
-
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.borrow[slots.as_range()].iter()
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    #[inline]
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         batch.next().unwrap()
     }
 }
 
 impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for ReadComponent<'w, T> {
+    #[inline]
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.borrow.get_unchecked(slot)
+    }
+
+    #[inline]
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
+        &batch.as_slice()[slot]
     }
 }
 

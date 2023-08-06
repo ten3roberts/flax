@@ -57,17 +57,17 @@ where
 {
     type Item = &'q V::Target;
 
-    type Batch = F::Batch;
+    type Chunk = F::Chunk;
 
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.0.filter_slots(slots)
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
         self.0.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         F::fetch_next(batch)
     }
 }
@@ -79,5 +79,9 @@ where
 {
     unsafe fn fetch_shared(&'q self, slot: crate::archetype::Slot) -> Self::Item {
         self.0.fetch_shared(slot)
+    }
+
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: crate::archetype::Slot) -> Self::Item {
+        F::fetch_shared_chunk(batch, slot)
     }
 }

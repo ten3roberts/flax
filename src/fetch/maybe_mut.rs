@@ -96,9 +96,9 @@ pub struct Batch<'a> {
 
 impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     type Item = MutGuard<'q, T>;
-    type Batch = Batch<'q>;
+    type Chunk = Batch<'q>;
 
-    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             cell: self.cell,
             new_tick: self.new_tick,
@@ -107,7 +107,7 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         let slot = batch.slot;
         batch.slot += 1;
         MutGuard {
@@ -128,6 +128,16 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
             cell: self.cell,
             new_tick: self.new_tick,
             id: self.entities[slot],
+            _marker: PhantomData,
+        }
+    }
+
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
+        MutGuard {
+            slot,
+            cell: batch.cell,
+            new_tick: batch.new_tick,
+            id: batch.ids[slot],
             _marker: PhantomData,
         }
     }

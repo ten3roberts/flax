@@ -72,13 +72,13 @@ where
     V: 'static + Copy,
 {
     type Item = V;
-    type Batch = F::Batch;
+    type Chunk = F::Chunk;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.0.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         *F::fetch_next(batch)
     }
 
@@ -95,6 +95,10 @@ where
 {
     unsafe fn fetch_shared(&'q self, slot: crate::archetype::Slot) -> Self::Item {
         *self.0.fetch_shared(slot)
+    }
+
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: crate::archetype::Slot) -> Self::Item {
+        *F::fetch_shared_chunk(batch, slot)
     }
 }
 

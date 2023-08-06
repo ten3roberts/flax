@@ -57,6 +57,10 @@ where
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.0.as_ref().map(|fetch| fetch.fetch_shared(slot))
     }
+
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
+        batch.as_ref().map(|v| F::fetch_shared_chunk(v, slot))
+    }
 }
 
 impl<'q, F> PreparedFetch<'q> for PreparedOpt<F>
@@ -64,7 +68,7 @@ where
     F: PreparedFetch<'q>,
 {
     type Item = Option<F::Item>;
-    type Batch = Option<F::Batch>;
+    type Chunk = Option<F::Chunk>;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -75,11 +79,11 @@ where
         }
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.0.as_mut().map(|v| v.create_chunk(slots))
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         batch.as_mut().map(|v| F::fetch_next(v))
     }
 }
@@ -141,7 +145,7 @@ where
     V: 'q,
 {
     type Item = &'q V;
-    type Batch = Either<F::Batch, &'q V>;
+    type Chunk = Either<F::Chunk, &'q V>;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -152,14 +156,14 @@ where
         }
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         match self.fetch {
             Some(ref mut v) => Either::Left(v.create_chunk(slots)),
             None => Either::Right(self.value),
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         match batch {
             Either::Left(v) => F::fetch_next(v),
             Either::Right(v) => v,
