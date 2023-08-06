@@ -90,11 +90,6 @@ impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T>
     type Chunk = slice::IterMut<'q, T>;
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
-        eprintln!(
-            "Modified {:?} {}",
-            &self.arch.entities[slots.as_range()],
-            self.tick,
-        );
         self.guard
             .set_modified(&self.arch.entities[slots.as_range()], slots, self.tick);
 
