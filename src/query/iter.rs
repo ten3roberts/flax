@@ -66,7 +66,7 @@ where
             None
         } else {
             // let fetch = unsafe { &mut *(self.fetch as *mut Q::Batch) };
-            let item = unsafe { Q::fetch_next(&mut self.fetch) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch, self.pos) };
             self.pos += 1;
             Some(item)
         }
@@ -81,7 +81,7 @@ where
         if self.pos == self.end {
             None
         } else {
-            let item = unsafe { Q::fetch_next(&mut self.fetch) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch, self.pos) };
             let id = self.arch.entities[self.pos];
             self.pos += 1;
             Some((id, item))
@@ -93,7 +93,7 @@ where
             None
         } else {
             let slot = self.pos;
-            let item = unsafe { Q::fetch_next(&mut self.fetch) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch, slot) };
             let id = self.arch.entities[slot];
             self.pos += 1;
 
@@ -114,38 +114,6 @@ pub struct ArchetypeChunks<'q, Q, F> {
 unsafe impl<'q, Q: 'q, F: 'q> Sync for ArchetypeChunks<'q, Q, F> where &'q mut Filtered<Q, F>: Sync {}
 unsafe impl<'q, Q: 'q, F: 'q> Send for ArchetypeChunks<'q, Q, F> where &'q mut Filtered<Q, F>: Send {}
 
-impl<'q, Q, F> ArchetypeChunks<'q, Q, F>
-where
-    Q: PreparedFetch<'q>,
-    F: PreparedFetch<'q>,
-{
-    fn next_slice(slots: &mut Slice, fetch: &mut Filtered<Q, F>) -> Option<Slice> {
-        if slots.is_empty() {
-            return None;
-        }
-
-        while !slots.is_empty() {
-            // Safety
-            // The yielded slots are split off of `self.slots`
-            let cur = unsafe { fetch.filter_slots(*slots) };
-
-            let (_l, m, r) = slots
-                .split_with(&cur)
-                .expect("Return value of filter must be a subset of `slots");
-
-            assert_eq!(cur, m);
-
-            *slots = r;
-
-            if !m.is_empty() {
-                return Some(m);
-            }
-        }
-
-        None
-    }
-}
-
 impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
 where
     Q: 'q + PreparedFetch<'q>,
@@ -161,10 +129,10 @@ where
         // Get the next chunk
         let slots = next_slice(&mut self.slots, fetch)?;
 
-        // Disjoing chunk
-        let batch = unsafe { fetch.create_chunk(slots) };
-        let batch = Chunk::new(self.arch, batch, slots);
+        // Safety: Disjoint chunk
+        let chunk = unsafe { fetch.create_chunk(slots) };
+        let chunk = Chunk::new(self.arch, chunk, slots);
 
-        Some(batch)
+        Some(chunk)
     }
 }

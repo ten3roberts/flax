@@ -15,7 +15,7 @@ pub(crate) struct PreparedArchetype<'w, Q, F> {
 
 impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
     #[inline]
-    pub fn create_chunk<'q>(&'q mut self, slots: Slice) -> Option<Chunk<'q, Q>>
+    pub unsafe fn create_chunk<'q>(&'q mut self, slots: Slice) -> Option<Chunk<'q, Q>>
     where
         Q: PreparedFetch<'q>,
         F: PreparedFetch<'q>,
@@ -28,10 +28,10 @@ impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
         // Fetch will never change and all calls are disjoint
         let fetch = unsafe { &mut *(&mut self.fetch as *mut Filtered<Q, F>) };
 
-        let batch = unsafe { fetch.create_chunk(slots) };
+        let chunk = unsafe { fetch.create_chunk(slots) };
 
-        let batch = Chunk::new(self.arch, batch, slots);
-        Some(batch)
+        let chunk = Chunk::new(self.arch, chunk, slots);
+        Some(chunk)
     }
 
     #[inline]

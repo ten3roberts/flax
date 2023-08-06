@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
 
         while acc > 0.0 {
             acc -= dt;
-            let batches = physics_schedule.batch_info(&mut world);
+            let batches = physics_schedule.batch_info(&world);
             tracing::debug!(
                 "Batches: {:#?}",
                 batches

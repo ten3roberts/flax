@@ -115,8 +115,8 @@ where
             Ok((loc, p)) => {
                 // self is a mutable reference, so this is the only reference to the slot
                 unsafe {
-                    let mut batch = p.fetch.create_chunk(Slice::single(loc.slot));
-                    Ok(<Q::Prepared>::fetch_next(&mut batch))
+                    let mut chunk = p.fetch.create_chunk(Slice::single(loc.slot));
+                    Ok(<Q::Prepared>::fetch_next(&mut chunk, loc.slot))
                 }
             }
             Err(e) => Err(e.clone()),

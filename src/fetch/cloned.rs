@@ -77,8 +77,8 @@ where
         self.0.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        F::fetch_next(chunk).clone()
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_next(chunk, slot).clone()
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {

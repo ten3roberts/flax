@@ -287,9 +287,11 @@ where
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
         let p = &mut self.prepared[idx];
-        let mut chunk = p
-            .create_chunk(Slice::single(slot))
-            .ok_or(Error::Filtered(id))?;
+        // Safety: &mut self
+        let mut chunk = unsafe {
+            p.create_chunk(Slice::single(slot))
+                .ok_or(Error::Filtered(id))?
+        };
 
         let item = chunk.next().unwrap();
 

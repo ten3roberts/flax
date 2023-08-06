@@ -226,7 +226,7 @@ fn main() -> anyhow::Result<()> {
 
     for i in 0..20 {
         tracing::info!("Frame: {i}");
-        tracing::info!("Batches: {:#?}", schedule.batch_info(&mut world));
+        tracing::info!("Batches: {:#?}", schedule.batch_info(&world));
         schedule.execute_par(&mut world)?;
     }
 

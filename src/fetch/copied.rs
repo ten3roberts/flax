@@ -6,7 +6,7 @@ use core::{
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::{Archetype, Slice},
+    archetype::{Archetype, Slice, Slot},
     system::Access,
     Fetch, FetchItem,
 };
@@ -78,8 +78,8 @@ where
         self.0.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        *F::fetch_next(chunk)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        *F::fetch_next(chunk, slot)
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {

@@ -91,30 +91,26 @@ pub struct Batch<'a> {
     cell: &'a Cell,
     new_tick: u32,
     ids: &'a [Entity],
-    slot: Slot,
 }
 
 impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     type Item = MutGuard<'q, T>;
     type Chunk = Batch<'q>;
 
-    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
+    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             cell: self.cell,
             new_tick: self.new_tick,
             ids: self.entities,
-            slot: slots.start,
         }
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        let slot = chunk.slot;
-        chunk.slot += 1;
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
         MutGuard {
             slot,
             cell: chunk.cell,
             new_tick: chunk.new_tick,
-            id: chunk.ids[slot],
+            id: *chunk.ids.get_unchecked(slot),
             _marker: PhantomData,
         }
     }

@@ -1,5 +1,5 @@
 use crate::{
-    archetype::{Archetype, Slice},
+    archetype::{Archetype, Slice, Slot},
     fetch::{FetchAccessData, FetchPrepareData, PreparedFetch},
     system::Access,
     Fetch, FetchItem,
@@ -45,10 +45,11 @@ impl<'q> PreparedFetch<'q> for Nothing {
         Slice::new(slots.end, slots.end)
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 /// Yields all entities
@@ -84,10 +85,11 @@ impl<'q> PreparedFetch<'q> for All {
 
     type Chunk = ();
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for Slice {
@@ -125,12 +127,14 @@ impl<'q> PreparedFetch<'q> for Slice {
             .unwrap_or(Slice::new(slots.end, slots.end))
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
 }
 
-impl<'w, 'q> FetchItem<'q> for bool {
+impl<'q> FetchItem<'q> for bool {
     type Item = bool;
 }
 
@@ -162,12 +166,13 @@ impl<'q> PreparedFetch<'q> for bool {
 
     type Chunk = bool;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {
         *self
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
         *chunk
     }
 }

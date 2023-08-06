@@ -8,11 +8,7 @@ component! {
 #[test]
 #[cfg(feature = "flume")]
 fn entity_ref() {
-    use flax::{
-        entity_ids,
-        events::{Event, EventKind, EventSubscriber},
-        Query,
-    };
+    use flax::{entity_ids, Query};
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 

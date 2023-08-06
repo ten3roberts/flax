@@ -2,8 +2,8 @@ mod context;
 mod traits;
 
 use crate::{
-    archetype::ArchetypeInfo, fetch::PreparedFetch, filter::Filtered, query::QueryData,
-    util::TupleCombine, ArchetypeId, CommandBuffer, ComponentKey, Fetch, FetchItem, Query, World,
+    archetype::ArchetypeInfo, query::QueryData, util::TupleCombine, ArchetypeId, CommandBuffer,
+    ComponentKey, Fetch, FetchItem, Query, World,
 };
 use alloc::{
     boxed::Box,
@@ -77,8 +77,8 @@ impl<'a, Func, Q, F> SystemFn<'a, (QueryData<'a, Q, F>,), ()> for ParForEach<Fun
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
-    for<'x> <Filtered<Q, F> as Fetch<'x>>::Prepared: Send,
-    for<'x, 'y> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'y>>::Chunk: Send,
+    for<'x> <crate::filter::Filtered<Q, F> as Fetch<'x>>::Prepared: Send,
+    for<'x, 'y> <<Q as Fetch<'x>>::Prepared as crate::fetch::PreparedFetch<'y>>::Chunk: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
 {
     fn execute(&mut self, mut data: (QueryData<Q, F>,)) {
@@ -113,7 +113,7 @@ impl<Q, F, T> SystemBuilder<(Query<Q, F>,), T>
 where
     for<'x> Q: 'static + Fetch<'x> + Send,
     for<'x> F: 'static + Fetch<'x> + Send,
-    for<'x> <<Q as Fetch<'x>>::Prepared as PreparedFetch<'x>>::Chunk: Send,
+    for<'x> <<Q as Fetch<'x>>::Prepared as crate::fetch::PreparedFetch<'x>>::Chunk: Send,
     // for<'x, 'y> crate::query::Batch<'y, <Q as Fetch<'x>>::Prepared>: Send,
 {
     /// Execute a function for each item in the query in parallel batches

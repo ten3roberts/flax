@@ -155,7 +155,7 @@ impl<'a, T> Deref for RefMut<'a, T> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.guard.get()
+        self.guard.get()
     }
 }
 
