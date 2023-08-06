@@ -228,7 +228,7 @@ default is also returned by reference. For when there is an owned value, conside
 <p>This combinator is useful when writing systems which may need to operate on entities which lack some components, such as physics where the entity may not have a rotation.</p>
 <h2 id="change-detection"><a class="header" href="#change-detection">Change detection</a></h2>
 <p>Every time a component is modified, either through <a href="https://docs.rs/flax/latest/flax/struct.World#method.get_mut"><code>World::get_mut</code></a>, or a query, a <code>Modified</code> event is added to the affected entities.</p>
-<p>Similarly, <code>set</code> when the component did not previously exist, and new entities will create an <code>Inserted</code> event.</p>
+<p>Similarly, <code>set</code> when the component did not previously exist, and new entities will create an <code>Added</code> event.</p>
 <p><code>Removal</code> events are created by
 <a href="https://docs.rs/flax/latest/flax/struct.World#method.remove"><code>World::remove</code></a>.</p>
 <p>The following example makes use of optional combinators and change detection to

@@ -491,7 +491,7 @@ sequence.</p>
 
     for i in 0..20 {
         tracing::info!(&quot;Frame: {i}&quot;);
-        tracing::info!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;mut world));
+        tracing::info!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;world));
         schedule.execute_par(&amp;mut world)?;
     }
 
@@ -1049,19 +1049,17 @@ enabled.</p>
 <span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="change-detection"><a class="header" href="#change-detection">Change Detection</a></h1>
 <p>Flax tracks when a component is added, mutably accessed, or removed.</p>
-<p>Queries allow filtering on change events since the query last run.</p>
+<p>A query allows filtering the entities based on a change event since it last ran.</p>
 <ul>
-<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.modified"><code>modified</code></a> filter mutated or new components</li>
-<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.modified"><code>inserted</code></a> only new components</li>
-<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.modified"><code>removed</code></a> filter recently removed components.</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.modified"><code>modified</code></a> filter mutated or new components</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.added"><code>added</code></a> only new components</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.removed"><code>removed</code></a> filter recently removed components.</li>
 </ul>
 <p>The modified filter is best used for queries which calculate or update a value
 based on one or more components, or in other ways react to a changed value.</p>
+<p>A change filter can be added to a single component, or to a tuple of components. Applying a <code>.modified()</code> transform on a tuple will create a query which yields if <em>any</em> of the constituents were modified.</p>
 <p>The following example creates a system which prints the updated health values
 for each entity.</p>
-<p><strong>Note</strong>: Tuple queries combine using <code>and</code>, which means a query with multiple <code>modified</code> or other change filtered components will only yield if <strong>all</strong> the annotated components changed since the last query ran.</p>
-<p>Prefer using <code>.filter(Or(a().modified, b().modified()))</code> when dealing with multiple
-change filters, or splitting up the query.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
@@ -1078,8 +1076,7 @@ change filters, or splitting up the query.</p>
 
 <span class="boring">}</span></code></pre></pre>
 <h1 id="combining-filters"><a class="header" href="#combining-filters">Combining filters</a></h1>
-<p>Change filters can be combined with other filters, which leads to queries which
-do even less work than that particular group member.</p>
+<p>Change filters can be combined with other filters, which leads to queries needing to perform even even less work.</p>
 <p>The following example creates a query which removes despawns entities when their
 health becomes <code>0</code>. Noteworthy in particular, is that this system can run in
 parallel with the previously discussed system, since they do not overlap in
@@ -1087,18 +1084,19 @@ mutable access.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
-</span>    let query = Query::new((entity_ids(), player().satisfied())).filter(health().le(0.0));
+</span>    let query = Query::new((name().opt(), entity_ids(), player().satisfied()))
+        .filter(health().le(0.0).modified());
 
     let cleanup = System::builder()
         .with_name(&quot;cleanup&quot;)
         .with(query)
         .write::&lt;CommandBuffer&gt;()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
-            for (id, is_player) in &amp;mut q {
+            for (name, id, is_player) in &amp;mut q {
                 if is_player {
                     tracing::info!(&quot;Player died&quot;);
                 }
-                tracing::info!(is_player, &quot;Despawning {id}&quot;);
+                tracing::info!(name, is_player, &quot;Despawning {id}&quot;);
                 cmd.despawn(id);
             }
         });
@@ -1164,6 +1162,7 @@ is not a requirement for change detection.</p>
         .with_system(damage_random)
         .with_system(update_poison)
         .with_system(health_changes)
+        .flush()
         .with_system(cleanup)
         .flush();
 
@@ -1171,6 +1170,7 @@ is not a requirement for change detection.</p>
         schedule
             .execute_par(&amp;mut world)
             .expect(&quot;Failed to run schedule&quot;);
+
         sleep(Duration::from_millis(1000));
     }
 
@@ -1389,7 +1389,7 @@ default is also returned by reference. For when there is an owned value, conside
 <p>This combinator is useful when writing systems which may need to operate on entities which lack some components, such as physics where the entity may not have a rotation.</p>
 <h2 id="change-detection-1"><a class="header" href="#change-detection-1">Change detection</a></h2>
 <p>Every time a component is modified, either through <a href="https://docs.rs/flax/latest/flax/struct.World#method.get_mut"><code>World::get_mut</code></a>, or a query, a <code>Modified</code> event is added to the affected entities.</p>
-<p>Similarly, <code>set</code> when the component did not previously exist, and new entities will create an <code>Inserted</code> event.</p>
+<p>Similarly, <code>set</code> when the component did not previously exist, and new entities will create an <code>Added</code> event.</p>
 <p><code>Removal</code> events are created by
 <a href="https://docs.rs/flax/latest/flax/struct.World#method.remove"><code>World::remove</code></a>.</p>
 <p>The following example makes use of optional combinators and change detection to
@@ -1494,9 +1494,9 @@ spawned in the <code>STATIC</code> global namespace which is shared across all w
 
     let mut world = World::new();
 
-    let position: Component&lt;Vec2&gt; = world.spawn_component(&quot;position&quot;, |info| {
+    let position: Component&lt;Vec2&gt; = world.spawn_component(&quot;position&quot;, |desc| {
         let mut buf = ComponentBuffer::new();
-        &lt;Debug as MetaData&lt;Vec2&gt;&gt;::attach(info, &amp;mut buf);
+        &lt;Debug as MetaData&lt;Vec2&gt;&gt;::attach(desc, &amp;mut buf);
         buf
     });
 
@@ -1541,9 +1541,9 @@ entity as the generation is not needed.</p>
         distance: f32,
     }
 
-    let child_of = world.spawn_relation::&lt;RelationData&gt;(&quot;child_of&quot;, |info| {
+    let child_of = world.spawn_relation::&lt;RelationData&gt;(&quot;child_of&quot;, |desc| {
         let mut buf = ComponentBuffer::new();
-        &lt;Debug as MetaData&lt;RelationData&gt;&gt;::attach(info, &amp;mut buf);
+        &lt;Debug as MetaData&lt;RelationData&gt;&gt;::attach(desc, &amp;mut buf);
         buf
     });
 

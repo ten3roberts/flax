@@ -179,9 +179,9 @@ spawned in the <code>STATIC</code> global namespace which is shared across all w
 
     let mut world = World::new();
 
-    let position: Component&lt;Vec2&gt; = world.spawn_component(&quot;position&quot;, |info| {
+    let position: Component&lt;Vec2&gt; = world.spawn_component(&quot;position&quot;, |desc| {
         let mut buf = ComponentBuffer::new();
-        &lt;Debug as MetaData&lt;Vec2&gt;&gt;::attach(info, &amp;mut buf);
+        &lt;Debug as MetaData&lt;Vec2&gt;&gt;::attach(desc, &amp;mut buf);
         buf
     });
 
@@ -226,9 +226,9 @@ entity as the generation is not needed.</p>
         distance: f32,
     }
 
-    let child_of = world.spawn_relation::&lt;RelationData&gt;(&quot;child_of&quot;, |info| {
+    let child_of = world.spawn_relation::&lt;RelationData&gt;(&quot;child_of&quot;, |desc| {
         let mut buf = ComponentBuffer::new();
-        &lt;Debug as MetaData&lt;RelationData&gt;&gt;::attach(info, &amp;mut buf);
+        &lt;Debug as MetaData&lt;RelationData&gt;&gt;::attach(desc, &amp;mut buf);
         buf
     });
 

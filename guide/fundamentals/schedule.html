@@ -267,7 +267,7 @@ sequence.</p>
 
     for i in 0..20 {
         tracing::info!(&quot;Frame: {i}&quot;);
-        tracing::info!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;mut world));
+        tracing::info!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;world));
         schedule.execute_par(&amp;mut world)?;
     }
 
