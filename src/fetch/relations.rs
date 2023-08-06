@@ -95,12 +95,12 @@ where
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        let slot = batch.slot;
-        batch.slot += 1;
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        let slot = chunk.slot;
+        chunk.slot += 1;
 
         RelationsIter {
-            borrows: batch.borrows.iter(),
+            borrows: chunk.borrows.iter(),
             slot,
         }
     }

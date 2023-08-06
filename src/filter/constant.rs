@@ -48,7 +48,7 @@ impl<'q> PreparedFetch<'q> for Nothing {
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
 }
 
 /// Yields all entities
@@ -87,7 +87,7 @@ impl<'q> PreparedFetch<'q> for All {
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for Slice {
@@ -127,7 +127,7 @@ impl<'q> PreparedFetch<'q> for Slice {
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<'w, 'q> FetchItem<'q> for bool {
@@ -167,7 +167,7 @@ impl<'q> PreparedFetch<'q> for bool {
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        *batch
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        *chunk
     }
 }

@@ -134,21 +134,21 @@ impl World {
     }
 
     /// Efficiently spawn many entities with the same components at once.
-    pub fn spawn_batch(&mut self, batch: &mut BatchSpawn) -> Vec<Entity> {
+    pub fn spawn_batch(&mut self, chunk: &mut BatchSpawn) -> Vec<Entity> {
         self.flush_reserved();
 
-        for component in batch.components() {
+        for component in chunk.components() {
             self.init_component(component);
         }
 
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, arch) = self.archetypes.find_create(batch.components());
+        let (arch_id, arch) = self.archetypes.find_create(chunk.components());
 
         let base = arch.len();
         let store = self.entities.init(EntityKind::empty());
 
-        let ids = (0..batch.len())
+        let ids = (0..chunk.len())
             .map(|idx| {
                 store.spawn(EntityLocation {
                     slot: base + idx,
@@ -159,7 +159,7 @@ impl World {
 
         let _ = arch.allocate_n(&ids);
 
-        for (_, mut storage) in batch.take_all() {
+        for (_, mut storage) in chunk.take_all() {
             unsafe {
                 arch.extend(&mut storage, change_tick)
                     .expect("Component not in archetype");
@@ -824,25 +824,25 @@ impl World {
     pub fn spawn_batch_at<'a>(
         &mut self,
         ids: &'a [Entity],
-        batch: &mut BatchSpawn,
+        chunk: &mut BatchSpawn,
     ) -> Result<&'a [Entity]> {
-        for component in batch.components() {
+        for component in chunk.components() {
             self.init_component(component);
         }
 
-        self.spawn_batch_at_inner(ids, batch)
+        self.spawn_batch_at_inner(ids, chunk)
     }
 
     /// Does not initialize components
     fn spawn_batch_at_inner<'a>(
         &mut self,
         ids: &'a [Entity],
-        batch: &mut BatchSpawn,
+        chunk: &mut BatchSpawn,
     ) -> Result<&'a [Entity]> {
         self.flush_reserved();
         assert_eq!(
             ids.len(),
-            batch.len(),
+            chunk.len(),
             "The length of ids must match the number of slots in `batch`"
         );
 
@@ -856,7 +856,7 @@ impl World {
 
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, arch) = self.archetypes.find_create(batch.components());
+        let (arch_id, arch) = self.archetypes.find_create(chunk.components());
 
         let base = arch.len();
         for (idx, &id) in ids.iter().enumerate() {
@@ -880,7 +880,7 @@ impl World {
 
         let arch = self.archetypes.get_mut(arch_id);
 
-        for (_, mut storage) in batch.take_all() {
+        for (_, mut storage) in chunk.take_all() {
             unsafe {
                 arch.extend(&mut storage, change_tick)
                     .expect("Component not in archetype");

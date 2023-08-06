@@ -170,8 +170,8 @@ where
         self.fetch.fetch_shared(slot)
     }
 
-    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
-        F::fetch_shared_chunk(batch, slot)
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_shared_chunk(chunk, slot)
     }
 }
 
@@ -213,8 +213,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        Q::fetch_next(batch)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        Q::fetch_next(chunk)
     }
 }
 

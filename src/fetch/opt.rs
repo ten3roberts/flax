@@ -58,8 +58,8 @@ where
         self.0.as_ref().map(|fetch| fetch.fetch_shared(slot))
     }
 
-    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
-        batch.as_ref().map(|v| F::fetch_shared_chunk(v, slot))
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        chunk.as_ref().map(|v| F::fetch_shared_chunk(v, slot))
     }
 }
 
@@ -83,8 +83,8 @@ where
         self.0.as_mut().map(|v| v.create_chunk(slots))
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        batch.as_mut().map(|v| F::fetch_next(v))
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        chunk.as_mut().map(|v| F::fetch_next(v))
     }
 }
 
@@ -163,8 +163,8 @@ where
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        match batch {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        match chunk {
             Either::Left(v) => F::fetch_next(v),
             Either::Right(v) => v,
         }

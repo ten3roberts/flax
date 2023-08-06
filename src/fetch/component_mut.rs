@@ -106,8 +106,8 @@ impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T>
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         // TODO: raw stepping slice access
-        batch.next().unwrap()
+        chunk.next().unwrap()
     }
 }

@@ -171,8 +171,8 @@ where
         self.fetch.create_chunk(Slice::single(self.slot))
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        Q::fetch_shared_chunk(batch, 0)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        Q::fetch_shared_chunk(chunk, 0)
     }
 }
 

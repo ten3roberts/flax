@@ -85,8 +85,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        (L::fetch_next(&mut batch.0), R::fetch_next(&mut batch.1))
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        (L::fetch_next(&mut chunk.0), R::fetch_next(&mut chunk.1))
     }
 }
 
@@ -150,7 +150,7 @@ where
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<R, T> ops::BitOr<R> for Not<T> {
@@ -252,8 +252,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        T::fetch_next(batch)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        T::fetch_next(chunk)
     }
 }
 

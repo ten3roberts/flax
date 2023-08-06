@@ -49,8 +49,8 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedChangeFilter<'w, T
     }
 
     #[inline]
-    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
-        batch.as_slice().get_unchecked(slot)
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        chunk.as_slice().get_unchecked(slot)
     }
 }
 
@@ -171,8 +171,8 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
     type Chunk = slice::Iter<'q, T>;
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        batch.next().unwrap()
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        chunk.next().unwrap()
     }
 
     #[inline]
@@ -283,7 +283,7 @@ impl<'q, 'w> ReadOnlyFetch<'q> for PreparedRemoveFilter<'w> {
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
 
     #[inline]
-    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {}
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {}
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
@@ -303,7 +303,7 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {}
 }
 
 #[cfg(test)]

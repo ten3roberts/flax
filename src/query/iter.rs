@@ -24,10 +24,10 @@ impl<'q, Q: PreparedFetch<'q>> core::fmt::Debug for Chunk<'q, Q> {
 }
 
 impl<'q, Q: PreparedFetch<'q>> Chunk<'q, Q> {
-    pub(crate) fn new(arch: &'q Archetype, batch: Q::Chunk, slice: Slice) -> Self {
+    pub(crate) fn new(arch: &'q Archetype, chunk: Q::Chunk, slice: Slice) -> Self {
         Self {
             arch,
-            fetch: batch,
+            fetch: chunk,
             pos: slice.start,
             end: slice.end,
         }
