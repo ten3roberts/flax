@@ -43,11 +43,13 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
     type Chunk = bool;
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
-        let res = self.0.filter_slots(slots);
-        if res.is_empty() {
-            false
-        } else {
-            true
+        match &mut self.0 {
+            Some(f) => {
+                let res = f.filter_slots(slots);
+                eprintln!("satisfied create_chunk {res:?}");
+                !res.is_empty()
+            }
+            None => false,
         }
     }
 
@@ -56,12 +58,21 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        let res = self.0.filter_slots(slots);
+        match &mut self.0 {
+            Some(f) => {
+                let res = f.filter_slots(slots);
+                eprintln!("satisfied filter_slots {slots:?} => {res:?}");
 
-        if res.is_empty() {
-            Slice::new(slots.start, (slots.start + 1).min(slots.end))
-        } else {
-            res
+                // Something was missed
+                if res.start != slots.start {
+                    // Catch the negative slice
+                    eprintln!("neg");
+                    Slice::new(slots.start, res.start)
+                } else {
+                    res
+                }
+            }
+            None => slots,
         }
     }
 }
@@ -153,7 +164,7 @@ mod test {
 
         *world.get_mut(ids[1], a()).unwrap() = 5;
 
-        assert_eq!(
+        ::std::assert_eq!(
             query.collect_vec(&world),
             [
                 ("a".into(), false),

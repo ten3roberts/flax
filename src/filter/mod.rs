@@ -738,13 +738,15 @@ mod tests {
         let world = World::new();
         let chunks = FilterIter::new(
             slots,
-            filter.prepare(FetchPrepareData {
-                world: &world,
-                arch: &archetype,
-                arch_id: ArchetypeId::MAX,
-                old_tick: 0,
-                new_tick: 1,
-            }),
+            filter
+                .prepare(FetchPrepareData {
+                    world: &world,
+                    arch: &archetype,
+                    arch_id: ArchetypeId::MAX,
+                    old_tick: 0,
+                    new_tick: 1,
+                })
+                .unwrap(),
         )
         .flatten()
         .collect_vec();

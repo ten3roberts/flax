@@ -215,8 +215,10 @@ impl<'w> Fetch<'w> for () {
 }
 
 impl<'q> ReadOnlyFetch<'q> for () {
+    #[inline]
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
-    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch_shared_chunk(_: &Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 impl<'q> PreparedFetch<'q> for () {
@@ -224,43 +226,37 @@ impl<'q> PreparedFetch<'q> for () {
 
     type Chunk = ();
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
-
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
-}
-
-impl<'q, F> PreparedFetch<'q> for Option<F>
-where
-    F: PreparedFetch<'q>,
-{
-    type Item = Option<F::Item>;
-    type Chunk = Option<F::Chunk>;
-
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
-        if let Some(fetch) = self {
-            Some(fetch.create_chunk(slots))
-        } else {
-            None
-        }
-    }
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        if let Some(fetch) = self {
-            fetch.filter_slots(slots)
-        } else {
-            Slice::new(slots.end, slots.end)
-        }
-    }
-
-    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
-        if let Some(fetch) = batch {
-            Some(F::fetch_next(fetch))
-        } else {
-            None
-        }
-    }
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
+
+// impl<'q, F> PreparedFetch<'q> for Option<F>
+// where
+//     F: PreparedFetch<'q>,
+// {
+//     type Item = Option<F::Item>;
+//     type Chunk = Option<F::Chunk>;
+
+//     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+//         self.as_mut().map(|fetch| fetch.create_chunk(slots))
+//     }
+
+//     #[inline]
+//     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+//         if let Some(fetch) = self {
+//             fetch.filter_slots(slots)
+//         } else {
+//             Slice::new(slots.end, slots.end)
+//         }
+//     }
+
+//     unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
+//         batch.as_mut().map(|fetch| F::fetch_next(fetch))
+//     }
+// }
 
 #[derive(Debug, Clone)]
 /// Returns the entity ids
