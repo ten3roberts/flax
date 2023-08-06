@@ -86,11 +86,7 @@ impl<T> Copy for Relation<T> {}
 
 impl<T> Clone for Relation<T> {
     fn clone(&self) -> Self {
-        Self {
-            id: self.id,
-            vtable: self.vtable,
-            marker: PhantomData,
-        }
+        *self
     }
 }
 
@@ -243,10 +239,10 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let (&key, cell) = self.cells.next()?;
-        // Safety: the type matches the relation ext
-        Some((key.object().unwrap(), unsafe {
-            cell.get_mut::<T>(self.entities, self.slot, self.change_tick)
-                .unwrap()
-        }))
+        Some((
+            key.object().unwrap(),
+            cell.get_mut::<T>(self.entities[self.slot], self.slot, self.change_tick)
+                .unwrap(),
+        ))
     }
 }

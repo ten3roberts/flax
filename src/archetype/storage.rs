@@ -4,7 +4,7 @@ use alloc::{
     alloc::alloc, alloc::dealloc, alloc::handle_alloc_error, alloc::realloc, alloc::Layout,
 };
 
-use crate::{ComponentInfo, ComponentKey, ComponentValue};
+use crate::{ComponentDesc, ComponentKey, ComponentValue};
 
 use super::Slot;
 
@@ -15,38 +15,38 @@ pub struct Storage {
     /// The number of items
     len: usize,
     cap: usize,
-    info: ComponentInfo,
+    desc: ComponentDesc,
 }
 
 impl core::fmt::Debug for Storage {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Storage")
             .field("len", &self.len)
-            .field("info", &self.info)
+            .field("desc", &self.desc)
             .finish()
     }
 }
 
 impl Storage {
     /// Allocates space for storage of `len` components.
-    pub fn new(info: ComponentInfo) -> Self {
-        Self::with_capacity(info, 0)
+    pub fn new(desc: ComponentDesc) -> Self {
+        Self::with_capacity(desc, 0)
     }
 
-    pub fn with_capacity(info: ComponentInfo, cap: usize) -> Self {
+    pub fn with_capacity(desc: ComponentDesc, cap: usize) -> Self {
         if cap == 0 {
-            let data = (info.vtable.dangling)();
+            let data = (desc.vtable.dangling)();
 
-            assert_eq!(data.as_ptr() as usize % info.layout().align(), 0);
+            assert_eq!(data.as_ptr() as usize % desc.layout().align(), 0);
             return Self {
                 data,
                 cap: 0,
                 len: 0,
-                info,
+                desc,
             };
         }
 
-        let layout = Layout::from_size_align(info.size() * cap, info.align()).unwrap();
+        let layout = Layout::from_size_align(desc.size() * cap, desc.align()).unwrap();
 
         unsafe {
             let data = alloc(layout);
@@ -54,12 +54,12 @@ impl Storage {
                 Some(v) => v,
                 None => handle_alloc_error(layout),
             };
-            assert_eq!(data.as_ptr() as usize % info.layout().align(), 0);
+            assert_eq!(data.as_ptr() as usize % desc.layout().align(), 0);
             Self {
                 data,
                 cap,
                 len: 0,
-                info,
+                desc,
             }
         }
     }
@@ -77,13 +77,13 @@ impl Storage {
         // tracing::debug!(
         //     "Reserving size: {old_cap}[{}] + {additional} => {new_cap} for: {:?}",
         //     self.len(),
-        //     self.info().name()
+        //     self.desc().name()
         // );
 
         let old_layout =
-            Layout::from_size_align(self.info.size() * old_cap, self.info.align()).unwrap();
+            Layout::from_size_align(self.desc.size() * old_cap, self.desc.align()).unwrap();
         let new_layout =
-            Layout::from_size_align(self.info.size() * new_cap, self.info.align()).unwrap();
+            Layout::from_size_align(self.desc.size() * new_cap, self.desc.align()).unwrap();
 
         // Handle zst
         if new_layout.size() == 0 {
@@ -118,13 +118,13 @@ impl Storage {
         unsafe {
             let ptr = self.as_ptr();
 
-            let dst = ptr.add(slot * self.info.size());
+            let dst = ptr.add(slot * self.desc.size());
 
             on_move(dst);
 
-            let src = ptr.add((self.len - 1) * self.info.size());
+            let src = ptr.add((self.len - 1) * self.desc.size());
 
-            core::ptr::copy(src, dst, self.info.size())
+            core::ptr::copy(src, dst, self.desc.size())
         }
         self.len -= 1;
     }
@@ -139,7 +139,7 @@ impl Storage {
         if slot >= self.len {
             None
         } else {
-            Some(self.data.as_ptr().add(self.info.size() * slot))
+            Some(self.data.as_ptr().add(self.desc.size() * slot))
         }
     }
 
@@ -149,8 +149,8 @@ impl Storage {
 
         core::ptr::copy_nonoverlapping(
             src,
-            self.as_ptr().add(self.len * self.info.size()),
-            len * self.info.size(),
+            self.as_ptr().add(self.len * self.desc.size()),
+            len * self.desc.size(),
         );
 
         self.len += len
@@ -162,8 +162,8 @@ impl Storage {
     /// Other must be of the same type as self
     pub(crate) unsafe fn append(&mut self, other: &mut Self) {
         assert_eq!(
-            self.info.type_id(),
-            other.info.type_id(),
+            self.desc.type_id(),
+            other.desc.type_id(),
             "Mismatched types"
         );
 
@@ -178,8 +178,8 @@ impl Storage {
 
         core::ptr::copy_nonoverlapping(
             other.as_ptr(),
-            self.as_ptr().add(self.len * self.info.size()),
-            other.len * self.info.size(),
+            self.as_ptr().add(self.len * self.desc.size()),
+            other.len * self.desc.size(),
         );
 
         self.len += other.len;
@@ -188,7 +188,7 @@ impl Storage {
 
     #[inline(always)]
     pub fn downcast_mut<T: ComponentValue>(&mut self) -> &mut [T] {
-        if !self.info.is::<T>() {
+        if !self.desc.is::<T>() {
             panic!("Mismatched types");
         }
 
@@ -197,20 +197,11 @@ impl Storage {
 
     #[inline(always)]
     pub fn downcast_ref<T: ComponentValue>(&self) -> &[T] {
-        if !self.info.is::<T>() {
+        if !self.desc.is::<T>() {
             panic!("Mismatched types");
         }
 
         unsafe { core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len) }
-    }
-
-    // #[inline(always)]
-    /// # Safety
-    /// The types must match
-    pub unsafe fn borrow<T: ComponentValue>(&self) -> &[T] {
-        debug_assert!(self.info.is::<T>(), "Mismatched types");
-
-        core::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), self.len)
     }
 
     pub fn clear(&mut self) {
@@ -218,7 +209,7 @@ impl Storage {
         for slot in 0..self.len {
             unsafe {
                 let value = self.at_mut(slot).unwrap();
-                self.info.drop(value);
+                self.desc.drop(value);
             }
         }
 
@@ -252,15 +243,16 @@ impl Storage {
     /// This is safe as the underlying vtable is not changed, as long as the id
     /// points to a component of the same kind.
     pub(crate) unsafe fn set_id(&mut self, id: ComponentKey) {
-        self.info.key = id
+        self.desc.key = id
     }
 
     pub(crate) fn capacity(&self) -> usize {
         self.cap
     }
 
-    pub(crate) fn info(&self) -> ComponentInfo {
-        self.info
+    #[inline]
+    pub(crate) fn desc(&self) -> ComponentDesc {
+        self.desc
     }
 }
 
@@ -269,13 +261,13 @@ impl Drop for Storage {
         self.clear();
 
         // ZST
-        if self.cap == 0 || self.info.size() == 0 {
+        if self.cap == 0 || self.desc.size() == 0 {
             return;
         }
 
         let ptr = self.as_ptr();
         let layout =
-            Layout::from_size_align(self.info.size() * self.cap, self.info.align()).unwrap();
+            Layout::from_size_align(self.desc.size() * self.cap, self.desc.align()).unwrap();
 
         unsafe {
             dealloc(ptr, layout);
@@ -302,30 +294,30 @@ mod test {
 
     #[test]
     fn push() {
-        let mut storage = Storage::new(a().info());
+        let mut storage = Storage::new(a().desc());
         unsafe {
             storage.push(5);
             storage.push(7);
 
-            assert_eq!(storage.borrow::<i32>(), [5, 7]);
+            assert_eq!(storage.downcast_ref::<i32>(), [5, 7]);
             storage.swap_remove(0, |v| ptr::drop_in_place(v.cast::<i32>()));
 
-            assert_eq!(storage.borrow::<i32>(), [7]);
+            assert_eq!(storage.downcast_ref::<i32>(), [7]);
 
-            let mut other = Storage::new(a().info());
+            let mut other = Storage::new(a().desc());
             other.push(8);
             other.push(9);
             other.push(10);
 
             storage.append(&mut other);
-            assert_eq!(storage.borrow::<i32>(), [7, 8, 9, 10]);
+            assert_eq!(storage.downcast_ref::<i32>(), [7, 8, 9, 10]);
         }
     }
 
     #[test]
     fn drop() {
         let v = Arc::new("This is shared".to_string());
-        let mut storage = Storage::new(b().info());
+        let mut storage = Storage::new(b().desc());
         unsafe {
             storage.push(v.clone());
             storage.push(v.clone());

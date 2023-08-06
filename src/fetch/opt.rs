@@ -1,16 +1,17 @@
 use core::fmt::{self, Formatter};
 
 use alloc::vec::Vec;
+use itertools::Either;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
     fetch::FetchPrepareData,
     fetch::PreparedFetch,
     system::Access,
-    ComponentValue, Fetch,
+    Fetch,
 };
 
-use super::{FetchAccessData, FetchItem, ReadOnlyFetch};
+use super::{FetchAccessData, FetchItem, ReadOnlyFetch, TransformFetch};
 
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
@@ -49,12 +50,16 @@ where
 #[doc(hidden)]
 pub struct PreparedOpt<F>(pub(crate) Option<F>);
 
-impl<'p, F> ReadOnlyFetch<'p> for PreparedOpt<F>
+impl<'q, F> ReadOnlyFetch<'q> for PreparedOpt<F>
 where
-    F: ReadOnlyFetch<'p>,
+    F: ReadOnlyFetch<'q>,
 {
-    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.0.as_ref().map(|fetch| fetch.fetch_shared(slot))
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        chunk.as_ref().map(|v| F::fetch_shared_chunk(v, slot))
     }
 }
 
@@ -63,11 +68,7 @@ where
     F: PreparedFetch<'q>,
 {
     type Item = Option<F::Item>;
-
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.0.as_mut().map(|fetch| fetch.fetch(slot))
-    }
+    type Chunk = Option<F::Chunk>;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -78,11 +79,12 @@ where
         }
     }
 
-    #[inline]
-    fn set_visited(&mut self, slots: Slice) {
-        if let Some(fetch) = &mut self.0 {
-            fetch.set_visited(slots)
-        }
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+        self.0.as_mut().map(|v| v.create_chunk(slots))
+    }
+
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        chunk.as_mut().map(|v| F::fetch_next(v, slot))
     }
 }
 
@@ -90,20 +92,22 @@ where
 #[derive(Debug, Clone)]
 pub struct OptOr<F, V> {
     fetch: F,
-    or: V,
+    value: V,
 }
 
 impl<F, V> OptOr<F, V> {
     pub(crate) fn new(inner: F, or: V) -> Self {
-        Self { fetch: inner, or }
+        Self {
+            fetch: inner,
+            value: or,
+        }
     }
 }
 
 impl<'w, F, V> Fetch<'w> for OptOr<F, V>
 where
     F: Fetch<'w> + for<'q> FetchItem<'q, Item = &'q V>,
-    for<'q> F::Prepared: PreparedFetch<'q, Item = &'q V>,
-    V: ComponentValue,
+    V: 'static,
 {
     const MUTABLE: bool = F::MUTABLE;
 
@@ -112,7 +116,7 @@ where
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         Some(OptOr {
             fetch: self.fetch.prepare(data),
-            or: &self.or,
+            value: &self.value,
         })
     }
 
@@ -131,23 +135,17 @@ where
     }
 }
 
-impl<'q, F: FetchItem<'q, Item = &'q V>, V: ComponentValue> FetchItem<'q> for OptOr<F, V> {
+impl<'q, F: FetchItem<'q, Item = &'q V>, V: 'static> FetchItem<'q> for OptOr<F, V> {
     type Item = &'q V;
 }
 
-impl<'q, 'w, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>
+impl<'w, 'q, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>
 where
     F: PreparedFetch<'q, Item = &'q V>,
-    V: 'static,
+    V: 'q,
 {
     type Item = &'q V;
-
-    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
-        match self.fetch {
-            Some(ref mut v) => v.fetch(slot),
-            None => self.or,
-        }
-    }
+    type Chunk = Either<F::Chunk, &'q V>;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -158,9 +156,45 @@ where
         }
     }
 
-    fn set_visited(&mut self, slots: Slice) {
-        if let Some(fetch) = &mut self.fetch {
-            fetch.set_visited(slots)
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+        match self.fetch {
+            Some(ref mut v) => Either::Left(v.create_chunk(slots)),
+            None => Either::Right(self.value),
+        }
+    }
+
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        match chunk {
+            Either::Left(v) => F::fetch_next(v, slot),
+            Either::Right(v) => v,
+        }
+    }
+}
+
+impl<K, F> TransformFetch<K> for Opt<F>
+where
+    F: TransformFetch<K>,
+{
+    type Output = Opt<F::Output>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        Opt(self.0.transform_fetch(method))
+    }
+}
+
+impl<K, F, V> TransformFetch<K> for OptOr<F, V>
+where
+    F: TransformFetch<K>,
+    F: for<'q> FetchItem<'q, Item = &'q V>,
+    F::Output: for<'q> FetchItem<'q, Item = &'q V>,
+    V: 'static,
+{
+    type Output = OptOr<F::Output, V>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        OptOr {
+            fetch: self.fetch.transform_fetch(method),
+            value: self.value,
         }
     }
 }

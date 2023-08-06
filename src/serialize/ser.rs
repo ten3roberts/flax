@@ -86,7 +86,7 @@ where
     pub fn with_filter<G>(self, filter: G) -> SerializeBuilder<And<F, G>> {
         SerializeBuilder {
             slots: self.slots,
-            filter: And::new(self.filter, filter),
+            filter: And(self.filter, filter),
         }
     }
 
@@ -255,9 +255,9 @@ impl<'a> Serialize for SerializeEntityData<'a> {
 
         let mut state = serializer.serialize_map(Some(len))?;
         for cell in self.arch.cells().values() {
-            let storage = cell.storage().borrow();
-            if let Some(slot) = self.context.slots.get(&storage.info().key()) {
-                state.serialize_entry(&slot.key, (slot.ser)(&storage, self.slot))?;
+            let data = cell.data.borrow();
+            if let Some(slot) = self.context.slots.get(&data.key) {
+                state.serialize_entry(&slot.key, (slot.ser)(&data.storage, self.slot))?;
             }
         }
 
@@ -333,13 +333,14 @@ impl<'a> serde::Serialize for SerializeStorages<'a> {
         let mut state = serializer.serialize_map(Some(len))?;
 
         for cell in self.arch.cells().values() {
-            let storage = cell.storage().borrow();
-            let id = storage.info().key;
+            let data = cell.data.borrow();
+
+            let id = data.key;
             if let Some(slot) = self.context.slots.get(&id) {
                 state.serialize_entry(
                     &slot.key,
                     &SerializeStorage {
-                        storage: &storage,
+                        storage: &data.storage,
                         slot,
                     },
                 )?;

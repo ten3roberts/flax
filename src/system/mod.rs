@@ -77,8 +77,8 @@ impl<'a, Func, Q, F> SystemFn<'a, (QueryData<'a, Q, F>,), ()> for ParForEach<Fun
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
-    for<'x> <Q as Fetch<'x>>::Prepared: Send,
-    for<'x> <F as Fetch<'x>>::Prepared: Send,
+    for<'x> <crate::filter::Filtered<Q, F> as Fetch<'x>>::Prepared: Send,
+    for<'x, 'y> <<Q as Fetch<'x>>::Prepared as crate::fetch::PreparedFetch<'y>>::Chunk: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
 {
     fn execute(&mut self, mut data: (QueryData<Q, F>,)) {
@@ -111,11 +111,10 @@ where
 #[cfg(feature = "parallel")]
 impl<Q, F, T> SystemBuilder<(Query<Q, F>,), T>
 where
-    for<'x> Q: Fetch<'x> + 'static + Send,
-    for<'x> F: Fetch<'x> + 'static + Send,
-    for<'x, 'y> crate::query::BatchedIter<'x, 'y, Q, F>: Send,
-    for<'x, 'y> crate::query::Batch<'x, <Q as Fetch<'y>>::Prepared, <F as Fetch<'y>>::Prepared>:
-        Send,
+    for<'x> Q: 'static + Fetch<'x> + Send,
+    for<'x> F: 'static + Fetch<'x> + Send,
+    for<'x> <<Q as Fetch<'x>>::Prepared as crate::fetch::PreparedFetch<'x>>::Chunk: Send,
+    // for<'x, 'y> crate::query::Batch<'y, <Q as Fetch<'x>>::Prepared>: Send,
 {
     /// Execute a function for each item in the query in parallel batches
     pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, (Query<Q, F>,), (), T>
@@ -497,7 +496,7 @@ pub(crate) fn access_info(accesses: &[Access], world: &World) -> AccessInfo {
                     .archetypes
                     .entry(id)
                     .or_insert_with(|| ArchetypeAccess {
-                        arch: arch.info(),
+                        arch: arch.desc(),
                         ..Default::default()
                     })
                     .components
@@ -513,7 +512,7 @@ pub(crate) fn access_info(accesses: &[Access], world: &World) -> AccessInfo {
                     .archetypes
                     .entry(id)
                     .or_insert_with(|| ArchetypeAccess {
-                        arch: arch.info(),
+                        arch: arch.desc(),
                         ..Default::default()
                     })
                     .change_events

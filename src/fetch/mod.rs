@@ -5,17 +5,20 @@ mod component_mut;
 mod copied;
 mod entity_ref;
 mod ext;
+mod map;
 mod maybe_mut;
 mod opt;
 mod read_only;
 mod relations;
 mod satisfied;
 mod source;
+mod transform;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
     filter::RefFetch,
     system::Access,
+    util::Ptr,
     ArchetypeId, ArchetypeSearcher, Entity, World,
 };
 use alloc::vec::Vec;
@@ -28,12 +31,14 @@ pub use component::*;
 pub use component_mut::*;
 pub use entity_ref::*;
 pub use ext::FetchExt;
+pub use map::Map;
 pub use maybe_mut::{MaybeMut, MutGuard};
 pub use opt::*;
 pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
 pub use satisfied::Satisfied;
 pub use source::Source;
+pub use transform::{Modified, TransformFetch};
 
 #[doc(hidden)]
 pub struct FmtQuery<'r, Q>(pub &'r Q);
@@ -127,6 +132,15 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 pub trait PreparedFetch<'q> {
     /// Item returned by fetch
     type Item: 'q;
+    /// A chunk accessing a disjoint set of the borrow sequentially
+    type Chunk: 'q;
+
+    /// Creates a chunk to access a slice of the borrow
+    ///
+    /// # Safety
+    ///
+    /// `slots` must be disjoint to all other currently existing chunks
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk;
 
     /// Fetch the item from entity at the slot in the prepared storage.
     /// # Safety
@@ -134,7 +148,8 @@ pub trait PreparedFetch<'q> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item;
+    /// Repeated calls must use increasing adjacent values for `slot`
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item;
 
     #[inline]
     /// Filter the slots to visit
@@ -145,11 +160,15 @@ pub trait PreparedFetch<'q> {
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         slots
     }
+}
 
-    /// Do something for a a slice of entity slots which have been visited, such
-    /// as updating change tracking for mutable queries.
-    #[inline]
-    fn set_visited(&mut self, _slots: Slice) {}
+/// Allows filtering the constituent parts of a fetch using a set union
+pub trait UnionFilter {
+    // Filter the slots using a union operation of the constituent part
+    ///
+    /// # Safety
+    /// See: [`PreparedFetch::filter_slots`]
+    unsafe fn filter_union(&mut self, slots: Slice) -> Slice;
 }
 
 impl<'q, F> PreparedFetch<'q> for &'q mut F
@@ -157,22 +176,29 @@ where
     F: PreparedFetch<'q>,
 {
     type Item = F::Item;
+    type Chunk = F::Chunk;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        (*self).fetch(slot)
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+        (*self).create_chunk(slots)
+    }
+
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_next(chunk, slot)
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         (*self).filter_slots(slots)
     }
-
-    fn set_visited(&mut self, slots: Slice) {
-        (*self).set_visited(slots)
-    }
 }
 
 impl<'q> FetchItem<'q> for () {
     type Item = ();
+}
+
+impl UnionFilter for () {
+    unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
+        slots
+    }
 }
 
 impl<'w> Fetch<'w> for () {
@@ -196,43 +222,49 @@ impl<'w> Fetch<'w> for () {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl<'p> ReadOnlyFetch<'p> for () {
-    unsafe fn fetch_shared(&'p self, _: Slot) -> Self::Item {}
+impl<'q> ReadOnlyFetch<'q> for () {
+    #[inline]
+    unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch_shared_chunk(_: &Self::Chunk, _: Slot) -> Self::Item {}
 }
 
 impl<'q> PreparedFetch<'q> for () {
     type Item = ();
 
-    unsafe fn fetch(&'q mut self, _: Slot) -> Self::Item {}
+    type Chunk = ();
+
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
+
+    #[inline]
+    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
 }
 
-impl<'q, F> PreparedFetch<'q> for Option<F>
-where
-    F: PreparedFetch<'q>,
-{
-    type Item = Option<F::Item>;
+// impl<'q, F> PreparedFetch<'q> for Option<F>
+// where
+//     F: PreparedFetch<'q>,
+// {
+//     type Item = Option<F::Item>;
+//     type Chunk = Option<F::Chunk>;
 
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.as_mut().map(|fetch| fetch.fetch(slot))
-    }
+//     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+//         self.as_mut().map(|fetch| fetch.create_chunk(slots))
+//     }
 
-    #[inline]
-    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        if let Some(fetch) = self {
-            fetch.filter_slots(slots)
-        } else {
-            Slice::new(slots.end, slots.end)
-        }
-    }
+//     #[inline]
+//     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+//         if let Some(fetch) = self {
+//             fetch.filter_slots(slots)
+//         } else {
+//             Slice::new(slots.end, slots.end)
+//         }
+//     }
 
-    #[inline]
-    fn set_visited(&mut self, slots: Slice) {
-        if let Some(fetch) = self {
-            fetch.set_visited(slots)
-        }
-    }
-}
+//     unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+//         batch.as_mut().map(|fetch| F::fetch_next(fetch))
+//     }
+// }
 
 #[derive(Debug, Clone)]
 /// Returns the entity ids
@@ -272,9 +304,16 @@ impl<'w> Fetch<'w> for EntityIds {
 impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
     type Item = Entity;
 
-    #[inline]
-    unsafe fn fetch(&mut self, slot: usize) -> Self::Item {
-        self.entities[slot]
+    type Chunk = Ptr<'q, Entity>;
+
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+        Ptr::new(self.entities[slots.as_range()].as_ptr())
+    }
+
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+        let old = chunk.as_ptr();
+        *chunk = chunk.add(1);
+        *old
     }
 }
 
@@ -283,9 +322,11 @@ impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
     unsafe fn fetch_shared(&self, slot: usize) -> Self::Item {
         self.entities[slot]
     }
-}
 
-use crate::filter::Or;
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        *chunk.add(slot).as_ref()
+    }
+}
 
 // Implement for tuples
 macro_rules! tuple_impl {
@@ -307,6 +348,13 @@ macro_rules! tuple_impl {
                     (self.$idx).fetch_shared(slot),
                 )*)
             }
+
+            #[inline(always)]
+            unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+                ($(
+                    $ty::fetch_shared_chunk(&chunk.$idx, slot),
+                )*)
+            }
         }
 
 
@@ -315,59 +363,44 @@ macro_rules! tuple_impl {
         {
 
             type Item = ($($ty::Item,)*);
+            type Chunk = ($($ty::Chunk,)*);
+
             #[inline]
-            unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+            unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
                 ($(
-                    (self.$idx).fetch(slot),
+                    $ty::fetch_next(&mut chunk.$idx, slot),
                 )*)
             }
 
             #[inline]
-            fn set_visited(&mut self, slots: Slice) {
-                $((self.$idx).set_visited(slots);)*
+            unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+                ($((self.$idx).create_chunk(slots),)*)
             }
 
             #[inline]
             unsafe fn filter_slots(&mut self, mut slots: Slice) -> Slice {
-                // let mut start = slots.start;
-
-                // while !slots.is_empty() {
-                //         let v = slots;
-
-                //     $( let v = self.$idx.filter_slots(v);)*
-
-                //     if !v.is_empty() || v.start == slots.end {
-                //         return v;
-                //     }
-
-                //     slots.start = v.start;
-                // }
-                // slots
                 $(
 
                     slots = self.$idx.filter_slots(slots);
                 )*
 
                 slots
-                // ( $(
-                //     {
-                //         let v = self.$idx.filter_slots(slots);
-                //         start = start.max(v.start);
-                //         v
-                //     },
-                // )*);
+            }
+        }
 
-                // let mut u = slots;
+        impl<'q, $($ty, )*> UnionFilter for ($($ty,)*)
+            where $($ty: PreparedFetch<'q>,)*
+        {
 
-                // // Clamp to end bound
-                // start = start.min(slots.end);
-                // slots.start = start;
-
-                // $(
-                //     u = u.intersect(&self.$idx.filter_slots(slots));
-                // )*
-
-                // u
+            #[inline]
+            unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
+                [
+                    // Don't leak union into this
+                    $( self.$idx.filter_slots(slots)),*
+                ]
+                .into_iter()
+                .min()
+                .unwrap_or_default()
             }
         }
 
@@ -394,76 +427,13 @@ macro_rules! tuple_impl {
 
             #[inline]
             fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-            $( (self.$idx).access(data, dst);)*
+                $( (self.$idx).access(data, dst);)*
             }
 
             #[inline]
             fn searcher(&self, searcher: &mut ArchetypeSearcher) {
                 $((self.$idx).searcher(searcher));*
             }
-        }
-
-
-        // ----- OR -----
-        impl<'q, $($ty, )*> FetchItem<'q> for Or<($($ty,)*)> {
-            type Item = ();
-        }
-
-        impl<'w, $($ty, )*> Fetch<'w> for Or<($($ty,)*)>
-        where $($ty: Fetch<'w>,)*
-        {
-            const MUTABLE: bool =  $($ty::MUTABLE )|*;
-            type Prepared       = Or<($(Option<$ty::Prepared>,)*)>;
-
-            fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-                let inner = &self.0;
-                Some( Or(($(inner.$idx.prepare(data),)*)) )
-            }
-
-            fn filter_arch(&self, arch: &Archetype) -> bool {
-                let inner = &self.0;
-                $(inner.$idx.filter_arch(arch))||*
-            }
-
-            fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-                 $(self.0.$idx.access(data, dst);)*
-            }
-
-            fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                let mut s = f.debug_tuple("Or");
-                    let inner = &self.0;
-                $(
-                    s.field(&FmtQuery(&inner.$idx));
-                )*
-                s.finish()
-            }
-        }
-
-
-        impl<'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
-        where $($ty: PreparedFetch<'q>,)*
-        {
-            type Item = ();
-
-            unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-                let inner = &mut self.0;
-
-                [
-                    $( inner.$idx.filter_slots(slots)),*
-                ]
-                .into_iter()
-                .min()
-                .unwrap_or_default()
-
-            }
-
-            #[inline]
-            unsafe fn fetch(&mut self, _: usize) -> Self::Item {}
-
-            fn set_visited(&mut self, slots: Slice) {
-                $( self.0.$idx.set_visited(slots);)*
-            }
-
         }
     };
 }

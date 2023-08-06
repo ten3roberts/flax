@@ -143,7 +143,11 @@ crate::component! {
     pub(crate) dummy,
 }
 
-/// Defines a strongly typed component
+/// Defines a strongly typed component.
+///
+/// Implements a *read only* fetch when used as part of a query
+///
+/// Use `.as_mut()` to acquire a *mutable* fetch.
 pub struct Component<T> {
     key: ComponentKey,
     marker: PhantomData<T>,
@@ -162,12 +166,9 @@ impl<T> PartialEq for Component<T> {
 impl<T> Copy for Component<T> {}
 
 impl<T> Clone for Component<T> {
+    #[inline]
     fn clone(&self) -> Self {
-        Self {
-            key: self.key,
-            vtable: self.vtable,
-            marker: PhantomData,
-        }
+        *self
     }
 }
 
@@ -241,9 +242,9 @@ impl<T: ComponentValue> Component<T> {
         self.key.id
     }
 
-    /// Returns the type erased component info
-    pub fn info(self) -> ComponentInfo {
-        ComponentInfo::of(self)
+    /// Returns the type erased component description
+    pub fn desc(self) -> ComponentDesc {
+        ComponentDesc::of(self)
     }
 
     /// Transform this into a mutable fetch
@@ -257,13 +258,8 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Construct a fine grained change detection filter.
-    pub fn modified(self) -> ChangeFilter<T> {
-        ChangeFilter::new(self, ChangeKind::Modified)
-    }
-
-    /// Construct a fine grained insert detection filter.
-    pub fn inserted(self) -> ChangeFilter<T> {
-        ChangeFilter::new(self, ChangeKind::Inserted)
+    pub(crate) fn into_change_filter(self, kind: ChangeKind) -> ChangeFilter<T> {
+        ChangeFilter::new(self, kind)
     }
 
     /// Construct a fine grained component remove detection filter.
@@ -306,13 +302,13 @@ impl<T: ComponentValue> Component<T> {
 
     /// Returns all metadata components
     pub fn get_meta(&self) -> ComponentBuffer {
-        self.vtable.meta.get(self.info())
+        self.vtable.meta.get(self.desc())
     }
 }
 
 impl<T: ComponentValue> Metadata<T> for Component<T> {
-    fn attach(info: ComponentInfo, buffer: &mut ComponentBuffer) {
-        buffer.set(crate::components::component_info(), info);
+    fn attach(desc: ComponentDesc, buffer: &mut ComponentBuffer) {
+        buffer.set(crate::components::component_info(), desc);
     }
 }
 
@@ -357,19 +353,19 @@ impl<T: ComponentValue> RelationExt<T> for Component<T> {
 
 /// Represents a type erased component along with its memory layout and drop fn.
 #[derive(Clone, Copy)]
-pub struct ComponentInfo {
+pub struct ComponentDesc {
     pub(crate) key: ComponentKey,
     pub(crate) vtable: &'static UntypedVTable,
 }
 
-impl Eq for ComponentInfo {}
-impl PartialEq for ComponentInfo {
+impl Eq for ComponentDesc {}
+impl PartialEq for ComponentDesc {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key && ptr::eq(self.vtable, other.vtable)
     }
 }
 
-impl core::fmt::Debug for ComponentInfo {
+impl core::fmt::Debug for ComponentDesc {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self.key.object {
             Some(object) => write!(f, "{}({}) {}", self.vtable.name, object, self.key.id()),
@@ -378,25 +374,25 @@ impl core::fmt::Debug for ComponentInfo {
     }
 }
 
-impl<T: ComponentValue> From<Component<T>> for ComponentInfo {
+impl<T: ComponentValue> From<Component<T>> for ComponentDesc {
     fn from(v: Component<T>) -> Self {
-        ComponentInfo::of(v)
+        ComponentDesc::of(v)
     }
 }
 
-impl PartialOrd for ComponentInfo {
+impl PartialOrd for ComponentDesc {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.key.partial_cmp(&other.key)
+        Some(self.cmp(other))
     }
 }
 
-impl Ord for ComponentInfo {
+impl Ord for ComponentDesc {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.key.cmp(&other.key)
     }
 }
 
-impl ComponentInfo {
+impl ComponentDesc {
     /// Convert back to a typed form
     ///
     /// # Panics
@@ -406,7 +402,7 @@ impl ComponentInfo {
         Component::from_raw_parts(self.key, self.vtable)
     }
 
-    /// Returns the component info of a types component
+    /// Returns the component description of a types component
     pub fn of<T: ComponentValue>(component: Component<T>) -> Self {
         Self {
             key: component.key(),
@@ -415,7 +411,7 @@ impl ComponentInfo {
     }
 
     #[inline]
-    pub(crate) fn is<T: ComponentValue>(&self) -> bool {
+    pub(crate) fn is<T: 'static>(&self) -> bool {
         (self.vtable.type_id)() == TypeId::of::<T>()
     }
 

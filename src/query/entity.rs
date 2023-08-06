@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use crate::{
     archetype::Slice,
     entity::EntityLocation,
-    error::Result,
+    error::{MissingComponent, Result},
     fetch::{FetchAccessData, PreparedFetch},
     filter::{All, Filtered},
     system::{Access, AccessKind},
@@ -32,9 +32,12 @@ fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
 
     let Some(mut p) = state.prepare_fetch(loc.arch_id, arch) else {
         return match find_missing_components(state.fetch, loc.arch_id, state.world).next() {
-            Some(missing) => Err(Error::MissingComponent(id, missing)),
+            Some(missing) => Err(Error::MissingComponent(MissingComponent {
+                id,
+                desc: missing,
+            })),
             None => Err(Error::DoesNotMatch(id)),
-        }
+        };
     };
 
     // Safety
@@ -111,8 +114,10 @@ where
         match &mut self.prepared {
             Ok((loc, p)) => {
                 // self is a mutable reference, so this is the only reference to the slot
-                p.fetch.set_visited(Slice::single(loc.slot));
-                unsafe { Ok(p.fetch.fetch(loc.slot)) }
+                unsafe {
+                    let mut chunk = p.fetch.create_chunk(Slice::single(loc.slot));
+                    Ok(<Q::Prepared>::fetch_next(&mut chunk, loc.slot))
+                }
             }
             Err(e) => Err(e.clone()),
         }
@@ -156,7 +161,10 @@ mod test {
         world.remove(id, name()).unwrap();
         assert_eq!(
             query.borrow(&world).get(),
-            Err(Error::MissingComponent(id, name().info()))
+            Err(Error::MissingComponent(MissingComponent {
+                id,
+                desc: name().desc()
+            }))
         );
         world.set(id, name(), "Bar".into()).unwrap();
         {

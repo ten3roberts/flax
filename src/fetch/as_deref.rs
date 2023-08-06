@@ -1,5 +1,5 @@
 use super::{FetchAccessData, FmtQuery, PreparedFetch, ReadOnlyFetch};
-use crate::{query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
+use crate::{archetype::Slot, query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
 use alloc::vec::Vec;
 use core::{fmt, ops::Deref};
 
@@ -57,16 +57,19 @@ where
 {
     type Item = &'q V::Target;
 
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.0.fetch(slot)
-    }
+    type Chunk = F::Chunk;
 
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.0.filter_slots(slots)
     }
 
-    fn set_visited(&mut self, slots: crate::archetype::Slice) {
-        self.0.set_visited(slots)
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
+        self.0.create_chunk(slots)
+    }
+
+    #[inline]
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_next(chunk, slot)
     }
 }
 
@@ -77,5 +80,9 @@ where
 {
     unsafe fn fetch_shared(&'q self, slot: crate::archetype::Slot) -> Self::Item {
         self.0.fetch_shared(slot)
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: crate::archetype::Slot) -> Self::Item {
+        F::fetch_shared_chunk(chunk, slot)
     }
 }

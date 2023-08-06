@@ -2,22 +2,19 @@
 
 Flax tracks when a component is added, mutably accessed, or removed.
 
-Queries allow filtering on change events since the query last run.
+A query allows filtering the entities based on a change event since it last ran.
 
-- [`modified`](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) filter mutated or new components
-- [`inserted`](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) only new components
-- [`removed`](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) filter recently removed components.
+- [`modified`](https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.modified) filter mutated or new components
+- [`added`](https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.added) only new components
+- [`removed`](https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.removed) filter recently removed components.
 
 The modified filter is best used for queries which calculate or update a value
 based on one or more components, or in other ways react to a changed value.
 
+A change filter can be added to a single component, or to a tuple of components. Applying a `.modified()` transform on a tuple will create a query which yields if *any* of the constituents were modified.
+
 The following example creates a system which prints the updated health values
 for each entity.
-
-**Note**: Tuple queries combine using `and`, which means a query with multiple `modified` or other change filtered components will only yield if **all** the annotated components changed since the last query ran.
-
-Prefer using `.filter(Or(a().modified, b().modified()))` when dealing with multiple
-change filters, or splitting up the query.
 
 ```rust
 {{ #include ../../../examples/guide/change_detection.rs:health_changes }}
@@ -25,8 +22,7 @@ change filters, or splitting up the query.
 
 # Combining filters
 
-Change filters can be combined with other filters, which leads to queries which
-do even less work than that particular group member.
+Change filters can be combined with other filters, which leads to queries needing to perform even even less work.
 
 The following example creates a query which removes despawns entities when their
 health becomes `0`. Noteworthy in particular, is that this system can run in
@@ -36,7 +32,6 @@ mutable access.
 ```rust
 {{ #include ../../../examples/guide/change_detection.rs:cleanup_system }}
 ```
-
 
 # Bringing it all together
 

@@ -327,8 +327,8 @@ impl DerefMut for ChangeList {
 pub(crate) enum ChangeKind {
     /// Component was modified
     Modified = 0,
-    /// Component was inserted
-    Inserted = 1,
+    /// Component was added
+    Added = 1,
     /// Component was removed
     Removed = 2,
 }
@@ -337,7 +337,7 @@ impl Display for ChangeKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             ChangeKind::Modified => f.write_str("modified"),
-            ChangeKind::Inserted => f.write_str("inserted"),
+            ChangeKind::Added => f.write_str("inserted"),
             ChangeKind::Removed => f.write_str("removed"),
         }
     }
@@ -414,8 +414,8 @@ impl Changes {
     }
 
     #[inline]
-    pub(crate) fn set_inserted(&mut self, change: Change) -> &mut Self {
-        self.map[ChangeKind::Inserted as usize].set(change);
+    pub(crate) fn set_added(&mut self, change: Change) -> &mut Self {
+        self.map[ChangeKind::Added as usize].set(change);
         self.map[ChangeKind::Modified as usize].set(change);
         self
     }
@@ -449,7 +449,7 @@ impl Changes {
         mut on_removed: impl FnMut(ChangeKind, Change),
     ) {
         self.map[0].swap_remove_with(slot, dst, |v| on_removed(ChangeKind::Modified, v));
-        self.map[1].swap_remove_with(slot, dst, |v| on_removed(ChangeKind::Inserted, v));
+        self.map[1].swap_remove_with(slot, dst, |v| on_removed(ChangeKind::Added, v));
         self.map[2].swap_remove_with(slot, dst, |v| on_removed(ChangeKind::Removed, v));
     }
 
@@ -460,7 +460,7 @@ impl Changes {
         mut f: impl FnMut(ChangeKind, &mut ChangeList, &mut ChangeList),
     ) {
         f(ChangeKind::Modified, &mut self.map[0], &mut other.map[0]);
-        f(ChangeKind::Inserted, &mut self.map[1], &mut other.map[1]);
+        f(ChangeKind::Added, &mut self.map[1], &mut other.map[1]);
         f(ChangeKind::Removed, &mut self.map[2], &mut other.map[2]);
     }
 

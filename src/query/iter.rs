@@ -1,20 +1,20 @@
 use crate::{
     archetype::{Archetype, Slice, Slot},
     fetch::PreparedFetch,
-    filter::{FilterIter, Filtered},
+    filter::{next_slice, Filtered},
     Entity,
 };
 
 /// Iterates over a chunk of entities, specified by a predicate.
 /// In essence, this is the unflattened version of [crate::QueryIter].
-pub struct Batch<'q, Q, F> {
+pub struct Chunk<'q, Q: PreparedFetch<'q>> {
     arch: &'q Archetype,
-    fetch: &'q mut Filtered<Q, F>,
+    fetch: Q::Chunk,
     pos: Slot,
     end: Slot,
 }
 
-impl<'q, Q, F> core::fmt::Debug for Batch<'q, Q, F> {
+impl<'q, Q: PreparedFetch<'q>> core::fmt::Debug for Chunk<'q, Q> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Batch")
             .field("pos", &self.pos)
@@ -23,11 +23,11 @@ impl<'q, Q, F> core::fmt::Debug for Batch<'q, Q, F> {
     }
 }
 
-impl<'q, Q, F> Batch<'q, Q, F> {
-    pub(crate) fn new(arch: &'q Archetype, fetch: &'q mut Filtered<Q, F>, slice: Slice) -> Self {
+impl<'q, Q: PreparedFetch<'q>> Chunk<'q, Q> {
+    pub(crate) fn new(arch: &'q Archetype, chunk: Q::Chunk, slice: Slice) -> Self {
         Self {
             arch,
-            fetch,
+            fetch: chunk,
             pos: slice.start,
             end: slice.end,
         }
@@ -55,10 +55,9 @@ impl<'q, Q, F> Batch<'q, Q, F> {
     }
 }
 
-impl<'q, Q, F> Iterator for Batch<'q, Q, F>
+impl<'q, Q> Iterator for Chunk<'q, Q>
 where
     Q: PreparedFetch<'q>,
-    F: PreparedFetch<'q>,
 {
     type Item = Q::Item;
 
@@ -66,25 +65,23 @@ where
         if self.pos == self.end {
             None
         } else {
-            let fetch = unsafe { &mut *(self.fetch as *mut Filtered<Q, F>) };
-            let item = unsafe { fetch.fetch(self.pos) };
+            // let fetch = unsafe { &mut *(self.fetch as *mut Q::Batch) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch, self.pos) };
             self.pos += 1;
             Some(item)
         }
     }
 }
 
-impl<'q, Q, F> Batch<'q, Q, F>
+impl<'q, Q> Chunk<'q, Q>
 where
     Q: PreparedFetch<'q>,
-    F: PreparedFetch<'q>,
 {
     pub(crate) fn next_with_id(&mut self) -> Option<(Entity, Q::Item)> {
         if self.pos == self.end {
             None
         } else {
-            let fetch = unsafe { &mut *(self.fetch as *mut Filtered<Q, F>) };
-            let item = unsafe { fetch.fetch(self.pos) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch, self.pos) };
             let id = self.arch.entities[self.pos];
             self.pos += 1;
             Some((id, item))
@@ -95,9 +92,8 @@ where
         if self.pos == self.end {
             None
         } else {
-            let fetch = unsafe { &mut *(self.fetch as *mut Filtered<Q, F>) };
             let slot = self.pos;
-            let item = unsafe { fetch.fetch(slot) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch, slot) };
             let id = self.arch.entities[slot];
             self.pos += 1;
 
@@ -111,27 +107,31 @@ where
 /// filters.
 pub struct ArchetypeChunks<'q, Q, F> {
     pub(crate) arch: &'q Archetype,
-    pub(crate) iter: FilterIter<&'q mut Filtered<Q, F>>,
+    pub(crate) fetch: *mut Filtered<Q, F>,
+    pub(crate) slots: Slice,
 }
+
+unsafe impl<'q, Q: 'q, F: 'q> Sync for ArchetypeChunks<'q, Q, F> where &'q mut Filtered<Q, F>: Sync {}
+unsafe impl<'q, Q: 'q, F: 'q> Send for ArchetypeChunks<'q, Q, F> where &'q mut Filtered<Q, F>: Send {}
 
 impl<'q, Q, F> Iterator for ArchetypeChunks<'q, Q, F>
 where
-    Q: PreparedFetch<'q>,
-    F: PreparedFetch<'q>,
+    Q: 'q + PreparedFetch<'q>,
+    F: 'q + PreparedFetch<'q>,
 {
-    type Item = Batch<'q, Q, F>;
+    type Item = Chunk<'q, Q>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        // Get the next chunk
-        let chunk = self.iter.next()?;
-
         // Fetch will never change and all calls are disjoint
-        let fetch = unsafe { &mut *(self.iter.fetch as *mut Filtered<Q, F>) };
+        let fetch = unsafe { &mut *self.fetch };
 
-        // Set the chunk as visited
-        fetch.set_visited(chunk);
-        let chunk = Batch::new(self.arch, fetch, chunk);
+        // Get the next chunk
+        let slots = next_slice(&mut self.slots, fetch)?;
+
+        // Safety: Disjoint chunk
+        let chunk = unsafe { fetch.create_chunk(slots) };
+        let chunk = Chunk::new(self.arch, chunk, slots);
 
         Some(chunk)
     }
