@@ -146,13 +146,13 @@ where
         self.filter.filter_slots(l)
     }
 
-    type Batch = Q::Batch;
+    type Chunk = Q::Chunk;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.fetch.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         Q::fetch_next(batch)
     }
 }
@@ -275,7 +275,7 @@ pub struct Without {
     pub(crate) name: &'static str,
 }
 
-impl<'w, 'q> FetchItem<'q> for Without {
+impl<'q> FetchItem<'q> for Without {
     type Item = ();
 }
 
@@ -540,15 +540,17 @@ pub struct BatchSize(pub(crate) Slot);
 
 impl<'q> PreparedFetch<'q> for BatchSize {
     type Item = ();
-    type Batch = ();
+    type Chunk = ();
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))
     }
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
+    #[inline]
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for BatchSize {

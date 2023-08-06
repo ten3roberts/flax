@@ -63,13 +63,13 @@ where
 {
     type Item = T;
 
-    type Batch = (&'q F, Q::Batch);
+    type Chunk = (&'q F, Q::Chunk);
 
-    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
         todo!()
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         (batch.0)(Q::fetch_next(&mut batch.1))
     }
 

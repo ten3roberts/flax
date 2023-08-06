@@ -11,6 +11,7 @@ pub trait ReadOnlyFetch<'q>: PreparedFetch<'q> {
     /// # Safety
     /// Slot must be valid
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item;
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item;
 }
 
 impl<'q, F> ReadOnlyFetch<'q> for Option<F>
@@ -19,5 +20,11 @@ where
 {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.as_ref().map(|fetch| fetch.fetch_shared(slot))
+    }
+
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
+        batch
+            .as_ref()
+            .map(|v| <F as ReadOnlyFetch<'q>>::fetch_shared_chunk(v, slot))
     }
 }

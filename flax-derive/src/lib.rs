@@ -123,7 +123,7 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         }
 
         // #vis struct #batch_name #wq_generics {
-        //     #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>::Prepared> as #crate_name::fetch::PreparedFetch<#q_lf>>::Batch,)*
+        //     #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>::Prepared> as #crate_name::fetch::PreparedFetch<#q_lf>>::Chunk,)*
         // }
 
         // #[automatically_derived]
@@ -305,10 +305,10 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             where #(#field_types: 'static,)*
         {
             type Item = #item_name #item_ty;
-            type Batch = (#(<<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::Batch,)*);
+            type Chunk = (#(<<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::Chunk,)*);
 
             #[inline]
-            unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+            unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
                 Self::Item {
                     #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::fetch_next(&mut batch.#field_idx),)*
                 }
@@ -320,7 +320,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             }
 
             #[inline]
-            unsafe fn create_chunk(&'q mut self, slots: #crate_name::archetype::Slice) -> Self::Batch {
+            unsafe fn create_chunk(&'q mut self, slots: #crate_name::archetype::Slice) -> Self::Chunk {
                 (
                     #(#crate_name::fetch::PreparedFetch::create_chunk(&mut self.#field_names, slots),)*
                 )

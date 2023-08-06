@@ -131,9 +131,9 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
 pub trait PreparedFetch<'q> {
     /// Item returned by fetch
     type Item: 'q;
-    type Batch: 'q;
+    type Chunk: 'q;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch;
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk;
 
     /// Fetch the item from entity at the slot in the prepared storage.
     /// # Safety
@@ -141,7 +141,7 @@ pub trait PreparedFetch<'q> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item;
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item;
 
     #[inline]
     /// Filter the slots to visit
@@ -168,13 +168,13 @@ where
     F: PreparedFetch<'q>,
 {
     type Item = F::Item;
-    type Batch = F::Batch;
+    type Chunk = F::Chunk;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         (*self).create_chunk(slots)
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         F::fetch_next(batch)
     }
 
@@ -216,16 +216,17 @@ impl<'w> Fetch<'w> for () {
 
 impl<'q> ReadOnlyFetch<'q> for () {
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {}
 }
 
 impl<'q> PreparedFetch<'q> for () {
     type Item = ();
 
-    type Batch = ();
+    type Chunk = ();
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<'q, F> PreparedFetch<'q> for Option<F>
@@ -233,9 +234,9 @@ where
     F: PreparedFetch<'q>,
 {
     type Item = Option<F::Item>;
-    type Batch = Option<F::Batch>;
+    type Chunk = Option<F::Chunk>;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         if let Some(fetch) = self {
             Some(fetch.create_chunk(slots))
         } else {
@@ -252,7 +253,7 @@ where
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         if let Some(fetch) = batch {
             Some(F::fetch_next(fetch))
         } else {
@@ -299,13 +300,13 @@ impl<'w> Fetch<'w> for EntityIds {
 impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
     type Item = Entity;
 
-    type Batch = slice::Iter<'q, Entity>;
+    type Chunk = slice::Iter<'q, Entity>;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.entities[slots.as_range()].iter()
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         *batch.next().unwrap()
     }
 }
@@ -314,6 +315,9 @@ impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
     #[inline]
     unsafe fn fetch_shared(&self, slot: usize) -> Self::Item {
         self.entities[slot]
+    }
+    unsafe fn fetch_shared_chunk(batch: &Self::Chunk, slot: Slot) -> Self::Item {
+        batch.as_slice()[slot]
     }
 }
 
@@ -337,6 +341,13 @@ macro_rules! tuple_impl {
                     (self.$idx).fetch_shared(slot),
                 )*)
             }
+
+            #[inline(always)]
+            unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+                ($(
+                    $ty::fetch_shared_chunk(&chunk.$idx, slot),
+                )*)
+            }
         }
 
 
@@ -345,17 +356,17 @@ macro_rules! tuple_impl {
         {
 
             type Item = ($($ty::Item,)*);
-            type Batch = ($($ty::Batch,)*);
+            type Chunk = ($($ty::Chunk,)*);
 
             #[inline]
-            unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+            unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
                 ($(
                     $ty::fetch_next(&mut batch.$idx),
                 )*)
             }
 
             #[inline]
-            unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+            unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
                 ($((self.$idx).create_chunk(slots),)*)
             }
 

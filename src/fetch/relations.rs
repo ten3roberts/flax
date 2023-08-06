@@ -86,16 +86,16 @@ where
 {
     type Item = RelationsIter<'q, T>;
 
-    type Batch = Batch<'q, T>;
+    type Chunk = Batch<'q, T>;
 
-    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             borrows: &self.borrows,
             slot: slots.start,
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         let slot = batch.slot;
         batch.slot += 1;
 

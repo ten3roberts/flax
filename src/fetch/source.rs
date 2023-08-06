@@ -3,7 +3,7 @@ use core::{fmt::Debug, marker::PhantomData};
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::{Archetype, Slot},
+    archetype::{Archetype, Slice, Slot},
     entity::EntityLocation,
     system::Access,
     ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
@@ -79,7 +79,7 @@ impl<Q, S> Source<Q, S> {
     }
 }
 
-impl<'w, 'q, Q, S> FetchItem<'q> for Source<Q, S>
+impl<'q, Q, S> FetchItem<'q> for Source<Q, S>
 where
     Q: FetchItem<'q>,
 {
@@ -165,16 +165,14 @@ where
         self.fetch.filter_slots(slots)
     }
 
-    type Batch = Q::Item;
+    type Chunk = Q::Chunk;
 
-    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Batch {
-        todo!()
-        // self.fetch.fetch_shared(self.slot)
+    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
+        self.fetch.create_chunk(Slice::single(self.slot))
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
-        todo!()
-        // *batch
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
+        Q::fetch_shared_chunk(batch, 0)
     }
 }
 

@@ -9,7 +9,7 @@ use crate::{
 /// In essence, this is the unflattened version of [crate::QueryIter].
 pub struct Chunk<'q, Q: PreparedFetch<'q>> {
     arch: &'q Archetype,
-    fetch: Q::Batch,
+    fetch: Q::Chunk,
     pos: Slot,
     end: Slot,
 }
@@ -24,7 +24,7 @@ impl<'q, Q: PreparedFetch<'q>> core::fmt::Debug for Chunk<'q, Q> {
 }
 
 impl<'q, Q: PreparedFetch<'q>> Chunk<'q, Q> {
-    pub(crate) fn new(arch: &'q Archetype, batch: Q::Batch, slice: Slice) -> Self {
+    pub(crate) fn new(arch: &'q Archetype, batch: Q::Chunk, slice: Slice) -> Self {
         Self {
             arch,
             fetch: batch,

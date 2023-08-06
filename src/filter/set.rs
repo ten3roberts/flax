@@ -78,14 +78,14 @@ where
         self.1.filter_slots(l)
     }
 
-    type Batch = (L::Batch, R::Batch);
+    type Chunk = (L::Chunk, R::Chunk);
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         (self.0.create_chunk(slots), self.1.create_chunk(slots))
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         (L::fetch_next(&mut batch.0), R::fetch_next(&mut batch.1))
     }
 }
@@ -146,11 +146,11 @@ where
         }
     }
 
-    type Batch = ();
+    type Chunk = ();
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {}
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {}
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<R, T> ops::BitOr<R> for Not<T> {
@@ -244,15 +244,15 @@ where
         self.filter_union(slots)
     }
 
-    type Batch = T::Batch;
+    type Chunk = T::Chunk;
 
     #[inline]
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.0.create_chunk(slots)
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         T::fetch_next(batch)
     }
 }
@@ -299,7 +299,7 @@ macro_rules! tuple_impl {
         where 'w: 'q, $($ty: PreparedFetch<'q>,)*
         {
             type Item = ();
-            type Batch = ();
+            type Chunk = ();
 
             unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
                 let inner = &mut self.0;
@@ -314,9 +314,10 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {}
+            unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 
-            unsafe fn create_chunk(&mut self, slots: Slice) -> Self::Batch {}
+            #[inline]
+            unsafe fn create_chunk(&mut self, _: Slice) -> Self::Chunk {}
 
         }
 

@@ -67,9 +67,9 @@ pub struct Batch<'a> {
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
-    type Batch = Batch<'q>;
+    type Chunk = Batch<'q>;
 
-    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             world: self.world,
             arch: self.arch,
@@ -78,7 +78,7 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     }
 
     #[inline]
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         let slot = batch.slot;
 
         EntityRef {

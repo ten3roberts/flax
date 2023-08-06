@@ -40,9 +40,9 @@ pub struct PreparedSatisfied<F>(Option<F>);
 
 impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
     type Item = bool;
-    type Batch = bool;
+    type Chunk = bool;
 
-    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Batch {
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         let res = self.0.filter_slots(slots);
         if res.is_empty() {
             false
@@ -51,7 +51,7 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
         }
     }
 
-    unsafe fn fetch_next(batch: &mut Self::Batch) -> Self::Item {
+    unsafe fn fetch_next(batch: &mut Self::Chunk) -> Self::Item {
         *batch
     }
 
