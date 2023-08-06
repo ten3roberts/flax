@@ -207,10 +207,9 @@ mod test {
             .with(status_effects())
             .build();
 
-        let json = serde_json::to_string_pretty(
-            &serializer.serialize(&world, SerializeFormat::ColumnMajor),
-        )
-        .unwrap();
+        let json =
+            serde_json::to_string(&serializer.serialize(&world, SerializeFormat::ColumnMajor))
+                .unwrap();
 
         let new_world: World = deserializer
             .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
@@ -239,6 +238,7 @@ mod test {
 
         let encoded =
             ron::to_string(&serializer.serialize(&world, SerializeFormat::ColumnMajor)).unwrap();
+
         let new_world = deserializer
             .deserialize(&mut ron::Deserializer::from_str(&encoded).unwrap())
             .unwrap();
