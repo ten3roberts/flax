@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::Archetype,
+    archetype::{Archetype, Slot},
     system::{Access, AccessKind},
     EntityRef, Fetch, FetchItem, World,
 };
@@ -59,16 +59,30 @@ pub struct PreparedEntityRef<'a> {
     arch: &'a Archetype,
 }
 
+#[doc(hidden)]
+pub struct Batch<'a> {
+    pub(crate) world: &'a World,
+    pub(crate) arch: &'a Archetype,
+}
+
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
+    type Chunk = Batch<'q>;
+
+    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
+        Batch {
+            world: self.world,
+            arch: self.arch,
+        }
+    }
 
     #[inline]
-    unsafe fn fetch(&'q mut self, slot: crate::archetype::Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
         EntityRef {
-            arch: self.arch,
+            arch: chunk.arch,
+            world: chunk.world,
             slot,
-            id: self.arch.entities()[slot],
-            world: self.world,
+            id: *chunk.arch.entities.get_unchecked(slot),
         }
     }
 }

@@ -6,12 +6,12 @@ use core::{
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::{Archetype, Slice},
+    archetype::{Archetype, Slice, Slot},
     system::Access,
     Fetch, FetchItem,
 };
 
-use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch, TransformFetch};
 
 #[derive(Debug, Clone)]
 /// Component which cloned the value.
@@ -20,19 +20,21 @@ use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 /// See [crate::Component::as_mut]
 pub struct Cloned<F>(pub(crate) F);
 
-impl<'q, F, V> FetchItem<'q> for Cloned<F>
+impl<'q, F> FetchItem<'q> for Cloned<F>
 where
-    F: FetchItem<'q, Item = &'q V>,
-    V: 'static,
+    F: FetchItem<'q>,
+    <F as FetchItem<'q>>::Item: Deref,
+    <<F as FetchItem<'q>>::Item as Deref>::Target: 'static + Clone,
 {
-    type Item = V;
+    type Item = <<F as FetchItem<'q>>::Item as Deref>::Target;
 }
 
-impl<'w, F, V> Fetch<'w> for Cloned<F>
+impl<'w, F> Fetch<'w> for Cloned<F>
 where
     F: Fetch<'w>,
-    F: for<'q> FetchItem<'q, Item = &'q V>,
-    V: 'static + Clone,
+    F: for<'q> FetchItem<'q>,
+    for<'q> <F as FetchItem<'q>>::Item: Deref,
+    for<'q> <<F as FetchItem<'q>>::Item as Deref>::Target: 'static + Clone,
 {
     const MUTABLE: bool = F::MUTABLE;
 
@@ -69,20 +71,18 @@ where
     V: 'static + Clone,
 {
     type Item = V;
+    type Chunk = F::Chunk;
 
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.0.fetch(slot).clone()
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+        self.0.create_chunk(slots)
     }
 
-    #[inline]
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_next(chunk, slot).clone()
+    }
+
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         self.0.filter_slots(slots)
-    }
-
-    #[inline]
-    fn set_visited(&mut self, slots: Slice) {
-        self.0.set_visited(slots)
     }
 }
 
@@ -92,7 +92,24 @@ where
     F::Item: Deref<Target = V>,
     V: 'static + Clone,
 {
-    unsafe fn fetch_shared(&'q self, slot: crate::archetype::Slot) -> Self::Item {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.0.fetch_shared(slot).clone()
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_shared_chunk(chunk, slot).clone()
+    }
+}
+
+impl<K, F> TransformFetch<K> for Cloned<F>
+where
+    F: TransformFetch<K>,
+    Cloned<F>: for<'x> Fetch<'x>,
+    Cloned<F::Output>: for<'x> Fetch<'x>,
+{
+    type Output = Cloned<F::Output>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        Cloned(self.0.transform_fetch(method))
     }
 }

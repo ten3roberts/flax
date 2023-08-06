@@ -30,7 +30,7 @@
 /// # Metadata
 ///
 /// Metadata can be attached to any component, which allows reflection and
-/// additional info for components. Any type which implements [`crate::metadata::Metadata`] can be used.
+/// additional desc for components. Any type which implements [`crate::metadata::Metadata`] can be used.
 ///
 /// The following allows the component value to be printed for the world debug
 /// formatter, and it thus recommended to add where possible.
@@ -105,15 +105,15 @@ macro_rules! component {
         $vis fn $name($obj: $crate::Entity) -> $crate::Component<$ty> {
 
             static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
-            fn meta(_component: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
+            fn meta(_desc: $crate::ComponentDesc) -> $crate::buffer::ComponentBuffer {
                 let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
-                <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_component, &mut _buffer);
-                <$crate::Component<$ty> as $crate::metadata::Metadata<$ty>>::attach(_component, &mut _buffer);
+                <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
+                <$crate::Component<$ty> as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
 
                 $(
                     $(
-                        <$metadata as $crate::metadata::Metadata::<$ty>>::attach(_component, &mut _buffer);
+                        <$metadata as $crate::metadata::Metadata::<$ty>>::attach(_desc, &mut _buffer);
                     )*
                 )*
 
@@ -138,15 +138,15 @@ macro_rules! component {
         $(#[$outer])*
         $vis fn $name() -> $crate::Component<$ty> {
         static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
-            fn meta(_component: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
+            fn meta(_desc: $crate::ComponentDesc) -> $crate::buffer::ComponentBuffer {
                 let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
-                <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_component, &mut _buffer);
-                <$crate::Component<$ty> as $crate::metadata::Metadata<$ty>>::attach(_component, &mut _buffer);
+                <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
+                <$crate::Component<$ty> as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
 
                 $(
                     $(
-                        <$metadata as $crate::metadata::Metadata::<$ty>>::attach(_component, &mut _buffer);
+                        <$metadata as $crate::metadata::Metadata::<$ty>>::attach(_desc, &mut _buffer);
                     )*
                 )*
 
@@ -183,15 +183,15 @@ macro_rules! component_vtable {
     ($name:tt: $ty: ty $(=> [$($metadata: ty),*])?) => {
 
         {
-            fn meta(_info: $crate::ComponentInfo) -> $crate::buffer::ComponentBuffer {
+            fn meta(_desc: $crate::ComponentDesc) -> $crate::buffer::ComponentBuffer {
                 let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
-                <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_info, &mut _buffer);
-                <$crate::Component<$ty> as $crate::metadata::Metadata<$ty>>::attach(_info, &mut _buffer);
+                <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
+                <$crate::Component<$ty> as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
 
                 $(
                     $(
-                        <$metadata as $crate::metadata::Metadata::<$ty>>::attach(_info, &mut _buffer);
+                        <$metadata as $crate::metadata::Metadata::<$ty>>::attach(_desc, &mut _buffer);
                     )*
                 )*
 

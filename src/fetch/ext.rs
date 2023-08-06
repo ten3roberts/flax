@@ -9,7 +9,8 @@ use super::{
     copied::Copied,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation},
-    Satisfied, Source,
+    transform::Added,
+    Map, Modified, Satisfied, Source, TransformFetch,
 };
 
 /// Extension trait for [crate::Fetch]
@@ -133,6 +134,46 @@ pub trait FetchExt: Sized {
         T: ComponentValue,
     {
         Source::new(self, FromRelation::new(relation))
+    }
+
+    /// Transform the fetch into a fetch where each constituent part tracks and yields for
+    /// modification events.
+    ///
+    /// This is different from E.g; `(a().modified(), b().modified())` as it implies only when
+    /// *both* `a` and `b` are modified in the same iteration, which is seldom useful.
+    ///
+    /// This means will yield *any* of `a` *or* `b` are modified.
+    ///
+    /// Works with `opt`, `copy`, etc constituents.
+    fn modified(self) -> <Self as TransformFetch<Modified>>::Output
+    where
+        Self: TransformFetch<Modified>,
+    {
+        self.transform_fetch(Modified)
+    }
+
+    /// Transform the fetch into a fetch where each constituent part tracks and yields for insert
+    /// events.
+    ///
+    /// This is different from E.g; `(a().modified(), b().modified())` as it implies only when
+    /// *both* `a` and `b` are modified in the same iteration, which is seldom useful.
+    ///
+    /// This means will yield *any* of `a` *or* `b` are modified.
+    ///
+    /// Works with `opt`, `copy`, etc constituents.
+    fn added(self) -> <Self as TransformFetch<Added>>::Output
+    where
+        Self: TransformFetch<Added>,
+    {
+        self.transform_fetch(Added)
+    }
+    /// Map each item of the query to another type using the provided function.
+    fn map<F, T>(self, func: F) -> Map<Self, F>
+    where
+        Self: for<'x> FetchItem<'x>,
+        for<'x> F: Fn(<Self as FetchItem<'x>>::Item) -> T,
+    {
+        Map { query: self, func }
     }
 }
 

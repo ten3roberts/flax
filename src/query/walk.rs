@@ -50,7 +50,7 @@ where
         GraphQuery {
             fetch: Filtered::new(
                 self.fetch.fetch,
-                And::new(self.fetch.filter, filter),
+                And(self.fetch.filter, filter),
                 self.fetch.include_components,
             ),
             relation: self.relation,
@@ -203,6 +203,7 @@ pub struct Node<'w, Q, F> {
 }
 
 impl<'w, Q, F> Clone for Node<'w, Q, F> {
+    #[inline]
     fn clone(&self) -> Self {
         Self {
             id: self.id,
@@ -214,8 +215,6 @@ impl<'w, Q, F> Clone for Node<'w, Q, F> {
         }
     }
 }
-
-impl<'w, Q, F> Copy for Node<'w, Q, F> {}
 
 impl<'w, Q, F> Debug for Node<'w, Q, F> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -243,7 +242,8 @@ where
 
         let p = &mut borrow.prepared[index];
 
-        p.manual_chunk(Slice::single(self.slot))?.next()
+        // Safety: &mut borrow
+        unsafe { p.create_chunk(Slice::single(self.slot))? }.next()
     }
 
     /// Traverse the immediate children of the current node.
@@ -267,7 +267,7 @@ where
 
     /// Traverse the current subtree including the current node in depth-first order.
     pub fn dfs(&self) -> DfsIter<'w, Q, F> {
-        let stack = smallvec::smallvec![*self];
+        let stack = smallvec::smallvec![self.clone()];
 
         DfsIter {
             stack,

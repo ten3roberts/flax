@@ -1,9 +1,9 @@
-use core::fmt::Debug;
+use core::{fmt::Debug, marker::PhantomData};
 
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::{Archetype, Slot},
+    archetype::{Archetype, Slice, Slot},
     entity::EntityLocation,
     system::Access,
     ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
@@ -82,7 +82,6 @@ impl<Q, S> Source<Q, S> {
 impl<'q, Q, S> FetchItem<'q> for Source<Q, S>
 where
     Q: FetchItem<'q>,
-    S: FetchSource,
 {
     type Item = Q::Item;
 }
@@ -95,7 +94,7 @@ where
 {
     const MUTABLE: bool = Q::MUTABLE;
 
-    type Prepared = PreparedSource<Q::Prepared>;
+    type Prepared = PreparedSource<'w, Q::Prepared>;
 
     fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let loc = self.source.resolve(data.arch, data.world)?;
@@ -114,6 +113,7 @@ where
         Some(PreparedSource {
             slot: loc.slot,
             fetch,
+            _marker: PhantomData,
         })
     }
 
@@ -146,33 +146,40 @@ where
     }
 }
 
-impl<'q, Q> ReadOnlyFetch<'q> for PreparedSource<Q>
-where
-    Q: ReadOnlyFetch<'q>,
-{
-    unsafe fn fetch_shared(&'q self, _: crate::archetype::Slot) -> Self::Item {
-        self.fetch.fetch_shared(self.slot)
-    }
-}
+// impl<'w, 'q, Q> ReadOnlyFetch<'q> for PreparedSource<Q>
+// where
+//     Q: ReadOnlyFetch<'q>,
+// {
+//     unsafe fn fetch_shared(&'q self, _: crate::archetype::Slot) -> Self::Item {
+//         self.fetch.fetch_shared(self.slot)
+//     }
+// }
 
-impl<'q, Q> PreparedFetch<'q> for PreparedSource<Q>
+impl<'w, 'q, Q> PreparedFetch<'q> for PreparedSource<'w, Q>
 where
-    Q: ReadOnlyFetch<'q>,
+    Q: 'w + ReadOnlyFetch<'q>,
 {
     type Item = Q::Item;
-
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.fetch_shared(slot)
-    }
 
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.fetch.filter_slots(slots)
     }
+
+    type Chunk = Q::Chunk;
+
+    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
+        self.fetch.create_chunk(Slice::single(self.slot))
+    }
+
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+        Q::fetch_shared_chunk(chunk, 0)
+    }
 }
 
-pub struct PreparedSource<Q> {
+pub struct PreparedSource<'w, Q> {
     slot: Slot,
     fetch: Q,
+    _marker: PhantomData<&'w mut ()>,
 }
 
 #[cfg(test)]

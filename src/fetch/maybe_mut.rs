@@ -87,16 +87,30 @@ pub struct PreparedMaybeMut<'w, T> {
     _marker: PhantomData<T>,
 }
 
+pub struct Batch<'a> {
+    cell: &'a Cell,
+    new_tick: u32,
+    ids: &'a [Entity],
+}
+
 impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     type Item = MutGuard<'q, T>;
+    type Chunk = Batch<'q>;
 
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        MutGuard {
-            slot,
+    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
+        Batch {
             cell: self.cell,
             new_tick: self.new_tick,
-            entities: self.entities,
+            ids: self.entities,
+        }
+    }
+
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        MutGuard {
+            slot,
+            cell: chunk.cell,
+            new_tick: chunk.new_tick,
+            id: *chunk.ids.get_unchecked(slot),
             _marker: PhantomData,
         }
     }
@@ -109,7 +123,17 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
             slot,
             cell: self.cell,
             new_tick: self.new_tick,
-            entities: self.entities,
+            id: self.entities[slot],
+            _marker: PhantomData,
+        }
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        MutGuard {
+            slot,
+            cell: chunk.cell,
+            new_tick: chunk.new_tick,
+            id: chunk.ids[slot],
             _marker: PhantomData,
         }
     }
@@ -120,7 +144,7 @@ impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
 /// See: [`MaybeMut`]
 pub struct MutGuard<'w, T> {
     slot: Slot,
-    entities: &'w [Entity],
+    id: Entity,
     cell: &'w Cell,
     new_tick: u32,
     _marker: PhantomData<T>,
@@ -138,10 +162,8 @@ impl<'w, T: ComponentValue> MutGuard<'w, T> {
     /// Triggers a change
     pub fn write(&self) -> RefMut<T> {
         // Type is guaranteed by constructor
-        unsafe {
-            self.cell
-                .get_mut(self.entities, self.slot, self.new_tick)
-                .unwrap()
-        }
+        self.cell
+            .get_mut(self.id, self.slot, self.new_tick)
+            .unwrap()
     }
 }

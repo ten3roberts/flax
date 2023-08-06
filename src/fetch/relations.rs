@@ -4,11 +4,10 @@ use core::{
 };
 
 use alloc::vec::Vec;
-use atomic_refcell::AtomicRef;
 use smallvec::SmallVec;
 
 use crate::{
-    archetype::{Archetype, Slot},
+    archetype::{Archetype, CellGuard, Slot},
     component::dummy,
     system::{Access, AccessKind},
     Component, ComponentValue, Entity, Fetch, FetchItem, RelationExt,
@@ -31,15 +30,10 @@ where
     type Prepared = PreparedRelations<'w, T>;
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let borrows: SmallVec<[(Entity, AtomicRef<[T]>); 4]> = {
+        let borrows: SmallVec<[_; 4]> = {
             data.arch
                 .relations_like(self.component.id())
-                .map(|(info, cell)| {
-                    (
-                        info.object.unwrap(),
-                        AtomicRef::map(cell.storage().borrow(), |v| unsafe { v.borrow() }),
-                    )
-                })
+                .map(|(desc, cell)| (desc.object.unwrap(), cell.borrow()))
                 .collect()
         };
 
@@ -78,18 +72,30 @@ impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {
 
 #[doc(hidden)]
 pub struct PreparedRelations<'a, T> {
-    borrows: SmallVec<[(Entity, AtomicRef<'a, [T]>); 4]>,
+    borrows: SmallVec<[(Entity, CellGuard<'a, [T]>); 4]>,
 }
 
-impl<'q, 'w, T> PreparedFetch<'q> for PreparedRelations<'w, T>
+pub struct Batch<'a, T> {
+    borrows: &'a [(Entity, CellGuard<'a, [T]>)],
+}
+
+impl<'w, 'q, T> PreparedFetch<'q> for PreparedRelations<'w, T>
 where
     T: ComponentValue,
 {
     type Item = RelationsIter<'q, T>;
 
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
+    type Chunk = Batch<'q, T>;
+
+    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
+        Batch {
+            borrows: &self.borrows,
+        }
+    }
+
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
         RelationsIter {
-            borrows: self.borrows.iter(),
+            borrows: chunk.borrows.iter(),
             slot,
         }
     }
@@ -97,7 +103,7 @@ where
 
 /// Iterates the relation object and data for the yielded query item
 pub struct RelationsIter<'a, T> {
-    borrows: slice::Iter<'a, (Entity, AtomicRef<'a, [T]>)>,
+    borrows: slice::Iter<'a, (Entity, CellGuard<'a, [T]>)>,
     slot: Slot,
 }
 
@@ -106,7 +112,7 @@ impl<'a, T> Iterator for RelationsIter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let (id, borrow) = self.borrows.next()?;
-        let borrow = &borrow[self.slot];
+        let borrow = &borrow.get()[self.slot];
         Some((*id, borrow))
     }
 }

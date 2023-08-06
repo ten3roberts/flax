@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 use crate::{
     archetype::Slice,
     entity::EntityLocation,
-    error::Result,
+    error::{MissingComponent, Result},
     fetch::{FetchAccessData, PreparedFetch},
     filter::{All, Filtered},
     system::{Access, AccessKind},
@@ -14,7 +14,7 @@ use crate::{
 
 use super::{
     borrow::QueryBorrowState, difference::find_missing_components, ArchetypeChunks,
-    ArchetypeSearcher, Batch, PreparedArchetype, QueryStrategy,
+    ArchetypeSearcher, Chunk, PreparedArchetype, QueryStrategy,
 };
 
 /// The default linear iteration strategy
@@ -222,6 +222,7 @@ where
     where
         Q: Sync,
         Q::Prepared: Send,
+        for<'x> <Q::Prepared as PreparedFetch<'x>>::Chunk: Send,
         F: Sync,
         F::Prepared: Send,
     {
@@ -276,7 +277,9 @@ where
         let idx =
             self.prepare_archetype(arch_id).ok_or_else(|| {
                 match find_missing_components(self.state.fetch, arch_id, self.state.world).next() {
-                    Some(missing) => Error::MissingComponent(id, missing),
+                    Some(missing) => {
+                        Error::MissingComponent(MissingComponent { id, desc: missing })
+                    }
                     None => Error::DoesNotMatch(id),
                 }
             })?;
@@ -284,9 +287,11 @@ where
         // Since `self` is a mutable references the borrow checker
         // guarantees this borrow is unique
         let p = &mut self.prepared[idx];
-        let mut chunk = p
-            .manual_chunk(Slice::single(slot))
-            .ok_or(Error::Filtered(id))?;
+        // Safety: &mut self
+        let mut chunk = unsafe {
+            p.create_chunk(Slice::single(slot))
+                .ok_or(Error::Filtered(id))?
+        };
 
         let item = chunk.next().unwrap();
 
@@ -321,6 +326,37 @@ where
     }
 }
 
+// struct SlicePtrIter<T> {
+//     ptr: *mut T,
+//     count: usize,
+// }
+
+// impl<T> SlicePtrIter<T> {
+//     fn new(slice: *mut [T]) -> Self {
+//         Self {
+//             ptr: slice.as_mut_ptr(),
+//             count: slice.len,
+//         }
+//     }
+// }
+
+// impl<T> Iterator for SlicePtrIter<T> {
+//     type Item = *mut T;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         if self.count == 0 {
+//             return None;
+//         }
+
+//         self.count -= 1;
+//         let old = self.ptr;
+//         unsafe {
+//             self.ptr = self.ptr.add(1);
+//         }
+//         Some(old)
+//     }
+// }
+
 /// An iterator which yields disjoint continuous slices for each matched archetype
 /// and filter predicate.
 pub struct BatchedIter<'w, 'q, Q, F>
@@ -333,7 +369,8 @@ where
     pub(crate) current: Option<ArchetypeChunks<'q, Q::Prepared, F::Prepared>>,
 }
 
-impl<'q, 'w, Q, F> BatchedIter<'w, 'q, Q, F>
+/// Iterates over archetypes, yielding batches
+impl<'w, 'q, Q, F> BatchedIter<'w, 'q, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,
@@ -355,7 +392,7 @@ where
     F: Fetch<'w>,
     'w: 'q,
 {
-    type Item = Batch<'q, Q::Prepared, F::Prepared>;
+    type Item = Chunk<'q, Q::Prepared>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -366,7 +403,11 @@ where
                 }
             }
 
-            let p = self.archetypes.next()?;
+            let p = unsafe {
+                &mut *(self.archetypes.next()?
+                    as *mut PreparedArchetype<'w, Q::Prepared, F::Prepared>)
+            };
+
             self.current = Some(p.chunks());
         }
     }

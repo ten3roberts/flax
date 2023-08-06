@@ -100,7 +100,7 @@ fn access() {
     ]);
 
     assert_eq!(
-        schedule.batch_info(&mut world).to_names(),
+        schedule.batch_info(&world).to_names(),
         [
             vec!["regen_system", "weapons", "names"],
             vec!["blue_system", "red_system"],
@@ -111,7 +111,7 @@ fn access() {
     world.set(spectator, blue_team(), ()).unwrap();
 
     assert_eq!(
-        schedule.batch_info(&mut world).to_names(),
+        schedule.batch_info(&world).to_names(),
         [
             vec!["regen_system", "weapons", "names"],
             vec!["blue_system", "red_system"],
@@ -123,7 +123,7 @@ fn access() {
     world.set(spectator, red_team(), ()).unwrap();
 
     assert_eq!(
-        schedule.batch_info(&mut world).to_names(),
+        schedule.batch_info(&world).to_names(),
         [
             vec!["regen_system", "weapons", "names"],
             vec!["blue_system"],
@@ -135,7 +135,7 @@ fn access() {
     world.remove(spectator, weapon()).unwrap();
 
     assert_eq!(
-        schedule.batch_info(&mut world).to_names(),
+        schedule.batch_info(&world).to_names(),
         [
             vec!["regen_system", "weapons", "names"],
             vec!["blue_system", "red_system"],

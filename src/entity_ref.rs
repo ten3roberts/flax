@@ -10,9 +10,11 @@ use crate::{
     archetype::{Archetype, RefMut, Slot},
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
-    error::Result,
+    error::MissingComponent,
     format::EntityFormatter,
-    name, Component, ComponentKey, ComponentValue, Entity, Error, RelationExt, World,
+    name,
+    writer::{EntityWriter, FnWriter, Replace, SingleComponentWriter, WriteDedup},
+    Component, ComponentKey, ComponentValue, Entity, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
@@ -28,21 +30,36 @@ pub struct EntityRefMut<'a> {
 
 impl<'a> EntityRefMut<'a> {
     /// Access a component
-    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<T>> {
+    pub fn get<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<AtomicRef<T>, MissingComponent> {
         self.world
             .get_at(self.loc(), component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+            .ok_or_else(|| MissingComponent {
+                id: self.id,
+                desc: component.desc(),
+            })
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<T>> {
+    pub fn get_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<RefMut<T>, MissingComponent> {
         self.world
             .get_mut_at(self.loc(), component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+            .ok_or_else(|| MissingComponent {
+                id: self.id,
+                desc: component.desc(),
+            })
     }
 
     /// Shorthand to copy and not use a borrowing references
-    pub fn get_copy<T: ComponentValue + Copy>(&self, component: Component<T>) -> Result<T> {
+    pub fn get_copy<T: ComponentValue + Copy>(
+        &self,
+        component: Component<T>,
+    ) -> Result<T, MissingComponent> {
         self.get(component).map(|v| *v)
     }
 
@@ -60,10 +77,33 @@ impl<'a> EntityRefMut<'a> {
         &self,
         component: Component<T>,
         f: impl FnOnce(&mut T) -> U,
-    ) -> Option<U> {
+    ) -> Result<U, MissingComponent> {
         let loc = self.loc();
         let arch = self.world.archetypes.get(loc.arch_id);
-        arch.update(loc.slot, component, self.world.advance_change_tick(), f)
+        let tick = self.world.advance_change_tick();
+
+        arch.update(loc.slot, component, FnWriter::new(f), tick)
+            .ok_or(MissingComponent {
+                id: self.id,
+                desc: component.desc(),
+            })
+    }
+
+    /// Updates a component in place
+    pub fn update_dedup<T: ComponentValue + PartialEq>(
+        &self,
+        component: Component<T>,
+        value: T,
+    ) -> Result<(), MissingComponent> {
+        let loc = self.loc();
+        let arch = self.world.archetypes.get(loc.arch_id);
+        let tick = self.world.advance_change_tick();
+
+        arch.update(loc.slot, component, WriteDedup::new(value), tick)
+            .ok_or(MissingComponent {
+                id: self.id,
+                desc: component.desc(),
+            })
     }
 
     /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
@@ -106,18 +146,43 @@ impl<'a> EntityRefMut<'a> {
 
     /// Set a component for the entity
     pub fn set<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> Option<T> {
-        let (old, loc) = self.world.set_inner(self.id, component, value).unwrap();
+        self.set_with_writer(SingleComponentWriter::new(
+            component.desc(),
+            Replace::new(value),
+        ))
+        .left()
+    }
+
+    /// Set a component for the entity.
+    ///
+    /// Does not trigger a modification event if the value is the same
+    pub fn set_dedup<T: ComponentValue + PartialEq>(&mut self, component: Component<T>, value: T) {
+        self.set_with_writer(SingleComponentWriter::new(
+            component.desc(),
+            WriteDedup::new(value),
+        ));
+    }
+
+    /// Set a component for the entity
+    pub(crate) fn set_with_writer<W: EntityWriter>(&mut self, writer: W) -> W::Output {
+        let (loc, res) = self.world.set_with_writer(self.id, writer).unwrap();
         self.loc = OnceCell::with_value(loc);
-        old
+        res
     }
 
     /// Remove a component
-    pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Result<T> {
+    pub fn remove<T: ComponentValue>(
+        &mut self,
+        component: Component<T>,
+    ) -> Result<T, MissingComponent> {
         let mut res: MaybeUninit<T> = MaybeUninit::uninit();
         let (old, loc) = unsafe {
-            let loc = self.world.remove_inner(self.id, component.info(), |ptr| {
-                res.write(ptr.cast::<T>().read());
-            })?;
+            let loc = self
+                .world
+                .remove_inner(self.id, component.desc(), |ptr| {
+                    res.write(ptr.cast::<T>().read());
+                })
+                .map_err(|v| v.try_into_missing_component().unwrap())?;
             (res.assume_init(), loc)
         };
 
@@ -228,21 +293,36 @@ pub struct EntityRef<'a> {
 
 impl<'a> EntityRef<'a> {
     /// Access a component
-    pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Result<AtomicRef<'a, T>> {
+    pub fn get<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<AtomicRef<'a, T>, MissingComponent> {
         self.arch
             .get(self.slot, component)
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+            .ok_or_else(|| MissingComponent {
+                id: self.id,
+                desc: component.desc(),
+            })
     }
 
     /// Access a component mutably
-    pub fn get_mut<T: ComponentValue>(&self, component: Component<T>) -> Result<RefMut<'a, T>> {
+    pub fn get_mut<T: ComponentValue>(
+        &self,
+        component: Component<T>,
+    ) -> Result<RefMut<'a, T>, MissingComponent> {
         self.arch
             .get_mut(self.slot, component, self.world.advance_change_tick())
-            .ok_or_else(|| Error::MissingComponent(self.id, component.info()))
+            .ok_or_else(|| MissingComponent {
+                id: self.id,
+                desc: component.desc(),
+            })
     }
 
     /// Shorthand to copy and not use a borrowing references
-    pub fn get_copy<T: ComponentValue + Copy>(&self, component: Component<T>) -> Result<T> {
+    pub fn get_copy<T: ComponentValue + Copy>(
+        &self,
+        component: Component<T>,
+    ) -> Result<T, MissingComponent> {
         self.get(component).map(|v| *v)
     }
 
@@ -258,8 +338,22 @@ impl<'a> EntityRef<'a> {
         component: Component<T>,
         f: impl FnOnce(&mut T) -> U,
     ) -> Option<U> {
+        let change_tick = self.world.advance_change_tick();
+
         self.arch
-            .update(self.slot, component, self.world.advance_change_tick(), f)
+            .update(self.slot, component, FnWriter::new(f), change_tick)
+    }
+
+    /// Updates a component in place
+    pub fn update_dedup<T: ComponentValue + PartialEq>(
+        &self,
+        component: Component<T>,
+        value: T,
+    ) -> Option<()> {
+        let tick = self.world.advance_change_tick();
+
+        self.arch
+            .update(self.slot, component, WriteDedup::new(value), tick)
     }
 
     /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
@@ -361,7 +455,7 @@ impl Display for EntityRefMut<'_> {
 #[cfg(test)]
 mod test {
 
-    use crate::{component, components::name, is_static, EntityBuilder};
+    use crate::{component, components::name, is_static, EntityBuilder, FetchExt, Query};
 
     use super::*;
 
@@ -389,7 +483,10 @@ mod test {
 
         assert_eq!(
             res.as_deref(),
-            Err(&Error::MissingComponent(id, is_static().info()))
+            Err(&MissingComponent {
+                id,
+                desc: is_static().desc()
+            })
         )
     }
 
@@ -488,8 +585,12 @@ mod test {
 
         let entity = world.entity(id).unwrap();
 
+        let mut query = Query::new(a().modified().cloned());
+        assert_eq!(query.collect_vec(&world), ["Foo"]);
         assert_eq!(entity.update(a(), |v| v.push_str("Bar")), Some(()));
+        assert_eq!(query.collect_vec(&world), ["FooBar"]);
         assert_eq!(entity.update(b(), |v| v.push('_')), None);
+        assert!(query.collect_vec(&world).is_empty());
 
         assert_eq!(entity.get(a()).as_deref(), Ok(&"FooBar".to_string()));
         assert!(entity.get(b()).is_err());
@@ -511,10 +612,71 @@ mod test {
 
         let entity = world.entity_mut(id).unwrap();
 
-        assert_eq!(entity.update(a(), |v| v.push_str("Bar")), Some(()));
-        assert_eq!(entity.update(b(), |v| v.push('_')), None);
+        assert_eq!(entity.update(a(), |v| v.push_str("Bar")), Ok(()));
+        assert_eq!(
+            entity.update(b(), |v| v.push('_')),
+            Err(MissingComponent {
+                id,
+                desc: b().desc()
+            })
+        );
 
         assert_eq!(entity.get(a()).as_deref(), Ok(&"FooBar".to_string()));
         assert!(entity.get(b()).is_err());
+    }
+
+    #[test]
+    fn set_dedup() {
+        use alloc::string::String;
+        component! {
+            a: String,
+        }
+
+        let mut world = World::new();
+
+        let mut query = Query::new(a().modified().cloned());
+
+        let id = EntityBuilder::new()
+            .set(a(), "Foo".into())
+            .spawn(&mut world);
+
+        assert_eq!(query.collect_vec(&world), ["Foo"]);
+
+        let mut entity = world.entity_mut(id).unwrap();
+        entity.set_dedup(a(), "Foo".into());
+
+        assert!(query.collect_vec(&world).is_empty());
+        let mut entity = world.entity_mut(id).unwrap();
+        entity.set_dedup(a(), "Bar".into());
+
+        assert_eq!(query.collect_vec(&world), ["Bar"]);
+    }
+
+    #[test]
+    fn update_dedup() {
+        use alloc::string::String;
+        component! {
+            a: String,
+        }
+
+        let mut world = World::new();
+
+        let mut query = Query::new(a().modified().cloned());
+
+        let id = EntityBuilder::new()
+            .set(a(), "Foo".into())
+            .spawn(&mut world);
+
+        assert_eq!(query.collect_vec(&world), ["Foo"]);
+
+        let entity = world.entity_mut(id).unwrap();
+        let _ = entity.update_dedup(a(), "Foo".into());
+
+        assert!(query.collect_vec(&world).is_empty());
+
+        let entity = world.entity_mut(id).unwrap();
+        let _ = entity.update_dedup(a(), "Bar".into());
+
+        assert_eq!(query.collect_vec(&world), ["Bar"]);
     }
 }

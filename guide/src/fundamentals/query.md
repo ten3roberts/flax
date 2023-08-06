@@ -75,8 +75,8 @@ instead.
 
 ### Change detection
 
-- [modified](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) yields components which have been updated **or** inserted.
-- [inserted](https://docs.rs/flax/latest/flax/struct.Component.html#method.inserted) yields new components.
+- [modified](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified) yields components which have been updated **or** added.
+- [inserted](https://docs.rs/flax/latest/flax/struct.Component.html#method.added) yields new components.
 - [removed](https://docs.rs/flax/latest/flax/struct.Component.html#method.removed) yields each entity for which the component was recently removed.
 
 All change detection is per query and based on when the query last executed.

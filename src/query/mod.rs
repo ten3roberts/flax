@@ -15,8 +15,9 @@ use core::fmt::Debug;
 use crate::{
     archetype::Slot,
     fetch::FmtQuery,
-    filter::{All, And, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
+    filter::{All, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
     system::Access,
+    util::TupleCombine,
     Component, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 use alloc::vec::Vec;
@@ -119,7 +120,10 @@ impl<Q> Query<Q, All, Planar> {
     /// [`Query::with_components`]
     ///
     /// A fetch may also contain filters
-    pub fn new(fetch: Q) -> Self {
+    pub fn new(fetch: Q) -> Self
+    where
+        Q: for<'x> Fetch<'x>,
+    {
         Self {
             fetch: Filtered::new(fetch, All, false),
             change_tick: 0,
@@ -192,11 +196,14 @@ where
 {
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<G>(self, filter: G) -> Query<Q, And<F, G>, S> {
+    pub fn filter<G>(self, filter: G) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<G>,
+    {
         Query {
             fetch: Filtered::new(
                 self.fetch.fetch,
-                And::new(self.fetch.filter, filter),
+                self.fetch.filter.push_right(filter),
                 self.fetch.include_components,
             ),
             change_tick: self.change_tick,
@@ -206,7 +213,10 @@ where
     }
 
     /// Limits the size of each batch using [`QueryBorrow::iter_batched`]
-    pub fn batch_size(self, size: Slot) -> Query<Q, And<F, BatchSize>, S> {
+    pub fn batch_size(self, size: Slot) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<BatchSize>,
+    {
         self.filter(BatchSize(size))
     }
 
@@ -214,7 +224,10 @@ where
     pub fn with_relation<T: ComponentValue>(
         self,
         rel: impl RelationExt<T>,
-    ) -> Query<Q, And<F, WithRelation>, S> {
+    ) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<WithRelation>,
+    {
         self.filter(rel.with_relation())
     }
 
@@ -222,20 +235,26 @@ where
     pub fn without_relation<T: ComponentValue>(
         self,
         rel: impl RelationExt<T>,
-    ) -> Query<Q, And<F, WithoutRelation>, S> {
+    ) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<WithoutRelation>,
+    {
         self.filter(rel.without_relation())
     }
 
     /// Shortcut for filter(without)
-    pub fn without<T: ComponentValue>(
-        self,
-        component: Component<T>,
-    ) -> Query<Q, And<F, Without>, S> {
+    pub fn without<T: ComponentValue>(self, component: Component<T>) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<Without>,
+    {
         self.filter(component.without())
     }
 
     /// Shortcut for filter(with)
-    pub fn with<T: ComponentValue>(self, component: Component<T>) -> Query<Q, And<F, With>, S> {
+    pub fn with<T: ComponentValue>(self, component: Component<T>) -> Query<Q, F::PushRight, S>
+    where
+        F: TupleCombine<With>,
+    {
         self.filter(component.with())
     }
 
@@ -266,7 +285,7 @@ where
         (old_tick, new_tick)
     }
 
-    /// Borrow the world for the query.
+    /// Borrow data in the world for the query.
     ///
     /// The returned value holds the borrows of the query fetch. As such, all
     /// references from iteration or using [QueryBorrow::get`] will have a
@@ -303,7 +322,7 @@ where
 mod test {
     use pretty_assertions::assert_eq;
 
-    use crate::{filter::Or, name, Entity, Error, FetchExt, Query};
+    use crate::{error::MissingComponent, filter::Or, name, Entity, Error, FetchExt, Query};
 
     use super::*;
 
@@ -377,7 +396,10 @@ mod test {
 
         assert_eq!(
             borrow.get(id4),
-            Err(Error::MissingComponent(id4, b().info()))
+            Err(Error::MissingComponent(MissingComponent {
+                id: id4,
+                desc: b().desc()
+            }))
         );
     }
 

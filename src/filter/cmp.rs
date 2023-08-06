@@ -16,7 +16,9 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Slice, Slot},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch},
+    fetch::{
+        FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch, TransformFetch,
+    },
     system::Access,
     Fetch, FetchItem,
 };
@@ -159,27 +161,26 @@ pub struct PreparedCmp<'w, F, M> {
     method: &'w M,
 }
 
-impl<'p, 'w, F, M> ReadOnlyFetch<'p> for PreparedCmp<'w, F, M>
+impl<'w, 'q, F, M> ReadOnlyFetch<'q> for PreparedCmp<'w, F, M>
 where
     F: for<'x> ReadOnlyFetch<'x>,
     M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
 {
-    unsafe fn fetch_shared(&'p self, slot: Slot) -> Self::Item {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.fetch.fetch_shared(slot)
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        F::fetch_shared_chunk(chunk, slot)
     }
 }
 
-impl<'q, 'w, F, M> PreparedFetch<'q> for PreparedCmp<'w, F, M>
+impl<'w, 'q, Q, M> PreparedFetch<'q> for PreparedCmp<'w, Q, M>
 where
-    F: for<'x> ReadOnlyFetch<'x>,
-    M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
+    Q: for<'x> ReadOnlyFetch<'x>,
+    M: for<'x> CmpMethod<<Q as PreparedFetch<'x>>::Item> + 'w,
 {
-    type Item = <F as PreparedFetch<'q>>::Item;
-
-    #[inline]
-    unsafe fn fetch(&'q mut self, slot: usize) -> Self::Item {
-        self.fetch.fetch(slot)
-    }
+    type Item = <Q as PreparedFetch<'q>>::Item;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -205,9 +206,29 @@ where
         }
     }
 
+    type Chunk = <Q as PreparedFetch<'q>>::Chunk;
+
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+        self.fetch.create_chunk(slots)
+    }
+
     #[inline]
-    fn set_visited(&mut self, slots: Slice) {
-        self.fetch.set_visited(slots)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+        Q::fetch_next(chunk, slot)
+    }
+}
+
+impl<K, F, C> TransformFetch<K> for Cmp<F, C>
+where
+    F: TransformFetch<K>,
+{
+    type Output = Cmp<F::Output, C>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        Cmp {
+            fetch: self.fetch.transform_fetch(method),
+            method: self.method,
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 #[test]
 #[cfg(feature = "derive")]
-fn derive_fetch() {
+fn derive_fetch_generic() {
     flax::component! {
         position: Vec3 => [flax::Debuggable],
         rotation: Quat => [flax::Debuggable],
@@ -13,10 +13,10 @@ fn derive_fetch() {
 
     #[derive(Fetch)]
     #[fetch(item_derives = [Debug, PartialEq])]
-    struct TransformQuery {
-        pos: Component<Vec3>,
+    struct TransformQuery<V: ComponentValue> {
+        pos: Component<V>,
         rot: Opt<Component<Quat>>,
-        scale: Opt<Component<Vec3>>,
+        scale: Opt<Component<V>>,
     }
 
     let mut world = World::new();

@@ -5,7 +5,7 @@ use crate::{
     entity::{EntityKind, EntityStore, EntityStoreIter, EntityStoreIterMut},
     events::EventSubscriber,
     metadata::exclusive,
-    ArchetypeId, ComponentInfo, Entity,
+    ArchetypeId, ComponentDesc, Entity,
 };
 
 // fn is_sorted<T: Ord>(v: &[T]) -> bool {
@@ -55,12 +55,15 @@ impl Archetypes {
     /// Prunes a leaf and its ancestors from empty archetypes
     pub(crate) fn prune_arch(&mut self, arch_id: ArchetypeId) -> bool {
         let arch = self.get(arch_id);
-        if arch_id == self.root || !arch.is_empty() || !arch.outgoing.is_empty() {
+        if arch_id == self.root
+            || arch_id == self.reserved
+            || !arch.is_empty()
+            || !arch.outgoing.is_empty()
+        {
             return false;
         }
 
         let arch = self.inner.despawn(arch_id).unwrap();
-
         for (&key, &dst_id) in &arch.incoming {
             let dst = self.get_mut(dst_id);
             dst.remove_link(key);
@@ -79,9 +82,9 @@ impl Archetypes {
     /// `components` must be sorted.
     ///
     /// Ensures the `exclusive` property of any relations are satisfied
-    pub(crate) fn find(
+    pub(crate) fn find_create(
         &mut self,
-        components: impl IntoIterator<Item = ComponentInfo>,
+        components: impl IntoIterator<Item = ComponentDesc>,
     ) -> (ArchetypeId, &mut Archetype) {
         let mut cursor = self.root;
 

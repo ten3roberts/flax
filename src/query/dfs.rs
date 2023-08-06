@@ -12,7 +12,7 @@ use smallvec::SmallVec;
 
 use crate::{Entity, Fetch, RelationExt, World};
 
-use super::{borrow::QueryBorrowState, Batch, PreparedArchetype, QueryStrategy};
+use super::{borrow::QueryBorrowState, Chunk, PreparedArchetype, QueryStrategy};
 
 type AdjMap = BTreeMap<Entity, SmallVec<[usize; 8]>>;
 
@@ -222,10 +222,10 @@ where
         let prepared = (&mut self.prepared[..]) as *mut [_] as *mut PreparedArchetype<_, _>;
         let arch_index = *dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
 
-        // Fetch will never change and all calls are disjoint
+        // Fetch will never change and all calls are disjoint as the graph is acyclic
         let p = unsafe { &mut *prepared.add(arch_index) };
 
-        if let Some(mut chunk) = p.manual_chunk(Slice::single(loc.slot)) {
+        if let Some(mut chunk) = unsafe { p.create_chunk(Slice::single(loc.slot)) } {
             Self::traverse_batch(
                 self.query_state.world,
                 dfs,
@@ -269,7 +269,7 @@ where
         // Uses a raw pointer to be able to recurse inside the loop
         // Alternative: release all borrows and borrow/prepare each fetch inside the loop
         prepared: *mut PreparedArchetype<Q::Prepared, F::Prepared>,
-        chunk: &mut Batch<Q::Prepared, F::Prepared>,
+        chunk: &mut Chunk<Q::Prepared>,
         edge: Option<&[T]>,
         value: &V,
         visit: &mut Visit,
@@ -296,7 +296,7 @@ where
                         dfs,
                         prepared,
                         &mut chunk,
-                        edge.as_deref(),
+                        edge.as_ref().map(|v| v.get()),
                         &value,
                         visit,
                     )
@@ -314,7 +314,7 @@ where
     'w: 'q,
 {
     pub(crate) prepared: &'q mut [PreparedArchetype<'w, Q::Prepared, F::Prepared>],
-    pub(crate) stack: SmallVec<[Batch<'q, Q::Prepared, F::Prepared>; 8]>,
+    pub(crate) stack: SmallVec<[Chunk<'q, Q::Prepared>; 8]>,
 
     pub(crate) adj: &'q AdjMap,
 }
@@ -341,7 +341,7 @@ where
         let arch = &mut self.prepared[arch_index];
         // Fetch will never change and all calls are disjoint
         let p = unsafe { &mut *(arch as *mut PreparedArchetype<_, _>) };
-        if let Some(chunk) = p.manual_chunk(slice) {
+        if let Some(chunk) = p.create_chunk(slice) {
             self.stack.push(chunk)
         }
     }
@@ -405,7 +405,10 @@ mod test {
                     .tag(tree())
                     .spawn(&mut world)
             })
-            .collect_vec() else { unreachable!() };
+            .collect_vec()
+        else {
+            unreachable!()
+        };
 
         world.set(b, child_of(a), ()).unwrap();
         world.set(c, child_of(b), ()).unwrap();
@@ -434,10 +437,13 @@ mod test {
                     .tag(tree())
                     .spawn(&mut world);
 
-                    all.insert(id);
+                all.insert(id);
                 id
             })
-            .collect_vec() else { unreachable!() };
+            .collect_vec()
+        else {
+            unreachable!()
+        };
 
         world.set(i, other(), ()).unwrap();
 

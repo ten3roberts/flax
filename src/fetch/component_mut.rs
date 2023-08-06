@@ -1,24 +1,15 @@
 use alloc::vec::Vec;
-use atomic_refcell::AtomicRefMut;
+
 use core::fmt::{self, Formatter};
 
 use crate::{
-    archetype::{Archetype, Cell, CellMutGuard, Change, Changes, Slice, Slot},
-    events::{EventData, EventKind},
+    archetype::{Archetype, CellMutGuard, Slice, Slot},
     system::{Access, AccessKind},
-    Component, ComponentValue, Entity, Fetch, FetchItem,
+    util::PtrMut,
+    Component, ComponentValue, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch};
-
-#[doc(hidden)]
-pub struct WriteComponent<'a, T> {
-    storage: AtomicRefMut<'a, [T]>,
-    changes: AtomicRefMut<'a, Changes>,
-    cell: &'a Cell,
-    ids: &'a [Entity],
-    tick: u32,
-}
 
 #[derive(Debug, Clone)]
 /// Mutable component fetch
@@ -35,20 +26,12 @@ where
 
     #[inline]
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let CellMutGuard {
-            storage,
-            changes,
-            cell,
-            ids,
-            tick,
-        } = data.arch.borrow_mut(self.0, data.new_tick)?;
+        let guard = data.arch.borrow_mut(self.0.key())?;
 
         Some(WriteComponent {
-            storage,
-            changes,
-            cell,
-            ids,
-            tick,
+            guard,
+            arch: data.arch,
+            tick: data.new_tick,
         })
     }
 
@@ -93,29 +76,30 @@ impl<'q, T: ComponentValue> FetchItem<'q> for Mutable<T> {
     type Item = &'q mut T;
 }
 
-impl<'q, 'w, T: 'q> PreparedFetch<'q> for WriteComponent<'w, T> {
-    type Item = &'q mut T;
+#[doc(hidden)]
+pub struct WriteComponent<'a, T> {
+    guard: CellMutGuard<'a, [T]>,
+    arch: &'a Archetype,
+    tick: u32,
+}
 
-    #[inline(always)]
-    unsafe fn fetch(&'q mut self, slot: Slot) -> Self::Item {
-        // Perform a reborrow
-        // Cast from a immutable to a mutable borrow as all calls to this
-        // function are guaranteed to be disjoint
-        unsafe { &mut *(self.storage.get_unchecked_mut(slot) as *mut T) }
+impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T> {
+    type Item = &'q mut T;
+    type Chunk = PtrMut<'q, T>;
+
+    unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
+        self.guard
+            .set_modified(&self.arch.entities[slots.as_range()], slots, self.tick);
+
+        // Convert directly into a non-overlapping subslice without reading the whole slice
+        PtrMut::new((self.guard.storage().as_ptr() as *mut T).add(slots.start))
     }
 
-    fn set_visited(&mut self, slots: Slice) {
-        let event = EventData {
-            ids: &self.ids[slots.as_range()],
-            key: self.cell.info().key,
-            kind: EventKind::Modified,
-        };
-
-        for handler in self.cell.subscribers.iter() {
-            handler.on_event(&event)
-        }
-
-        self.changes
-            .set_modified_if_tracking(Change::new(slots, self.tick));
+    #[inline]
+    // See: <https://godbolt.org/z/8fWa136b9>
+    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+        let old = chunk.as_ptr();
+        chunk.advance(1);
+        &mut *old
     }
 }
