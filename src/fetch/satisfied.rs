@@ -46,7 +46,6 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
         match &mut self.0 {
             Some(f) => {
                 let res = f.filter_slots(slots);
-                eprintln!("satisfied create_chunk {res:?}");
                 !res.is_empty()
             }
             None => false,
@@ -61,12 +60,10 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
         match &mut self.0 {
             Some(f) => {
                 let res = f.filter_slots(slots);
-                eprintln!("satisfied filter_slots {slots:?} => {res:?}");
 
                 // Something was missed
                 if res.start != slots.start {
                     // Catch the negative slice
-                    eprintln!("neg");
                     Slice::new(slots.start, res.start)
                 } else {
                     res
@@ -164,7 +161,7 @@ mod test {
 
         *world.get_mut(ids[1], a()).unwrap() = 5;
 
-        ::std::assert_eq!(
+        assert_eq!(
             query.collect_vec(&world),
             [
                 ("a".into(), false),

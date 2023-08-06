@@ -311,6 +311,8 @@ mod tests {
         );
     }
 
+    #[test]
+    #[cfg(feature = "derive")]
     fn test_derive_parse() {
         use crate::{fetch::Cloned, Component, Fetch};
 
