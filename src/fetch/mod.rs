@@ -38,7 +38,7 @@ pub use read_only::*;
 pub use relations::{relations_like, Relations, RelationsIter};
 pub use satisfied::Satisfied;
 pub use source::Source;
-pub use transform::{Modified, TransformFetch};
+pub use transform::{Added, Modified, TransformFetch};
 
 #[doc(hidden)]
 pub struct FmtQuery<'r, Q>(pub &'r Q);
