@@ -498,8 +498,8 @@ enum TransformIdent {
 impl TransformIdent {
     fn to_tokens(&self, crate_name: &Ident) -> TokenStream {
         match self {
-            Self::Modified => quote!(#crate_name::fetch::transform::Modified),
-            Self::Added => quote!(#crate_name::fetch::transform::Added),
+            Self::Modified => quote!(#crate_name::fetch::Modified),
+            Self::Added => quote!(#crate_name::fetch::Added),
         }
     }
 }
