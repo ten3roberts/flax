@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.4.0] - 2023-04-11
+## [0.5.0] - 2023-08-11
 
 ### Features
 
@@ -41,6 +41,25 @@ All notable changes to this project will be documented in this file.
 - Trigger an ICE
 - [**breaking**] Feature gate derive
 - Improve and clarify schedule reordering
+- Better system description
+- User supplied context data in schedule execution
+- Entity builder component count
+- Hierarchy formatting
+- Implement display for `Entity` and `EntityRefMut`
+- EntityRef::update
+- Get copy
+- Implement modified transform for tuples
+- Use trait to support Union filter for foreign types
+- Make derive support generics
+- Derive modified transform
+- Generic fetch transforms
+- Fetch map
+- Buffer component writer
+- CellMutGuard and CellGuard mapping
+- EntityRefMut::set_dedup
+- Update_dedup
+- Inserted transform
+- Make entity errors more specific
 
 ### Bug Fixes
 
@@ -70,6 +89,31 @@ All notable changes to this project will be documented in this file.
 - Inlining perf regression
 - Derive feature
 - Broken MIR by pinning to older version
+- #4 broken link
+- Export entry
+- Unwrap on change filter when missing changes
+- Nostd
+- Use top-down access construction
+- Allow empty systems
+- Implement IntoIterator for `&mut TopoBorrow`
+- Nostd
+- Make QueryBorrow::for_each use FnMut
+- [**breaking**] Reduce exports of commonplace names in root
+- Doc links
+- Ci badge
+- Type in README.md
+- [**breaking**] Reduce `And` nesting in query filter parameter
+- Typos in README.md
+- Warnings
+- Warnings
+- No std tests
+- Invalid archetype
+- Rename inserted to added
+- Use of std
+- Source
+- Remaining queries
+- No-std
+- Use of private module
 
 ### Documentation
 
@@ -90,10 +134,14 @@ All notable changes to this project will be documented in this file.
 - Use vtable for component delegates
 - ReadOnlyFetch
 - Component buffer
+- Simplify writer traits
+- Remove set_inner
 
 ### Testing
 
 - Clearing
+- Entity builder relations
+- Replace existing relation on entity using builder
 
 ### Miscellaneous Tasks
 
@@ -124,6 +172,30 @@ All notable changes to this project will be documented in this file.
 - Rename module
 - Remove release workflow
 - Update git-cliff config
+- Less verbose display impls
+- Update tynm
+- Update syn and cleanup derive macro
+- Make codecov informational
+- Add asteroids src to README.md
+- Split filters into more modules
+- Move union to filter modules
+- Attempt to use GAT
+- Use fully qualified syntax for derive
+- Implement transform for Opt, Cloned, Copied
+- Remove adjacent atomic ref cell borrowing
+- Use entity slice directly
+- Cleanup
+- Make set use writer abstraction
+- Make set_with use new ComponentWriter
+- Cleanup
+- Sync readme
+- ComponentInfo => ComponentDesc
+- Force CI run
+- Cleanup
+- Batch => chunk
+- Improve miri speed
+- Use advancing ptr
+- [**breaking**] Remove redundant AccessKind::ChangeEvent
 
 ### Ci
 
