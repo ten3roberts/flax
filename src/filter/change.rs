@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::archetype::{Archetype, CellGuard, Change, Slot};
 use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
-use crate::system::{Access, AccessKind};
+use crate::system::Access;
 use crate::util::Ptr;
 use crate::{
     archetype::{ChangeKind, ChangeList, Slice},
@@ -84,16 +84,6 @@ where
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         self.component.access(data, dst);
-
-        if data.arch.has(self.component.key()) {
-            dst.push(Access {
-                kind: AccessKind::ChangeEvent {
-                    id: data.arch_id,
-                    component: self.component.key(),
-                },
-                mutable: false,
-            })
-        }
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -243,15 +233,8 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
         true
     }
 
-    fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-        dst.push(Access {
-            kind: AccessKind::ChangeEvent {
-                id: data.arch_id,
-                component: self.component.key(),
-            },
-            mutable: false,
-        })
-    }
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 
     fn describe(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "removed {}", self.component.name())

@@ -43,22 +43,13 @@ where
     #[inline]
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         if data.arch.has(self.0.key()) {
-            dst.extend_from_slice(&[
-                Access {
-                    kind: AccessKind::Archetype {
-                        id: data.arch_id,
-                        component: self.0.key(),
-                    },
-                    mutable: true,
+            dst.extend_from_slice(&[Access {
+                kind: AccessKind::Archetype {
+                    id: data.arch_id,
+                    component: self.0.key(),
                 },
-                Access {
-                    kind: AccessKind::ChangeEvent {
-                        id: data.arch_id,
-                        component: self.0.key(),
-                    },
-                    mutable: true,
-                },
-            ])
+                mutable: true,
+            }])
         }
     }
 
