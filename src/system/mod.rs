@@ -405,13 +405,6 @@ pub enum AccessKind {
         /// The accessed component
         component: ComponentKey,
     },
-    /// Borrow a single change event of an archetype
-    ChangeEvent {
-        /// The archetype id
-        id: ArchetypeId,
-        /// The accessed component
-        component: ComponentKey,
-    },
     /// A unit struct works as a synchronization barrier
     External(TypeId),
     /// Borrow the whole world
@@ -500,22 +493,6 @@ pub(crate) fn access_info(accesses: &[Access], world: &World) -> AccessInfo {
                         ..Default::default()
                     })
                     .components
-                    .push(ComponentAccessInfo {
-                        mutable: access.mutable,
-                        name: arch.component(component).unwrap().name(),
-                        id: component,
-                    })
-            }
-            AccessKind::ChangeEvent { id, component } => {
-                let arch = world.archetypes.get(id);
-                result
-                    .archetypes
-                    .entry(id)
-                    .or_insert_with(|| ArchetypeAccess {
-                        arch: arch.desc(),
-                        ..Default::default()
-                    })
-                    .change_events
                     .push(ComponentAccessInfo {
                         mutable: access.mutable,
                         name: arch.component(component).unwrap().name(),
