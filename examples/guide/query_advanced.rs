@@ -71,12 +71,12 @@ fn main() -> anyhow::Result<()> {
 
     let create_world_matrix = System::builder()
         .with_name("add_world_matrix")
-        .with(
+        .with_query(
             Query::new(entity_ids())
                 .with(position())
                 .without(world_matrix()),
         )
-        .write::<CommandBuffer>()
+        .with_cmd_mut()
         .build(
             |mut query: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
                 for id in &mut query {
@@ -88,7 +88,7 @@ fn main() -> anyhow::Result<()> {
 
     let update_world_matrix = System::builder()
         .with_name("update_world_matrix")
-        .with(
+        .with_query(
             Query::new((
                 entity_ids(),
                 world_matrix().as_mut(),

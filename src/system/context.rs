@@ -67,58 +67,55 @@ where
     }
 }
 
-/// Holds external context for system execution.
-/// Contains the world and a commandbuffer
+/// Everything needed to execute a system
 pub struct SystemContext<'a, T> {
     world: AtomicRefCell<&'a mut World>,
     cmd: AtomicRefCell<&'a mut CommandBuffer>,
-    /// User supplied
-    data: AtomicRefCell<&'a mut T>,
+    /// External input
+    input: AtomicRefCell<&'a mut T>,
 }
 
 impl<'a, T> SystemContext<'a, T> {
     /// Creates a new system context
-    pub fn new(world: &'a mut World, cmd: &'a mut CommandBuffer, data: &'a mut T) -> Self {
+    pub fn new(world: &'a mut World, cmd: &'a mut CommandBuffer, input: &'a mut T) -> Self {
         Self {
             world: AtomicRefCell::new(world),
             cmd: AtomicRefCell::new(cmd),
-            data: AtomicRefCell::new(data),
+            input: AtomicRefCell::new(input),
         }
     }
 
     /// Access the world
+    #[inline]
     pub fn world(&self) -> AtomicRef<World> {
         let borrow = self.world.borrow();
         AtomicRef::map(borrow, |v| *v)
     }
 
     /// Access the world mutably
+    #[inline]
     pub fn world_mut(&self) -> AtomicRefMut<World> {
         let borrow = self.world.borrow_mut();
         AtomicRefMut::map(borrow, |v| *v)
     }
 
     /// Access the commandbuffer
+    #[inline]
     pub fn cmd(&self) -> AtomicRef<CommandBuffer> {
         let borrow = self.cmd.borrow();
         AtomicRef::map(borrow, |v| *v)
     }
 
     /// Access the commandbuffer mutably
+    #[inline]
     pub fn cmd_mut(&self) -> AtomicRefMut<CommandBuffer> {
         let borrow = self.cmd.borrow_mut();
         AtomicRefMut::map(borrow, |v| *v)
     }
 
     /// Access user provided context data
-    pub fn data(&self) -> AtomicRef<T> {
-        let borrow = self.data.borrow();
-        AtomicRef::map(borrow, |v| *v)
-    }
-
-    /// Access user provided context data mutably
-    pub fn data_mut(&self) -> AtomicRefMut<T> {
-        let borrow = self.data.borrow_mut();
-        AtomicRefMut::map(borrow, |v| *v)
+    #[inline]
+    pub fn input(&self) -> &AtomicRefCell<&'a mut T> {
+        &self.input
     }
 }

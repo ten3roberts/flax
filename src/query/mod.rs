@@ -17,7 +17,7 @@ use crate::{
     fetch::FmtQuery,
     filter::{All, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
     system::Access,
-    util::TupleCombine,
+    util::TuplePush,
     Component, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
 use alloc::vec::Vec;
@@ -198,7 +198,7 @@ where
     /// This filter is and:ed with the existing filters.
     pub fn filter<G>(self, filter: G) -> Query<Q, F::PushRight, S>
     where
-        F: TupleCombine<G>,
+        F: TuplePush<G>,
     {
         Query {
             fetch: Filtered::new(
@@ -215,7 +215,7 @@ where
     /// Limits the size of each batch using [`QueryBorrow::iter_batched`]
     pub fn batch_size(self, size: Slot) -> Query<Q, F::PushRight, S>
     where
-        F: TupleCombine<BatchSize>,
+        F: TuplePush<BatchSize>,
     {
         self.filter(BatchSize(size))
     }
@@ -226,7 +226,7 @@ where
         rel: impl RelationExt<T>,
     ) -> Query<Q, F::PushRight, S>
     where
-        F: TupleCombine<WithRelation>,
+        F: TuplePush<WithRelation>,
     {
         self.filter(rel.with_relation())
     }
@@ -237,7 +237,7 @@ where
         rel: impl RelationExt<T>,
     ) -> Query<Q, F::PushRight, S>
     where
-        F: TupleCombine<WithoutRelation>,
+        F: TuplePush<WithoutRelation>,
     {
         self.filter(rel.without_relation())
     }
@@ -245,7 +245,7 @@ where
     /// Shortcut for filter(without)
     pub fn without<T: ComponentValue>(self, component: Component<T>) -> Query<Q, F::PushRight, S>
     where
-        F: TupleCombine<Without>,
+        F: TuplePush<Without>,
     {
         self.filter(component.without())
     }
@@ -253,7 +253,7 @@ where
     /// Shortcut for filter(with)
     pub fn with<T: ComponentValue>(self, component: Component<T>) -> Query<Q, F::PushRight, S>
     where
-        F: TupleCombine<With>,
+        F: TuplePush<With>,
     {
         self.filter(component.with())
     }

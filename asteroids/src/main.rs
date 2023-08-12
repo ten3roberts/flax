@@ -254,7 +254,7 @@ fn create_explosion(
 fn particle_system() -> BoxedSystem {
     System::builder()
         .with_name("particle_system")
-        .with(Query::new((
+        .with_query(Query::new((
             lifetime(),
             particle_size(),
             particle_lifetime(),
@@ -273,8 +273,8 @@ fn particle_system() -> BoxedSystem {
 /// Uses two different queries, one for the player and one for the camera.
 fn camera_system(dt: f32) -> BoxedSystem {
     System::builder()
-        .with(Query::new((position(), velocity())).with(player()))
-        .with(Query::new((
+        .with_query(Query::new((position(), velocity())).with(player()))
+        .with_query(Query::new((
             position().as_mut(),
             velocity().as_mut(),
             camera().as_mut(),
@@ -376,8 +376,8 @@ impl CollisionQuery {
 fn lifetime_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_name("lifetime_system")
-        .with(Query::new((entity_ids(), lifetime().as_mut())))
-        .write::<CommandBuffer>()
+        .with_query(Query::new((entity_ids(), lifetime().as_mut())))
+        .with_cmd_mut()
         .build(
             move |mut q: QueryBorrow<(EntityIds, Mutable<f32>)>, cmd: &mut CommandBuffer| {
                 for (id, lf) in &mut q {
@@ -395,11 +395,11 @@ fn lifetime_system(dt: f32) -> BoxedSystem {
 fn collision_system() -> BoxedSystem {
     System::builder()
         .with_name("collision_system")
-        .with(Query::new(rng().as_mut()).entity(resources()))
-        .with(Query::new((entity_ids(), CollisionQuery::new())))
-        .with(Query::new((entity_ids(), CollisionQuery::new())))
-        .read::<World>()
-        .write::<CommandBuffer>()
+        .with_query(Query::new(rng().as_mut()).entity(resources()))
+        .with_query(Query::new((entity_ids(), CollisionQuery::new())))
+        .with_query(Query::new((entity_ids(), CollisionQuery::new())))
+        .with_world()
+        .with_cmd_mut()
         .build(
             |mut resources: EntityBorrow<_>,
              mut a: QueryBorrow<(EntityIds, CollisionQuery)>,
@@ -514,8 +514,8 @@ fn player_system(dt: f32) -> BoxedSystem {
 
     System::builder()
         .with_name("player_system")
-        .with(Query::new(PlayerQuery::default()))
-        .write::<CommandBuffer>()
+        .with_query(Query::new(PlayerQuery::default()))
+        .with_cmd_mut()
         .build(
             move |mut q: QueryBorrow<PlayerQuery>, cmd: &mut CommandBuffer| {
                 current_weapon_cooldown -= dt;
@@ -571,8 +571,8 @@ fn player_system(dt: f32) -> BoxedSystem {
 fn despawn_out_of_bounds() -> BoxedSystem {
     System::builder()
         .with_name("despawn_out_of_bounds")
-        .with(Query::new(position()).with(player()))
-        .with(Query::new((position(), health().as_mut())).without(player()))
+        .with_query(Query::new(position()).with(player()))
+        .with_query(Query::new((position(), health().as_mut())).without(player()))
         .build(
             |mut player: QueryBorrow<Component<Vec2>, _>,
              mut asteroids: QueryBorrow<(Component<Vec2>, Mutable<f32>), _>| {
@@ -592,12 +592,12 @@ fn despawn_out_of_bounds() -> BoxedSystem {
 fn despawn_dead() -> BoxedSystem {
     System::builder()
         .with_name("despawn_dead")
-        .with(Query::new(self::rng().as_mut()).entity(resources()))
-        .with(
+        .with_query(Query::new(self::rng().as_mut()).entity(resources()))
+        .with_query(
             Query::new((entity_ids(), position(), velocity(), material().opt()))
                 .filter(health().modified() & health().le(0.0)),
         )
-        .write::<CommandBuffer>()
+        .with_cmd_mut()
         .build(
             |mut resources: EntityBorrow<Mutable<StdRng>>,
              mut q: QueryBorrow<(EntityIds, Component<Vec2>, Component<_>, Opt<_>), _>,
@@ -630,10 +630,10 @@ fn despawn_dead() -> BoxedSystem {
 fn spawn_asteroids(max_count: usize) -> BoxedSystem {
     System::builder()
         .with_name("spawn_asteroids")
-        .with(Query::new(self::rng().as_mut()).entity(resources()))
-        .with(Query::new((position(), difficulty())).with(player()))
-        .with(Query::new(asteroid()))
-        .write::<CommandBuffer>()
+        .with_query(Query::new(self::rng().as_mut()).entity(resources()))
+        .with_query(Query::new((position(), difficulty())).with(player()))
+        .with_query(Query::new(asteroid()))
+        .with_cmd_mut()
         .build(
             move |mut resources: EntityBorrow<Mutable<StdRng>>,
                   mut players: QueryBorrow<(Component<Vec2>, Component<f32>), _>,
@@ -697,7 +697,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
 fn integrate_velocity(dt: f32) -> BoxedSystem {
     System::builder()
         .with_name("integrate_velocity")
-        .with(Query::new((position().as_mut(), velocity())))
+        .with_query(Query::new((position().as_mut(), velocity())))
         .for_each(move |(pos, vel)| {
             *pos += *vel * dt;
         })
@@ -707,7 +707,7 @@ fn integrate_velocity(dt: f32) -> BoxedSystem {
 fn integrate_ang_velocity(dt: f32) -> BoxedSystem {
     System::builder()
         .with_name("integrate_ang_velocity")
-        .with(Query::new((rotation().as_mut(), angular_velocity())))
+        .with_query(Query::new((rotation().as_mut(), angular_velocity())))
         .for_each(move |(rot, w)| {
             *rot += *w * dt;
         })
@@ -734,8 +734,8 @@ fn draw_shapes() -> BoxedSystem {
     System::builder()
         .with_name("draw_asteroids")
         .with_resource(SharedResource::new(GraphicsContext))
-        .with(Query::new(camera()))
-        .with(Query::new((TransformQuery::new(), shape(), color())))
+        .with_query(Query::new(camera()))
+        .with_query(Query::new((TransformQuery::new(), shape(), color())))
         .build(
             |_ctx: &mut GraphicsContext,
              mut camera: QueryBorrow<Component<Mat3>>,
@@ -761,9 +761,9 @@ fn draw_ui() -> BoxedSystem {
     System::builder()
         .with_name("draw_ui")
         .with_resource(SharedResource::new(GraphicsContext))
-        .with(Query::new((material(), health(), difficulty())).with(player()))
-        .with(Query::new(()))
-        .read::<World>()
+        .with_query(Query::new((material(), health(), difficulty())).with(player()))
+        .with_query(Query::new(()))
+        .with_world()
         .build(
             |_ctx: &mut GraphicsContext,
              mut players: QueryBorrow<(Component<f32>, Component<f32>, Component<f32>), _>,

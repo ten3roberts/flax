@@ -63,8 +63,8 @@ fn main() -> anyhow::Result<()> {
     let mut rng = StdRng::seed_from_u64(42);
     let spawner = System::builder()
         .with_name("spawn_entities")
-        .with(Query::new(()))
-        .write::<CommandBuffer>()
+        .with_query(Query::new(()))
+        .with_cmd_mut()
         .build(move |mut q: QueryBorrow<()>, cmd: &mut CommandBuffer| {
             let count = q.count();
 
@@ -81,8 +81,8 @@ fn main() -> anyhow::Result<()> {
     // Ensure a world matrix to each entity with a position
     let add_world_matrix = System::builder()
         .with_name("add_world_matrix")
-        .with(Query::new((entity_ids(), position())).without(world_matrix()))
-        .write::<CommandBuffer>()
+        .with_query(Query::new((entity_ids(), position())).without(world_matrix()))
+        .with_cmd_mut()
         .build(
             |mut q: QueryBorrow<(EntityIds, Component<Vec2>), _>, cmd: &mut CommandBuffer| {
                 for (id, pos) in &mut q {
@@ -95,7 +95,7 @@ fn main() -> anyhow::Result<()> {
     // Update the world matrix if position changes
     let update_world_matrix = System::builder()
         .with_name("update_world_matrix")
-        .with(
+        .with_query(
             Query::new((entity_ids(), position(), world_matrix().as_mut()))
                 .filter(position().modified()),
         )

@@ -207,11 +207,11 @@ mod test {
 
         assert_eq!(world.get(id, position()).as_deref(), Ok(&Vec3::X));
 
-        let mut system = System::builder().with(Query::new(name()).entity(id)).build(
-            |mut q: EntityBorrow<_, _>| {
+        let mut system = System::builder()
+            .with_query(Query::new(name()).entity(id))
+            .build(|mut q: EntityBorrow<_, _>| {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
-            },
-        );
+            });
 
         system.run_on(&mut world);
     }
@@ -259,7 +259,7 @@ mod test {
         assert_eq!(world.get(id2, position()).as_deref(), Ok(&Vec3::X));
 
         let mut system = System::builder()
-            .with(Query::new(name()).entity(id2))
+            .with_query(Query::new(name()).entity(id2))
             .build(|mut q: EntityBorrow<_>| {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             });

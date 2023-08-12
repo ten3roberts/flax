@@ -6,7 +6,7 @@ use core::marker::PhantomData;
 use crate::filter::All;
 
 /// Allows pushing onto a tuple
-pub trait TupleCombine<T> {
+pub trait TuplePush<T> {
     /// The resulting right push
     type PushRight;
     /// The resulting left push
@@ -20,7 +20,7 @@ pub trait TupleCombine<T> {
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<$($ty,)* T> TupleCombine<T> for ($($ty,)*) {
+        impl<$($ty,)* T> TuplePush<T> for ($($ty,)*) {
             type PushRight = ($($ty,)* T);
             type PushLeft  = (T, $($ty,)*);
             fn push_right(self, value: T) -> Self::PushRight {
@@ -38,7 +38,7 @@ macro_rules! tuple_impl {
     };
 }
 
-impl<T> TupleCombine<T> for () {
+impl<T> TuplePush<T> for () {
     type PushRight = (T,);
 
     type PushLeft = (T,);
@@ -65,7 +65,7 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 
 #[cfg(test)]
 mod test {
 
-    use super::TupleCombine;
+    use super::TuplePush;
 
     #[test]
     fn tuples_push() {
@@ -81,7 +81,7 @@ mod test {
     }
 }
 
-impl<T> TupleCombine<T> for All {
+impl<T> TuplePush<T> for All {
     type PushRight = (All, T);
 
     type PushLeft = (T, All);
@@ -180,3 +180,11 @@ impl<'a, T> PtrMut<'a, T> {
 
 unsafe impl<T: Sync> Sync for PtrMut<'_, T> {}
 unsafe impl<T: Send> Send for PtrMut<'_, T> {}
+
+#[derive(PartialEq, Eq, Clone)]
+pub(crate) struct Verbatim(pub alloc::string::String);
+impl core::fmt::Debug for Verbatim {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}

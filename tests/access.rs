@@ -44,7 +44,7 @@ fn access() {
 
     let weapons = System::builder()
         .with_name("weapons")
-        .with(Query::new(weapon()))
+        .with_query(Query::new(weapon()))
         .build(|mut q: QueryBorrow<Component<&'static str>>| {
             let weapons: Vec<_> = q.iter().collect();
             eprintln!("Weapons in use: {weapons:?}");
@@ -53,7 +53,7 @@ fn access() {
 
     let names = System::builder()
         .with_name("names")
-        .with(Query::new(name()))
+        .with_query(Query::new(name()))
         .build(|mut q: QueryBorrow<Component<String>>| {
             let names: Vec<_> = q.iter().collect();
             eprintln!("names in use: {names:?}");
@@ -62,13 +62,13 @@ fn access() {
 
     let regen_system = System::builder()
         .with_name("regen_system")
-        .with(Query::new(health().as_mut()))
+        .with_query(Query::new(health().as_mut()))
         .for_each(|v| *v = (*v + 10.0).min(100.0))
         .boxed();
 
     let blue_system = System::builder()
         .with_name("blue_system")
-        .with(Query::new(weapon().as_mut()).filter(blue_team().with() & health().gt(0.0)))
+        .with_query(Query::new(weapon().as_mut()).filter(blue_team().with() & health().gt(0.0)))
         .for_each(|_v| {
             sleep(Duration::from_millis(100));
             // here be logic
@@ -77,7 +77,7 @@ fn access() {
 
     let red_system = System::builder()
         .with_name("red_system")
-        .with(Query::new(weapon().as_mut()).filter(red_team().with() & health().gt(0.0)))
+        .with_query(Query::new(weapon().as_mut()).filter(red_team().with() & health().gt(0.0)))
         .for_each(|_v| {
             sleep(Duration::from_millis(100));
             // here be logic
@@ -86,7 +86,7 @@ fn access() {
 
     let stats_system = System::builder()
         .with_name("stats")
-        .with(Query::new((weapon(), health())).filter(health().gt(0.0)))
+        .with_query(Query::new((weapon(), health())).filter(health().gt(0.0)))
         .for_each(|(weapon, health)| eprintln!("player using {weapon} is alive {health}"))
         .boxed();
 

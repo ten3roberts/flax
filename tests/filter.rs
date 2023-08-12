@@ -253,12 +253,12 @@ fn sparse_or() {
 
     // Check access compatability
     let system_a = System::builder()
-        .with(query)
+        .with_query(query)
         .build(|_query: QueryBorrow<EntityIds, _>| {})
         .boxed();
 
     let system_b = System::builder()
-        .with(Query::new(a().as_mut()))
+        .with_query(Query::new(a().as_mut()))
         .build(|_query: QueryBorrow<_, _>| {})
         .boxed();
 
@@ -316,12 +316,12 @@ fn sparse_and() {
 
     // Check access compatability
     let system_a = System::builder()
-        .with(query)
+        .with_query(query)
         .build(|_query: QueryBorrow<EntityIds, _>| {})
         .boxed();
 
     let system_b = System::builder()
-        .with(Query::new(a().as_mut()).with(c()))
+        .with_query(Query::new(a().as_mut()).with(c()))
         .build(|_query: QueryBorrow<_, _>| {})
         .boxed();
 

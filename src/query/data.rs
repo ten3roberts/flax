@@ -3,7 +3,7 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     filter::All,
-    system::{Access, AsBorrow, SystemAccess, SystemContext, SystemData},
+    system::{Access, AsBorrowed, SystemAccess, SystemContext, SystemData},
     Fetch, Planar, Query, World,
 };
 
@@ -73,7 +73,7 @@ where
     }
 }
 
-impl<'a, 'w, Q, F, S> AsBorrow<'a> for QueryData<'w, Q, F, S>
+impl<'a, 'w, Q, F, S> AsBorrowed<'a> for QueryData<'w, Q, F, S>
 where
     Q: for<'x> Fetch<'x> + 'static,
     F: for<'x> Fetch<'x> + 'static,
@@ -82,7 +82,7 @@ where
 {
     type Borrowed = <S as QueryStrategy<'a, Q, F>>::Borrow;
 
-    fn as_borrow(&'a mut self) -> Self::Borrowed {
+    fn as_borrowed(&'a mut self) -> Self::Borrowed {
         self.borrow()
     }
 }
