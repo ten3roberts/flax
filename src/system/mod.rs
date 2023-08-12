@@ -1,8 +1,9 @@
 mod context;
+mod input;
 mod traits;
 
 use crate::{
-    archetype::ArchetypeInfo, query::QueryData, util::TupleCombine, ArchetypeId, CommandBuffer,
+    archetype::ArchetypeInfo, query::QueryData, util::TuplePush, ArchetypeId, CommandBuffer,
     ComponentKey, Fetch, FetchItem, Query, World,
 };
 use alloc::{
@@ -12,6 +13,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
+use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::{
     any::{type_name, TypeId},
     fmt::{self, Formatter},
@@ -21,7 +23,12 @@ use core::{
 pub use context::*;
 #[cfg(feature = "parallel")]
 use rayon::prelude::{ParallelBridge, ParallelIterator};
-pub use traits::*;
+pub use traits::{AsBorrowed, SystemAccess, SystemData, SystemFn};
+
+use self::{
+    input::Extract,
+    traits::{WithCmd, WithCmdMut, WithInput, WithInputMut, WithWorld, WithWorldMut},
+};
 
 /// A system builder which allows incrementally adding data to a system
 /// function.
@@ -129,54 +136,71 @@ where
     }
 }
 
-impl<Args, T> SystemBuilder<Args, T> {
-    /// Add a new query to the system
-    pub fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight, T>
+impl<Args, I> SystemBuilder<Args, I> {
+    /// Use a query within the system
+    ///
+    /// Systems are automatically multithreaded on an archetype and component granularity level.
+    ///
+    /// This means that queries which access the same component mutably for *different* archetypes
+    /// will be scheduled in parallel, and queries which access *different* components mutably in
+    /// the same archetype will also be scheduled in parallel.
+    pub fn with_query<Q, F, S>(self, query: Query<Q, F, S>) -> SystemBuilder<Args::PushRight, I>
     where
-        S: for<'x> SystemData<'x, T>,
-        Args: TupleCombine<S>,
+        Args: TuplePush<Query<Q, F, S>>,
     {
-        SystemBuilder {
-            name: self.name,
-            args: self.args.push_right(other),
-            data: PhantomData,
-        }
+        self.with(query)
+    }
+    /// Access the world
+    ///
+    /// **Note**: This still creates a barrier to queries in other systems as the archetypes can be
+    /// mutated by a shared reference
+    pub fn with_world(self) -> SystemBuilder<Args::PushRight, I>
+    where
+        Args: TuplePush<WithWorld>,
+    {
+        self.with(WithWorld)
     }
 
-    /// Access data mutably in the system
-    pub fn write<W>(self) -> SystemBuilder<Args::PushRight, T>
+    /// Access the world mutably
+    pub fn with_world_mut(self) -> SystemBuilder<Args::PushRight, I>
     where
-        Args: TupleCombine<Write<W>>,
-        Write<W>: for<'x> SystemData<'x, T>,
+        Args: TuplePush<WithWorldMut>,
     {
-        self.with(Write::<W>(PhantomData))
+        self.with(WithWorldMut)
     }
 
-    /// Access data mutably in the system
-    pub fn read<R>(self) -> SystemBuilder<Args::PushRight, T>
+    /// Access the command buffer
+    pub fn with_cmd(self) -> SystemBuilder<Args::PushRight, I>
     where
-        Args: TupleCombine<Read<R>>,
-        Read<R>: for<'x> SystemData<'x, T>,
+        Args: TuplePush<WithCmd>,
     {
-        self.with(Read::<R>(PhantomData))
+        self.with(WithCmd)
     }
 
-    /// Access execution context data
-    pub fn read_context(self) -> SystemBuilder<Args::PushRight, T>
+    /// Access the command buffer mutably
+    pub fn with_cmd_mut(self) -> SystemBuilder<Args::PushRight, I>
     where
-        Args: TupleCombine<ReadContextData<T>>,
-        ReadContextData<T>: for<'x> SystemData<'x, T>,
+        Args: TuplePush<WithCmdMut>,
     {
-        self.with(ReadContextData::<T>(PhantomData))
+        self.with(WithCmdMut)
     }
 
-    /// Access execution context data mutably
-    pub fn write_context(self) -> SystemBuilder<Args::PushRight, T>
+    /// Access schedule input
+    pub fn with_input<T>(self) -> SystemBuilder<Args::PushRight, I>
     where
-        Args: TupleCombine<WriteContextData<T>>,
-        WriteContextData<T>: for<'x> SystemData<'x, T>,
+        Args: TuplePush<WithInput<T>>,
+        for<'x, 'y> AtomicRefCell<&'y mut I>: Extract<'x, AtomicRef<'x, T>>,
     {
-        self.with(WriteContextData::<T>(PhantomData))
+        self.with(WithInput::<T>(PhantomData))
+    }
+
+    /// Access schedule input mutably
+    pub fn with_input_mut<T>(self) -> SystemBuilder<Args::PushRight, I>
+    where
+        Args: TuplePush<WithInputMut<T>>,
+        for<'x, 'y> AtomicRefCell<&'y mut I>: Extract<'x, AtomicRefMut<'x, T>>,
+    {
+        self.with(WithInputMut::<T>(PhantomData))
     }
 
     /// Set the systems name
@@ -190,26 +214,38 @@ impl<Args, T> SystemBuilder<Args, T> {
     /// This is useful to avoid sharing `Arc<Mutex<_>>` and locking for each
     /// system. In addition, the resource will be taken into account for the
     /// schedule paralellization and will as such not block.
-    pub fn with_resource<R>(self, resource: SharedResource<R>) -> SystemBuilder<Args::PushRight, T>
+    pub fn with_resource<R>(self, resource: SharedResource<R>) -> SystemBuilder<Args::PushRight, I>
     where
-        Args: TupleCombine<SharedResource<R>>,
+        Args: TuplePush<SharedResource<R>>,
         R: Send + 'static,
     {
         self.with(resource)
     }
 
-    /// Creates the system by suppling a function to act upon the systems data,
-    /// like queries and world accesses.
-    pub fn build<Func, Ret>(self, func: Func) -> System<Func, Args, Ret, T>
+    /// Build the system by supplying a function to act upon the systems arguments,
+    pub fn build<Func, Ret>(self, func: Func) -> System<Func, Args, Ret, I>
     where
-        Args: for<'a> SystemData<'a, T> + 'static,
-        Func: for<'this, 'a> SystemFn<'this, <Args as SystemData<'a, T>>::Value, Ret>,
+        Args: for<'a> SystemData<'a, I> + 'static,
+        Func: for<'this, 'a> SystemFn<'this, <Args as SystemData<'a, I>>::Value, Ret>,
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             func,
             self.args,
         )
+    }
+
+    /// Add a new generic argument to the system
+    fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight, I>
+    where
+        // S: for<'x> SystemData<'x, I>,
+        Args: TuplePush<S>,
+    {
+        SystemBuilder {
+            name: self.name,
+            args: self.args.push_right(other),
+            data: PhantomData,
+        }
     }
 }
 
@@ -347,7 +383,7 @@ impl<F, Args, Ret, T> System<F, Args, Ret, T> {
     }
 }
 
-impl System<(), (), (), ()> {
+impl System<(), (), ()> {
     /// See [crate::SystemBuilder]
     pub fn builder() -> SystemBuilder<(), ()> {
         SystemBuilder::new()
@@ -556,7 +592,7 @@ impl<T> BoxedSystem<T> {
         self.inner.execute(ctx)
     }
 
-    /// Same as execute but creates and applied a temporary commandbuffer
+    /// Same as execute but creates and applied a temporary command buffer
     pub fn run_with<'a>(&'a mut self, world: &'a mut World, data: &mut T) -> anyhow::Result<()> {
         let mut cmd = CommandBuffer::new();
         let ctx = SystemContext::new(world, &mut cmd, data);
@@ -583,7 +619,7 @@ impl<T> BoxedSystem<T> {
 /// Can't be generic over the context data here due to coherence
 impl<T> From<T> for BoxedSystem<()>
 where
-    T: 'static + DynSystem<()> + Send + Sync,
+    T: 'static + Send + Sync + DynSystem<()>,
 {
     fn from(system: T) -> Self {
         Self::new(system)
@@ -631,8 +667,8 @@ mod test {
         let mut cmd = CommandBuffer::new();
 
         #[allow(clippy::let_unit_value)]
-        let mut data = ();
-        let ctx = SystemContext::new(&mut world, &mut cmd, &mut data);
+        let data = &mut ();
+        let ctx = SystemContext::new(&mut world, &mut cmd, data);
 
         system.execute(&ctx).unwrap();
 
@@ -642,7 +678,7 @@ mod test {
 
         let mut boxed = fallible.boxed();
 
-        let ctx = SystemContext::new(&mut world, &mut cmd, &mut data);
+        let ctx = SystemContext::new(&mut world, &mut cmd, data);
         let res = boxed.execute(&ctx);
         let _ = res.unwrap_err();
     }

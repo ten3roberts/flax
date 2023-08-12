@@ -104,7 +104,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut update_dist = System::builder()
         .with_name("update_distance")
-        .with(query)
+        .with_query(query)
         .build(
             |mut query: QueryBorrow<(_, Component<Vec2>, Mutable<f32>), _>| {
                 for (id, pos, dist) in &mut query {
@@ -120,7 +120,7 @@ fn main() -> anyhow::Result<()> {
     // ANCHOR: system_for_each
     let mut update_dist = System::builder()
         .with_name("update_distance")
-        .with(
+        .with_query(
             Query::new((entity_ids(), position(), distance().as_mut()))
                 .filter(position().modified()),
         )
@@ -140,8 +140,8 @@ fn main() -> anyhow::Result<()> {
     // ANCHOR: schedule_basic
     let despawn = System::builder()
         .with_name("delete_outside_world")
-        .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
-        .write::<CommandBuffer>()
+        .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
+        .with_cmd_mut()
         .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
             for (id, &dist) in &mut q {
                 tracing::info!("Despawning {id} at: {dist}");
@@ -151,7 +151,7 @@ fn main() -> anyhow::Result<()> {
 
     let debug_world = System::builder()
         .with_name("debug_world")
-        .read::<World>()
+        .with_world()
         .build(|world: &_| {
             tracing::debug!("World: {world:?}");
         });
@@ -178,7 +178,7 @@ fn main() -> anyhow::Result<()> {
     // eventually be despawned
     let move_out = System::builder()
         .with_name("move_out")
-        .with(Query::new(position().as_mut()).filter(is_static().without()))
+        .with_query(Query::new(position().as_mut()).filter(is_static().without()))
         .for_each(|pos| {
             let dir = pos.normalize_or_zero();
 
@@ -186,10 +186,8 @@ fn main() -> anyhow::Result<()> {
         });
 
     // Spawn new entities with a random position each frame
-    let spawn = System::builder()
-        .with_name("spawner")
-        .write::<CommandBuffer>()
-        .build(move |cmd: &mut CommandBuffer| {
+    let spawn = System::builder().with_name("spawner").with_cmd_mut().build(
+        move |cmd: &mut CommandBuffer| {
             for _ in 0..100 {
                 let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!("Spawning new entity at: {pos:?}");
@@ -198,14 +196,15 @@ fn main() -> anyhow::Result<()> {
                     .set_default(distance())
                     .spawn_into(cmd);
             }
-        });
+        },
+    );
 
     let mut frame_count = 0;
 
     // Count the number of entities in the world and log it
     let count = System::builder()
         .with_name("count")
-        .with(Query::new(()))
+        .with_query(Query::new(()))
         .build(move |mut query: QueryBorrow<()>| {
             let count: usize = query.iter_batched().map(|v| v.len()).sum();
             tracing::info!("[{frame_count}]: {count}");
@@ -265,7 +264,7 @@ fn main() -> anyhow::Result<()> {
     // ANCHOR: entity_query_system
 
     let mut window_system = System::builder()
-        .with(query)
+        .with_query(query)
         .build(|mut q: EntityBorrow<_>| {
             if let Ok((width, height, allow_vsync)) = q.get() {
                 tracing::info!(width, height, allow_vsync, "Config changed");

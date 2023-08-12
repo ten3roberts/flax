@@ -6,15 +6,16 @@ use anyhow::Context;
 use itertools::Itertools;
 
 use crate::{
-    system::{access_info, AccessInfo, SystemContext, Verbatim},
+    system::{access_info, AccessInfo, SystemContext},
+    util::Verbatim,
     BoxedSystem, CommandBuffer, System, World,
 };
 
 fn flush_system<T: 'static + Send + Sync>() -> BoxedSystem<T> {
     System::builder_with_data()
         .with_name("flush")
-        .write::<World>()
-        .write::<CommandBuffer>()
+        .with_world_mut()
+        .with_cmd_mut()
         .build(|world: &mut World, cmd: &mut CommandBuffer| {
             cmd.apply(world)
                 .context("Failed to flush commandbuffer in schedule\n")
@@ -236,16 +237,16 @@ impl<T: 'static + Send + Sync> Schedule<T> {
         BatchInfos(batches)
     }
 
-    /// Same as [`Self::execute_seq`] but allows supplying short lived data available to the systems
+    /// Same as [`Self::execute_seq`] but allows supplying short lived input available to the systems
     ///
     /// **Note**:
     /// Due to current limitations in Rust, T has to be as `Fn(T): 'static` implies `T: 'static`.
     ///
     /// See:
     /// - <https://github.com/rust-lang/rust/issues/57325>
-    /// - <https://stackoverflow.com/questions/53966598/how-to-make-fnt-static-register-as-static-for-any-generic-type-argument-t>
-    pub fn execute_seq_with(&mut self, world: &mut World, data: &mut T) -> anyhow::Result<()> {
-        let ctx = SystemContext::new(world, &mut self.cmd, data);
+    /// - <https://stackoverflow.com/questions/53966598/how-to-fnt-static-register-as-static-for-any-generic-type-argument-t>
+    pub fn execute_seq_with(&mut self, world: &mut World, input: &mut T) -> anyhow::Result<()> {
+        let ctx = SystemContext::new(world, &mut self.cmd, input);
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("execute_seq").entered();
@@ -264,7 +265,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     #[cfg(feature = "parallel")]
     /// Same as [`Self::execute_par`] but allows supplying short lived data available to the systems
-    pub fn execute_par_with(&mut self, world: &mut World, data: &mut T) -> anyhow::Result<()> {
+    pub fn execute_par_with(&mut self, world: &mut World, input: &mut T) -> anyhow::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
         #[cfg(feature = "tracing")]
@@ -277,7 +278,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
             self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
         }
 
-        let ctx = SystemContext::new(world, &mut self.cmd, data);
+        let ctx = SystemContext::new(world, &mut self.cmd, input);
 
         let result = self.systems.iter_mut().try_for_each(|batch| {
             batch
@@ -488,7 +489,7 @@ mod test {
             .set(b(), 5)
             .spawn(&mut world);
 
-        let system_a = System::builder().with(Query::new(a())).build(
+        let system_a = System::builder().with_query(Query::new(a())).build(
             move |mut a: QueryBorrow<_>| -> anyhow::Result<()> {
                 let _count = a.iter().count() as i32;
 
@@ -496,7 +497,7 @@ mod test {
             },
         );
 
-        let system_b = System::builder().with(Query::new(b())).build(
+        let system_b = System::builder().with_query(Query::new(b())).build(
             move |mut query: QueryBorrow<_>| -> anyhow::Result<()> {
                 let _item: &i32 = query.get(id).map_err(|v| v.into_anyhow())?;
 
@@ -532,8 +533,8 @@ mod test {
             .spawn(&mut world);
 
         let system_a = System::builder_with_data()
-            .with(Query::new(a()))
-            .read_context()
+            .with_query(Query::new(a()))
+            .with_input()
             .build(
                 move |mut a: QueryBorrow<_>, cx: &String| -> anyhow::Result<()> {
                     let _count = a.iter().count() as i32;
@@ -546,8 +547,8 @@ mod test {
             .boxed();
 
         let system_b = System::builder_with_data()
-            .with(Query::new(b()))
-            .write_context()
+            .with_query(Query::new(b()))
+            .with_input_mut()
             .build(
                 move |mut query: QueryBorrow<_>, cx: &mut String| -> anyhow::Result<()> {
                     let _item: &i32 = query.get(id).map_err(|v| v.into_anyhow())?;
@@ -560,7 +561,7 @@ mod test {
             .boxed();
 
         let system_c = System::builder_with_data()
-            .read_context()
+            .with_input()
             .build(move |cx: &String| -> anyhow::Result<()> {
                 assert_eq!(cx, "Bar");
                 Ok(())
@@ -573,6 +574,7 @@ mod test {
             .with_system(system_c);
 
         let mut cx = String::from("Foo");
+
         schedule.execute_par_with(&mut world, &mut cx).unwrap();
 
         assert_eq!(cx, "Bar");
@@ -643,7 +645,7 @@ mod test {
             .spawn(&mut world);
 
         let heal = System::builder()
-            .with(Query::new(health().as_mut()))
+            .with_query(Query::new(health().as_mut()))
             .with_name("heal")
             .build(|mut q: QueryBorrow<crate::Mutable<f32>>| {
                 q.iter().for_each(|h| {
@@ -654,9 +656,8 @@ mod test {
             });
 
         let cleanup = System::builder()
-            // .with(Query::new(entity_ids()).filter(health().le(0.0)))
-            .with(Query::new(entity_ids()))
-            .write::<CommandBuffer>()
+            .with_query(Query::new(entity_ids()))
+            .with_cmd_mut()
             .with_name("cleanup")
             .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
                 q.iter().for_each(|id| {
@@ -681,13 +682,13 @@ mod test {
         }
 
         let battle = System::builder()
-            .with(Query::new(BattleSubject {
+            .with_query(Query::new(BattleSubject {
                 id: EntityIds,
                 damage: damage(),
                 range: range(),
                 pos: pos(),
             }))
-            .with(Query::new(BattleObject {
+            .with_query(Query::new(BattleObject {
                 id: EntityIds,
                 pos: pos(),
                 health: health().as_mut(),
@@ -712,7 +713,7 @@ mod test {
 
         let remaining = System::builder()
             .with_name("remaining")
-            .with(Query::new(entity_ids()))
+            .with_query(Query::new(entity_ids()))
             .build(|mut q: QueryBorrow<EntityIds>| {
                 eprintln!("Remaining: {:?}", q.iter().format(", "));
             });

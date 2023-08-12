@@ -56,7 +56,9 @@ fn main() {
     // ANCHOR: systems
 
     let update_world_position = System::builder()
-        .with(Query::new((world_position().as_mut(), position())).with_strategy(Dfs::new(child_of)))
+        .with_query(
+            Query::new((world_position().as_mut(), position())).with_strategy(Dfs::new(child_of)),
+        )
         .build(
             |mut query: DfsBorrow<(Mutable<Vec3>, Component<Vec3>), All, ()>| {
                 query.traverse(&Vec3::ZERO, |(world_pos, &pos), _, &parent_pos| {
@@ -68,7 +70,9 @@ fn main() {
 
     let mut buf = String::new();
     let print_hierarchy = System::builder()
-        .with(Query::new((name(), position(), world_position())).with_strategy(Dfs::new(child_of)))
+        .with_query(
+            Query::new((name(), position(), world_position())).with_strategy(Dfs::new(child_of)),
+        )
         .build(move |mut query: DfsBorrow<_, _, _>| {
             query.traverse(&0usize, |(name, pos, world_pos), _, depth| {
                 let indent = depth * 4;

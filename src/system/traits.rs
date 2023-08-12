@@ -1,5 +1,5 @@
-use alloc::{string::String, vec::Vec};
-use atomic_refcell::{AtomicRef, AtomicRefMut};
+use alloc::vec::Vec;
+use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use core::{
     fmt::{self, Formatter},
     marker::PhantomData,
@@ -8,30 +8,30 @@ use core::{
 use crate::system::AccessKind;
 use crate::*;
 
-use super::{Access, SystemContext};
+use super::{input::Extract, Access, SystemContext};
 
 /// Allows dereferencing `AtomicRef<T>` to &T and similar "lock" types in a safe manner.
 /// Traits for guarded types like `AtomicRef`, `Mutex` or [`QueryData`](crate::query::QueryData).
-pub trait AsBorrow<'a> {
+pub trait AsBorrowed<'a> {
     /// The dereference target
     type Borrowed: 'a;
 
     /// Dereference a held borrow
-    fn as_borrow(&'a mut self) -> Self::Borrowed;
+    fn as_borrowed(&'a mut self) -> Self::Borrowed;
 }
 
-impl<'a, 'b, T: 'a> AsBorrow<'a> for AtomicRef<'b, T> {
+impl<'a, 'b, T: 'a> AsBorrowed<'a> for AtomicRef<'b, T> {
     type Borrowed = &'a T;
 
-    fn as_borrow(&'a mut self) -> Self::Borrowed {
+    fn as_borrowed(&'a mut self) -> Self::Borrowed {
         &*self
     }
 }
 
-impl<'a, 'b, T: 'a> AsBorrow<'a> for AtomicRefMut<'b, T> {
+impl<'a, 'b, T: 'a> AsBorrowed<'a> for AtomicRefMut<'b, T> {
     type Borrowed = &'a mut T;
 
-    fn as_borrow(&'a mut self) -> Self::Borrowed {
+    fn as_borrowed(&'a mut self) -> Self::Borrowed {
         &mut *self
     }
 }
@@ -46,12 +46,13 @@ where
     }
 }
 
-/// Provider trait for data from a system execution context
-pub trait SystemData<'a, T>: SystemAccess {
+/// Borrow state from the system execution data
+pub trait SystemData<'a, I>: SystemAccess {
     /// The borrow from the system context
     type Value;
+
     /// Get the data from the system context
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value;
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value;
     /// Human friendly debug description
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 }
@@ -68,23 +69,15 @@ pub trait SystemFn<'this, Args, Ret> {
     fn execute(&'this mut self, args: Args) -> Ret;
 }
 
-#[derive(PartialEq, Eq, Clone)]
-pub(crate) struct Verbatim(pub String);
-impl fmt::Debug for Verbatim {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
         impl<'this, Func, Ret, $($ty,)*> SystemFn<'this, ($($ty,)*), Ret> for Func
         where
-            $(for<'x> $ty: AsBorrow<'x>,)*
-            for<'x> Func: FnMut($(<$ty as AsBorrow<'x>>::Borrowed),*) -> Ret,
+            $(for<'x> $ty: AsBorrowed<'x>,)*
+            for<'x> Func: FnMut($(<$ty as AsBorrowed<'x>>::Borrowed),*) -> Ret,
         {
             fn execute(&'this mut self, mut _args: ($($ty,)*)) -> Ret {
-                let _borrowed = ($(_args.$idx.as_borrow(),)*);
+                let _borrowed = ($(_args.$idx.as_borrowed(),)*);
                 (self)($(_borrowed.$idx,)*)
             }
         }
@@ -95,18 +88,6 @@ macro_rules! tuple_impl {
         {
             fn access(&self, _world: &World, _dst: &mut Vec<Access>) {
                 $(self.$idx.access(_world, _dst);)*
-            }
-        }
-
-        impl<'a, $($ty,)*> AsBorrow<'a> for ($($ty,)*)
-        where
-            $($ty: AsBorrow<'a>,)*
-        {
-            type Borrowed = ($(<$ty as AsBorrow<'a>>::Borrowed,)*);
-
-            #[allow(clippy::unused_unit)]
-            fn as_borrow(&'a mut self) -> Self::Borrowed {
-                ($((self.$idx).as_borrow(),)*)
             }
         }
 
@@ -148,28 +129,13 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 //     fn init(ctx: &'ctx SystemContext<'w>) -> Self::Init;
 // }
 
-/// Access part of the context mutably.
-#[doc(hidden)]
-pub struct Write<T>(pub(crate) PhantomData<T>);
-#[doc(hidden)]
-pub struct Read<T>(pub(crate) PhantomData<T>);
+/// Access the world
+pub struct WithWorld;
 
-impl<'a, T> SystemData<'a, T> for Write<World> {
-    type Value = AtomicRefMut<'a, World>;
-
-    fn acquire(&mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
-        ctx.world_mut()
-    }
-
-    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("&mut World")
-    }
-}
-
-impl<'a, T> SystemData<'a, T> for Read<World> {
+impl<'a, I> SystemData<'a, I> for WithWorld {
     type Value = AtomicRef<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
         ctx.world()
     }
 
@@ -178,16 +144,7 @@ impl<'a, T> SystemData<'a, T> for Read<World> {
     }
 }
 
-impl SystemAccess for Write<World> {
-    fn access(&self, _: &World, dst: &mut Vec<Access>) {
-        dst.push(Access {
-            kind: AccessKind::World,
-            mutable: true,
-        });
-    }
-}
-
-impl SystemAccess for Read<World> {
+impl SystemAccess for WithWorld {
     fn access(&self, _: &World, dst: &mut Vec<Access>) {
         dst.push(Access {
             kind: AccessKind::World,
@@ -197,10 +154,62 @@ impl SystemAccess for Read<World> {
     }
 }
 
-impl<'a, T> SystemData<'a, T> for Write<CommandBuffer> {
+/// Access the world mutably
+pub struct WithWorldMut;
+
+impl<'a, I> SystemData<'a, I> for WithWorldMut {
+    type Value = AtomicRefMut<'a, World>;
+
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
+        ctx.world_mut()
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("&mut World")
+    }
+}
+
+impl SystemAccess for WithWorldMut {
+    fn access(&self, _: &World, dst: &mut Vec<Access>) {
+        dst.push(Access {
+            kind: AccessKind::World,
+            // Due to interior mutablity as anything can be borrowed mut
+            mutable: true,
+        });
+    }
+}
+
+/// Access the command buffer
+pub struct WithCmd;
+
+impl<'a, I> SystemData<'a, I> for WithCmd {
     type Value = AtomicRefMut<'a, CommandBuffer>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
+        ctx.cmd_mut()
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("&CommandBuffer")
+    }
+}
+
+impl SystemAccess for WithCmd {
+    fn access(&self, _: &World, dst: &mut Vec<Access>) {
+        dst.push(Access {
+            kind: AccessKind::CommandBuffer,
+            mutable: false,
+        });
+    }
+}
+
+/// Access the command buffer mutably
+pub struct WithCmdMut;
+
+impl<'a, I> SystemData<'a, I> for WithCmdMut {
+    type Value = AtomicRefMut<'a, CommandBuffer>;
+
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
         ctx.cmd_mut()
     }
 
@@ -209,7 +218,7 @@ impl<'a, T> SystemData<'a, T> for Write<CommandBuffer> {
     }
 }
 
-impl SystemAccess for Write<CommandBuffer> {
+impl SystemAccess for WithCmdMut {
     fn access(&self, _: &World, dst: &mut Vec<Access>) {
         dst.push(Access {
             kind: AccessKind::CommandBuffer,
@@ -218,14 +227,17 @@ impl SystemAccess for Write<CommandBuffer> {
     }
 }
 
-#[doc(hidden)]
-pub struct ReadContextData<T>(pub(crate) PhantomData<T>);
+/// Access schedule input
+pub struct WithInput<T>(pub(crate) PhantomData<T>);
 
-impl<'a, T: 'a> SystemData<'a, T> for ReadContextData<T> {
+impl<'a, T: 'a, I: 'a> SystemData<'a, I> for WithInput<T>
+where
+    for<'x> AtomicRefCell<&'x mut I>: Extract<'a, AtomicRef<'a, T>>,
+{
     type Value = AtomicRef<'a, T>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
-        ctx.data()
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
+        ctx.input().extract()
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -234,7 +246,7 @@ impl<'a, T: 'a> SystemData<'a, T> for ReadContextData<T> {
     }
 }
 
-impl<T> SystemAccess for ReadContextData<T> {
+impl<T> SystemAccess for WithInput<T> {
     fn access(&self, _: &World, dst: &mut Vec<Access>) {
         dst.push(Access {
             kind: AccessKind::ContextData,
@@ -243,14 +255,17 @@ impl<T> SystemAccess for ReadContextData<T> {
     }
 }
 
-#[doc(hidden)]
-pub struct WriteContextData<T>(pub(crate) PhantomData<T>);
+/// Access schedule input mutably
+pub struct WithInputMut<T>(pub(crate) PhantomData<T>);
 
-impl<'a, T: 'a> SystemData<'a, T> for WriteContextData<T> {
+impl<'a, T: 'a, I: 'a> SystemData<'a, I> for WithInputMut<T>
+where
+    for<'x> AtomicRefCell<&'x mut I>: Extract<'a, AtomicRefMut<'a, T>>,
+{
     type Value = AtomicRefMut<'a, T>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
-        ctx.data_mut()
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
+        ctx.input().extract()
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -259,7 +274,7 @@ impl<'a, T: 'a> SystemData<'a, T> for WriteContextData<T> {
     }
 }
 
-impl<T> SystemAccess for WriteContextData<T> {
+impl<T> SystemAccess for WithInputMut<T> {
     fn access(&self, _: &World, dst: &mut Vec<Access>) {
         dst.push(Access {
             kind: AccessKind::ContextData,
@@ -270,9 +285,6 @@ impl<T> SystemAccess for WriteContextData<T> {
 
 #[cfg(test)]
 mod test {
-
-    use core::marker::PhantomData;
-
     use alloc::string::String;
     use atomic_refcell::AtomicRefMut;
     use itertools::Itertools;
@@ -282,7 +294,7 @@ mod test {
         CommandBuffer, Component, Entity, Query, QueryBorrow, World,
     };
 
-    use super::{SystemData, SystemFn, Write};
+    use super::{SystemData, SystemFn, WithWorldMut};
 
     component! {
         health: f32,
@@ -314,7 +326,7 @@ mod test {
             assert_eq!(names, ["Neo", "Trinity"]);
         };
 
-        let data = &mut (Write::<World>(PhantomData),);
+        let data = &mut (WithWorldMut,);
         let data: (AtomicRefMut<World>,) = data.acquire(&ctx);
         SystemFn::<(AtomicRefMut<World>,), ()>::execute(&mut spawner, data);
         // (spawner).execute(data);
