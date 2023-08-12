@@ -244,12 +244,12 @@ handle a 3d world.</p>
 
     let create_world_matrix = System::builder()
         .with_name(&quot;add_world_matrix&quot;)
-        .with(
+        .with_query(
             Query::new(entity_ids())
                 .with(position())
                 .without(world_matrix()),
         )
-        .write::&lt;CommandBuffer&gt;()
+        .with_cmd_mut()
         .build(
             |mut query: QueryBorrow&lt;EntityIds, _&gt;, cmd: &amp;mut CommandBuffer| {
                 for id in &amp;mut query {
@@ -261,7 +261,7 @@ handle a 3d world.</p>
 
     let update_world_matrix = System::builder()
         .with_name(&quot;update_world_matrix&quot;)
-        .with(
+        .with_query(
             Query::new((
                 entity_ids(),
                 world_matrix().as_mut(),

@@ -202,7 +202,7 @@
 </span>
 <span class="boring">fn main() {
 </span>    let mut window_system = System::builder()
-        .with(query)
+        .with_query(query)
         .build(|mut q: EntityBorrow&lt;_&gt;| {
             if let Ok((width, height, allow_vsync)) = q.get() {
                 tracing::info!(width, height, allow_vsync, &quot;Config changed&quot;);

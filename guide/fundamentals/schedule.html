@@ -182,8 +182,8 @@ sequence.</p>
 </span><span class="boring">fn main() {
 </span>    let despawn = System::builder()
         .with_name(&quot;delete_outside_world&quot;)
-        .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
-        .write::&lt;CommandBuffer&gt;()
+        .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
+        .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (id, &amp;dist) in &amp;mut q {
                 tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
@@ -193,7 +193,7 @@ sequence.</p>
 
     let debug_world = System::builder()
         .with_name(&quot;debug_world&quot;)
-        .read::&lt;World&gt;()
+        .with_world()
         .build(|world: &amp;_| {
             tracing::debug!(&quot;World: {world:?}&quot;);
         });
@@ -219,7 +219,7 @@ sequence.</p>
     // eventually be despawned
     let move_out = System::builder()
         .with_name(&quot;move_out&quot;)
-        .with(Query::new(position().as_mut()).filter(is_static().without()))
+        .with_query(Query::new(position().as_mut()).filter(is_static().without()))
         .for_each(|pos| {
             let dir = pos.normalize_or_zero();
 
@@ -227,10 +227,8 @@ sequence.</p>
         });
 
     // Spawn new entities with a random position each frame
-    let spawn = System::builder()
-        .with_name(&quot;spawner&quot;)
-        .write::&lt;CommandBuffer&gt;()
-        .build(move |cmd: &amp;mut CommandBuffer| {
+    let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd_mut().build(
+        move |cmd: &amp;mut CommandBuffer| {
             for _ in 0..100 {
                 let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
                 tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
@@ -239,14 +237,15 @@ sequence.</p>
                     .set_default(distance())
                     .spawn_into(cmd);
             }
-        });
+        },
+    );
 
     let mut frame_count = 0;
 
     // Count the number of entities in the world and log it
     let count = System::builder()
         .with_name(&quot;count&quot;)
-        .with(Query::new(()))
+        .with_query(Query::new(()))
         .build(move |mut query: QueryBorrow&lt;()&gt;| {
             let count: usize = query.iter_batched().map(|v| v.len()).sum();
             tracing::info!(&quot;[{frame_count}]: {count}&quot;);

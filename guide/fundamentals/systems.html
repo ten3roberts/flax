@@ -208,7 +208,7 @@ thrice could be turned into a query.</p>
 <span class="boring">fn main() {
 </span>    let mut update_dist = System::builder()
         .with_name(&quot;update_distance&quot;)
-        .with(query)
+        .with_query(query)
         .build(
             |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
                 for (id, pos, dist) in &amp;mut query {
@@ -228,7 +228,7 @@ single query.</p>
 </span><span class="boring">fn main() {
 </span>    let mut update_dist = System::builder()
         .with_name(&quot;update_distance&quot;)
-        .with(
+        .with_query(
             Query::new((entity_ids(), position(), distance().as_mut()))
                 .filter(position().modified()),
         )
@@ -257,8 +257,8 @@ as it may access anything.</p>
 </span>    // Despawn all entities with a distance &gt; 50
     let despawn = System::builder()
         .with_name(&quot;delete_outside_world&quot;)
-        .with(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
-        .write::&lt;CommandBuffer&gt;()
+        .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
+        .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (id, &amp;dist) in &amp;mut q {
                 tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
@@ -268,7 +268,7 @@ as it may access anything.</p>
 
     let debug_world = System::builder()
         .with_name(&quot;debug_world&quot;)
-        .read::&lt;World&gt;()
+        .with_world()
         .build(|world: &amp;_| {
             tracing::debug!(&quot;World: {world:?}&quot;);
         });

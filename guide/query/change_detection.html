@@ -185,7 +185,7 @@ for each entity.</p>
 </span>    let query = Query::new((name(), health().modified()));
 
     let health_changes = System::builder()
-        .with(query)
+        .with_query(query)
         .build(|mut query: QueryBorrow&lt;_&gt;| {
             info_span!(&quot;health_changes&quot;);
             for (name, health) in &amp;mut query {
@@ -208,8 +208,8 @@ mutable access.</p>
 
     let cleanup = System::builder()
         .with_name(&quot;cleanup&quot;)
-        .with(query)
-        .write::&lt;CommandBuffer&gt;()
+        .with_query(query)
+        .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (name, id, is_player) in &amp;mut q {
                 if is_player {
@@ -253,7 +253,7 @@ needs to be something to modify the health of entities.</p>
         });
 
     let damage_random = System::builder()
-        .write::&lt;World&gt;()
+        .with_world_mut()
         .build(move |world: &amp;mut World| {
             let count = rng.gen_range(0..enemies.len());
             let targets = all.choose_multiple(&amp;mut rng, count);
@@ -265,7 +265,7 @@ needs to be something to modify the health of entities.</p>
         });
 
     let update_poison = System::builder()
-        .with(Query::new((name().opt(), health().as_mut(), poison())))
+        .with_query(Query::new((name().opt(), health().as_mut(), poison())))
         .for_each(|(name, health, poison)| {
             *health -= poison;
             tracing::info!(&quot;{name:?} suffered {poison} in poison damage&quot;);

@@ -229,8 +229,8 @@ in other situations where a mutable reference to the world is not available.</p>
     let mut rng = StdRng::seed_from_u64(42);
     let spawner = System::builder()
         .with_name(&quot;spawn_entities&quot;)
-        .with(Query::new(()))
-        .write::&lt;CommandBuffer&gt;()
+        .with_query(Query::new(()))
+        .with_cmd_mut()
         .build(move |mut q: QueryBorrow&lt;()&gt;, cmd: &amp;mut CommandBuffer| {
             let count = q.count();
 
@@ -247,8 +247,8 @@ in other situations where a mutable reference to the world is not available.</p>
     // Ensure a world matrix to each entity with a position
     let add_world_matrix = System::builder()
         .with_name(&quot;add_world_matrix&quot;)
-        .with(Query::new((entity_ids(), position())).without(world_matrix()))
-        .write::&lt;CommandBuffer&gt;()
+        .with_query(Query::new((entity_ids(), position())).without(world_matrix()))
+        .with_cmd_mut()
         .build(
             |mut q: QueryBorrow&lt;(EntityIds, Component&lt;Vec2&gt;), _&gt;, cmd: &amp;mut CommandBuffer| {
                 for (id, pos) in &amp;mut q {
@@ -261,7 +261,7 @@ in other situations where a mutable reference to the world is not available.</p>
     // Update the world matrix if position changes
     let update_world_matrix = System::builder()
         .with_name(&quot;update_world_matrix&quot;)
-        .with(
+        .with_query(
             Query::new((entity_ids(), position(), world_matrix().as_mut()))
                 .filter(position().modified()),
         )

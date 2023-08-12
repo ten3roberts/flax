@@ -214,7 +214,9 @@
 </span>
 <span class="boring">fn main() {
 </span>    let update_world_position = System::builder()
-        .with(Query::new((world_position().as_mut(), position())).with_strategy(Dfs::new(child_of)))
+        .with_query(
+            Query::new((world_position().as_mut(), position())).with_strategy(Dfs::new(child_of)),
+        )
         .build(
             |mut query: DfsBorrow&lt;(Mutable&lt;Vec3&gt;, Component&lt;Vec3&gt;), All, ()&gt;| {
                 query.traverse(&amp;Vec3::ZERO, |(world_pos, &amp;pos), _, &amp;parent_pos| {
@@ -226,7 +228,9 @@
 
     let mut buf = String::new();
     let print_hierarchy = System::builder()
-        .with(Query::new((name(), position(), world_position())).with_strategy(Dfs::new(child_of)))
+        .with_query(
+            Query::new((name(), position(), world_position())).with_strategy(Dfs::new(child_of)),
+        )
         .build(move |mut query: DfsBorrow&lt;_, _, _&gt;| {
             query.traverse(&amp;0usize, |(name, pos, world_pos), _, depth| {
                 let indent = depth * 4;
