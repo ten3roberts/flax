@@ -118,8 +118,8 @@ fn main() -> anyhow::Result<()> {
         System::builder()
             .with_name("debug_world")
             .with_world()
-            .build(|world: &_| {
-                // println!("World: {world:#?}");
+            .build(|_world: &_| {
+                // println!("World: {_world:#?}");
             })
             .boxed()
     }
@@ -169,7 +169,7 @@ fn main() -> anyhow::Result<()> {
         .with_system(add_distance_system())
         .flush()
         .with_system(update_distance_system())
-        // .with_system(despawn_system())
+        .with_system(despawn_system())
         .with_system(spawn_system(rng, 1))
         .with_system(move_system())
         .with_system(inspect_system())
@@ -179,6 +179,7 @@ fn main() -> anyhow::Result<()> {
         println!("Frame: {i}");
         schedule.execute_par(&mut world)?;
     }
+
     // ANCHOR_END: schedule
 
     Ok(())

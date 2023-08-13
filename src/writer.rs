@@ -382,7 +382,7 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
         };
 
         update_entity_loc(world, id, dst_loc, swapped);
-        world.archetypes.prune_arch(src_loc.arch_id);
+        // world.archetypes.prune_arch(src_loc.arch_id);
 
         (dst_loc, ())
     }

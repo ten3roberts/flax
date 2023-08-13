@@ -269,7 +269,7 @@ impl World {
                 .slot = slot;
         }
 
-        self.archetypes.prune_arch(arch_id);
+        // self.archetypes.prune_arch(arch_id);
 
         *self.location_mut(id).unwrap() = EntityLocation {
             slot: dst_slot,
@@ -277,6 +277,11 @@ impl World {
         };
 
         Ok(())
+    }
+
+    /// Prune empty archetypes, returning the number of archetypes removed
+    pub fn prune_archetypes(&mut self) -> usize {
+        self.archetypes.prune_all()
     }
 
     pub(crate) fn retain_entity_components(
@@ -307,7 +312,7 @@ impl World {
                 .slot = slot;
         }
 
-        self.archetypes.prune_arch(loc.arch_id);
+        // self.archetypes.prune_arch(loc.arch_id);
         let loc = EntityLocation {
             slot: dst_slot,
             arch_id: dst_id,
@@ -371,7 +376,7 @@ impl World {
                 .slot = slot;
         }
 
-        self.archetypes.prune_arch(arch);
+        // self.archetypes.prune_arch(arch);
         self.entities.init(id.kind()).despawn(id)?;
         self.detach(id);
         Ok(())
@@ -634,7 +639,6 @@ impl World {
             let swapped_ns = self.entities.init(swapped.kind());
             swapped_ns.get_mut(swapped).expect("Invalid entity id").slot = slot;
         }
-        self.archetypes.prune_arch(src_id);
 
         let loc = EntityLocation {
             slot: dst_slot,
