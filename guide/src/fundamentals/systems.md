@@ -1,48 +1,56 @@
 # Systems
 
-Having to both keep queries around, and their logic is tedious and error prone.
+Maintaining queries and their associated data and logic can be verbose and error prone.
 
-Systems aid in organizing your applications logic and required data.
+*Systems* provide the perfect aid and allows bundling arguments, such as
+queries, world access, and much more along with the logic to execute with it.
 
-Each system represents a set of data, like queries or view into the world, or a
-commandbuffer, and a function which will be executed.
+A system can be run manually or in a [`Schedule`](https://docs.rs/flax/0.4.0/flax/schedule/struct.Schedule.html), which will automatically parallelize the system execution on multiple threads.
 
-In the previous chapter, the "update distance from positions", which was reused
-thrice could be turned into a query.
-
-Instead of:
+For example, to update `distance` from each `position` you could do:
 
 ```rust
-{{ #include ../../../examples/guide/query.rs:query_modified }}
+{{ #include ../../../examples/guide/systems.rs:system_basic }}
 ```
 
-We get this:
+The system construction can subsequently be extracted to a function
 
 ```rust
-{{ #include ../../../examples/guide/query.rs:system_basic }}
+{{ #include ../../../examples/guide/systems.rs:system_func }}
+```
+
+However, the query won't yield entities since none have the `distance` component to modify. No to fear, we could add another system which ensures the component is present.
+
+```rust
+{{ #include ../../../examples/guide/systems.rs:add_missing }}
 ```
 
 ## For each
 
-If the systems sole purpose it to execute an action for each element, the
-`for_each` shorthand can be used. This is only possible if the system uses a
-single query.
+Most systems iterate each item of a single query, without any other system arguments.
+
+The shorthand `for_each` is provided for this purpose
 
 ```rust
-{{ #include ../../../examples/guide/query.rs:system_for_each }}
+{{ #include ../../../examples/guide/systems.rs:for_each }}
+```
+
+## Schedule
+
+Lets add some more systems and add them to a [`Schedule`](https://docs.rs/flax/0.4.0/flax/schedule/struct.Schedule.html)
+
+```rust
+{{ #include ../../../examples/guide/systems.rs:schedule }}
+
 ```
 
 ## System access
-Contrary to using a query directly, the `world` is not needed to prepare a
-query. This is because the world is contained inside the `QueryData` argument.
 
-This ensures a system will only access the components in the associated queries,
-which allows for paralellizing system execution.
+One of the abilities of a system is to automatically extract what they need for their arguments from the schedule context.
 
-If access to the whole world is required, use `with_world`.
+This both increases their ease of use, but further assures that only the declared pieces of data will be accessed, which allows seamless fine-grained parallelization capabilities
 
-Similarly, `with_cmd` allows access to the commandbuffer in the system, which is
-used for deferred sets, removes, or spawns.
+Therefore, it is advised to keep your system arguments as *specific* as possible, such as using queries whenever possible, rather than the whole world.
 
 **Note**: Systems which access the world will not paralellize with other systems
 as it may access anything.

@@ -5,6 +5,7 @@
 - [Fundamentals](fundamentals/index.md)
   - [World](fundamentals/world.md)
   - [Components](fundamentals/components.md)
+  - [Queries](fundamentals/query.md)
   - [Systems](fundamentals/systems.md)
   - [Schedule](fundamentals/schedule.md)
   - [EntityBuilder](fundamentals/builder.md)
