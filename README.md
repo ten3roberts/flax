@@ -77,14 +77,14 @@ collected into a schedule.
 
 ```rust
 let regen_system = System::builder()
-    .with(Query::new((health().as_mut(), regen())))
+    .with_query(Query::new((health().as_mut(), regen())))
     .for_each(|(health, regen)| {
         *health = (*health + regen).min(100.0);
     })
     .boxed();
 
 let despawn_system = System::builder()
-    .with(Query::new(entity_ids()).filter(health().le(0.0)))
+    .with_query(Query::new(entity_ids()).filter(health().le(0.0)))
     .write::<CommandBuffer>()
     .build(|mut q: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
         for id in &mut q {

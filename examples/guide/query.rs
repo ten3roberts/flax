@@ -4,16 +4,8 @@ use flax::{
 };
 use glam::{vec2, Vec2};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use tracing_subscriber::{prelude::*, util::SubscriberInitExt, EnvFilter};
-use tracing_tree::HierarchicalLayer;
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env())
-        .with(HierarchicalLayer::default().with_indent_lines(true))
-        .init();
-
-    // ANCHOR: query_simple
     let mut world = World::new();
 
     component! {
@@ -21,16 +13,17 @@ fn main() -> anyhow::Result<()> {
         health: f32 => [ Debuggable ],
     }
 
+    // ANCHOR: query_simple
     // Spawn two entities
-    let id = world.spawn();
+    let id = Entity::builder()
+        .set(position(), vec2(1.0, 4.0))
+        .set(health(), 75.0)
+        .spawn(&mut world);
 
-    world.set(id, position(), vec2(1.0, 4.0))?;
-    world.set(id, health(), 100.0)?;
-
-    let id2 = world.spawn();
-
-    world.set(id2, position(), vec2(-1.0, 4.0))?;
-    world.set(id2, health(), 75.0)?;
+    let id2 = Entity::builder()
+        .set(position(), vec2(-1.0, 4.0))
+        .set(health(), 75.0)
+        .spawn(&mut world);
 
     let mut query = Query::new((position(), health()));
 
@@ -46,22 +39,22 @@ fn main() -> anyhow::Result<()> {
         distance: f32 => [ flax::Debuggable ],
     }
 
-    tracing::info!("Spawning id3");
+    println!("Spawning id3");
     let id3 = world.spawn();
     world.set(id3, position(), vec2(5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
-        tracing::info!("Adding distance to {id}");
+        println!("Adding distance to {id}");
         world.set(id, distance(), 0.0)?;
     }
 
     let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
         .filter(position().modified() & health().gt(0.0));
 
-    tracing::info!("Updating distances");
+    println!("Updating distances");
     for (id, pos, dist) in &mut query.borrow(&world) {
-        tracing::info!("Updating distance for {id} with position: {pos:?}");
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
 
@@ -69,9 +62,9 @@ fn main() -> anyhow::Result<()> {
 
     // ANCHOR: query_repeat
 
-    tracing::info!("Running query again");
+    println!("Running query again");
     for (id, pos, dist) in &mut query.borrow(&world) {
-        tracing::info!("Updating distance for {id} with position: {pos:?}");
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
     // ANCHOR_END: query_repeat
@@ -80,9 +73,9 @@ fn main() -> anyhow::Result<()> {
 
     *world.get_mut(id2, position())? = vec2(8.0, 3.0);
 
-    tracing::info!("... and again");
+    println!("... and again");
     for (id, pos, dist) in &mut query.borrow(&world) {
-        tracing::info!("Updating distance for {id} with position: {pos:?}");
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
 
@@ -102,19 +95,19 @@ fn main() -> anyhow::Result<()> {
 
     // ANCHOR: system_basic
 
-    let mut update_dist = System::builder()
+    let mut update_distance = System::builder()
         .with_name("update_distance")
         .with_query(query)
         .build(
             |mut query: QueryBorrow<(_, Component<Vec2>, Mutable<f32>), _>| {
                 for (id, pos, dist) in &mut query {
-                    tracing::info!("Updating distance for {id} with position: {pos:?}");
+                    println!("Updating distance for {id} with position: {pos:?}");
                     *dist = pos.length();
                 }
             },
         );
 
-    update_dist.run_on(&mut world);
+    update_distance.run_on(&mut world);
     // ANCHOR_END: system_basic
 
     // ANCHOR: system_for_each
@@ -144,7 +137,7 @@ fn main() -> anyhow::Result<()> {
         .with_cmd_mut()
         .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
             for (id, &dist) in &mut q {
-                tracing::info!("Despawning {id} at: {dist}");
+                println!("Despawning {id} at: {dist}");
                 cmd.despawn(id);
             }
         });
@@ -190,7 +183,7 @@ fn main() -> anyhow::Result<()> {
         move |cmd: &mut CommandBuffer| {
             for _ in 0..100 {
                 let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-                tracing::info!("Spawning new entity at: {pos:?}");
+                println!("Spawning new entity at: {pos:?}");
                 Entity::builder()
                     .set(position(), pos)
                     .set_default(distance())
@@ -207,7 +200,7 @@ fn main() -> anyhow::Result<()> {
         .with_query(Query::new(()))
         .build(move |mut query: QueryBorrow<()>| {
             let count: usize = query.iter_batched().map(|v| v.len()).sum();
-            tracing::info!("[{frame_count}]: {count}");
+            println!("[{frame_count}]: {count}");
             frame_count += 1;
         });
 
@@ -221,11 +214,11 @@ fn main() -> anyhow::Result<()> {
         .with_system(count)
         .build();
 
-    tracing::info!("{schedule:#?}");
+    println!("{schedule:#?}");
 
     for i in 0..20 {
-        tracing::info!("Frame: {i}");
-        tracing::info!("Batches: {:#?}", schedule.batch_info(&world));
+        println!("Frame: {i}");
+        println!("Batches: {:#?}", schedule.batch_info(&world));
         schedule.execute_par(&mut world)?;
     }
 
@@ -255,7 +248,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut borrow = query.borrow(&world);
     let (width, height, vsync) = borrow.get().unwrap();
-    tracing::info!("width: {width} height: {height}, vsync: {vsync}");
+    println!("width: {width} height: {height}, vsync: {vsync}");
 
     // ANCHOR_END: entity_query
 
@@ -267,9 +260,11 @@ fn main() -> anyhow::Result<()> {
         .with_query(query)
         .build(|mut q: EntityBorrow<_>| {
             if let Ok((width, height, allow_vsync)) = q.get() {
-                tracing::info!(width, height, allow_vsync, "Config changed");
+                println!(
+                    "Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}"
+                );
             } else {
-                tracing::info!("No config change");
+                println!("No config change");
             }
         });
 

@@ -1,4 +1,5 @@
 # Queries
-Queries are the beating heart of any ECS.
 
-They provide a declarative method to iterate, modify, and inspect the world, or a subset thereof.
+A query is the most useful tool in your ECS toolbox, and has many use cases.
+
+This chapter explores the available methods and uses for queries
