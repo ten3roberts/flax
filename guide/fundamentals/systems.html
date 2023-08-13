@@ -268,8 +268,8 @@ queries, world access, and much more along with the logic to execute with it.</p
         System::builder()
             .with_name(&quot;debug_world&quot;)
             .with_world()
-            .build(|world: &amp;_| {
-                // println!(&quot;World: {world:#?}&quot;);
+            .build(|_world: &amp;_| {
+                // println!(&quot;World: {_world:#?}&quot;);
             })
             .boxed()
     }
@@ -319,7 +319,7 @@ queries, world access, and much more along with the logic to execute with it.</p
         .with_system(add_distance_system())
         .flush()
         .with_system(update_distance_system())
-        // .with_system(despawn_system())
+        .with_system(despawn_system())
         .with_system(spawn_system(rng, 1))
         .with_system(move_system())
         .with_system(inspect_system())
@@ -329,6 +329,7 @@ queries, world access, and much more along with the logic to execute with it.</p
         println!(&quot;Frame: {i}&quot;);
         schedule.execute_par(&amp;mut world)?;
     }
+
 
 <span class="boring">}</span></code></pre></pre>
 <h2 id="system-access"><a class="header" href="#system-access">System access</a></h2>
