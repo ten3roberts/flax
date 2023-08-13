@@ -1,5 +1,11 @@
+use flax::{
+    name, query::QueryData, system::DynSystem, BoxedSystem, CommandBuffer, Entity, FetchExt, Query,
+    QueryBorrow, Schedule, System, World,
+};
+use itertools::Itertools;
+
 #[test]
-#[cfg(feature = "parallel")]
+#[cfg(feature = "rayon")]
 fn schedule_granularity() {
     use flax::*;
     use std::iter::repeat;
@@ -88,4 +94,84 @@ fn schedule_granularity() {
 
     assert_eq!(batches.len(), 2, "{names:#?}");
     schedule.execute_par(&mut world).unwrap();
+}
+
+#[test]
+fn command_flushing() {
+    fn produce(name: &'static str) -> BoxedSystem {
+        System::builder()
+            .with_cmd_mut()
+            .build(|cmd: &mut CommandBuffer| {
+                Entity::builder()
+                    .set(flax::components::name(), name.into())
+                    .spawn_into(cmd);
+            })
+            .boxed()
+    }
+
+    fn consume() -> BoxedSystem {
+        System::builder()
+            .with_query(Query::new(name().added().eq("Foo")))
+            .build(|mut q: QueryBorrow<_>| {
+                assert_eq!(q.iter().collect_vec(), ["Foo"]);
+            })
+            .boxed()
+    }
+    {
+        let mut world = World::new();
+
+        let mut schedule = Schedule::builder()
+            .with_system(produce("Foo"))
+            .flush()
+            .with_system(consume())
+            .with_system(produce("Bar"))
+            .build();
+
+        schedule.execute_seq(&mut world).unwrap();
+        assert_eq!(Query::new(name()).borrow(&world).iter().count(), 2);
+
+        schedule.execute_seq(&mut world).unwrap();
+        assert_eq!(Query::new(name()).borrow(&world).iter().count(), 4);
+    }
+}
+
+#[test]
+#[cfg(feature = "rayon")]
+fn command_flushing_par() {
+    fn produce(name: &'static str) -> BoxedSystem {
+        System::builder()
+            .with_cmd_mut()
+            .build(|cmd: &mut CommandBuffer| {
+                Entity::builder()
+                    .set(flax::components::name(), name.into())
+                    .spawn_into(cmd);
+            })
+            .boxed()
+    }
+
+    fn consume() -> BoxedSystem {
+        System::builder()
+            .with_query(Query::new(name().added().eq("Foo")))
+            .build(|mut q: QueryBorrow<_>| {
+                assert_eq!(q.iter().collect_vec(), ["Foo"]);
+            })
+            .boxed()
+    }
+
+    {
+        let mut world = World::new();
+
+        let mut schedule = Schedule::builder()
+            .with_system(produce("Foo"))
+            .flush()
+            .with_system(consume())
+            .with_system(produce("Bar"))
+            .build();
+
+        schedule.execute_par(&mut world).unwrap();
+        assert_eq!(Query::new(name()).borrow(&world).iter().count(), 2);
+
+        schedule.execute_par(&mut world).unwrap();
+        assert_eq!(Query::new(name()).borrow(&world).iter().count(), 4);
+    }
 }

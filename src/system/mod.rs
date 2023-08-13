@@ -21,7 +21,7 @@ use core::{
 };
 
 pub use context::*;
-#[cfg(feature = "parallel")]
+#[cfg(feature = "rayon")]
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 pub use traits::{AsBorrowed, SystemAccess, SystemData, SystemFn};
 
@@ -74,12 +74,12 @@ where
 }
 
 /// Execute a function for each item in the query in parallel batches
-#[cfg(feature = "parallel")]
+#[cfg(feature = "rayon")]
 pub struct ParForEach<F> {
     func: F,
 }
 
-#[cfg(feature = "parallel")]
+#[cfg(feature = "rayon")]
 impl<'a, Func, Q, F> SystemFn<'a, (QueryData<'a, Q, F>,), ()> for ParForEach<Func>
 where
     for<'x> Q: Fetch<'x>,
@@ -115,7 +115,7 @@ where
     }
 }
 
-#[cfg(feature = "parallel")]
+#[cfg(feature = "rayon")]
 impl<Q, F, T> SystemBuilder<(Query<Q, F>,), T>
 where
     for<'x> Q: 'static + Fetch<'x> + Send,
@@ -178,6 +178,8 @@ impl<Args, I> SystemBuilder<Args, I> {
     }
 
     /// Access the command buffer mutably
+    /// **Note**: Add `.flush()` after the system in the schedule to have the changes visible in
+    /// the next system
     pub fn with_cmd_mut(self) -> SystemBuilder<Args::PushRight, I>
     where
         Args: TuplePush<WithCmdMut>,
@@ -588,7 +590,7 @@ impl<T> BoxedSystem<T> {
     }
 
     /// Execute the system with the provided context
-    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'a, T>) -> anyhow::Result<()> {
+    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'_, T>) -> anyhow::Result<()> {
         self.inner.execute(ctx)
     }
 

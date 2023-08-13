@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, mem, ops::Deref};
+use core::{marker::PhantomData, mem, ops::Deref, slice::IterMut};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
@@ -86,7 +86,7 @@ impl SystemInfo {
     }
 }
 
-/// A collection of systems to run on the world
+/// A schedule of systems to execute with automatic parallelization.
 pub struct Schedule<T = ()> {
     systems: Vec<Vec<BoxedSystem<T>>>,
     cmd: CommandBuffer,
@@ -160,6 +160,34 @@ where
 {
     fn from(v: U) -> Self {
         Self::from_systems(v.into_iter().collect_vec())
+    }
+}
+
+impl Schedule<()> {
+    /// Creates a new schedule builder
+    pub fn builder() -> ScheduleBuilder {
+        ScheduleBuilder::default()
+    }
+    /// Execute all systems in the schedule sequentially on the world.
+    /// Returns the first error and aborts if the execution fails.
+    pub fn execute_seq(&mut self, world: &mut World) -> anyhow::Result<()> {
+        self.execute_seq_with(world, &mut ())
+    }
+
+    #[cfg(feature = "rayon")]
+    /// Executes the systems in the schedule in parallel.
+    ///
+    /// Systems will run in an order such that changes and mutable accesses made by systems
+    /// provided
+    /// *before* are observable when the system runs.
+    ///
+    /// Systems with no dependencies between each other may run in any order, but will **not** run
+    /// before any previously provided system which it depends on.
+    ///
+    /// A dependency between two systems is given by a side effect, e.g; a component write, which
+    /// is accessed by the seconds system through a read or other side effect.
+    pub fn execute_par(&mut self, world: &mut World) -> anyhow::Result<()> {
+        self.execute_par_with(world, &mut ())
     }
 }
 
@@ -251,19 +279,16 @@ impl<T: 'static + Send + Sync> Schedule<T> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("execute_seq").entered();
 
-        self.systems
-            .iter_mut()
-            .flatten()
-            .try_for_each(|system| system.execute(&ctx))?;
+        for system in self.systems.iter_mut().flatten() {
+            system.execute(&ctx)?
+        }
 
         self.cmd
             .apply(world)
-            .context("Failed to apply commandbuffer")?;
-
-        Ok(())
+            .context("Failed to apply commandbuffer")
     }
 
-    #[cfg(feature = "parallel")]
+    #[cfg(feature = "rayon")]
     /// Same as [`Self::execute_par`] but allows supplying short lived data available to the systems
     pub fn execute_par_with(&mut self, world: &mut World, input: &mut T) -> anyhow::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -278,19 +303,43 @@ impl<T: 'static + Send + Sync> Schedule<T> {
             self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
         }
 
-        let ctx = SystemContext::new(world, &mut self.cmd, input);
+        let mut ctx = SystemContext::new(world, &mut self.cmd, input);
 
-        let result = self.systems.iter_mut().try_for_each(|batch| {
+        let mut batches = self.systems.iter_mut();
+
+        for batch in &mut batches {
             batch
                 .par_iter_mut()
-                .try_for_each(|system| system.execute(&ctx))
-        });
+                .try_for_each(|system| system.execute(&ctx))?;
+
+            // If the archetype generation changed the batches are invalidated
+            //
+            // Execute sequentially, and rebuild the schedule next time around
+            if self.archetype_gen != ctx.world.get_mut().archetype_gen() {
+                Self::bail_seq(batches, &ctx)?;
+
+                return self
+                    .cmd
+                    .apply(world)
+                    .context("Failed to apply commandbuffer");
+            }
+        }
 
         self.cmd
             .apply(world)
-            .context("Failed to apply commandbuffer")?;
+            .context("Failed to apply commandbuffer")
+    }
 
-        result
+    #[cfg(feature = "rayon")]
+    fn bail_seq(
+        batches: IterMut<Vec<BoxedSystem<T>>>,
+        ctx: &SystemContext<'_, T>,
+    ) -> anyhow::Result<()> {
+        for system in batches.flatten() {
+            system.execute(ctx)?;
+        }
+
+        Ok(())
     }
 
     fn build_dependencies(
@@ -350,35 +399,6 @@ impl<T: 'static + Send + Sync> Schedule<T> {
         topo_sort(systems, &deps)
     }
 }
-
-impl Schedule<()> {
-    /// Creates a new schedule builder
-    pub fn builder() -> ScheduleBuilder {
-        ScheduleBuilder::default()
-    }
-    /// Execute all systems in the schedule sequentially on the world.
-    /// Returns the first error and aborts if the execution fails.
-    pub fn execute_seq(&mut self, world: &mut World) -> anyhow::Result<()> {
-        self.execute_seq_with(world, &mut ())
-    }
-
-    #[cfg(feature = "parallel")]
-    /// Executes the systems in the schedule in parallel.
-    ///
-    /// Systems will run in an order such that changes and mutable accesses made by systems
-    /// provided
-    /// *before* are observable when the system runs.
-    ///
-    /// Systems with no dependencies between each other may run in any order, but will **not** run
-    /// before any previously provided system which it depends on.
-    ///
-    /// A dependency between two systems is given by a side effect, e.g; a component write, which
-    /// is accessed by the seconds system through a read or other side effect.
-    pub fn execute_par(&mut self, world: &mut World) -> anyhow::Result<()> {
-        self.execute_par_with(world, &mut ())
-    }
-}
-
 ///// Insert accesses checking for compatibility.
 /////
 ///// If the new system's accesses are not compatible, the current acceses are replaced with the new
@@ -517,7 +537,7 @@ mod test {
 
     #[test]
     #[cfg_attr(miri, ignore)]
-    #[cfg(feature = "parallel")]
+    #[cfg(feature = "rayon")]
     #[cfg(feature = "std")]
     fn schedule_context() {
         component! {
@@ -581,7 +601,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "parallel")]
+    #[cfg(feature = "rayon")]
     #[cfg(feature = "std")]
     #[cfg(feature = "derive")]
     fn schedule_par() {

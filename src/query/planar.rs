@@ -44,8 +44,6 @@ impl Planar {
         fetch: &Filtered<Q, F>,
         result: &mut Vec<ArchetypeId>,
     ) {
-        result.clear();
-
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
@@ -56,13 +54,6 @@ impl Planar {
 
             result.push(arch_id)
         });
-
-        // let mut unique = BTreeSet::new();
-
-        // assert!(
-        //     result.iter().all(|v| unique.insert(v)),
-        //     "Duplicate archetypes: {result:?}"
-        // );
     }
 }
 
@@ -76,6 +67,7 @@ where
     fn borrow(&'w mut self, state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow {
         // Make sure the archetypes to visit are up to date
         if dirty {
+            self.archetypes.clear();
             Self::update_state(state.world, state.fetch, &mut self.archetypes);
         }
 
@@ -217,7 +209,7 @@ where
     ///     .par_bridge()
     ///     .for_each(|v| v.for_each(&func))
     /// ```
-    #[cfg(feature = "parallel")]
+    #[cfg(feature = "rayon")]
     pub fn par_for_each(&mut self, func: impl Fn(<Q as FetchItem<'_>>::Item) + Send + Sync)
     where
         Q: Sync,
