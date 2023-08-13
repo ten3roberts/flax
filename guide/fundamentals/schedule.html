@@ -83,7 +83,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.3.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html" class="active"><strong aria-hidden="true">1.4.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.5.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.6.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.7.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.8.</strong> Component metadata</a></li></ol></li><li class="chapter-item expanded "><a href="../query/index.html"><strong aria-hidden="true">2.</strong> Queries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../query/basics.html"><strong aria-hidden="true">2.1.</strong> Basics</a></li><li class="chapter-item expanded "><a href="../query/filters.html"><strong aria-hidden="true">2.2.</strong> Filters</a></li><li class="chapter-item expanded "><a href="../query/change_detection.html"><strong aria-hidden="true">2.3.</strong> Change Detection</a></li><li class="chapter-item expanded "><a href="../query/entity_query.html"><strong aria-hidden="true">2.4.</strong> Entity Query</a></li><li class="chapter-item expanded "><a href="../query/graphs.html"><strong aria-hidden="true">2.5.</strong> Graphs</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">3.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">3.1.</strong> Advanced Queries</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">3.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">3.3.</strong> Serialization</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html"><strong aria-hidden="true">1.3.</strong> Queries</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.4.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html" class="active"><strong aria-hidden="true">1.5.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.6.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.7.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.8.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.9.</strong> Component metadata</a></li></ol></li><li class="chapter-item expanded "><a href="../query/index.html"><strong aria-hidden="true">2.</strong> Queries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../query/basics.html"><strong aria-hidden="true">2.1.</strong> Basics</a></li><li class="chapter-item expanded "><a href="../query/filters.html"><strong aria-hidden="true">2.2.</strong> Filters</a></li><li class="chapter-item expanded "><a href="../query/change_detection.html"><strong aria-hidden="true">2.3.</strong> Change Detection</a></li><li class="chapter-item expanded "><a href="../query/entity_query.html"><strong aria-hidden="true">2.4.</strong> Entity Query</a></li><li class="chapter-item expanded "><a href="../query/graphs.html"><strong aria-hidden="true">2.5.</strong> Graphs</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">3.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">3.1.</strong> Advanced Queries</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">3.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">3.3.</strong> Serialization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -186,7 +186,7 @@ sequence.</p>
         .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (id, &amp;dist) in &amp;mut q {
-                tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
+                println!(&quot;Despawning {id} at: {dist}&quot;);
                 cmd.despawn(id);
             }
         });
@@ -231,7 +231,7 @@ sequence.</p>
         move |cmd: &amp;mut CommandBuffer| {
             for _ in 0..100 {
                 let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-                tracing::info!(&quot;Spawning new entity at: {pos:?}&quot;);
+                println!(&quot;Spawning new entity at: {pos:?}&quot;);
                 Entity::builder()
                     .set(position(), pos)
                     .set_default(distance())
@@ -248,7 +248,7 @@ sequence.</p>
         .with_query(Query::new(()))
         .build(move |mut query: QueryBorrow&lt;()&gt;| {
             let count: usize = query.iter_batched().map(|v| v.len()).sum();
-            tracing::info!(&quot;[{frame_count}]: {count}&quot;);
+            println!(&quot;[{frame_count}]: {count}&quot;);
             frame_count += 1;
         });
 
@@ -262,11 +262,11 @@ sequence.</p>
         .with_system(count)
         .build();
 
-    tracing::info!(&quot;{schedule:#?}&quot;);
+    println!(&quot;{schedule:#?}&quot;);
 
     for i in 0..20 {
-        tracing::info!(&quot;Frame: {i}&quot;);
-        tracing::info!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;world));
+        println!(&quot;Frame: {i}&quot;);
+        println!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;world));
         schedule.execute_par(&amp;mut world)?;
     }
 

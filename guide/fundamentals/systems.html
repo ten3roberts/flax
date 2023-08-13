@@ -83,7 +83,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html" class="active"><strong aria-hidden="true">1.3.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.4.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.5.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.6.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.7.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.8.</strong> Component metadata</a></li></ol></li><li class="chapter-item expanded "><a href="../query/index.html"><strong aria-hidden="true">2.</strong> Queries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../query/basics.html"><strong aria-hidden="true">2.1.</strong> Basics</a></li><li class="chapter-item expanded "><a href="../query/filters.html"><strong aria-hidden="true">2.2.</strong> Filters</a></li><li class="chapter-item expanded "><a href="../query/change_detection.html"><strong aria-hidden="true">2.3.</strong> Change Detection</a></li><li class="chapter-item expanded "><a href="../query/entity_query.html"><strong aria-hidden="true">2.4.</strong> Entity Query</a></li><li class="chapter-item expanded "><a href="../query/graphs.html"><strong aria-hidden="true">2.5.</strong> Graphs</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">3.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">3.1.</strong> Advanced Queries</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">3.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">3.3.</strong> Serialization</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html"><strong aria-hidden="true">1.3.</strong> Queries</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html" class="active"><strong aria-hidden="true">1.4.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.5.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.6.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.7.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.8.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.9.</strong> Component metadata</a></li></ol></li><li class="chapter-item expanded "><a href="../query/index.html"><strong aria-hidden="true">2.</strong> Queries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../query/basics.html"><strong aria-hidden="true">2.1.</strong> Basics</a></li><li class="chapter-item expanded "><a href="../query/filters.html"><strong aria-hidden="true">2.2.</strong> Filters</a></li><li class="chapter-item expanded "><a href="../query/change_detection.html"><strong aria-hidden="true">2.3.</strong> Change Detection</a></li><li class="chapter-item expanded "><a href="../query/entity_query.html"><strong aria-hidden="true">2.4.</strong> Entity Query</a></li><li class="chapter-item expanded "><a href="../query/graphs.html"><strong aria-hidden="true">2.5.</strong> Graphs</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">3.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">3.1.</strong> Advanced Queries</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">3.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">3.3.</strong> Serialization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -167,89 +167,174 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="systems"><a class="header" href="#systems">Systems</a></h1>
-<p>Having to both keep queries around, and their logic is tedious and error prone.</p>
-<p>Systems aid in organizing your applications logic and required data.</p>
-<p>Each system represents a set of data, like queries or view into the world, or a
-commandbuffer, and a function which will be executed.</p>
-<p>In the previous chapter, the &quot;update distance from positions&quot;, which was reused
-thrice could be turned into a query.</p>
-<p>Instead of:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    component! {
-        /// Distance to origin
-        distance: f32 =&gt; [ flax::Debuggable ],
-    }
-
-    tracing::info!(&quot;Spawning id3&quot;);
-    let id3 = world.spawn();
-    world.set(id3, position(), vec2(5.0, 6.0))?;
-    world.set(id3, health(), 5.0)?;
-
-    for id in [id, id2, id3] {
-        tracing::info!(&quot;Adding distance to {id}&quot;);
-        world.set(id, distance(), 0.0)?;
-    }
-
-    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
-        .filter(position().modified() &amp; health().gt(0.0));
-
-    tracing::info!(&quot;Updating distances&quot;);
-    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-        *dist = pos.length();
-    }
-
-<span class="boring">}</span></code></pre></pre>
-<p>We get this:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    let mut update_dist = System::builder()
-        .with_name(&quot;update_distance&quot;)
-        .with_query(query)
-        .build(
-            |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
-                for (id, pos, dist) in &amp;mut query {
-                    tracing::info!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-                    *dist = pos.length();
-                }
-            },
-        );
-
-    update_dist.run_on(&amp;mut world);
-<span class="boring">}</span></code></pre></pre>
-<h2 id="for-each"><a class="header" href="#for-each">For each</a></h2>
-<p>If the systems sole purpose it to execute an action for each element, the
-<code>for_each</code> shorthand can be used. This is only possible if the system uses a
-single query.</p>
+<p>Maintaining queries and their associated data and logic can be verbose and error prone.</p>
+<p><em>Systems</em> provide the perfect aid and allows bundling arguments, such as
+queries, world access, and much more along with the logic to execute with it.</p>
+<p>A system can be run manually or in a <a href="https://docs.rs/flax/0.4.0/flax/schedule/struct.Schedule.html"><code>Schedule</code></a>, which will automatically parallelize the system execution on multiple threads.</p>
+<p>For example, to update <code>distance</code> from each <code>position</code> you could do:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>    let mut update_dist = System::builder()
-        .with_name(&quot;update_distance&quot;)
-        .with_query(
-            Query::new((entity_ids(), position(), distance().as_mut()))
-                .filter(position().modified()),
-        )
-        .for_each(|(id, pos, dist)| {
-            tracing::debug!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
-            *dist = pos.length();
-        });
+</span>        let update_distance = System::builder()
+            .with_name(&quot;update_distance&quot;)
+            .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
+            .build(
+                |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
+                    for (id, pos, dist) in &amp;mut query {
+                        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                        *dist = pos.length();
+                    }
+                },
+            );
+<span class="boring">}</span></code></pre></pre>
+<p>The system construction can subsequently be extracted to a function</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>        fn update_distance_system() -&gt; BoxedSystem {
+            System::builder()
+                .with_name(&quot;update_distance&quot;)
+                .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
+                .build(
+                    |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
+                        for (id, pos, dist) in &amp;mut query {
+                            println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                            *dist = pos.length();
+                        }
+                    },
+                )
+                .boxed()
+        }
+    }
+    let mut update_distance = update_distance_system();
 
-    for _ in 0..16 {
-        update_dist.run_on(&amp;mut world);
+<span class="boring">}</span></code></pre></pre>
+<p>However, the query won't yield entities since none have the <code>distance</code> component to modify. No to fear, we could add another system which ensures the component is present.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    fn add_distance_system() -&gt; BoxedSystem {
+        let query = Query::new(entity_ids())
+            .with(position())
+            .without(distance());
+
+        System::builder()
+            .with_cmd_mut()
+            .with_query(query)
+            .build(
+                |cmd: &amp;mut CommandBuffer, mut query: QueryBorrow&lt;'_, flax::EntityIds, _&gt;| {
+                    for id in &amp;mut query {
+                        cmd.set(id, distance(), 0.0);
+                    }
+                },
+            )
+            .boxed()
+    }
+<span class="boring">}</span></code></pre></pre>
+<h2 id="for-each"><a class="header" href="#for-each">For each</a></h2>
+<p>Most systems iterate each item of a single query, without any other system arguments.</p>
+<p>The shorthand <code>for_each</code> is provided for this purpose</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    fn update_distance_system() -&gt; BoxedSystem {
+        System::builder()
+            .with_name(&quot;update_distance&quot;)
+            .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
+            .for_each(|(id, pos, dist)| {
+                println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                *dist = pos.length();
+            })
+            .boxed()
+    }
+
+<span class="boring">}</span></code></pre></pre>
+<h2 id="schedule"><a class="header" href="#schedule">Schedule</a></h2>
+<p>Lets add some more systems and add them to a <a href="https://docs.rs/flax/0.4.0/flax/schedule/struct.Schedule.html"><code>Schedule</code></a></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    /// Despawn all entities with a distance &gt; 50
+    fn despawn_system() -&gt; BoxedSystem {
+        System::builder()
+            .with_name(&quot;delete_outside_world&quot;)
+            .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
+            .with_cmd_mut()
+            .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
+                for (id, &amp;dist) in &amp;mut q {
+                    println!(&quot;Despawning {id} at: {dist}&quot;);
+                    cmd.despawn(id);
+                }
+            })
+            .boxed()
+    }
+
+    fn inspect_system() -&gt; BoxedSystem {
+        System::builder()
+            .with_name(&quot;debug_world&quot;)
+            .with_world()
+            .build(|world: &amp;_| {
+                // println!(&quot;World: {world:#?}&quot;);
+            })
+            .boxed()
+    }
+
+    component! {
+        /// Entities with this component will not be moved
+        is_static: () =&gt; [ flax::Debuggable ],
+    }
+
+    fn move_system() -&gt; BoxedSystem {
+        System::builder()
+            .with_name(&quot;move_out&quot;)
+            .with_query(Query::new(position().as_mut()).filter(is_static().without()))
+            .for_each(|pos| {
+                let dir = pos.normalize_or_zero();
+
+                *pos += dir;
+            })
+            .boxed()
+    }
+
+    // Since this system will move non static entities out from the origin, they will
+    // eventually be despawned
+
+    // Spawn new entities with a random position each frame
+    fn spawn_system(mut rng: StdRng, count: usize) -&gt; BoxedSystem {
+        System::builder()
+            .with_name(&quot;spawn&quot;)
+            .with_cmd_mut()
+            .build(move |cmd: &amp;mut CommandBuffer| {
+                for _ in 0..count {
+                    let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+                    println!(&quot;Spawning new entity at: {pos:?}&quot;);
+                    Entity::builder()
+                        .set(position(), pos)
+                        .set_default(distance())
+                        .spawn_into(cmd);
+                }
+            })
+            .boxed()
+    }
+
+    let rng = StdRng::seed_from_u64(42);
+
+    // Assemble the schedule, takes care of dependency management
+    let mut schedule = Schedule::builder()
+        .with_system(add_distance_system())
+        .flush()
+        .with_system(update_distance_system())
+        // .with_system(despawn_system())
+        .with_system(spawn_system(rng, 1))
+        .with_system(move_system())
+        .with_system(inspect_system())
+        .build();
+
+    for i in 0..20 {
+        println!(&quot;Frame: {i}&quot;);
+        schedule.execute_par(&amp;mut world)?;
     }
 
 <span class="boring">}</span></code></pre></pre>
 <h2 id="system-access"><a class="header" href="#system-access">System access</a></h2>
-<p>Contrary to using a query directly, the <code>world</code> is not needed to prepare a
-query. This is because the world is contained inside the <code>QueryData</code> argument.</p>
-<p>This ensures a system will only access the components in the associated queries,
-which allows for paralellizing system execution.</p>
-<p>If access to the whole world is required, use <code>with_world</code>.</p>
-<p>Similarly, <code>with_cmd</code> allows access to the commandbuffer in the system, which is
-used for deferred sets, removes, or spawns.</p>
+<p>One of the abilities of a system is to automatically extract what they need for their arguments from the schedule context.</p>
+<p>This both increases their ease of use, but further assures that only the declared pieces of data will be accessed, which allows seamless fine-grained parallelization capabilities</p>
+<p>Therefore, it is advised to keep your system arguments as <em>specific</em> as possible, such as using queries whenever possible, rather than the whole world.</p>
 <p><strong>Note</strong>: Systems which access the world will not paralellize with other systems
 as it may access anything.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -261,7 +346,7 @@ as it may access anything.</p>
         .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (id, &amp;dist) in &amp;mut q {
-                tracing::info!(&quot;Despawning {id} at: {dist}&quot;);
+                println!(&quot;Despawning {id} at: {dist}&quot;);
                 cmd.despawn(id);
             }
         });
@@ -279,7 +364,7 @@ as it may access anything.</p>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../fundamentals/components.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../fundamentals/query.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -293,7 +378,7 @@ as it may access anything.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../fundamentals/components.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../fundamentals/query.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 

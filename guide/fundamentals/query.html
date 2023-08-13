@@ -1,0 +1,567 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Queries - Flax Guide</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = null;
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../fundamentals/index.html"><strong aria-hidden="true">1.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/world.html"><strong aria-hidden="true">1.1.</strong> World</a></li><li class="chapter-item expanded "><a href="../fundamentals/components.html"><strong aria-hidden="true">1.2.</strong> Components</a></li><li class="chapter-item expanded "><a href="../fundamentals/query.html" class="active"><strong aria-hidden="true">1.3.</strong> Queries</a></li><li class="chapter-item expanded "><a href="../fundamentals/systems.html"><strong aria-hidden="true">1.4.</strong> Systems</a></li><li class="chapter-item expanded "><a href="../fundamentals/schedule.html"><strong aria-hidden="true">1.5.</strong> Schedule</a></li><li class="chapter-item expanded "><a href="../fundamentals/builder.html"><strong aria-hidden="true">1.6.</strong> EntityBuilder</a></li><li class="chapter-item expanded "><a href="../fundamentals/commandbuffer.html"><strong aria-hidden="true">1.7.</strong> CommandBuffer</a></li><li class="chapter-item expanded "><a href="../fundamentals/relations.html"><strong aria-hidden="true">1.8.</strong> Relations</a></li><li class="chapter-item expanded "><a href="../fundamentals/metadata.html"><strong aria-hidden="true">1.9.</strong> Component metadata</a></li></ol></li><li class="chapter-item expanded "><a href="../query/index.html"><strong aria-hidden="true">2.</strong> Queries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../query/basics.html"><strong aria-hidden="true">2.1.</strong> Basics</a></li><li class="chapter-item expanded "><a href="../query/filters.html"><strong aria-hidden="true">2.2.</strong> Filters</a></li><li class="chapter-item expanded "><a href="../query/change_detection.html"><strong aria-hidden="true">2.3.</strong> Change Detection</a></li><li class="chapter-item expanded "><a href="../query/entity_query.html"><strong aria-hidden="true">2.4.</strong> Entity Query</a></li><li class="chapter-item expanded "><a href="../query/graphs.html"><strong aria-hidden="true">2.5.</strong> Graphs</a></li></ol></li><li class="chapter-item expanded "><a href="../diving_deeper/index.html"><strong aria-hidden="true">3.</strong>  Diving deeper </a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../diving_deeper/query.html"><strong aria-hidden="true">3.1.</strong> Advanced Queries</a></li><li class="chapter-item expanded "><a href="../diving_deeper/dynamic_components.html"><strong aria-hidden="true">3.2.</strong> Dynamic Components</a></li><li class="chapter-item expanded "><a href="../diving_deeper/serde.html"><strong aria-hidden="true">3.3.</strong> Serialization</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Flax Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="query"><a class="header" href="#query">Query</a></h1>
+<p>A query is the beating heart of the ECS.</p>
+<p>They provide a declarative method to iterate, modify, and inspect the world's entities and their components.</p>
+<p>In short a query is a declaration of which components to access, though they allow for so much more, such as filtering or excluding entities with certain components, change detection, relationship and graph traversal and much much more.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">use flax::{
+</span><span class="boring">    component, entity_ids, CommandBuffer, Component, Debuggable, Entity, EntityBorrow, FetchExt,
+</span><span class="boring">    Mutable, Query, QueryBorrow, Schedule, System, World,
+</span><span class="boring">};
+</span><span class="boring">use glam::{vec2, Vec2};
+</span><span class="boring">use rand::{rngs::StdRng, Rng, SeedableRng};
+</span><span class="boring">
+</span><span class="boring">fn main() -&gt; anyhow::Result&lt;()&gt; {
+</span><span class="boring">    let mut world = World::new();
+</span><span class="boring">
+</span><span class="boring">    component! {
+</span><span class="boring">        position: Vec2 =&gt; [ Debuggable ],
+</span><span class="boring">        health: f32 =&gt; [ Debuggable ],
+</span><span class="boring">    }
+</span><span class="boring">
+</span>    // Spawn two entities
+    let id = Entity::builder()
+        .set(position(), vec2(1.0, 4.0))
+        .set(health(), 75.0)
+        .spawn(&amp;mut world);
+
+    let id2 = Entity::builder()
+        .set(position(), vec2(-1.0, 4.0))
+        .set(health(), 75.0)
+        .spawn(&amp;mut world);
+
+    let mut query = Query::new((position(), health()));
+
+    for (pos, health) in &amp;mut query.borrow(&amp;world) {
+        println!(&quot;pos: {pos:?}, health: {health}&quot;);
+    }
+
+<span class="boring">
+</span><span class="boring">    component! {
+</span><span class="boring">        /// Distance to origin
+</span><span class="boring">        distance: f32 =&gt; [ flax::Debuggable ],
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    println!(&quot;Spawning id3&quot;);
+</span><span class="boring">    let id3 = world.spawn();
+</span><span class="boring">    world.set(id3, position(), vec2(5.0, 6.0))?;
+</span><span class="boring">    world.set(id3, health(), 5.0)?;
+</span><span class="boring">
+</span><span class="boring">    for id in [id, id2, id3] {
+</span><span class="boring">        println!(&quot;Adding distance to {id}&quot;);
+</span><span class="boring">        world.set(id, distance(), 0.0)?;
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
+</span><span class="boring">        .filter(position().modified() &amp; health().gt(0.0));
+</span><span class="boring">
+</span><span class="boring">    println!(&quot;Updating distances&quot;);
+</span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
+</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        *dist = pos.length();
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    println!(&quot;Running query again&quot;);
+</span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
+</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        *dist = pos.length();
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
+</span><span class="boring">
+</span><span class="boring">    println!(&quot;... and again&quot;);
+</span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
+</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        *dist = pos.length();
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    #[allow(unused_variables)]
+</span><span class="boring">    {
+</span><span class="boring">        // Instead of this:
+</span><span class="boring">        let query = Query::new((position(), health(), distance()))
+</span><span class="boring">            .filter(position().modified() &amp; health().modified());
+</span><span class="boring">
+</span><span class="boring">        // Do this:
+</span><span class="boring">        let query = Query::new((position().modified(), health().modified(), distance()));
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    let mut update_distance = System::builder()
+</span><span class="boring">        .with_name(&quot;update_distance&quot;)
+</span><span class="boring">        .with_query(query)
+</span><span class="boring">        .build(
+</span><span class="boring">            |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
+</span><span class="boring">                for (id, pos, dist) in &amp;mut query {
+</span><span class="boring">                    println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">                    *dist = pos.length();
+</span><span class="boring">                }
+</span><span class="boring">            },
+</span><span class="boring">        );
+</span><span class="boring">
+</span><span class="boring">    update_distance.run_on(&amp;mut world);
+</span><span class="boring">
+</span><span class="boring">    let mut update_dist = System::builder()
+</span><span class="boring">        .with_name(&quot;update_distance&quot;)
+</span><span class="boring">        .with_query(
+</span><span class="boring">            Query::new((entity_ids(), position(), distance().as_mut()))
+</span><span class="boring">                .filter(position().modified()),
+</span><span class="boring">        )
+</span><span class="boring">        .for_each(|(id, pos, dist)| {
+</span><span class="boring">            tracing::debug!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">            *dist = pos.length();
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">    for _ in 0..16 {
+</span><span class="boring">        update_dist.run_on(&amp;mut world);
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    // Despawn all entities with a distance &gt; 50
+</span><span class="boring">    let despawn = System::builder()
+</span><span class="boring">        .with_name(&quot;delete_outside_world&quot;)
+</span><span class="boring">        .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
+</span><span class="boring">        .with_cmd_mut()
+</span><span class="boring">        .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
+</span><span class="boring">            for (id, &amp;dist) in &amp;mut q {
+</span><span class="boring">                println!(&quot;Despawning {id} at: {dist}&quot;);
+</span><span class="boring">                cmd.despawn(id);
+</span><span class="boring">            }
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">    let debug_world = System::builder()
+</span><span class="boring">        .with_name(&quot;debug_world&quot;)
+</span><span class="boring">        .with_world()
+</span><span class="boring">        .build(|world: &amp;_| {
+</span><span class="boring">            tracing::debug!(&quot;World: {world:?}&quot;);
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    component! {
+</span><span class="boring">        is_static: () =&gt; [ flax::Debuggable ],
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    // Spawn 150 static entities, which wont move
+</span><span class="boring">    let mut rng = StdRng::seed_from_u64(42);
+</span><span class="boring">
+</span><span class="boring">    for _ in 0..150 {
+</span><span class="boring">        let pos = vec2(rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+</span><span class="boring">        Entity::builder()
+</span><span class="boring">            .set(position(), pos)
+</span><span class="boring">            .set_default(distance())
+</span><span class="boring">            .set_default(is_static())
+</span><span class="boring">            .spawn(&amp;mut world);
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    // Since this system will move non static entities out from the origin, they will
+</span><span class="boring">    // eventually be despawned
+</span><span class="boring">    let move_out = System::builder()
+</span><span class="boring">        .with_name(&quot;move_out&quot;)
+</span><span class="boring">        .with_query(Query::new(position().as_mut()).filter(is_static().without()))
+</span><span class="boring">        .for_each(|pos| {
+</span><span class="boring">            let dir = pos.normalize_or_zero();
+</span><span class="boring">
+</span><span class="boring">            *pos += dir;
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">    // Spawn new entities with a random position each frame
+</span><span class="boring">    let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd_mut().build(
+</span><span class="boring">        move |cmd: &amp;mut CommandBuffer| {
+</span><span class="boring">            for _ in 0..100 {
+</span><span class="boring">                let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+</span><span class="boring">                println!(&quot;Spawning new entity at: {pos:?}&quot;);
+</span><span class="boring">                Entity::builder()
+</span><span class="boring">                    .set(position(), pos)
+</span><span class="boring">                    .set_default(distance())
+</span><span class="boring">                    .spawn_into(cmd);
+</span><span class="boring">            }
+</span><span class="boring">        },
+</span><span class="boring">    );
+</span><span class="boring">
+</span><span class="boring">    let mut frame_count = 0;
+</span><span class="boring">
+</span><span class="boring">    // Count the number of entities in the world and log it
+</span><span class="boring">    let count = System::builder()
+</span><span class="boring">        .with_name(&quot;count&quot;)
+</span><span class="boring">        .with_query(Query::new(()))
+</span><span class="boring">        .build(move |mut query: QueryBorrow&lt;()&gt;| {
+</span><span class="boring">            let count: usize = query.iter_batched().map(|v| v.len()).sum();
+</span><span class="boring">            println!(&quot;[{frame_count}]: {count}&quot;);
+</span><span class="boring">            frame_count += 1;
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">    // Assemble the schedule, takes care of dependency management
+</span><span class="boring">    let mut schedule = Schedule::builder()
+</span><span class="boring">        .with_system(update_dist)
+</span><span class="boring">        .with_system(despawn)
+</span><span class="boring">        .with_system(spawn)
+</span><span class="boring">        .with_system(move_out)
+</span><span class="boring">        .with_system(debug_world)
+</span><span class="boring">        .with_system(count)
+</span><span class="boring">        .build();
+</span><span class="boring">
+</span><span class="boring">    println!(&quot;{schedule:#?}&quot;);
+</span><span class="boring">
+</span><span class="boring">    for i in 0..20 {
+</span><span class="boring">        println!(&quot;Frame: {i}&quot;);
+</span><span class="boring">        println!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;world));
+</span><span class="boring">        schedule.execute_par(&amp;mut world)?;
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    component! {
+</span><span class="boring">        window_width: f32,
+</span><span class="boring">        window_height: f32,
+</span><span class="boring">        allow_vsync: bool,
+</span><span class="boring">
+</span><span class="boring">        /// A static entity, which is always alive
+</span><span class="boring">        resources,
+</span><span class="boring">    }
+</span><span class="boring">
+</span><span class="boring">    Entity::builder()
+</span><span class="boring">        .set(window_width(), 800.0)
+</span><span class="boring">        .set(window_height(), 600.0)
+</span><span class="boring">        .set(allow_vsync(), false)
+</span><span class="boring">        // Since `resources` is static, it is not required to spawn it
+</span><span class="boring">        .append_to(&amp;mut world, resources())
+</span><span class="boring">        .unwrap();
+</span><span class="boring">
+</span><span class="boring">    let mut query = Query::new((window_width(), window_height(), allow_vsync()))
+</span><span class="boring">        // Change the query strategy to only iterate the `resources` entity
+</span><span class="boring">        .entity(resources());
+</span><span class="boring">
+</span><span class="boring">    let mut borrow = query.borrow(&amp;world);
+</span><span class="boring">    let (width, height, vsync) = borrow.get().unwrap();
+</span><span class="boring">    println!(&quot;width: {width} height: {height}, vsync: {vsync}&quot;);
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    drop(borrow);
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    let mut window_system = System::builder()
+</span><span class="boring">        .with_query(query)
+</span><span class="boring">        .build(|mut q: EntityBorrow&lt;_&gt;| {
+</span><span class="boring">            if let Ok((width, height, allow_vsync)) = q.get() {
+</span><span class="boring">                println!(
+</span><span class="boring">                    &quot;Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}&quot;
+</span><span class="boring">                );
+</span><span class="boring">            } else {
+</span><span class="boring">                println!(&quot;No config change&quot;);
+</span><span class="boring">            }
+</span><span class="boring">        });
+</span><span class="boring">
+</span><span class="boring">    window_system.run_on(&amp;mut world);
+</span><span class="boring">    window_system.run_on(&amp;mut world);
+</span><span class="boring">    world.set(resources(), window_height(), 720.0)?;
+</span><span class="boring">    window_system.run_on(&amp;mut world);
+</span><span class="boring">
+</span><span class="boring">
+</span><span class="boring">    Ok(())
+</span><span class="boring">}</span></code></pre></pre>
+<p>A query accepts any type which implements
+<a href="https://docs.rs/flax/latest/flax/fetch/trait.Fetch.html">Fetch</a>, such as</p>
+<ul>
+<li>A component</li>
+<li>A tuple of components</li>
+<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.as_mut"><code>component.as_mut()</code></a> for mutable access</li>
+<li><a href="https://docs.rs/flax/latest/flax/struct.Component.html#method.as_cloned"><code>component.as_cloned()</code></a> for cloning the values</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt"><code>component.opt()</code></a> for an optional access, returns Option&lt;&amp;T&gt;,</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt"><code>component.as_mut().opt()</code></a> for an optional mutable access, returns Option&lt;&amp;mut T&gt;,</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or_default"><code>component.opt_or_default()</code></a> for returning the default value if the component is not present</li>
+<li><a href="https://docs.rs/flax/latest/flax/trait.FetchExt.html#method.opt_or"><code>component.opt_or()</code></a> for returning a default if the component is not present</li>
+<li><a href="https://docs.rs/flax/latest/flax/entity/fn.entity_ids.html"><code>entity_ids</code></a> to return the
+iterated <code>Entity</code> ids.</li>
+<li>... and many more</li>
+<li></li>
+</ul>
+<p>See <a href="../query/index.html">Queries</a> for more details</p>
+<h2 id="filters"><a class="header" href="#filters">Filters</a></h2>
+<p>A query allows for filters, such as skipping entities which have a certain
+components, or where the value of a component satisfies some condition. This will efficiently skip entire archetypes or ranges of entities.</p>
+<p>The following example shows a query which will update the distance to origin
+when an entity moves for every entity.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    component! {
+        /// Distance to origin
+        distance: f32 =&gt; [ flax::Debuggable ],
+    }
+
+    println!(&quot;Spawning id3&quot;);
+    let id3 = world.spawn();
+    world.set(id3, position(), vec2(5.0, 6.0))?;
+    world.set(id3, health(), 5.0)?;
+
+    for id in [id, id2, id3] {
+        println!(&quot;Adding distance to {id}&quot;);
+        world.set(id, distance(), 0.0)?;
+    }
+
+    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
+        .filter(position().modified() &amp; health().gt(0.0));
+
+    println!(&quot;Updating distances&quot;);
+    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
+        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        *dist = pos.length();
+    }
+
+<span class="boring">}</span></code></pre></pre>
+<p>The same query can be run again, but since all changes have been visited, it
+yields nothing.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    println!(&quot;Running query again&quot;);
+    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
+        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        *dist = pos.length();
+    }
+<span class="boring">}</span></code></pre></pre>
+<p>However, if the position were to be modified, the query would yield that one change.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span>
+<span class="boring">fn main() {
+</span>    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
+
+    println!(&quot;... and again&quot;);
+    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
+        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        *dist = pos.length();
+    }
+
+<span class="boring">}</span></code></pre></pre>
+<p>For situations where an <code>or</code> combined filter is used in conjunction with a fetch
+of the same components, the filter may be attached directly to the query fetch
+instead.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>        // Instead of this:
+        let query = Query::new((position(), health(), distance()))
+            .filter(position().modified() &amp; health().modified());
+
+        // Do this:
+        let query = Query::new((position().modified(), health().modified(), distance()));
+<span class="boring">}</span></code></pre></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../fundamentals/components.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next" href="../fundamentals/systems.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../fundamentals/components.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next" href="../fundamentals/systems.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
