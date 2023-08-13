@@ -61,7 +61,10 @@ component! {
 
 #[macroquad::main("Asteroids")]
 async fn main() -> Result<()> {
-    registry().with(HierarchicalLayer::default()).init();
+    registry()
+        .with(HierarchicalLayer::default())
+        .with(tracing_subscriber::filter::LevelFilter::INFO)
+        .init();
 
     let mut world = World::new();
 
@@ -122,6 +125,11 @@ async fn main() -> Result<()> {
                     .collect_vec()
             );
             physics_schedule.execute_seq(&mut world)?;
+        }
+
+        match world.prune_archetypes() {
+            0 => {}
+            n => tracing::info!("Pruned {} archetypes", n),
         }
 
         clear_background(BLACK);
@@ -522,7 +530,6 @@ fn player_system(dt: f32) -> BoxedSystem {
                 current_plume_cooldown -= dt;
 
                 for player in &mut q {
-                    dbg!(&player);
                     *player.invincibility = (*player.invincibility - 0.02).max(0.0);
 
                     *player.difficulty = (*player.material * 0.001).max(1.0);
@@ -537,10 +544,15 @@ fn player_system(dt: f32) -> BoxedSystem {
                         Vec2::ZERO
                     };
 
+                    *player.vel += acc * dt;
+
                     if acc.length() > 0.0 && current_plume_cooldown <= 0.0 {
                         current_plume_cooldown = PLUME_COOLDOWN;
                         create_particle(8.0, 0.5, ORANGE)
-                            .set(position(), *player.pos - 30.0 * forward)
+                            .set(
+                                position(),
+                                *player.pos + *player.vel * dt - 30.0 * forward.normalize(),
+                            )
                             .set(velocity(), *player.vel + -acc)
                             .spawn_into(cmd)
                     }
@@ -559,8 +571,6 @@ fn player_system(dt: f32) -> BoxedSystem {
                             .set(position(), *player.pos + 30.0 * forward)
                             .spawn_into(cmd)
                     }
-
-                    *player.vel += acc * dt;
                 }
             },
         )
@@ -647,7 +657,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                 };
 
                 let existing = existing.count();
-                tracing::info!(
+                tracing::debug!(
                     ?existing,
                     max_count,
                     "Spawning asteroids around {player_pos}"

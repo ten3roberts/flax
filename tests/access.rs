@@ -102,9 +102,9 @@ fn access() {
     assert_eq!(
         schedule.batch_info(&world).to_names(),
         [
-            vec!["regen_system", "weapons", "names"],
-            vec!["blue_system", "red_system"],
-            vec!["stats"]
+            &["regen_system", "weapons", "names"][..],
+            &["blue_system", "red_system"],
+            &["stats"]
         ]
     );
 
@@ -113,9 +113,9 @@ fn access() {
     assert_eq!(
         schedule.batch_info(&world).to_names(),
         [
-            vec!["regen_system", "weapons", "names"],
-            vec!["blue_system", "red_system"],
-            vec!["stats"]
+            &["regen_system", "weapons", "names"][..],
+            &["blue_system", "red_system"],
+            &["stats"]
         ]
     );
 
@@ -125,10 +125,10 @@ fn access() {
     assert_eq!(
         schedule.batch_info(&world).to_names(),
         [
-            vec!["regen_system", "weapons", "names"],
-            vec!["blue_system"],
-            vec!["red_system"],
-            vec!["stats"],
+            &["regen_system", "weapons", "names"][..],
+            &["blue_system"],
+            &["red_system"],
+            &["stats"],
         ]
     );
 
@@ -137,9 +137,21 @@ fn access() {
     assert_eq!(
         schedule.batch_info(&world).to_names(),
         [
-            vec!["regen_system", "weapons", "names"],
-            vec!["blue_system", "red_system"],
-            vec!["stats"]
+            &["regen_system", "weapons", "names"][..],
+            &["blue_system"],
+            &["red_system"],
+            &["stats"]
+        ]
+    );
+
+    world.prune_archetypes();
+
+    assert_eq!(
+        schedule.batch_info(&world).to_names(),
+        [
+            &["regen_system", "weapons", "names"][..],
+            &["blue_system", "red_system"],
+            &["stats"]
         ]
     );
 }

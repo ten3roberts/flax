@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, mem, ops::Deref, slice::IterMut};
+use core::{marker::PhantomData, mem, ops::Deref};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
@@ -332,7 +332,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     #[cfg(feature = "rayon")]
     fn bail_seq(
-        batches: IterMut<Vec<BoxedSystem<T>>>,
+        batches: core::slice::IterMut<Vec<BoxedSystem<T>>>,
         ctx: &SystemContext<'_, T>,
     ) -> anyhow::Result<()> {
         for system in batches.flatten() {

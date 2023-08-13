@@ -8,10 +8,6 @@ use crate::{
     ArchetypeId, ComponentDesc, Entity,
 };
 
-// fn is_sorted<T: Ord>(v: &[T]) -> bool {
-//     v.windows(2).all(|w| w[0] < w[1])
-// }
-
 pub(crate) struct Archetypes {
     pub(crate) root: ArchetypeId,
     pub(crate) reserved: ArchetypeId,
@@ -53,27 +49,78 @@ impl Archetypes {
     }
 
     /// Prunes a leaf and its ancestors from empty archetypes
-    pub(crate) fn prune_arch(&mut self, arch_id: ArchetypeId) -> bool {
-        let arch = self.get(arch_id);
-        if arch_id == self.root
-            || arch_id == self.reserved
-            || !arch.is_empty()
-            || !arch.outgoing.is_empty()
-        {
-            return false;
+    // pub(crate) fn prune_arch(&mut self, arch_id: ArchetypeId) -> usize {
+    //     let arch = self.get(arch_id);
+    //     if arch_id == self.root
+    //         || arch_id == self.reserved
+    //         || !arch.is_empty()
+    //         || !arch.outgoing.is_empty()
+    //     {
+    //         return 0;
+    //     }
+
+    //     let arch = self.inner.despawn(arch_id).unwrap();
+    //     let mut count = 1;
+    //     for (&key, &dst_id) in &arch.incoming {
+    //         let dst = self.get_mut(dst_id);
+    //         dst.remove_link(key);
+
+    //         count += self.prune_arch(dst_id);
+    //     }
+
+    //     self.gen = self.gen.wrapping_add(1);
+
+    //     count
+    // }
+
+    /// Prunes a leaf and its ancestors from empty archetypes
+    pub(crate) fn prune_all(&mut self) -> usize {
+        fn prune(
+            archetypes: &EntityStore<Archetype>,
+            id: ArchetypeId,
+            res: &mut Vec<ArchetypeId>,
+        ) -> bool {
+            let arch = archetypes.get(id).unwrap();
+
+            // An archetype can be removed iff all its children are removed
+            let mut pruned_children = true;
+            for &id in arch.children.values() {
+                pruned_children = prune(archetypes, id, res) && pruned_children;
+            }
+
+            if pruned_children && arch.is_empty() {
+                res.push(id);
+                true
+            } else {
+                false
+            }
         }
 
-        let arch = self.inner.despawn(arch_id).unwrap();
-        for (&key, &dst_id) in &arch.incoming {
-            let dst = self.get_mut(dst_id);
-            dst.remove_link(key);
+        let mut to_remove = Vec::new();
+        for &id in self.get(self.root()).children.values() {
+            prune(&self.inner, id, &mut to_remove);
+        }
 
-            self.prune_arch(dst_id);
+        if to_remove.is_empty() {
+            return 0;
+        }
+
+        let count = to_remove.len();
+        for id in to_remove {
+            let arch = self.inner.despawn(id).unwrap();
+
+            for (&key, &dst_id) in &arch.incoming {
+                self.get_mut(dst_id).remove_link(key);
+            }
+
+            for (key, &dst_id) in &arch.outgoing {
+                self.get_mut(dst_id).incoming.remove(key);
+            }
         }
 
         self.gen = self.gen.wrapping_add(1);
 
-        true
+        count
     }
 
     /// Returns or creates an archetype which satisfies all the given components
