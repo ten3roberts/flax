@@ -85,7 +85,7 @@
 //!
 //! let despawn_system = System::builder()
 //!     .with_query(Query::new(entity_ids()).filter(health().le(0.0)))
-//!     .write::<CommandBuffer>()
+//!     .with_cmd_mut()
 //!     .build(|mut q: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
 //!         for id in &mut q {
 //!             cmd.despawn(id);
