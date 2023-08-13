@@ -56,11 +56,10 @@ debug = true
 
 [features]
 std = ["itertools/use_std", "itertools/use_alloc", "anyhow/std"]
-default = ["std", "parallel", "flume"]
+default = ["std", "rayon", "flume"]
 serde = ["dep:serde", "erased-serde"]
 internal_assert = []
 derive = ["flax-derive"]
-parallel = ["rayon"]
 
 [[example]]
 name = "guide"
@@ -117,6 +116,11 @@ name = "transform"
 path = "./examples/query/transform.rs"
 required-features = ["std"]
 
+
+[[example]]
+name = "systems"
+path = "./examples/guide/systems.rs"
+required-features = ["std", "rayon"]
 
 [[bench]]
 name = "benchmarks"

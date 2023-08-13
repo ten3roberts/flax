@@ -183,10 +183,10 @@ impl SystemAccess for WithWorldMut {
 pub struct WithCmd;
 
 impl<'a, I> SystemData<'a, I> for WithCmd {
-    type Value = AtomicRefMut<'a, CommandBuffer>;
+    type Value = AtomicRef<'a, CommandBuffer>;
 
     fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
-        ctx.cmd_mut()
+        ctx.cmd()
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {

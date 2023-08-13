@@ -69,7 +69,7 @@ where
 
 /// Everything needed to execute a system
 pub struct SystemContext<'a, T> {
-    world: AtomicRefCell<&'a mut World>,
+    pub(crate) world: AtomicRefCell<&'a mut World>,
     cmd: AtomicRefCell<&'a mut CommandBuffer>,
     /// External input
     input: AtomicRefCell<&'a mut T>,
