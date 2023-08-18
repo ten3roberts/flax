@@ -2,66 +2,42 @@ use core::{any::TypeId, ptr::NonNull};
 
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
-/// Describes the ability to extract `T` from `Self`
-pub trait Extract<'a, T> {
-    /// Returns T from `Self`
-    fn extract(&'a self) -> T;
-}
-
-// impl<'a, T> Extract<'a, &'a T> for T {
-//     fn extract(&'a self) -> &'a T {
-//         self
-//     }
-// }
-
-// /// Extract a reference from a [`AtomicRefCell`]
-// impl<'a, T> Extract<'a, AtomicRef<'a, T>> for AtomicRefCell<&'a T> {
-//     fn extract(&'a self) -> AtomicRef<'a, T> {
-//         AtomicRef::map(self.borrow(), |v| *v)
-//     }
-// }
-
 /// Extract a reference from a [`AtomicRefCell`]
-impl<'a, 's, T> Extract<'a, AtomicRef<'a, T>> for AtomicRefCell<&'s mut T> {
-    fn extract(&'a self) -> AtomicRef<'a, T> {
-        AtomicRef::map(self.borrow(), |v| *v)
-    }
-}
-
-/// Extract a mutable reference from a [`AtomicRefCell`]
-impl<'a, 's, T> Extract<'a, AtomicRefMut<'a, T>> for AtomicRefCell<&'s mut T> {
-    fn extract(&'a self) -> AtomicRefMut<'a, T> {
-        AtomicRefMut::map(self.borrow_mut(), |v| *v)
-    }
-}
-
-// /// Extract a reference from a [`AtomicRefCell`]
-// impl<'a, T> Extract<'a, AtomicRef<'a, T>> for AtomicRefCell<T> {
-//     fn extract(&'a self) -> AtomicRef<'a, T> {
-//         self.borrow()
-//     }
-// }
-
-// /// Extract a reference from a [`AtomicRefCell`]
-// impl<'a, T> Extract<'a, AtomicRefMut<'a, T>> for AtomicRefCell<T> {
-//     fn extract(&'a self) -> AtomicRefMut<'a, T> {
-//         self.borrow_mut()
-//     }
-// }
-
-/// Extract a reference from a [`AtomicRefCell`]
-pub trait ExtractDyn<'a>: Send + Sync {
+/// # Safety
+///
+/// The returned value must be of the type specified by `ty`
+pub unsafe trait ExtractDyn<'a>: Send + Sync {
     /// Dynamically extract a reference of `ty` contained within
-    fn extract_dyn(&'a self, ty: TypeId) -> Option<NonNull<()>>;
+    /// # Safety
+    ///
+    /// The returned pointer is of type `ty` which has a lifetime of `'a`
+    unsafe fn extract_dyn(&'a self, ty: TypeId) -> Option<&'a AtomicRefCell<NonNull<()>>>;
 }
+
+struct ErasedCell<T: ?Sized> {
+    ptr: AtomicRefCell<NonNull<()>>,
+    _marker: core::marker::PhantomData<*mut T>,
+}
+
+impl<T: ?Sized> ErasedCell<T> {
+    unsafe fn new(value: &mut T) -> Self {
+        Self {
+            ptr: AtomicRefCell::new(NonNull::from(value).cast::<()>()),
+            _marker: core::marker::PhantomData,
+        }
+    }
+}
+
+unsafe impl<T: ?Sized> Send for ErasedCell<T> where T: Send {}
+unsafe impl<T: ?Sized> Sync for ErasedCell<T> where T: Sync {}
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<'a, $($ty: 'static + Send + Sync,)*> ExtractDyn<'a> for ($($ty,)*) {
-            fn extract_dyn(&'a self, ty: TypeId) -> Option<NonNull<()>>  {
+        unsafe impl<'a, $($ty: ?Sized + 'static + Send + Sync,)*> ExtractDyn<'a> for ($(ErasedCell<$ty>,)*) {
+            unsafe fn extract_dyn(&'a self, ty: TypeId) -> Option<&'a AtomicRefCell<NonNull<()>>>  {
                 $(
                     if TypeId::of::<$ty>() == ty {
-                        Some(NonNull::from(&self.$idx).cast::<()>())
+                        Some(&self.$idx.ptr)
                     } else
                 )*
                 {
@@ -72,25 +48,38 @@ macro_rules! tuple_impl {
     };
 }
 
-impl<'a, T> Extract<'a, &'a T> for dyn ExtractDyn<'a>
+impl<'a, T> Extract<'a, AtomicRef<'a, T>> for DynInput
 where
     T: 'static,
 {
-    fn extract(&'a self) -> &'a T {
-        match self.extract_dyn(TypeId::of::<T>()) {
-            Some(v) => unsafe { v.cast::<T>().as_ref() },
+    fn extract(&'a self) -> AtomicRef<'a, T> {
+        let cell = unsafe { (*self.ptr).extract_dyn(TypeId::of::<T>()) };
+
+        match cell {
+            Some(v) => AtomicRef::map(v.borrow(), |v| unsafe { v.cast::<T>().as_ref() }),
             None => panic!("Dynamic input does not contain {}", tynm::type_name::<T>()),
         }
     }
 }
 
-impl<'a, T> Extract<'a, Option<&'a T>> for dyn ExtractDyn<'a>
+impl<'a, T> Extract<'a, Option<AtomicRef<'a, T>>> for DynInput
 where
     T: 'static,
 {
-    fn extract(&'a self) -> Option<&'a T> {
-        self.extract_dyn(TypeId::of::<T>())
-            .map(|v| unsafe { v.cast::<T>().as_ref() })
+    fn extract(&'a self) -> Option<AtomicRef<'a, T>> {
+        let cell = unsafe { (*self.ptr).extract_dyn(TypeId::of::<T>()) };
+
+        cell.map(|v| AtomicRef::map(v.borrow(), |v| unsafe { v.cast::<T>().as_ref() }))
+    }
+}
+
+pub struct DynInput {
+    ptr: *mut dyn for<'x> ExtractDyn<'x>,
+}
+
+impl DynInput {
+    unsafe fn new(ptr: *mut dyn for<'x> ExtractDyn<'x>) -> Self {
+        Self { ptr }
     }
 }
 
@@ -104,31 +93,31 @@ mod tests {
 
     #[test]
     fn extract_2() {
-        let values = ("Foo", 5_i32);
+        let mut a = String::from("Foo");
+        let mut b = 5_i32;
+        let mut values = unsafe { (ErasedCell::new(&mut a), ErasedCell::new(&mut b)) };
+        let input = unsafe { DynInput::new(&mut values as *mut _) };
 
         unsafe {
             assert_eq!(
                 values
-                    .extract_dyn(TypeId::of::<&str>())
-                    .map(|v| v.cast::<&str>().as_ref()),
-                Some(&"Foo")
-            )
-        }
+                    .extract_dyn(TypeId::of::<String>())
+                    .map(|v| v.borrow().cast::<String>().as_ref())
+                    .map(|v| &**v),
+                Some("Foo")
+            );
 
-        unsafe {
             assert_eq!(
                 values
                     .extract_dyn(TypeId::of::<i32>())
-                    .map(|v| v.cast::<i32>().as_ref()),
+                    .map(|v| v.borrow().cast::<i32>().as_ref()),
                 Some(&5)
-            )
-        }
+            );
 
-        unsafe {
             assert_eq!(
                 values
                     .extract_dyn(TypeId::of::<f32>())
-                    .map(|v| v.cast::<f32>().as_ref()),
+                    .map(|v| v.borrow().cast::<f32>().as_ref()),
                 None
             )
         }
@@ -136,18 +125,26 @@ mod tests {
 
     #[test]
     fn extract_dyn() {
-        let values = ("Foo", 5_i32);
-        let values = &values as &dyn ExtractDyn;
+        let mut a = String::from("Foo");
+        let mut b = 5_i32;
+        let mut values = unsafe { (ErasedCell::new(&mut a), ErasedCell::new(&mut b)) };
+        let input = unsafe { DynInput::new(&mut values as *mut _) };
 
-        assert_eq!(<dyn ExtractDyn as Extract<&&str>>::extract(values), &"Foo");
-        assert_eq!(<dyn ExtractDyn as Extract<&i32>>::extract(values), &5);
         assert_eq!(
-            <dyn ExtractDyn as Extract<Option<&i32>>>::extract(values),
-            Some(&5)
+            &*<DynInput as Extract<AtomicRef<String>>>::extract(&input),
+            &"Foo"
+        );
+        assert_eq!(
+            &*<DynInput as Extract<AtomicRef<i32>>>::extract(&input),
+            &5i32
+        );
+        assert_eq!(
+            <DynInput as Extract<Option<AtomicRef<i32>>>>::extract(&input).as_deref(),
+            Some(&5i32)
         );
 
         assert_eq!(
-            <dyn ExtractDyn as Extract<Option<&f32>>>::extract(values),
+            <DynInput as Extract<Option<AtomicRef<f32>>>>::extract(&input).as_deref(),
             None
         );
     }
