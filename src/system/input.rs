@@ -1,6 +1,6 @@
 use core::{any::TypeId, ptr::NonNull};
 
-use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+use atomic_refcell::AtomicRefCell;
 
 /// Extract a reference from a [`AtomicRefCell`]
 /// # Safety
@@ -14,7 +14,25 @@ pub unsafe trait ExtractDyn<'a>: Send + Sync {
     unsafe fn extract_dyn(&'a self, ty: TypeId) -> Option<&'a AtomicRefCell<NonNull<()>>>;
 }
 
-struct ErasedCell<T: ?Sized> {
+/// Convert a tuple of references into a tuple of AtomicRefCell and type
+pub unsafe trait IntoInput {
+    type Output: for<'x> ExtractDyn<'x>;
+    fn into_input(self) -> Self::Output;
+}
+// TODO: lifetimes
+
+unsafe impl<'a> ExtractDyn<'a> for () {
+    unsafe fn extract_dyn(&self, _: TypeId) -> Option<&AtomicRefCell<NonNull<()>>> {
+        None
+    }
+}
+
+unsafe impl<'a, T: 'static + Send + Sync> IntoInput for &'a mut T {
+    type Output = ();
+    fn into_input(self) -> Self::Output {}
+}
+
+pub struct ErasedCell<T: ?Sized> {
     ptr: AtomicRefCell<NonNull<()>>,
     _marker: core::marker::PhantomData<*mut T>,
 }
@@ -33,6 +51,13 @@ unsafe impl<T: ?Sized> Sync for ErasedCell<T> where T: Sync {}
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
+        unsafe impl<'a, $($ty: ?Sized + 'static + Send + Sync,)*> IntoInput for ($(&'a mut $ty,)*) {
+            type Output = ($(ErasedCell<$ty>,)*);
+
+            fn into_input(self) -> Self::Output {
+                unsafe { ($(ErasedCell::new(self.$idx),)*) }
+            }
+        }
         unsafe impl<'a, $($ty: ?Sized + 'static + Send + Sync,)*> ExtractDyn<'a> for ($(ErasedCell<$ty>,)*) {
             unsafe fn extract_dyn(&'a self, ty: TypeId) -> Option<&'a AtomicRefCell<NonNull<()>>>  {
                 $(
@@ -48,41 +73,6 @@ macro_rules! tuple_impl {
     };
 }
 
-impl<'a, T> Extract<'a, AtomicRef<'a, T>> for DynInput
-where
-    T: 'static,
-{
-    fn extract(&'a self) -> AtomicRef<'a, T> {
-        let cell = unsafe { (*self.ptr).extract_dyn(TypeId::of::<T>()) };
-
-        match cell {
-            Some(v) => AtomicRef::map(v.borrow(), |v| unsafe { v.cast::<T>().as_ref() }),
-            None => panic!("Dynamic input does not contain {}", tynm::type_name::<T>()),
-        }
-    }
-}
-
-impl<'a, T> Extract<'a, Option<AtomicRef<'a, T>>> for DynInput
-where
-    T: 'static,
-{
-    fn extract(&'a self) -> Option<AtomicRef<'a, T>> {
-        let cell = unsafe { (*self.ptr).extract_dyn(TypeId::of::<T>()) };
-
-        cell.map(|v| AtomicRef::map(v.borrow(), |v| unsafe { v.cast::<T>().as_ref() }))
-    }
-}
-
-pub struct DynInput {
-    ptr: *mut dyn for<'x> ExtractDyn<'x>,
-}
-
-impl DynInput {
-    unsafe fn new(ptr: *mut dyn for<'x> ExtractDyn<'x>) -> Self {
-        Self { ptr }
-    }
-}
-
 tuple_impl! { 0 => A }
 tuple_impl! { 0 => A, 1 => B }
 tuple_impl! { 0 => A, 1 => B, 2 => C }
@@ -96,7 +86,6 @@ mod tests {
         let mut a = String::from("Foo");
         let mut b = 5_i32;
         let mut values = unsafe { (ErasedCell::new(&mut a), ErasedCell::new(&mut b)) };
-        let input = unsafe { DynInput::new(&mut values as *mut _) };
 
         unsafe {
             assert_eq!(
@@ -121,31 +110,5 @@ mod tests {
                 None
             )
         }
-    }
-
-    #[test]
-    fn extract_dyn() {
-        let mut a = String::from("Foo");
-        let mut b = 5_i32;
-        let mut values = unsafe { (ErasedCell::new(&mut a), ErasedCell::new(&mut b)) };
-        let input = unsafe { DynInput::new(&mut values as *mut _) };
-
-        assert_eq!(
-            &*<DynInput as Extract<AtomicRef<String>>>::extract(&input),
-            &"Foo"
-        );
-        assert_eq!(
-            &*<DynInput as Extract<AtomicRef<i32>>>::extract(&input),
-            &5i32
-        );
-        assert_eq!(
-            <DynInput as Extract<Option<AtomicRef<i32>>>>::extract(&input).as_deref(),
-            Some(&5i32)
-        );
-
-        assert_eq!(
-            <DynInput as Extract<Option<AtomicRef<f32>>>>::extract(&input).as_deref(),
-            None
-        );
     }
 }

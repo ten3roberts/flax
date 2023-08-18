@@ -213,7 +213,7 @@ mod test {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             });
 
-        system.run_on(&mut world);
+        system.run(&mut world);
     }
 
     #[test]
@@ -264,7 +264,7 @@ mod test {
                 assert_eq!(q.get(), Ok(&"Bar".into()));
             });
 
-        system.run_on(&mut world);
+        system.run(&mut world);
     }
 
     #[test]
