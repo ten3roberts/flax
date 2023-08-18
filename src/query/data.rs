@@ -32,7 +32,7 @@ where
     query: &'a mut Query<Q, F, S>,
 }
 
-impl<'a, Q, F, S, T> SystemData<'a, T> for Query<Q, F, S>
+impl<'a, Q, F, S> SystemData<'a> for Query<Q, F, S>
 where
     Q: 'static + for<'x> Fetch<'x>,
     F: 'static + for<'x> Fetch<'x>,
@@ -40,7 +40,7 @@ where
 {
     type Value = QueryData<'a, Q, F, S>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, T>) -> Self::Value {
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> Self::Value {
         let world = ctx.world();
 
         QueryData { world, query: self }

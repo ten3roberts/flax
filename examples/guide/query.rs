@@ -107,7 +107,7 @@ fn main() -> anyhow::Result<()> {
             },
         );
 
-    update_distance.run_on(&mut world);
+    update_distance.run(&mut world);
     // ANCHOR_END: system_basic
 
     // ANCHOR: system_for_each
@@ -123,7 +123,7 @@ fn main() -> anyhow::Result<()> {
         });
 
     for _ in 0..16 {
-        update_dist.run_on(&mut world);
+        update_dist.run(&mut world);
     }
 
     // ANCHOR_END: system_for_each
@@ -268,10 +268,10 @@ fn main() -> anyhow::Result<()> {
             }
         });
 
-    window_system.run_on(&mut world);
-    window_system.run_on(&mut world);
+    window_system.run(&mut world);
+    window_system.run(&mut world);
     world.set(resources(), window_height(), 720.0)?;
-    window_system.run_on(&mut world);
+    window_system.run(&mut world);
 
     // ANCHOR_END: entity_query_system
 

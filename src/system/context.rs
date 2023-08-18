@@ -8,7 +8,7 @@ use crate::{
     CommandBuffer, World,
 };
 
-use super::{SystemAccess, SystemData};
+use super::{input::ExtractDyn, SystemAccess, SystemData};
 
 /// A resource that can be shared between systems
 /// The difference between this and an `Arc<Mutex<_>>` is that this will be
@@ -50,13 +50,13 @@ where
     }
 }
 
-impl<'a, T, D> SystemData<'a, D> for SharedResource<T>
+impl<'a, T> SystemData<'a> for SharedResource<T>
 where
     T: Send + 'static,
 {
     type Value = AtomicRefMut<'a, T>;
 
-    fn acquire(&'a mut self, _: &'a SystemContext<'_, D>) -> Self::Value {
+    fn acquire(&'a mut self, _: &'a SystemContext<'_>) -> Self::Value {
         self.borrow_mut()
     }
 
@@ -68,20 +68,24 @@ where
 }
 
 /// Everything needed to execute a system
-pub struct SystemContext<'a, T> {
+pub struct SystemContext<'a> {
     pub(crate) world: AtomicRefCell<&'a mut World>,
     cmd: AtomicRefCell<&'a mut CommandBuffer>,
     /// External input
-    input: AtomicRefCell<&'a mut T>,
+    input: &'a dyn ExtractDyn<'a>,
 }
 
-impl<'a, T> SystemContext<'a, T> {
+impl<'a> SystemContext<'a> {
     /// Creates a new system context
-    pub fn new(world: &'a mut World, cmd: &'a mut CommandBuffer, input: &'a mut T) -> Self {
+    pub fn new(
+        world: &'a mut World,
+        cmd: &'a mut CommandBuffer,
+        input: &'a dyn ExtractDyn<'a>,
+    ) -> Self {
         Self {
             world: AtomicRefCell::new(world),
             cmd: AtomicRefCell::new(cmd),
-            input: AtomicRefCell::new(input),
+            input,
         }
     }
 
@@ -113,9 +117,17 @@ impl<'a, T> SystemContext<'a, T> {
         AtomicRefMut::map(borrow, |v| *v)
     }
 
-    /// Access user provided context data
+    /// Access user provided input data
     #[inline]
-    pub fn input(&self) -> &AtomicRefCell<&'a mut T> {
-        &self.input
+    pub fn input<T: 'static>(&self) -> Option<AtomicRef<'a, T>> {
+        let cell = unsafe { self.input.extract_dyn(TypeId::of::<T>()) };
+        cell.map(|v| AtomicRef::map(v.borrow(), unsafe { |v| v.cast().as_ref() }))
+    }
+
+    /// Access user provided input data
+    #[inline]
+    pub fn input_mut<T: 'static>(&self) -> Option<AtomicRefMut<'a, T>> {
+        let cell = unsafe { self.input.extract_dyn(TypeId::of::<T>()) };
+        cell.map(|v| AtomicRefMut::map(v.borrow_mut(), unsafe { |v| v.cast().as_mut() }))
     }
 }

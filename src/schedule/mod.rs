@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, mem, ops::Deref};
+use core::{mem, ops::Deref};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
@@ -6,13 +6,13 @@ use anyhow::Context;
 use itertools::Itertools;
 
 use crate::{
-    system::{access_info, AccessInfo, SystemContext},
+    system::{access_info, AccessInfo, IntoInput, SystemContext},
     util::Verbatim,
     BoxedSystem, CommandBuffer, System, World,
 };
 
-fn flush_system<T: 'static + Send + Sync>() -> BoxedSystem<T> {
-    System::builder_with_data()
+fn flush_system() -> BoxedSystem {
+    System::builder()
         .with_name("flush")
         .with_world_mut()
         .with_cmd_mut()
@@ -25,11 +25,11 @@ fn flush_system<T: 'static + Send + Sync>() -> BoxedSystem<T> {
 
 #[derive(Debug)]
 /// Incrementally construct a schedule constisting of systems
-pub struct ScheduleBuilder<T = ()> {
-    systems: Vec<BoxedSystem<T>>,
+pub struct ScheduleBuilder {
+    systems: Vec<BoxedSystem>,
 }
 
-impl<T> Default for ScheduleBuilder<T> {
+impl Default for ScheduleBuilder {
     fn default() -> Self {
         Self {
             systems: Default::default(),
@@ -37,14 +37,14 @@ impl<T> Default for ScheduleBuilder<T> {
     }
 }
 
-impl<T: 'static + Send + Sync> ScheduleBuilder<T> {
+impl ScheduleBuilder {
     /// Creates a new schedule builder
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Set the ScheduleBuilder's system
-    pub fn with_system(&mut self, system: impl Into<BoxedSystem<T>>) -> &mut Self {
+    pub fn with_system(&mut self, system: impl Into<BoxedSystem>) -> &mut Self {
         self.systems.push(system.into());
         self
     }
@@ -56,7 +56,7 @@ impl<T: 'static + Send + Sync> ScheduleBuilder<T> {
     }
 
     /// Build the schedule
-    pub fn build(&mut self) -> Schedule<T> {
+    pub fn build(&mut self) -> Schedule {
         Schedule::from_systems(mem::take(&mut self.systems))
     }
 }
@@ -87,21 +87,19 @@ impl SystemInfo {
 }
 
 /// A schedule of systems to execute with automatic parallelization.
-pub struct Schedule<T = ()> {
-    systems: Vec<Vec<BoxedSystem<T>>>,
+pub struct Schedule {
+    systems: Vec<Vec<BoxedSystem>>,
     cmd: CommandBuffer,
 
     archetype_gen: u32,
-    data: PhantomData<T>,
 }
 
-impl<T> Default for Schedule<T> {
+impl Default for Schedule {
     fn default() -> Self {
         Self {
             systems: Default::default(),
             cmd: Default::default(),
             archetype_gen: Default::default(),
-            data: Default::default(),
         }
     }
 }
@@ -139,7 +137,7 @@ impl Deref for BatchInfo {
     }
 }
 
-impl<T> core::fmt::Debug for Schedule<T> {
+impl core::fmt::Debug for Schedule {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Schedule")
             .field("systems", &self.systems)
@@ -148,26 +146,32 @@ impl<T> core::fmt::Debug for Schedule<T> {
     }
 }
 
-impl<T: 'static + Send + Sync> FromIterator<BoxedSystem<T>> for Schedule<T> {
-    fn from_iter<I: IntoIterator<Item = BoxedSystem<T>>>(iter: I) -> Self {
+impl FromIterator<BoxedSystem> for Schedule {
+    fn from_iter<I: IntoIterator<Item = BoxedSystem>>(iter: I) -> Self {
         Self::from_systems(iter.into_iter().collect_vec())
     }
 }
 
-impl<T: 'static + Send + Sync, U> From<U> for Schedule<T>
+impl<U> From<U> for Schedule
 where
-    U: IntoIterator<Item = BoxedSystem<T>>,
+    U: IntoIterator<Item = BoxedSystem>,
 {
     fn from(v: U) -> Self {
         Self::from_systems(v.into_iter().collect_vec())
     }
 }
 
-impl Schedule<()> {
+impl Schedule {
+    /// Creates a new empty schedule, prefer [Self::builder]
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     /// Creates a new schedule builder
     pub fn builder() -> ScheduleBuilder {
         ScheduleBuilder::default()
     }
+
     /// Execute all systems in the schedule sequentially on the world.
     /// Returns the first error and aborts if the execution fails.
     pub fn execute_seq(&mut self, world: &mut World) -> anyhow::Result<()> {
@@ -189,25 +193,13 @@ impl Schedule<()> {
     pub fn execute_par(&mut self, world: &mut World) -> anyhow::Result<()> {
         self.execute_par_with(world, &mut ())
     }
-}
-
-impl<T: 'static + Send + Sync> Schedule<T> {
-    /// Creates a new schedule builder with a custom data type
-    pub fn builder_with_data() -> ScheduleBuilder<T> {
-        ScheduleBuilder::default()
-    }
-    /// Creates a new empty schedule, prefer [Self::builder]
-    pub fn new() -> Self {
-        Default::default()
-    }
 
     /// Creates a schedule from a group of existing systems
-    pub fn from_systems(systems: impl Into<Vec<BoxedSystem<T>>>) -> Self {
+    pub fn from_systems(systems: impl Into<Vec<BoxedSystem>>) -> Self {
         Self {
             systems: alloc::vec![systems.into()],
             archetype_gen: 0,
             cmd: CommandBuffer::new(),
-            data: PhantomData,
         }
     }
 
@@ -219,7 +211,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     /// Add a new system to the schedule.
     /// Respects order.
-    pub fn with_system(mut self, system: impl Into<BoxedSystem<T>>) -> Self {
+    pub fn with_system(mut self, system: impl Into<BoxedSystem>) -> Self {
         self.archetype_gen = 0;
         let v = match self.systems.first_mut() {
             Some(v) => v,
@@ -267,14 +259,14 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     /// Same as [`Self::execute_seq`] but allows supplying short lived input available to the systems
     ///
-    /// **Note**:
-    /// Due to current limitations in Rust, T has to be as `Fn(T): 'static` implies `T: 'static`.
-    ///
-    /// See:
-    /// - <https://github.com/rust-lang/rust/issues/57325>
-    /// - <https://stackoverflow.com/questions/53966598/how-to-fnt-static-register-as-static-for-any-generic-type-argument-t>
-    pub fn execute_seq_with(&mut self, world: &mut World, input: &mut T) -> anyhow::Result<()> {
-        let ctx = SystemContext::new(world, &mut self.cmd, input);
+    /// The data can be a mutable reference type, or a tuple of mutable references
+    pub fn execute_seq_with(
+        &mut self,
+        world: &mut World,
+        input: impl IntoInput,
+    ) -> anyhow::Result<()> {
+        let input = input.into_input();
+        let ctx = SystemContext::new(world, &mut self.cmd, &input);
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("execute_seq").entered();
@@ -290,7 +282,11 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     #[cfg(feature = "rayon")]
     /// Same as [`Self::execute_par`] but allows supplying short lived data available to the systems
-    pub fn execute_par_with(&mut self, world: &mut World, input: &mut T) -> anyhow::Result<()> {
+    pub fn execute_par_with(
+        &mut self,
+        world: &mut World,
+        input: impl IntoInput,
+    ) -> anyhow::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
         #[cfg(feature = "tracing")]
@@ -303,7 +299,8 @@ impl<T: 'static + Send + Sync> Schedule<T> {
             self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
         }
 
-        let mut ctx = SystemContext::new(world, &mut self.cmd, input);
+        let input = input.into_input();
+        let mut ctx = SystemContext::new(world, &mut self.cmd, &input);
 
         let mut batches = self.systems.iter_mut();
 
@@ -332,8 +329,8 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     #[cfg(feature = "rayon")]
     fn bail_seq(
-        batches: core::slice::IterMut<Vec<BoxedSystem<T>>>,
-        ctx: &SystemContext<'_, T>,
+        batches: core::slice::IterMut<Vec<BoxedSystem>>,
+        ctx: &SystemContext<'_>,
     ) -> anyhow::Result<()> {
         for system in batches.flatten() {
             system.execute(ctx)?;
@@ -342,10 +339,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
         Ok(())
     }
 
-    fn build_dependencies(
-        systems: Vec<Vec<BoxedSystem<T>>>,
-        world: &World,
-    ) -> Vec<Vec<BoxedSystem<T>>> {
+    fn build_dependencies(systems: Vec<Vec<BoxedSystem>>, world: &World) -> Vec<Vec<BoxedSystem>> {
         let accesses = systems
             .iter()
             .flatten()
@@ -552,7 +546,7 @@ mod test {
             .set(b(), 5)
             .spawn(&mut world);
 
-        let system_a = System::builder_with_data()
+        let system_a = System::builder()
             .with_query(Query::new(a()))
             .with_input()
             .build(
@@ -566,7 +560,7 @@ mod test {
             )
             .boxed();
 
-        let system_b = System::builder_with_data()
+        let system_b = System::builder()
             .with_query(Query::new(b()))
             .with_input_mut()
             .build(
@@ -580,7 +574,7 @@ mod test {
             )
             .boxed();
 
-        let system_c = System::builder_with_data()
+        let system_c = System::builder()
             .with_input()
             .build(move |cx: &String| -> anyhow::Result<()> {
                 assert_eq!(cx, "Bar");
