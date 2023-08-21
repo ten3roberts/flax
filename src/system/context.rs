@@ -56,7 +56,7 @@ where
 {
     type Value = AtomicRefMut<'a, T>;
 
-    fn acquire(&'a mut self, _: &'a SystemContext<'_>) -> Self::Value {
+    fn acquire(&'a mut self, _: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         self.borrow_mut()
     }
 
@@ -68,19 +68,19 @@ where
 }
 
 /// Everything needed to execute a system
-pub struct SystemContext<'a> {
-    pub(crate) world: AtomicRefCell<&'a mut World>,
-    cmd: AtomicRefCell<&'a mut CommandBuffer>,
+pub struct SystemContext<'w, 'b, 'input> {
+    pub(crate) world: AtomicRefCell<&'w mut World>,
+    pub(crate) cmd: AtomicRefCell<&'w mut CommandBuffer>,
     /// External input
-    input: &'a dyn ExtractDyn<'a>,
+    input: &'b dyn ExtractDyn<'b, 'input>,
 }
 
-impl<'a> SystemContext<'a> {
+impl<'a, 'b, 'input> SystemContext<'a, 'b, 'input> {
     /// Creates a new system context
     pub fn new(
         world: &'a mut World,
         cmd: &'a mut CommandBuffer,
-        input: &'a dyn ExtractDyn<'a>,
+        input: &'b dyn ExtractDyn<'b, 'input>,
     ) -> Self {
         Self {
             world: AtomicRefCell::new(world),
@@ -119,14 +119,14 @@ impl<'a> SystemContext<'a> {
 
     /// Access user provided input data
     #[inline]
-    pub fn input<T: 'static>(&self) -> Option<AtomicRef<'a, T>> {
+    pub fn input<T: 'static>(&self) -> Option<AtomicRef<T>> {
         let cell = unsafe { self.input.extract_dyn(TypeId::of::<T>()) };
         cell.map(|v| AtomicRef::map(v.borrow(), unsafe { |v| v.cast().as_ref() }))
     }
 
     /// Access user provided input data
     #[inline]
-    pub fn input_mut<T: 'static>(&self) -> Option<AtomicRefMut<'a, T>> {
+    pub fn input_mut<T: 'static>(&self) -> Option<AtomicRefMut<T>> {
         let cell = unsafe { self.input.extract_dyn(TypeId::of::<T>()) };
         cell.map(|v| AtomicRefMut::map(v.borrow_mut(), unsafe { |v| v.cast().as_mut() }))
     }
