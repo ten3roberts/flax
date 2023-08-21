@@ -14,14 +14,14 @@ pub unsafe trait ExtractDyn<'a, 'b>: Send + Sync {
     unsafe fn extract_dyn(&'a self, ty: TypeId) -> Option<&'a AtomicRefCell<NonNull<()>>>;
 }
 
-/// Convert a tuple of references into a tuple of AtomicRefCell and type
+/// Convert a tuple of references into a tuple of reference checked erased cells
 pub trait IntoInput<'a> {
     /// The type erased cell
     type Output: for<'x> ExtractDyn<'x, 'a>;
     /// # Safety
     ///
     /// The caller must that the returned cell is used with the lifetime of `'a`
-    unsafe fn into_input(self) -> Self::Output;
+    fn into_input(self) -> Self::Output;
 }
 
 unsafe impl<'a, 'b> ExtractDyn<'a, 'b> for () {
@@ -30,7 +30,7 @@ unsafe impl<'a, 'b> ExtractDyn<'a, 'b> for () {
     }
 }
 
-unsafe impl<'a, 'b, T: 'static + Send + Sync> ExtractDyn<'a, 'b> for ErasedCell<T> {
+unsafe impl<'a, 'b, T: 'static + Send + Sync> ExtractDyn<'a, 'b> for ErasedCell<'b, T> {
     #[inline]
     unsafe fn extract_dyn(&'a self, ty: TypeId) -> Option<&'a AtomicRefCell<NonNull<()>>> {
         if TypeId::of::<T>() == ty {
@@ -41,20 +41,20 @@ unsafe impl<'a, 'b, T: 'static + Send + Sync> ExtractDyn<'a, 'b> for ErasedCell<
     }
 }
 
-unsafe impl<'a, T: 'static + Send + Sync> IntoInput<'a> for &'a mut T {
-    type Output = ErasedCell<T>;
+impl<'a, T: 'static + Send + Sync> IntoInput<'a> for &'a mut T {
+    type Output = ErasedCell<'a, T>;
     fn into_input(self) -> Self::Output {
         unsafe { ErasedCell::new(self) }
     }
 }
 
-pub struct ErasedCell<T: ?Sized> {
+pub struct ErasedCell<'a, T: ?Sized> {
     cell: AtomicRefCell<NonNull<()>>,
-    _marker: core::marker::PhantomData<*mut T>,
+    _marker: core::marker::PhantomData<&'a mut T>,
 }
 
-impl<T: ?Sized> ErasedCell<T> {
-    unsafe fn new(value: &mut T) -> Self {
+impl<'a, T: ?Sized> ErasedCell<'a, T> {
+    unsafe fn new(value: &'a mut T) -> Self {
         Self {
             cell: AtomicRefCell::new(NonNull::from(value).cast::<()>()),
             _marker: core::marker::PhantomData,
@@ -62,20 +62,20 @@ impl<T: ?Sized> ErasedCell<T> {
     }
 }
 
-unsafe impl<T: ?Sized> Send for ErasedCell<T> where T: Send {}
-unsafe impl<T: ?Sized> Sync for ErasedCell<T> where T: Sync {}
+unsafe impl<'a, T: ?Sized> Send for ErasedCell<'a, T> where T: Send {}
+unsafe impl<'a, T: ?Sized> Sync for ErasedCell<'a, T> where T: Sync {}
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        unsafe impl<'a, $($ty: ?Sized + 'static + Send + Sync,)*> IntoInput<'a> for ($(&'a mut $ty,)*) {
-            type Output = ($(ErasedCell<$ty>,)*);
+        impl<'a, $($ty: ?Sized + 'static + Send + Sync,)*> IntoInput<'a> for ($(&'a mut $ty,)*) {
+            type Output = ($(ErasedCell<'a, $ty>,)*);
 
             fn into_input(self) -> Self::Output {
                 unsafe { ($(ErasedCell::new(self.$idx),)*) }
             }
         }
 
-        unsafe impl<'a, 'b, $($ty: ?Sized + 'static + Send + Sync,)*> ExtractDyn<'a , 'b> for ($(ErasedCell<$ty>,)*) {
+        unsafe impl<'a, 'b, $($ty: ?Sized + 'static + Send + Sync,)*> ExtractDyn<'a , 'b> for ($(ErasedCell<'b, $ty>,)*) {
             unsafe fn extract_dyn(&'a self, ty: TypeId) -> Option<&'a AtomicRefCell<NonNull<()>>>  {
                 $(
                     if TypeId::of::<$ty>() == ty {

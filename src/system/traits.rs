@@ -283,11 +283,7 @@ mod test {
     use itertools::Itertools;
 
     use crate::{
-        component,
-        components::name,
-        filter::All,
-        query::QueryData,
-        system::{IntoInput, SystemContext},
+        component, components::name, filter::All, query::QueryData, system::SystemContext,
         CommandBuffer, Component, Entity, Query, QueryBorrow, World,
     };
 
@@ -302,8 +298,8 @@ mod test {
         let mut world = World::new();
         let mut cmd = CommandBuffer::new();
         #[allow(clippy::let_unit_value)]
-        let mut data = ().into_input();
-        let ctx = SystemContext::new(&mut world, &mut cmd, &mut data);
+        let data = ();
+        let ctx = SystemContext::new(&mut world, &mut cmd, &data);
 
         let mut spawner = |w: &mut World| {
             Entity::builder()
