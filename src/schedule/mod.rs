@@ -23,18 +23,10 @@ fn flush_system() -> BoxedSystem {
         .boxed()
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 /// Incrementally construct a schedule constisting of systems
 pub struct ScheduleBuilder {
     systems: Vec<BoxedSystem>,
-}
-
-impl Default for ScheduleBuilder {
-    fn default() -> Self {
-        Self {
-            systems: Default::default(),
-        }
-    }
 }
 
 impl ScheduleBuilder {
@@ -87,21 +79,12 @@ impl SystemInfo {
 }
 
 /// A schedule of systems to execute with automatic parallelization.
+#[derive(Default)]
 pub struct Schedule {
     systems: Vec<Vec<BoxedSystem>>,
     cmd: CommandBuffer,
 
     archetype_gen: u32,
-}
-
-impl Default for Schedule {
-    fn default() -> Self {
-        Self {
-            systems: Default::default(),
-            cmd: Default::default(),
-            archetype_gen: Default::default(),
-        }
-    }
 }
 
 /// Holds information regarding a schedule's batches
@@ -478,11 +461,7 @@ fn topo_sort<T>(items: Vec<Vec<T>>, deps: &BTreeMap<usize, Vec<usize>>) -> Vec<V
 #[cfg(test)]
 mod test {
 
-    use alloc::{string::String, vec};
-
-    use crate::{
-        component, schedule::Schedule, system::System, EntityBuilder, Query, QueryBorrow, World,
-    };
+    use alloc::vec;
 
     use super::topo_sort;
 
