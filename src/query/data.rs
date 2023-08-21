@@ -40,7 +40,7 @@ where
 {
     type Value = QueryData<'a, Q, F, S>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> Self::Value {
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         let world = ctx.world();
 
         QueryData { world, query: self }

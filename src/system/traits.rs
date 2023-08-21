@@ -52,7 +52,7 @@ pub trait SystemData<'a>: SystemAccess {
     type Value;
 
     /// Get the data from the system context
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> Self::Value;
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value;
     /// Human friendly debug description
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 }
@@ -91,14 +91,14 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<'w, $($ty,)*> SystemData<'w> for ($($ty,)*)
+        impl<'a, $($ty,)*> SystemData<'a> for ($($ty,)*)
         where
-            $($ty: SystemData<'w>,)*
+            $($ty: SystemData<'a>,)*
         {
-            type Value = ($(<$ty as SystemData<'w>>::Value,)*);
+            type Value = ($(<$ty as SystemData<'a>>::Value,)*);
 
             #[allow(clippy::unused_unit)]
-            fn acquire(&'w mut self, _ctx: &'w SystemContext<'_>) -> Self::Value {
+            fn acquire(&'a mut self, _ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
                 ($((self.$idx).acquire(_ctx),)*)
             }
 
@@ -127,7 +127,7 @@ pub struct WithWorld;
 impl<'a> SystemData<'a> for WithWorld {
     type Value = AtomicRef<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         ctx.world()
     }
 
@@ -152,7 +152,7 @@ pub struct WithWorldMut;
 impl<'a> SystemData<'a> for WithWorldMut {
     type Value = AtomicRefMut<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         ctx.world_mut()
     }
 
@@ -177,7 +177,7 @@ pub struct WithCmd;
 impl<'a> SystemData<'a> for WithCmd {
     type Value = AtomicRef<'a, CommandBuffer>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         ctx.cmd()
     }
 
@@ -201,7 +201,7 @@ pub struct WithCmdMut;
 impl<'a> SystemData<'a> for WithCmdMut {
     type Value = AtomicRefMut<'a, CommandBuffer>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         ctx.cmd_mut()
     }
 
@@ -225,7 +225,7 @@ pub struct WithInput<T>(pub(crate) PhantomData<T>);
 impl<'a, T: 'static> SystemData<'a> for WithInput<T> {
     type Value = AtomicRef<'a, T>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> Self::Value {
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         match ctx.input() {
             Some(v) => v,
             None => panic!("Input does not contain {}", tynm::type_name::<T>()),
@@ -253,7 +253,7 @@ pub struct WithInputMut<T>(pub(crate) PhantomData<T>);
 impl<'a, T: 'static> SystemData<'a> for WithInputMut<T> {
     type Value = AtomicRefMut<'a, T>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_>) -> Self::Value {
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         match ctx.input_mut() {
             Some(v) => v,
             None => panic!("Input does not contain {}", tynm::type_name::<T>()),

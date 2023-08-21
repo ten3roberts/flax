@@ -277,7 +277,7 @@ where
 pub trait DynSystem {
     fn name(&self) -> &str;
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
-    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()>;
+    fn execute(&mut self, ctx: &SystemContext<'_, '_, '_>) -> anyhow::Result<()>;
     fn access(&self, world: &World, dst: &mut Vec<Access>);
 }
 
@@ -287,7 +287,7 @@ where
     F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
     Err: Into<anyhow::Error>,
 {
-    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()> {
+    fn execute(&mut self, ctx: &SystemContext<'_, '_, '_>) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
@@ -325,7 +325,7 @@ where
     Args: for<'x> SystemData<'x>,
     F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, ()>,
 {
-    fn execute(&mut self, ctx: &SystemContext<'_>) -> anyhow::Result<()> {
+    fn execute(&mut self, ctx: &SystemContext<'_, '_, '_>) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
@@ -405,7 +405,7 @@ impl<F, Args, Ret> System<F, Args, Ret> {
 
 impl<F, Args, Ret> System<F, Args, Ret> {
     /// Run the system on the world. Any commands will be applied
-    pub fn run_with<'a>(&'a mut self, world: &'a mut World, input: impl IntoInput) -> Ret
+    pub fn run_with<'a>(&mut self, world: &mut World, input: impl IntoInput<'a>) -> Ret
     where
         Ret: 'static,
         for<'x> Args: SystemData<'x>,
@@ -421,7 +421,9 @@ impl<F, Args, Ret> System<F, Args, Ret> {
         let data = self.data.acquire(&ctx);
 
         let ret = self.func.execute(data);
-        cmd.apply(world).expect("Failed to apply commandbuffer");
+        ctx.cmd_mut()
+            .apply(&mut ctx.world.borrow_mut())
+            .expect("Failed to apply commandbuffer");
         ret
     }
 }
@@ -583,7 +585,7 @@ impl BoxedSystem {
     }
 
     /// Execute the system with the provided context
-    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'_>) -> anyhow::Result<()> {
+    pub fn execute<'a>(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> anyhow::Result<()> {
         self.inner.execute(ctx)
     }
 
@@ -591,7 +593,7 @@ impl BoxedSystem {
     pub fn run_with<'a>(
         &'a mut self,
         world: &'a mut World,
-        input: impl IntoInput,
+        input: impl IntoInput<'a>,
     ) -> anyhow::Result<()> {
         let mut cmd = CommandBuffer::new();
         let input = input.into_input();

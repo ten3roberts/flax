@@ -260,10 +260,10 @@ impl Schedule {
     /// Same as [`Self::execute_seq`] but allows supplying short lived input available to the systems
     ///
     /// The data can be a mutable reference type, or a tuple of mutable references
-    pub fn execute_seq_with(
-        &mut self,
-        world: &mut World,
-        input: impl IntoInput,
+    pub fn execute_seq_with<'a>(
+        &'a mut self,
+        world: &'a mut World,
+        input: impl IntoInput<'a>,
     ) -> anyhow::Result<()> {
         let input = input.into_input();
         let ctx = SystemContext::new(world, &mut self.cmd, &input);
@@ -282,10 +282,10 @@ impl Schedule {
 
     #[cfg(feature = "rayon")]
     /// Same as [`Self::execute_par`] but allows supplying short lived data available to the systems
-    pub fn execute_par_with(
-        &mut self,
-        world: &mut World,
-        input: impl IntoInput,
+    pub fn execute_par_with<'a>(
+        &'a mut self,
+        world: &'a mut World,
+        input: impl IntoInput<'a>,
     ) -> anyhow::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
@@ -313,12 +313,7 @@ impl Schedule {
             //
             // Execute sequentially, and rebuild the schedule next time around
             if self.archetype_gen != ctx.world.get_mut().archetype_gen() {
-                Self::bail_seq(batches, &ctx)?;
-
-                return self
-                    .cmd
-                    .apply(world)
-                    .context("Failed to apply commandbuffer");
+                return Self::bail_seq(batches, &mut ctx);
             }
         }
 
@@ -330,13 +325,16 @@ impl Schedule {
     #[cfg(feature = "rayon")]
     fn bail_seq(
         batches: core::slice::IterMut<Vec<BoxedSystem>>,
-        ctx: &SystemContext<'_>,
+        ctx: &mut SystemContext<'_, '_, '_>,
     ) -> anyhow::Result<()> {
         for system in batches.flatten() {
             system.execute(ctx)?;
         }
 
-        Ok(())
+        ctx.cmd
+            .get_mut()
+            .apply(ctx.world.get_mut())
+            .context("Failed to apply commandbuffer")
     }
 
     fn build_dependencies(systems: Vec<Vec<BoxedSystem>>, world: &World) -> Vec<Vec<BoxedSystem>> {
