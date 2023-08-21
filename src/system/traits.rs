@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 use core::{
+    any::TypeId,
     fmt::{self, Formatter},
     marker::PhantomData,
 };
@@ -238,10 +239,10 @@ impl<'a, T: 'static> SystemData<'a> for WithInput<T> {
     }
 }
 
-impl<T> SystemAccess for WithInput<T> {
+impl<T: 'static> SystemAccess for WithInput<T> {
     fn access(&self, _: &World, dst: &mut Vec<Access>) {
         dst.push(Access {
-            kind: AccessKind::ContextData,
+            kind: AccessKind::Input(TypeId::of::<T>()),
             mutable: false,
         });
     }
@@ -256,7 +257,7 @@ impl<'a, T: 'static> SystemData<'a> for WithInputMut<T> {
     fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         match ctx.input_mut() {
             Some(v) => v,
-            None => panic!("Input does not contain {}", tynm::type_name::<T>()),
+            None => panic!("input does not contain `{}`", tynm::type_name::<T>()),
         }
     }
 
@@ -266,10 +267,10 @@ impl<'a, T: 'static> SystemData<'a> for WithInputMut<T> {
     }
 }
 
-impl<T> SystemAccess for WithInputMut<T> {
+impl<T: 'static> SystemAccess for WithInputMut<T> {
     fn access(&self, _: &World, dst: &mut Vec<Access>) {
         dst.push(Access {
-            kind: AccessKind::ContextData,
+            kind: AccessKind::Input(TypeId::of::<T>()),
             mutable: true,
         });
     }
