@@ -445,7 +445,7 @@ pub enum AccessKind {
     /// Borrow the commandbuffer
     CommandBuffer,
     /// Data supplied by user in the execution context
-    ContextData,
+    Input(TypeId),
 }
 
 impl AccessKind {
@@ -498,7 +498,7 @@ pub struct AccessInfo {
     world: Option<bool>,
     cmd: Option<bool>,
     external: Vec<TypeId>,
-    context_data: Option<bool>,
+    input: Vec<(TypeId, bool)>,
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -533,7 +533,9 @@ pub(crate) fn access_info(accesses: &[Access], world: &World) -> AccessInfo {
                     })
             }
             AccessKind::External(ty) => result.external.push(ty),
-            AccessKind::ContextData => result.context_data = Some(access.mutable),
+            AccessKind::Input(ty) => {
+                result.input.push((ty, access.mutable));
+            }
             AccessKind::World => match result.world {
                 Some(true) => result.world = Some(true),
                 _ => result.world = Some(access.mutable),

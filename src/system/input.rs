@@ -15,9 +15,13 @@ pub unsafe trait ExtractDyn<'a, 'b>: Send + Sync {
 }
 
 /// Convert a tuple of references into a tuple of AtomicRefCell and type
-pub unsafe trait IntoInput<'a> {
+pub trait IntoInput<'a> {
+    /// The type erased cell
     type Output: for<'x> ExtractDyn<'x, 'a>;
-    fn into_input(self) -> Self::Output;
+    /// # Safety
+    ///
+    /// The caller must that the returned cell is used with the lifetime of `'a`
+    unsafe fn into_input(self) -> Self::Output;
 }
 
 unsafe impl<'a, 'b> ExtractDyn<'a, 'b> for () {
@@ -93,6 +97,7 @@ tuple_impl! { 0 => A, 1 => B, 2 => C }
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::string::String;
 
     #[test]
     fn extract_2() {
@@ -104,7 +109,7 @@ mod tests {
             assert_eq!(
                 values
                     .extract_dyn(TypeId::of::<String>())
-                    .map(|v| v.borrow().cast::<String>().as_ref())
+                    .map(|v| v.borrow().cast::<alloc::string::String>().as_ref())
                     .map(|v| &**v),
                 Some("Foo")
             );
