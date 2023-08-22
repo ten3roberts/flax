@@ -39,7 +39,7 @@ pub struct EventData<'a> {
 /// Allows subscribing to events *inside* the ECS, such as components being added, removed, or
 /// modified.
 pub trait EventSubscriber: ComponentValue {
-    /// Returns true if the listener is to be retained
+    /// Handle an incoming event
     fn on_event(&self, event: &EventData);
 
     /// Returns true if the subscriber is interested in this archetype

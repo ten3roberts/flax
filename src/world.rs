@@ -1097,7 +1097,7 @@ impl World {
 
     /// Subscribe to events in the world using the provided event handler.
     ///
-    /// This allows reacting to changes in other systems, in async contexts by using channels or [`tokio::sync::Notify`], or on other threads.
+    /// This allows reacting to changes in systems, and in async contexts by using channels or [`tokio::sync::Notify`].
     pub fn subscribe<S>(&mut self, subscriber: S)
     where
         S: EventSubscriber,

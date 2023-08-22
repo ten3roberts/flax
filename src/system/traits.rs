@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
-use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+use atomic_refcell::{AtomicRef, AtomicRefMut};
 use core::{
+    any::TypeId,
     fmt::{self, Formatter},
     marker::PhantomData,
 };
@@ -8,7 +9,7 @@ use core::{
 use crate::system::AccessKind;
 use crate::*;
 
-use super::{input::Extract, Access, SystemContext};
+use super::{Access, SystemContext};
 
 /// Allows dereferencing `AtomicRef<T>` to &T and similar "lock" types in a safe manner.
 /// Traits for guarded types like `AtomicRef`, `Mutex` or [`QueryData`](crate::query::QueryData).
@@ -36,10 +37,10 @@ impl<'a, 'b, T: 'a> AsBorrowed<'a> for AtomicRefMut<'b, T> {
     }
 }
 
-struct FmtSystemData<'a, S, T>(&'a S, PhantomData<T>);
-impl<'a, 'w, S, T> core::fmt::Debug for FmtSystemData<'a, S, T>
+struct FmtSystemData<'a, S>(&'a S);
+impl<'a, 'w, S> core::fmt::Debug for FmtSystemData<'a, S>
 where
-    S: SystemData<'w, T>,
+    S: SystemData<'w>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.describe(f)
@@ -47,12 +48,12 @@ where
 }
 
 /// Borrow state from the system execution data
-pub trait SystemData<'a, I>: SystemAccess {
+pub trait SystemData<'a>: SystemAccess {
     /// The borrow from the system context
     type Value;
 
     /// Get the data from the system context
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value;
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value;
     /// Human friendly debug description
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result;
 }
@@ -91,20 +92,20 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<'w, $($ty,)* T> SystemData<'w, T> for ($($ty,)*)
+        impl<'a, $($ty,)*> SystemData<'a> for ($($ty,)*)
         where
-            $($ty: SystemData<'w, T>,)*
+            $($ty: SystemData<'a>,)*
         {
-            type Value = ($(<$ty as SystemData<'w, T>>::Value,)*);
+            type Value = ($(<$ty as SystemData<'a>>::Value,)*);
 
             #[allow(clippy::unused_unit)]
-            fn acquire(&'w mut self, _ctx: &'w SystemContext<'_, T>) -> Self::Value {
+            fn acquire(&'a mut self, _ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
                 ($((self.$idx).acquire(_ctx),)*)
             }
 
             fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
                 core::fmt::Debug::fmt(&($(
-                    FmtSystemData(&self.$idx, PhantomData),
+                    FmtSystemData(&self.$idx),
                 )*), f)
 
             }
@@ -120,22 +121,14 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
-// tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
-
-// pub trait SystemData<'init, 'ctx, 'w> {
-//     type Init;
-//     /// Initialize and fetch data from the system execution context
-//     fn init(ctx: &'ctx SystemContext<'w>) -> Self::Init;
-// }
 
 /// Access the world
 pub struct WithWorld;
 
-impl<'a, I> SystemData<'a, I> for WithWorld {
+impl<'a> SystemData<'a> for WithWorld {
     type Value = AtomicRef<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         ctx.world()
     }
 
@@ -157,10 +150,10 @@ impl SystemAccess for WithWorld {
 /// Access the world mutably
 pub struct WithWorldMut;
 
-impl<'a, I> SystemData<'a, I> for WithWorldMut {
+impl<'a> SystemData<'a> for WithWorldMut {
     type Value = AtomicRefMut<'a, World>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         ctx.world_mut()
     }
 
@@ -182,10 +175,10 @@ impl SystemAccess for WithWorldMut {
 /// Access the command buffer
 pub struct WithCmd;
 
-impl<'a, I> SystemData<'a, I> for WithCmd {
+impl<'a> SystemData<'a> for WithCmd {
     type Value = AtomicRef<'a, CommandBuffer>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         ctx.cmd()
     }
 
@@ -206,10 +199,10 @@ impl SystemAccess for WithCmd {
 /// Access the command buffer mutably
 pub struct WithCmdMut;
 
-impl<'a, I> SystemData<'a, I> for WithCmdMut {
+impl<'a> SystemData<'a> for WithCmdMut {
     type Value = AtomicRefMut<'a, CommandBuffer>;
 
-    fn acquire(&mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
+    fn acquire(&mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
         ctx.cmd_mut()
     }
 
@@ -230,14 +223,14 @@ impl SystemAccess for WithCmdMut {
 /// Access schedule input
 pub struct WithInput<T>(pub(crate) PhantomData<T>);
 
-impl<'a, T: 'a, I: 'a> SystemData<'a, I> for WithInput<T>
-where
-    for<'x> AtomicRefCell<&'x mut I>: Extract<'a, AtomicRef<'a, T>>,
-{
+impl<'a, T: 'static> SystemData<'a> for WithInput<T> {
     type Value = AtomicRef<'a, T>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
-        ctx.input().extract()
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
+        match ctx.input() {
+            Some(v) => v,
+            None => panic!("Input does not contain {}", tynm::type_name::<T>()),
+        }
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -246,10 +239,10 @@ where
     }
 }
 
-impl<T> SystemAccess for WithInput<T> {
+impl<T: 'static> SystemAccess for WithInput<T> {
     fn access(&self, _: &World, dst: &mut Vec<Access>) {
         dst.push(Access {
-            kind: AccessKind::ContextData,
+            kind: AccessKind::Input(TypeId::of::<T>()),
             mutable: false,
         });
     }
@@ -258,14 +251,14 @@ impl<T> SystemAccess for WithInput<T> {
 /// Access schedule input mutably
 pub struct WithInputMut<T>(pub(crate) PhantomData<T>);
 
-impl<'a, T: 'a, I: 'a> SystemData<'a, I> for WithInputMut<T>
-where
-    for<'x> AtomicRefCell<&'x mut I>: Extract<'a, AtomicRefMut<'a, T>>,
-{
+impl<'a, T: 'static> SystemData<'a> for WithInputMut<T> {
     type Value = AtomicRefMut<'a, T>;
 
-    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, I>) -> Self::Value {
-        ctx.input().extract()
+    fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
+        match ctx.input_mut() {
+            Some(v) => v,
+            None => panic!("input does not contain `{}`", tynm::type_name::<T>()),
+        }
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -274,10 +267,10 @@ where
     }
 }
 
-impl<T> SystemAccess for WithInputMut<T> {
+impl<T: 'static> SystemAccess for WithInputMut<T> {
     fn access(&self, _: &World, dst: &mut Vec<Access>) {
         dst.push(Access {
-            kind: AccessKind::ContextData,
+            kind: AccessKind::Input(TypeId::of::<T>()),
             mutable: true,
         });
     }
@@ -305,8 +298,8 @@ mod test {
         let mut world = World::new();
         let mut cmd = CommandBuffer::new();
         #[allow(clippy::let_unit_value)]
-        let mut data = ();
-        let ctx = SystemContext::new(&mut world, &mut cmd, &mut data);
+        let data = ();
+        let ctx = SystemContext::new(&mut world, &mut cmd, &data);
 
         let mut spawner = |w: &mut World| {
             Entity::builder()
