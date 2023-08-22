@@ -93,6 +93,8 @@ macro_rules! tuple_impl {
 tuple_impl! { 0 => A }
 tuple_impl! { 0 => A, 1 => B }
 tuple_impl! { 0 => A, 1 => B, 2 => C }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D }
+tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E }
 
 #[cfg(test)]
 mod tests {
