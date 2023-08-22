@@ -384,7 +384,7 @@ between different libraries and users.</p>
 </span><span class="boring">            },
 </span><span class="boring">        );
 </span><span class="boring">
-</span><span class="boring">    update_distance.run_on(&amp;mut world);
+</span><span class="boring">    update_distance.run(&amp;mut world);
 </span><span class="boring">
 </span><span class="boring">    let mut update_dist = System::builder()
 </span><span class="boring">        .with_name(&quot;update_distance&quot;)
@@ -398,7 +398,7 @@ between different libraries and users.</p>
 </span><span class="boring">        });
 </span><span class="boring">
 </span><span class="boring">    for _ in 0..16 {
-</span><span class="boring">        update_dist.run_on(&amp;mut world);
+</span><span class="boring">        update_dist.run(&amp;mut world);
 </span><span class="boring">    }
 </span><span class="boring">
 </span><span class="boring">
@@ -535,10 +535,10 @@ between different libraries and users.</p>
 </span><span class="boring">            }
 </span><span class="boring">        });
 </span><span class="boring">
-</span><span class="boring">    window_system.run_on(&amp;mut world);
-</span><span class="boring">    window_system.run_on(&amp;mut world);
+</span><span class="boring">    window_system.run(&amp;mut world);
+</span><span class="boring">    window_system.run(&amp;mut world);
 </span><span class="boring">    world.set(resources(), window_height(), 720.0)?;
-</span><span class="boring">    window_system.run_on(&amp;mut world);
+</span><span class="boring">    window_system.run(&amp;mut world);
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">    Ok(())
@@ -1663,10 +1663,10 @@ a small physic calculation.</p>
             }
         });
 
-    window_system.run_on(&amp;mut world);
-    window_system.run_on(&amp;mut world);
+    window_system.run(&amp;mut world);
+    window_system.run(&amp;mut world);
     world.set(resources(), window_height(), 720.0)?;
-    window_system.run_on(&amp;mut world);
+    window_system.run(&amp;mut world);
 
 
 <span class="boring">}</span></code></pre></pre>

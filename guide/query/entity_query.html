@@ -213,10 +213,10 @@
             }
         });
 
-    window_system.run_on(&amp;mut world);
-    window_system.run_on(&amp;mut world);
+    window_system.run(&amp;mut world);
+    window_system.run(&amp;mut world);
     world.set(resources(), window_height(), 720.0)?;
-    window_system.run_on(&amp;mut world);
+    window_system.run(&amp;mut world);
 
 
 <span class="boring">}</span></code></pre></pre>
