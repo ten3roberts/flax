@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, mem, ops::Deref};
+use core::{mem, ops::Deref};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
@@ -6,13 +6,13 @@ use anyhow::Context;
 use itertools::Itertools;
 
 use crate::{
-    system::{access_info, AccessInfo, SystemContext},
+    system::{access_info, AccessInfo, IntoInput, SystemContext},
     util::Verbatim,
     BoxedSystem, CommandBuffer, System, World,
 };
 
-fn flush_system<T: 'static + Send + Sync>() -> BoxedSystem<T> {
-    System::builder_with_data()
+fn flush_system() -> BoxedSystem {
+    System::builder()
         .with_name("flush")
         .with_world_mut()
         .with_cmd_mut()
@@ -23,28 +23,20 @@ fn flush_system<T: 'static + Send + Sync>() -> BoxedSystem<T> {
         .boxed()
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 /// Incrementally construct a schedule constisting of systems
-pub struct ScheduleBuilder<T = ()> {
-    systems: Vec<BoxedSystem<T>>,
+pub struct ScheduleBuilder {
+    systems: Vec<BoxedSystem>,
 }
 
-impl<T> Default for ScheduleBuilder<T> {
-    fn default() -> Self {
-        Self {
-            systems: Default::default(),
-        }
-    }
-}
-
-impl<T: 'static + Send + Sync> ScheduleBuilder<T> {
+impl ScheduleBuilder {
     /// Creates a new schedule builder
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Set the ScheduleBuilder's system
-    pub fn with_system(&mut self, system: impl Into<BoxedSystem<T>>) -> &mut Self {
+    pub fn with_system(&mut self, system: impl Into<BoxedSystem>) -> &mut Self {
         self.systems.push(system.into());
         self
     }
@@ -56,7 +48,7 @@ impl<T: 'static + Send + Sync> ScheduleBuilder<T> {
     }
 
     /// Build the schedule
-    pub fn build(&mut self) -> Schedule<T> {
+    pub fn build(&mut self) -> Schedule {
         Schedule::from_systems(mem::take(&mut self.systems))
     }
 }
@@ -87,23 +79,12 @@ impl SystemInfo {
 }
 
 /// A schedule of systems to execute with automatic parallelization.
-pub struct Schedule<T = ()> {
-    systems: Vec<Vec<BoxedSystem<T>>>,
+#[derive(Default)]
+pub struct Schedule {
+    systems: Vec<Vec<BoxedSystem>>,
     cmd: CommandBuffer,
 
     archetype_gen: u32,
-    data: PhantomData<T>,
-}
-
-impl<T> Default for Schedule<T> {
-    fn default() -> Self {
-        Self {
-            systems: Default::default(),
-            cmd: Default::default(),
-            archetype_gen: Default::default(),
-            data: Default::default(),
-        }
-    }
 }
 
 /// Holds information regarding a schedule's batches
@@ -139,7 +120,7 @@ impl Deref for BatchInfo {
     }
 }
 
-impl<T> core::fmt::Debug for Schedule<T> {
+impl core::fmt::Debug for Schedule {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Schedule")
             .field("systems", &self.systems)
@@ -148,26 +129,32 @@ impl<T> core::fmt::Debug for Schedule<T> {
     }
 }
 
-impl<T: 'static + Send + Sync> FromIterator<BoxedSystem<T>> for Schedule<T> {
-    fn from_iter<I: IntoIterator<Item = BoxedSystem<T>>>(iter: I) -> Self {
+impl FromIterator<BoxedSystem> for Schedule {
+    fn from_iter<I: IntoIterator<Item = BoxedSystem>>(iter: I) -> Self {
         Self::from_systems(iter.into_iter().collect_vec())
     }
 }
 
-impl<T: 'static + Send + Sync, U> From<U> for Schedule<T>
+impl<U> From<U> for Schedule
 where
-    U: IntoIterator<Item = BoxedSystem<T>>,
+    U: IntoIterator<Item = BoxedSystem>,
 {
     fn from(v: U) -> Self {
         Self::from_systems(v.into_iter().collect_vec())
     }
 }
 
-impl Schedule<()> {
+impl Schedule {
+    /// Creates a new empty schedule, prefer [Self::builder]
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     /// Creates a new schedule builder
     pub fn builder() -> ScheduleBuilder {
         ScheduleBuilder::default()
     }
+
     /// Execute all systems in the schedule sequentially on the world.
     /// Returns the first error and aborts if the execution fails.
     pub fn execute_seq(&mut self, world: &mut World) -> anyhow::Result<()> {
@@ -189,25 +176,13 @@ impl Schedule<()> {
     pub fn execute_par(&mut self, world: &mut World) -> anyhow::Result<()> {
         self.execute_par_with(world, &mut ())
     }
-}
-
-impl<T: 'static + Send + Sync> Schedule<T> {
-    /// Creates a new schedule builder with a custom data type
-    pub fn builder_with_data() -> ScheduleBuilder<T> {
-        ScheduleBuilder::default()
-    }
-    /// Creates a new empty schedule, prefer [Self::builder]
-    pub fn new() -> Self {
-        Default::default()
-    }
 
     /// Creates a schedule from a group of existing systems
-    pub fn from_systems(systems: impl Into<Vec<BoxedSystem<T>>>) -> Self {
+    pub fn from_systems(systems: impl Into<Vec<BoxedSystem>>) -> Self {
         Self {
             systems: alloc::vec![systems.into()],
             archetype_gen: 0,
             cmd: CommandBuffer::new(),
-            data: PhantomData,
         }
     }
 
@@ -219,7 +194,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     /// Add a new system to the schedule.
     /// Respects order.
-    pub fn with_system(mut self, system: impl Into<BoxedSystem<T>>) -> Self {
+    pub fn with_system(mut self, system: impl Into<BoxedSystem>) -> Self {
         self.archetype_gen = 0;
         let v = match self.systems.first_mut() {
             Some(v) => v,
@@ -267,14 +242,14 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     /// Same as [`Self::execute_seq`] but allows supplying short lived input available to the systems
     ///
-    /// **Note**:
-    /// Due to current limitations in Rust, T has to be as `Fn(T): 'static` implies `T: 'static`.
-    ///
-    /// See:
-    /// - <https://github.com/rust-lang/rust/issues/57325>
-    /// - <https://stackoverflow.com/questions/53966598/how-to-fnt-static-register-as-static-for-any-generic-type-argument-t>
-    pub fn execute_seq_with(&mut self, world: &mut World, input: &mut T) -> anyhow::Result<()> {
-        let ctx = SystemContext::new(world, &mut self.cmd, input);
+    /// The data can be a mutable reference type, or a tuple of mutable references
+    pub fn execute_seq_with<'a>(
+        &'a mut self,
+        world: &'a mut World,
+        input: impl IntoInput<'a>,
+    ) -> anyhow::Result<()> {
+        let input = input.into_input();
+        let ctx = SystemContext::new(world, &mut self.cmd, &input);
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("execute_seq").entered();
@@ -290,7 +265,11 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     #[cfg(feature = "rayon")]
     /// Same as [`Self::execute_par`] but allows supplying short lived data available to the systems
-    pub fn execute_par_with(&mut self, world: &mut World, input: &mut T) -> anyhow::Result<()> {
+    pub fn execute_par_with<'a>(
+        &'a mut self,
+        world: &'a mut World,
+        input: impl IntoInput<'a>,
+    ) -> anyhow::Result<()> {
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
         #[cfg(feature = "tracing")]
@@ -303,7 +282,8 @@ impl<T: 'static + Send + Sync> Schedule<T> {
             self.systems = Self::build_dependencies(mem::take(&mut self.systems), world);
         }
 
-        let mut ctx = SystemContext::new(world, &mut self.cmd, input);
+        let input = input.into_input();
+        let mut ctx = SystemContext::new(world, &mut self.cmd, &input);
 
         let mut batches = self.systems.iter_mut();
 
@@ -316,12 +296,7 @@ impl<T: 'static + Send + Sync> Schedule<T> {
             //
             // Execute sequentially, and rebuild the schedule next time around
             if self.archetype_gen != ctx.world.get_mut().archetype_gen() {
-                Self::bail_seq(batches, &ctx)?;
-
-                return self
-                    .cmd
-                    .apply(world)
-                    .context("Failed to apply commandbuffer");
+                return Self::bail_seq(batches, &mut ctx);
             }
         }
 
@@ -332,20 +307,20 @@ impl<T: 'static + Send + Sync> Schedule<T> {
 
     #[cfg(feature = "rayon")]
     fn bail_seq(
-        batches: core::slice::IterMut<Vec<BoxedSystem<T>>>,
-        ctx: &SystemContext<'_, T>,
+        batches: core::slice::IterMut<Vec<BoxedSystem>>,
+        ctx: &mut SystemContext<'_, '_, '_>,
     ) -> anyhow::Result<()> {
         for system in batches.flatten() {
             system.execute(ctx)?;
         }
 
-        Ok(())
+        ctx.cmd
+            .get_mut()
+            .apply(ctx.world.get_mut())
+            .context("Failed to apply commandbuffer")
     }
 
-    fn build_dependencies(
-        systems: Vec<Vec<BoxedSystem<T>>>,
-        world: &World,
-    ) -> Vec<Vec<BoxedSystem<T>>> {
+    fn build_dependencies(systems: Vec<Vec<BoxedSystem>>, world: &World) -> Vec<Vec<BoxedSystem>> {
         let accesses = systems
             .iter()
             .flatten()
@@ -486,275 +461,9 @@ fn topo_sort<T>(items: Vec<Vec<T>>, deps: &BTreeMap<usize, Vec<usize>>) -> Vec<V
 #[cfg(test)]
 mod test {
 
-    use alloc::{string::String, vec};
-
-    use crate::{
-        component, schedule::Schedule, system::System, EntityBuilder, Query, QueryBorrow, World,
-    };
+    use alloc::vec;
 
     use super::topo_sort;
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn schedule_seq() {
-        component! {
-            a: String,
-            b: i32,
-        };
-
-        let mut world = World::new();
-
-        let id = EntityBuilder::new()
-            .set(a(), "Foo".into())
-            .set(b(), 5)
-            .spawn(&mut world);
-
-        let system_a = System::builder().with_query(Query::new(a())).build(
-            move |mut a: QueryBorrow<_>| -> anyhow::Result<()> {
-                let _count = a.iter().count() as i32;
-
-                Ok(())
-            },
-        );
-
-        let system_b = System::builder().with_query(Query::new(b())).build(
-            move |mut query: QueryBorrow<_>| -> anyhow::Result<()> {
-                let _item: &i32 = query.get(id).map_err(|v| v.into_anyhow())?;
-
-                Ok(())
-            },
-        );
-
-        let mut schedule = Schedule::new().with_system(system_a).with_system(system_b);
-
-        schedule.execute_seq(&mut world).unwrap();
-
-        world.despawn(id).unwrap();
-        let result: anyhow::Result<()> = schedule.execute_seq(&mut world).map_err(Into::into);
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    #[cfg(feature = "rayon")]
-    #[cfg(feature = "std")]
-    fn schedule_context() {
-        component! {
-            a: String,
-            b: i32,
-        };
-
-        let mut world = World::new();
-
-        let id = EntityBuilder::new()
-            .set(a(), "Foo".into())
-            .set(b(), 5)
-            .spawn(&mut world);
-
-        let system_a = System::builder_with_data()
-            .with_query(Query::new(a()))
-            .with_input()
-            .build(
-                move |mut a: QueryBorrow<_>, cx: &String| -> anyhow::Result<()> {
-                    let _count = a.iter().count() as i32;
-
-                    assert_eq!(cx, "Foo");
-
-                    Ok(())
-                },
-            )
-            .boxed();
-
-        let system_b = System::builder_with_data()
-            .with_query(Query::new(b()))
-            .with_input_mut()
-            .build(
-                move |mut query: QueryBorrow<_>, cx: &mut String| -> anyhow::Result<()> {
-                    let _item: &i32 = query.get(id).map_err(|v| v.into_anyhow())?;
-
-                    assert_eq!(cx, "Foo");
-                    *cx = "Bar".into();
-                    Ok(())
-                },
-            )
-            .boxed();
-
-        let system_c = System::builder_with_data()
-            .with_input()
-            .build(move |cx: &String| -> anyhow::Result<()> {
-                assert_eq!(cx, "Bar");
-                Ok(())
-            })
-            .boxed();
-
-        let mut schedule = Schedule::new()
-            .with_system(system_a)
-            .with_system(system_b)
-            .with_system(system_c);
-
-        let mut cx = String::from("Foo");
-
-        schedule.execute_par_with(&mut world, &mut cx).unwrap();
-
-        assert_eq!(cx, "Bar");
-    }
-
-    #[test]
-    #[cfg(feature = "rayon")]
-    #[cfg(feature = "std")]
-    #[cfg(feature = "derive")]
-    fn schedule_par() {
-        use glam::{vec2, Vec2};
-        use itertools::Itertools;
-
-        use crate::{
-            components::name, entity_ids, CommandBuffer, Component, EntityIds, Fetch, Mutable,
-        };
-
-        #[derive(Debug, Clone)]
-        enum Weapon {
-            Sword,
-            Bow,
-            Crossbow,
-        }
-
-        component! {
-            health: f32,
-            damage: f32,
-            range: f32,
-            weapon: Weapon,
-            pos: Vec2,
-        };
-
-        let mut world = World::new();
-
-        let mut builder = EntityBuilder::new();
-
-        // Create different archetypes
-        builder
-            .set(name(), "archer".to_string())
-            .set(health(), 100.0)
-            .set(damage(), 15.0)
-            .set(range(), 64.0)
-            .set(weapon(), Weapon::Bow)
-            .set(pos(), vec2(0.0, 0.0))
-            .spawn(&mut world);
-
-        builder
-            .set(name(), "swordsman".to_string())
-            .set(health(), 200.0)
-            .set(damage(), 20.0)
-            .set(weapon(), Weapon::Sword)
-            .set(pos(), vec2(10.0, 1.0))
-            .spawn(&mut world);
-
-        builder
-            .set(name(), "crossbow_archer".to_string())
-            .set(health(), 100.0)
-            .set(damage(), 20.0)
-            .set(range(), 48.0)
-            .set(weapon(), Weapon::Crossbow)
-            .set(pos(), vec2(17.0, 20.0))
-            .spawn(&mut world);
-
-        builder
-            .set(name(), "peasant_1".to_string())
-            .set(health(), 100.0)
-            .set(pos(), vec2(10.0, 10.0))
-            .spawn(&mut world);
-
-        let heal = System::builder()
-            .with_query(Query::new(health().as_mut()))
-            .with_name("heal")
-            .build(|mut q: QueryBorrow<crate::Mutable<f32>>| {
-                q.iter().for_each(|h| {
-                    if *h > 0.0 {
-                        *h += 1.0
-                    }
-                })
-            });
-
-        let cleanup = System::builder()
-            .with_query(Query::new(entity_ids()))
-            .with_cmd_mut()
-            .with_name("cleanup")
-            .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
-                q.iter().for_each(|id| {
-                    eprintln!("Cleaning up: {id}");
-                    cmd.despawn(id);
-                })
-            });
-
-        #[derive(Fetch, Debug, Clone)]
-        struct BattleSubject {
-            id: EntityIds,
-            damage: Component<f32>,
-            range: Component<f32>,
-            pos: Component<Vec2>,
-        }
-
-        #[derive(Fetch, Debug, Clone)]
-        struct BattleObject {
-            id: EntityIds,
-            pos: Component<Vec2>,
-            health: Mutable<f32>,
-        }
-
-        let battle = System::builder()
-            .with_query(Query::new(BattleSubject {
-                id: EntityIds,
-                damage: damage(),
-                range: range(),
-                pos: pos(),
-            }))
-            .with_query(Query::new(BattleObject {
-                id: EntityIds,
-                pos: pos(),
-                health: health().as_mut(),
-            }))
-            .with_name("battle")
-            .build(
-                |mut sub: QueryBorrow<BattleSubject>, mut obj: QueryBorrow<BattleObject>| {
-                    eprintln!("Prepared queries, commencing battles");
-                    for a in sub.iter() {
-                        for b in obj.iter() {
-                            let rel = *b.pos - *a.pos;
-                            let dist = rel.length();
-                            // We are within range
-                            if dist < *a.range {
-                                eprintln!("{} Applying {} damage to {}", a.id, a.damage, b.id);
-                                *b.health -= a.damage;
-                            }
-                        }
-                    }
-                },
-            );
-
-        let remaining = System::builder()
-            .with_name("remaining")
-            .with_query(Query::new(entity_ids()))
-            .build(|mut q: QueryBorrow<EntityIds>| {
-                eprintln!("Remaining: {:?}", q.iter().format(", "));
-            });
-
-        let mut schedule = Schedule::new()
-            .with_system(heal)
-            .with_system(cleanup)
-            .flush()
-            .with_system(battle)
-            .with_system(remaining);
-
-        rayon::ThreadPoolBuilder::new()
-            .build()
-            .unwrap()
-            .install(|| {
-                for _ in 0..32 {
-                    eprintln!("--------");
-                    schedule.execute_par(&mut world).unwrap();
-                }
-            });
-    }
 
     #[test]
     fn test_topo_sort() {

@@ -62,7 +62,7 @@ fn main() -> anyhow::Result<()> {
 
     // ANCHOR_END: system_func
 
-    update_distance.run_on(&mut world)?;
+    update_distance.run(&mut world)?;
 
     // ANCHOR: add_missing
     fn add_distance_system() -> BoxedSystem {
