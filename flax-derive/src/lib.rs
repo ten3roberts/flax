@@ -1,13 +1,14 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, iter::once};
 
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use proc_macro2::{Span, TokenStream};
 use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
 use syn::{
-    bracketed, parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, DataStruct,
-    DeriveInput, Error, GenericParam, Generics, Ident, ImplGenerics, Index, Lifetime,
-    LifetimeParam, Result, Token, Type, TypeGenerics, TypeParam, Visibility,
+    bracketed, parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, BoundLifetimes,
+    DataStruct, DeriveInput, Error, Field, Fields, FieldsNamed, GenericParam, Generics, Ident,
+    ImplGenerics, Index, Lifetime, LifetimeParam, PredicateType, Result, Token, Type, TypeGenerics,
+    TypeParam, Visibility, WherePredicate,
 };
 
 /// ```rust,ignore
@@ -15,10 +16,20 @@ use syn::{
 /// #[derive(Fetch)]
 /// #[fetch(item_derives = [Debug], transforms = [Modified])]
 /// struct CustomFetch {
-///     position: Component<Vec3>,
+///     #[fetch(ignore)]
 ///     rotation: Mutable<Quat>,
+///     position: Component<Vec3>,
+///     id: EntityIds,
 /// }
 /// ```
+/// # Struct Attributes
+///
+/// - `item_derives`: Derive additional traits for the item returned by the fetch.
+/// - `transforms`: Implement [flax::fetch::transform::Transform] for the specified transform kinds.
+///
+/// # Field Attributes
+/// - `ignore`: ignore slot-filtering and transformations for a field.
+///     Useful for including a `Mutable` in a change query.
 #[proc_macro_derive(Fetch, attributes(fetch))]
 pub fn derive_fetch(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let crate_name = match proc_macro_crate::crate_name("flax").expect("Failed to get crate name") {
@@ -51,7 +62,7 @@ fn derive_data_struct(
 
     match data.fields {
         syn::Fields::Named(_) => {
-            let params = Params::new(&crate_name, &input.vis, input, &attrs);
+            let params = Params::new(&crate_name, &input.vis, input, &attrs)?;
 
             let prepared_derive = derive_prepared_struct(&params);
 
@@ -59,7 +70,7 @@ fn derive_data_struct(
 
             let union_derive = derive_union(&params);
 
-            let transforms_derive = derive_transform(&params);
+            let transforms_derive = derive_transform(&params)?;
 
             Ok(quote! {
                 #fetch_derive
@@ -90,10 +101,9 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         item_name,
         prepared_name,
         q_generics,
+        fields,
         field_names,
         field_types,
-        w_lf,
-        q_lf,
         attrs,
         ..
     } = params;
@@ -114,11 +124,22 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
     let fetch_impl = params.w_impl();
     let fetch_ty = params.base_ty();
 
+    let item_fields = fields
+        .iter()
+        .map(|v| {
+            let ident = v.ident;
+            let ty = v.ty;
+            quote! {
+                #ident: <#ty as #crate_name::fetch::FetchItem<'q>>::Item,
+            }
+        })
+        .collect::<TokenStream>();
+
     quote! {
         #[doc = #item_msg]
         #extras
         #vis struct #item_name #q_generics {
-            #(#field_names: <#field_types as #crate_name::fetch::FetchItem<#q_lf>>::Item,)*
+            #item_fields
         }
 
         // #vis struct #batch_name #wq_generics {
@@ -126,15 +147,15 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         // }
 
         // #[automatically_derived]
-        impl #item_impl #crate_name::fetch::FetchItem<#q_lf> for #fetch_name #fetch_ty {
+        impl #item_impl #crate_name::fetch::FetchItem<'q> for #fetch_name #fetch_ty {
             type Item = #item_name #item_ty;
         }
 
         #[automatically_derived]
-        impl #fetch_impl #crate_name::Fetch<#w_lf> for #fetch_name #fetch_ty
+        impl #fetch_impl #crate_name::Fetch<'w> for #fetch_name #fetch_ty
             where #(#field_types: 'static,)*
         {
-            const MUTABLE: bool = #(<#field_types as #crate_name::Fetch <#w_lf>>::MUTABLE)||*;
+            const MUTABLE: bool = #(<#field_types as #crate_name::Fetch <'w>>::MUTABLE)||*;
 
             type Prepared = #prepared_name #prep_ty;
 
@@ -183,6 +204,7 @@ fn prepend_generics(prepend: &[GenericParam], generics: &Generics) -> Generics {
 fn derive_union(params: &Params) -> TokenStream {
     let Params {
         crate_name,
+        fields,
         field_names,
         prepared_name,
         ..
@@ -192,39 +214,62 @@ fn derive_union(params: &Params) -> TokenStream {
 
     let prep_ty = params.w_ty();
 
+    let filter_fields = fields.iter().filter(|v| !v.attrs.ignore).map(|v| v.ident);
+
     quote! {
         #[automatically_derived]
         impl #impl_generics #crate_name::fetch::UnionFilter for #prepared_name #prep_ty where #prepared_name #prep_ty: #crate_name::fetch::PreparedFetch<'q> {
             unsafe fn filter_union(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
-                #crate_name::fetch::PreparedFetch::filter_slots(&mut #crate_name::filter::Union((#(&mut self.#field_names,)*)), slots)
+                #crate_name::fetch::PreparedFetch::filter_slots(&mut #crate_name::filter::Union((#(&mut self.#filter_fields,)*)), slots)
             }
         }
     }
 }
 
 /// Implements the filtering of the struct fields using a set union
-fn derive_transform(params: &Params) -> TokenStream {
+fn derive_transform(params: &Params) -> Result<TokenStream> {
     let Params {
         crate_name,
         vis,
+        fields,
         fetch_name,
-        field_names,
-        field_types,
         attrs,
         ..
     } = params;
 
     // Replace all the fields with generics to allow transforming into different types
     let ty_generics = ('A'..='Z')
-        .map(|c| format_ident!("{}", c))
+        .zip(fields)
+        .filter(|(_, v)| !v.attrs.ignore)
+        .map(|(c, _)| format_ident!("{}", c))
         .map(|v| GenericParam::Type(TypeParam::from(v)))
-        .take(params.field_types.len())
         .collect_vec();
 
     let transformed_name = format_ident!("{fetch_name}Transformed");
-    let transformed_struct = quote! {
-        #vis struct #transformed_name<#(#ty_generics: for<'x> #crate_name::fetch::Fetch<'x>),*>{
-            #(#field_names: #ty_generics,)*
+    use quote::ToTokens;
+
+    let transformed_struct = {
+        let fields = ('A'..='Z').zip(fields).map(|(c, field)| {
+            let ty = if field.attrs.ignore {
+                field.ty.to_token_stream()
+            } else {
+                format_ident!("{}", c).to_token_stream()
+            };
+
+            let ident = field.ident;
+            let raw_attrs = field.raw_attrs;
+            quote! {
+                // #(#raw_attrs)*
+               #ident: #ty,
+            }
+        });
+
+        // eprintln!("types: {:?}", types);
+
+        quote! {
+            #vis struct #transformed_name<#(#ty_generics: for<'x> #crate_name::fetch::Fetch<'x>),*>{
+                #(#fields)*
+            }
         }
     };
 
@@ -232,34 +277,72 @@ fn derive_transform(params: &Params) -> TokenStream {
         syn::parse2::<DeriveInput>(transformed_struct).expect("Generated struct is always valid");
 
     let transformed_attrs = Attrs::default();
-    let transformed_params = Params::new(crate_name, vis, &input, &transformed_attrs);
+
+    let mut transformed_params = Params::new(crate_name, vis, &input, &transformed_attrs)?;
+    for (dst, src) in transformed_params.fields.iter_mut().zip(fields) {
+        dst.attrs = src.attrs.clone();
+    }
 
     let fetch = derive_fetch_struct(&transformed_params);
 
     let prepared = derive_prepared_struct(&transformed_params);
     let union = derive_union(&transformed_params);
 
-    let transforms = attrs.transforms.iter().map(|method| {
-        let method = method.to_tokens(crate_name);
+    let transforms = attrs
+        .transforms
+        .iter()
+        .map(|method| {
+            let method = method.to_tokens(crate_name);
 
-        let trait_name = quote! { #crate_name::fetch::TransformFetch<#method> };
+            let trait_name = quote! { #crate_name::fetch::TransformFetch<#method> };
 
-        quote! {
+            let types = fields
+                .iter()
+                .filter_map(|field| {
+                    if field.attrs.ignore {
+                        None
+                    } else {
+                        let ty = field.ty;
+                        Some(quote! {
+                            <#ty as #trait_name>::Output
+                        })
+                    }
+                })
+                .collect_vec();
 
-            #[automatically_derived]
-            impl #trait_name for #fetch_name
-            {
-                type Output = #crate_name::filter::Union<#transformed_name<#(<#field_types as #trait_name>::Output,)*>>;
-                fn transform_fetch(self, method: #method) -> Self::Output {
-                    #crate_name::filter::Union(#transformed_name {
-                        #(#field_names: <#field_types as #trait_name>::transform_fetch(self.#field_names, method),)*
-                    })
+            let initializers = fields
+                .iter()
+                .map(|field| {
+                    let ident = field.ident;
+                    let ty = field.ty;
+                    if field.attrs.ignore {
+                        quote! {
+                            #ident: self.#ident
+                        }
+                    } else {
+                        quote! {
+                            #ident: <#ty as #trait_name>::transform_fetch(self.#ident, method)
+                        }
+                    }
+                })
+                .collect_vec();
+
+            quote! {
+                #[automatically_derived]
+                impl #trait_name for #fetch_name
+                {
+                    type Output = #crate_name::filter::Union<#transformed_name<#(#types,)*>>;
+                    fn transform_fetch(self, method: #method) -> Self::Output {
+                        #crate_name::filter::Union(#transformed_name {
+                            #(#initializers,)*
+                        })
+                    }
                 }
             }
-        }
-    }).collect_vec();
+        })
+        .collect_vec();
 
-    quote! {
+    Ok(quote! {
         #input
 
         #fetch
@@ -269,7 +352,7 @@ fn derive_transform(params: &Params) -> TokenStream {
         #union
 
         #(#transforms)*
-    }
+    })
 }
 
 fn derive_prepared_struct(params: &Params) -> TokenStream {
@@ -279,6 +362,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
         fetch_name,
         item_name,
         prepared_name,
+        fields,
         field_names,
         field_types,
         w_generics,
@@ -291,7 +375,8 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
     let prep_ty = params.w_ty();
     let item_ty = params.q_ty();
 
-    let field_idx = (0..field_names.len()).map(Index::from).collect_vec();
+    let field_idx = (0..field_names.len()).map(Index::from);
+    let filter_fields = fields.iter().filter(|v| !v.attrs.ignore).map(|v| v.ident);
 
     quote! {
         #[doc = #msg]
@@ -315,7 +400,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
 
             #[inline]
             unsafe fn filter_slots(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
-                #crate_name::fetch::PreparedFetch::filter_slots(&mut (#(&mut self.#field_names,)*), slots)
+                #crate_name::fetch::PreparedFetch::filter_slots(&mut (#(&mut self.#filter_fields,)*), slots)
             }
 
             #[inline]
@@ -325,6 +410,76 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
                 )
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ParsedField<'a> {
+    ty: &'a Type,
+    ident: &'a Ident,
+    attrs: FieldAttrs,
+    raw_attrs: &'a [Attribute],
+}
+
+impl<'a> ParsedField<'a> {
+    fn get(field: &'a Field) -> Result<Self> {
+        let attrs = FieldAttrs::get(&field.attrs)?;
+
+        let ident = field
+            .ident
+            .as_ref()
+            .ok_or(Error::new(field.span(), "Only named fields are supported"))?;
+
+        Ok(Self {
+            ty: &field.ty,
+            ident,
+            attrs,
+            raw_attrs: &field.attrs,
+        })
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+struct FieldAttrs {
+    ignore: bool,
+}
+
+impl FieldAttrs {
+    fn get(input: &[Attribute]) -> Result<Self> {
+        let mut res = Self::default();
+
+        for attr in input {
+            if !attr.path().is_ident("fetch") {
+                continue;
+            }
+
+            match &attr.meta {
+                syn::Meta::List(list) => {
+                    // Parse list
+
+                    list.parse_nested_meta(|meta| {
+                        // item = [Debug, PartialEq]
+                        if meta.path.is_ident("ignore") {
+                            res.ignore = true;
+                            Ok(())
+                        } else {
+                            Err(Error::new(
+                                meta.path.span(),
+                                "Unknown fetch field attribute",
+                            ))
+                        }
+                    })?;
+                }
+                _ => {
+                    return Err(Error::new(
+                        Span::call_site(),
+                        "Expected a MetaList for `fetch`",
+                    ))
+                }
+            };
+        }
+
+        Ok(res)
     }
 }
 
@@ -401,6 +556,7 @@ struct Params<'a> {
     q_generics: Generics,
     wq_generics: Generics,
 
+    fields: Vec<ParsedField<'a>>,
     field_names: Vec<&'a Ident>,
     field_types: Vec<&'a Type>,
 
@@ -415,7 +571,7 @@ impl<'a> Params<'a> {
         vis: &'a Visibility,
         input: &'a DeriveInput,
         attrs: &'a Attrs,
-    ) -> Self {
+    ) -> Result<Self> {
         let fields = match &input.data {
             syn::Data::Struct(data) => match &data.fields {
                 syn::Fields::Named(fields) => fields,
@@ -425,23 +581,32 @@ impl<'a> Params<'a> {
             _ => unreachable!(),
         };
 
-        let field_names = fields
+        let field_types = fields.named.iter().map(|v| &v.ty).collect_vec();
+        let field_attrs = fields
             .named
             .iter()
-            .map(|v| v.ident.as_ref().unwrap())
-            .collect_vec();
-
-        let field_types = fields.named.iter().map(|v| &v.ty).collect_vec();
+            .map(|v| FieldAttrs::get(&v.attrs))
+            .collect::<Result<Vec<_>>>()?;
 
         let fetch_name = input.ident.clone();
 
         let w_lf = LifetimeParam::new(Lifetime::new("'w", Span::call_site()));
         let q_lf = LifetimeParam::new(Lifetime::new("'q", Span::call_site()));
 
-        Self {
+        let fields = fields
+            .named
+            .iter()
+            .map(ParsedField::get)
+            .collect::<Result<Vec<_>>>()?;
+
+        let field_names = fields.iter().map(|v| v.ident).collect_vec();
+        let field_types = fields.iter().map(|v| v.ty).collect_vec();
+
+        Ok(Self {
             crate_name,
             vis,
             generics: &input.generics,
+            fields,
             field_names,
             field_types,
             attrs,
@@ -461,7 +626,7 @@ impl<'a> Params<'a> {
 
             w_lf,
             q_lf,
-        }
+        })
     }
 
     fn q_impl(&self) -> ImplGenerics {
