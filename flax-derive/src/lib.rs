@@ -1,31 +1,29 @@
-use std::{collections::BTreeSet, iter::once};
+use std::collections::BTreeSet;
 
-use itertools::{izip, Itertools};
+use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
 use syn::{
-    bracketed, parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, BoundLifetimes,
-    DataStruct, DeriveInput, Error, Field, Fields, FieldsNamed, GenericParam, Generics, Ident,
-    ImplGenerics, Index, Lifetime, LifetimeParam, PredicateType, Result, Token, Type, TypeGenerics,
-    TypeParam, Visibility, WherePredicate,
+    bracketed, parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, DataStruct,
+    DeriveInput, Error, Field, GenericParam, Generics, Ident, ImplGenerics, Index, Lifetime,
+    LifetimeParam, Result, Token, Type, TypeGenerics, TypeParam, Visibility,
 };
 
 /// ```rust,ignore
-/// use glam::*;
 /// #[derive(Fetch)]
 /// #[fetch(item_derives = [Debug], transforms = [Modified])]
 /// struct CustomFetch {
 ///     #[fetch(ignore)]
-///     rotation: Mutable<Quat>,
-///     position: Component<Vec3>,
+///     rotation: Mutable<glam::Quat>,
+///     position: Component<glam::Vec3>,
 ///     id: EntityIds,
 /// }
 /// ```
 /// # Struct Attributes
 ///
 /// - `item_derives`: Derive additional traits for the item returned by the fetch.
-/// - `transforms`: Implement [flax::fetch::transform::Transform] for the specified transform kinds.
+/// - `transforms`: Implement `Transform` for the specified transform kinds.
 ///
 /// # Field Attributes
 /// - `ignore`: ignore slot-filtering and transformations for a field.
@@ -205,7 +203,6 @@ fn derive_union(params: &Params) -> TokenStream {
     let Params {
         crate_name,
         fields,
-        field_names,
         prepared_name,
         ..
     } = params;
@@ -257,9 +254,7 @@ fn derive_transform(params: &Params) -> Result<TokenStream> {
             };
 
             let ident = field.ident;
-            let raw_attrs = field.raw_attrs;
             quote! {
-                // #(#raw_attrs)*
                #ident: #ty,
             }
         });
@@ -418,7 +413,6 @@ struct ParsedField<'a> {
     ty: &'a Type,
     ident: &'a Ident,
     attrs: FieldAttrs,
-    raw_attrs: &'a [Attribute],
 }
 
 impl<'a> ParsedField<'a> {
@@ -434,7 +428,6 @@ impl<'a> ParsedField<'a> {
             ty: &field.ty,
             ident,
             attrs,
-            raw_attrs: &field.attrs,
         })
     }
 }
@@ -560,8 +553,6 @@ struct Params<'a> {
     field_names: Vec<&'a Ident>,
     field_types: Vec<&'a Type>,
 
-    w_lf: LifetimeParam,
-    q_lf: LifetimeParam,
     attrs: &'a Attrs,
 }
 
@@ -580,13 +571,6 @@ impl<'a> Params<'a> {
 
             _ => unreachable!(),
         };
-
-        let field_types = fields.named.iter().map(|v| &v.ty).collect_vec();
-        let field_attrs = fields
-            .named
-            .iter()
-            .map(|v| FieldAttrs::get(&v.attrs))
-            .collect::<Result<Vec<_>>>()?;
 
         let fetch_name = input.ident.clone();
 
@@ -623,9 +607,6 @@ impl<'a> Params<'a> {
                 ],
                 &input.generics,
             ),
-
-            w_lf,
-            q_lf,
         })
     }
 
