@@ -1,5 +1,6 @@
 use crate::{
     archetype::ChangeKind, filter::ChangeFilter, filter::Union, Component, ComponentValue,
+    EntityIds, Mutable,
 };
 
 /// Allows transforming a fetch into another.
@@ -28,6 +29,7 @@ impl<T: ComponentValue> TransformFetch<Added> for Component<T> {
         self.into_change_filter(ChangeKind::Added)
     }
 }
+
 /// Marker for a fetch which has been transformed to filter modified items.
 #[derive(Debug, Clone, Copy)]
 pub struct Modified;
@@ -232,19 +234,28 @@ mod tests {
     #[test]
     #[cfg(feature = "derive")]
     fn query_inserted_struct() {
-        use crate::{fetch::Cloned, Component, Fetch};
+        use crate::{fetch::Cloned, Component, EntityIds, Fetch, Mutable};
+
+        #[derive(Debug)]
+        struct Custom;
 
         component! {
             a: i32,
             b: String,
+            c: Custom,
             other: (),
         }
 
         #[derive(Fetch)]
         #[fetch(item_derives = [Debug], transforms = [Modified, Added])]
         struct MyFetch {
+            #[fetch(ignore)]
+            id: EntityIds,
+
             a: Component<i32>,
             b: Cloned<Component<String>>,
+            #[fetch(ignore)]
+            c: Mutable<Custom>,
         }
 
         let mut world = World::new();
@@ -252,40 +263,46 @@ mod tests {
         let id1 = Entity::builder()
             .set(a(), 0)
             .set(b(), "Hello".into())
+            .set(c(), Custom)
             .spawn(&mut world);
 
         let id2 = Entity::builder()
             .set(a(), 1)
             .set(b(), "World".into())
+            .set(c(), Custom)
             .spawn(&mut world);
 
         let id3 = Entity::builder()
             // .set(a(), 0)
             .set(b(), "There".into())
+            .set(c(), Custom)
             .spawn(&mut world);
 
         // Force to a different archetype
         let id4 = Entity::builder()
             .set(a(), 2)
             .set(b(), "!".into())
+            .set(c(), Custom)
             .tag(other())
             .spawn(&mut world);
 
         let query = MyFetch {
+            id: entity_ids(),
             a: a(),
             b: b().cloned(),
+            c: c().as_mut(),
         }
         .added()
-        .map(|v| (*v.a, v.b));
+        .map(|v| (v.id, *v.a, v.b));
 
-        let mut query = Query::new((entity_ids(), query));
+        let mut query = Query::new(query);
 
         assert_eq!(
             query.collect_vec(&world),
             [
-                (id1, (0, "Hello".to_string())),
-                (id2, (1, "World".to_string())),
-                (id4, (2, "!".to_string()))
+                (id1, 0, "Hello".to_string()),
+                (id2, 1, "World".to_string()),
+                (id4, 2, "!".to_string())
             ]
         );
 
@@ -299,16 +316,13 @@ mod tests {
 
         world.set(id2, a(), 5).unwrap();
 
-        assert_eq!(query.collect_vec(&world), [(id2, (5, "World".to_string()))]);
+        assert_eq!(query.collect_vec(&world), [(id2, 5, "World".to_string())]);
 
         // Adding the required component to id3 will cause it to be picked up by the query
         let mut cmd = CommandBuffer::new();
         cmd.set(id3, a(), -1).apply(&mut world).unwrap();
 
-        assert_eq!(
-            query.collect_vec(&world),
-            [(id3, (-1, "There".to_string()))]
-        );
+        assert_eq!(query.collect_vec(&world), [(id3, -1, "There".to_string())]);
     }
 
     #[test]

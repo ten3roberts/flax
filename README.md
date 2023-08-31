@@ -18,8 +18,7 @@ Consider reading the [User Guide](https://ten3roberts.github.io/flax/guide)
 
 ## Features
 
-- [Declarative component macro](https://docs.rs/flax/latest/flax/macro.component.html)
-- [Queries](https://docs.rs/flax/latest/flax/struct.Query.html)
+- [Queries](https://docs.rs/flax/latest/flax/query/struct.Query.html)
 - [Change detection](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified)
 - [Query filtering](https://docs.rs/flax/latest/flax/filter/index.html)
 - [System execution](https://docs.rs/flax/latest/flax/system/struct.System.html)
@@ -29,6 +28,7 @@ Consider reading the [User Guide](https://ten3roberts.github.io/flax/guide)
 - [Ergonomic entity builder](https://docs.rs/flax/latest/flax/struct.EntityBuilder.html)
 - [Serialization and deserialization](https://docs.rs/flax/latest/flax/serialize/)
 - [(async) event subscription](https://docs.rs/flax/latest/flax/struct.World.html#method.subscribe)
+- [Declarative component macro](https://docs.rs/flax/latest/flax/macro.component.html)
 - [Runtime components](https://docs.rs/flax/latest/flax/struct.World.html#method.spawn_component)
 - ...and more
 
@@ -100,7 +100,7 @@ schedule.execute_par(&mut world)?;
 ```
 ## Relations
 
-Flax provides first class many-many relations between entities, which is useful for tree scene
+Flax provides first class many to many relations between entities, which is useful for scene
 hierarchies, graphs, and physics joints between entities.
 
 Relations can be both state-less or have associated data, like spring or joint strengths.
