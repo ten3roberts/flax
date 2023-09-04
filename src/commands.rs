@@ -5,7 +5,7 @@ use anyhow::Context;
 
 use crate::{
     buffer::MultiComponentBuffer,
-    writer::{MissingDyn, SingleComponentWriter},
+    writer::{MissingDyn, SingleComponentWriter, WriteDedupDyn},
     BatchSpawn, Component, ComponentDesc, ComponentValue, Entity, EntityBuilder, World,
 };
 
@@ -25,6 +25,12 @@ enum Command {
         id: Entity,
         desc: ComponentDesc,
         offset: usize,
+    },
+    SetDedup {
+        id: Entity,
+        desc: ComponentDesc,
+        offset: usize,
+        cmp: unsafe fn(*const u8, *const u8) -> bool,
     },
     SetMissing {
         id: Entity,
@@ -57,6 +63,17 @@ impl fmt::Debug for Command {
                 .finish(),
             Self::Set { id, desc, offset } => f
                 .debug_struct("Set")
+                .field("id", id)
+                .field("desc", desc)
+                .field("offset", offset)
+                .finish(),
+            Self::SetDedup {
+                id,
+                desc,
+                offset,
+                cmp: _,
+            } => f
+                .debug_struct("SetDedup")
                 .field("id", id)
                 .field("desc", desc)
                 .field("offset", offset)
@@ -120,6 +137,32 @@ impl CommandBuffer {
             id,
             desc: component.desc(),
             offset,
+        });
+
+        self
+    }
+
+    /// Set a component for `id`.
+    ///
+    /// Does not trigger a modification event if the value is the same
+    pub fn set_dedup<T: ComponentValue + PartialEq>(
+        &mut self,
+        id: Entity,
+        component: Component<T>,
+        value: T,
+    ) -> &mut Self {
+        let offset = self.inserts.push(value);
+        unsafe fn cmp<T: PartialEq>(a: *const u8, b: *const u8) -> bool {
+            let a = &*(a as *const T);
+            let b = &*(b as *const T);
+
+            a == b
+        }
+        self.commands.push(Command::SetDedup {
+            id,
+            desc: component.desc(),
+            offset,
+            cmp: cmp::<T>,
         });
 
         self
@@ -243,6 +286,21 @@ impl CommandBuffer {
                         .map_err(|v| v.into_anyhow())
                         .with_context(|| format!("Failed to set component {}", desc.name()))?;
                 },
+                Command::SetDedup {
+                    id,
+                    desc,
+                    offset,
+                    cmp,
+                } => unsafe {
+                    let value = self.inserts.take_dyn(offset);
+                    world
+                        .set_with_writer(
+                            id,
+                            SingleComponentWriter::new(desc, WriteDedupDyn { value, cmp }),
+                        )
+                        .map_err(|v| v.into_anyhow())
+                        .with_context(|| format!("Failed to set component {}", desc.name()))?;
+                },
                 Command::SetMissing { id, desc, offset } => unsafe {
                     let value = self.inserts.take_dyn(offset);
                     world
@@ -311,5 +369,41 @@ mod tests {
         cmd.apply(&mut world).unwrap();
 
         assert_eq!(query.collect_vec(&world), [(false, "Foo".to_string())]);
+    }
+
+    #[test]
+    fn set_dedup() {
+        use alloc::string::String;
+        use alloc::string::ToString;
+
+        component! {
+            a: String,
+        }
+
+        let mut world = World::new();
+        let mut cmd = CommandBuffer::new();
+
+        let mut query = Query::new((a().modified().satisfied(), a().cloned()));
+
+        let id = EntityBuilder::new().spawn(&mut world);
+
+        assert!(query.collect_vec(&world).is_empty());
+
+        cmd.set_dedup(id, a(), "Foo".into())
+            .set_dedup(id, a(), "Bar".into());
+
+        cmd.apply(&mut world).unwrap();
+
+        assert_eq!(query.collect_vec(&world), [(true, "Bar".to_string())]);
+        assert_eq!(query.collect_vec(&world), [(false, "Bar".to_string())]);
+
+        cmd.set_dedup(id, a(), "Baz".into());
+        cmd.apply(&mut world).unwrap();
+
+        assert_eq!(query.collect_vec(&world), [(true, "Baz".to_string())]);
+
+        cmd.set_dedup(id, a(), "Baz".into());
+        cmd.apply(&mut world).unwrap();
+        assert_eq!(query.collect_vec(&world), [(false, "Baz".to_string())]);
     }
 }
