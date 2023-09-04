@@ -282,6 +282,43 @@ impl<T: ComponentValue + PartialEq> ComponentPusher for WriteDedup<T> {
     }
 }
 
+pub(crate) struct WriteDedupDyn {
+    pub(crate) value: *mut u8,
+    pub(crate) cmp: unsafe fn(*const u8, *const u8) -> bool,
+}
+
+impl ComponentUpdater for WriteDedupDyn {
+    type Updated = ();
+
+    unsafe fn update(self, data: &mut CellData, slot: Slot, id: Entity, tick: u32) {
+        let desc = data.storage.desc();
+        unsafe {
+            let dst = data.storage.at_mut(slot).unwrap();
+
+            if (self.cmp)(self.value, dst) {
+                return;
+            }
+
+            desc.drop(dst);
+
+            ptr::copy_nonoverlapping(self.value, dst, desc.size());
+        }
+
+        data.set_modified(&[id], Slice::single(slot), tick);
+    }
+}
+
+impl ComponentPusher for WriteDedupDyn {
+    type Pushed = ();
+
+    unsafe fn push(self, data: &mut CellData, id: Entity, tick: u32) {
+        let slot = data.storage.len();
+        data.storage.extend(self.value, 1);
+
+        data.set_added(&[id], Slice::single(slot), tick);
+    }
+}
+
 pub(crate) struct ReplaceDyn {
     pub(crate) value: *mut u8,
 }
