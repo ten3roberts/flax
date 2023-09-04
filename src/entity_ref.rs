@@ -13,7 +13,7 @@ use crate::{
     error::MissingComponent,
     format::EntityFormatter,
     name,
-    writer::{EntityWriter, FnWriter, Replace, SingleComponentWriter, WriteDedup},
+    writer::{EntityWriter, FnWriter, Missing, Replace, SingleComponentWriter, WriteDedup},
     Component, ComponentKey, ComponentValue, Entity, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
@@ -151,6 +151,17 @@ impl<'a> EntityRefMut<'a> {
             Replace::new(value),
         ))
         .left()
+    }
+
+    /// Set a component for the entity only if it is missing.
+    ///
+    /// Does not disturb or generate a change event if the component is present
+    pub fn set_missing<T: ComponentValue>(&mut self, component: Component<T>, value: T) -> bool {
+        self.set_with_writer(SingleComponentWriter::new(
+            component.desc(),
+            Missing { value },
+        ))
+        .is_right()
     }
 
     /// Set a component for the entity.
@@ -650,6 +661,35 @@ mod test {
         entity.set_dedup(a(), "Bar".into());
 
         assert_eq!(query.collect_vec(&world), ["Bar"]);
+    }
+
+    #[test]
+    fn set_missing() {
+        use alloc::string::String;
+        use alloc::string::ToString;
+
+        component! {
+            a: String,
+        }
+
+        let mut world = World::new();
+
+        let mut query = Query::new((a().modified().satisfied(), a().cloned()));
+
+        let id = EntityBuilder::new().spawn(&mut world);
+
+        assert!(query.collect_vec(&world).is_empty());
+
+        let mut entity = world.entity_mut(id).unwrap();
+        assert!(entity.set_missing(a(), "Foo".into()));
+
+        assert_eq!(query.collect_vec(&world), [(true, "Foo".to_string())]);
+        assert_eq!(query.collect_vec(&world), [(false, "Foo".to_string())]);
+
+        let mut entity = world.entity_mut(id).unwrap();
+        assert!(!entity.set_missing(a(), "Bar".into()));
+
+        assert_eq!(query.collect_vec(&world), [(false, "Foo".to_string())]);
     }
 
     #[test]
