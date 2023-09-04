@@ -220,6 +220,30 @@ impl<T: ComponentValue> ComponentPusher for Replace<T> {
     }
 }
 
+pub(crate) struct Missing<T: ComponentValue> {
+    pub(crate) value: T,
+}
+
+impl<T: ComponentValue> ComponentUpdater for Missing<T> {
+    type Updated = ();
+
+    unsafe fn update(self, _: &mut CellData, _: Slot, _: Entity, _: u32) {}
+}
+
+impl<T: ComponentValue> ComponentPusher for Missing<T> {
+    type Pushed = ();
+
+    unsafe fn push(mut self, data: &mut CellData, id: Entity, tick: u32) {
+        let slot = data.storage.len();
+
+        data.storage.extend(&mut self.value as *mut T as *mut u8, 1);
+
+        mem::forget(self.value);
+
+        data.set_added(&[id], Slice::single(slot), tick);
+    }
+}
+
 pub(crate) struct WriteDedup<T: ComponentValue> {
     pub(crate) value: T,
 }
@@ -280,6 +304,32 @@ impl ComponentUpdater for ReplaceDyn {
 }
 
 impl ComponentPusher for ReplaceDyn {
+    type Pushed = ();
+
+    unsafe fn push(self, data: &mut CellData, id: Entity, tick: u32) {
+        let slot = data.storage.len();
+        data.storage.extend(self.value, 1);
+
+        data.set_added(&[id], Slice::single(slot), tick);
+    }
+}
+
+pub(crate) struct MissingDyn {
+    pub(crate) value: *mut u8,
+}
+
+impl ComponentUpdater for MissingDyn {
+    type Updated = ();
+
+    unsafe fn update(self, data: &mut CellData, _: Slot, _: Entity, _: u32) {
+        let desc = data.storage.desc();
+        unsafe {
+            desc.drop(self.value);
+        }
+    }
+}
+
+impl ComponentPusher for MissingDyn {
     type Pushed = ();
 
     unsafe fn push(self, data: &mut CellData, id: Entity, tick: u32) {

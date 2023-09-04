@@ -4,8 +4,9 @@ use alloc::{boxed::Box, format, vec::Vec};
 use anyhow::Context;
 
 use crate::{
-    buffer::MultiComponentBuffer, BatchSpawn, Component, ComponentDesc, ComponentValue, Entity,
-    EntityBuilder, World,
+    buffer::MultiComponentBuffer,
+    writer::{MissingDyn, SingleComponentWriter},
+    BatchSpawn, Component, ComponentDesc, ComponentValue, Entity, EntityBuilder, World,
 };
 
 type DeferFn = Box<dyn Fn(&mut World) -> anyhow::Result<()> + Send + Sync>;
@@ -21,6 +22,11 @@ enum Command {
     SpawnBatchAt(BatchSpawn, Vec<Entity>),
     /// Set a component for an entity
     Set {
+        id: Entity,
+        desc: ComponentDesc,
+        offset: usize,
+    },
+    SetMissing {
         id: Entity,
         desc: ComponentDesc,
         offset: usize,
@@ -51,6 +57,12 @@ impl fmt::Debug for Command {
                 .finish(),
             Self::Set { id, desc, offset } => f
                 .debug_struct("Set")
+                .field("id", id)
+                .field("desc", desc)
+                .field("offset", offset)
+                .finish(),
+            Self::SetMissing { id, desc, offset } => f
+                .debug_struct("SetMissing")
                 .field("id", id)
                 .field("desc", desc)
                 .field("offset", offset)
@@ -96,9 +108,7 @@ impl CommandBuffer {
         Self::default()
     }
 
-    /// Deferred set a component for `id`.
-    /// Unlike, [`World::set`] it does not return the old value as that is
-    /// not known at call time.
+    /// Set a component for `id`.
     pub fn set<T: ComponentValue>(
         &mut self,
         id: Entity,
@@ -115,6 +125,24 @@ impl CommandBuffer {
         self
     }
 
+    /// Set a component for `id` if it does not exist when the commandbuffer is applied.
+    ///
+    /// This avoid accidentally overwriting a component that was added by another system.
+    pub fn set_missing<T: ComponentValue>(
+        &mut self,
+        id: Entity,
+        component: Component<T>,
+        value: T,
+    ) -> &mut Self {
+        let offset = self.inserts.push(value);
+        self.commands.push(Command::SetMissing {
+            id,
+            desc: component.desc(),
+            offset,
+        });
+
+        self
+    }
     /// Deferred removal of a component for `id`.
     /// Unlike, [`World::remove`] it does not return the old value as that is
     /// not known at call time.
@@ -215,6 +243,13 @@ impl CommandBuffer {
                         .map_err(|v| v.into_anyhow())
                         .with_context(|| format!("Failed to set component {}", desc.name()))?;
                 },
+                Command::SetMissing { id, desc, offset } => unsafe {
+                    let value = self.inserts.take_dyn(offset);
+                    world
+                        .set_with_writer(id, SingleComponentWriter::new(desc, MissingDyn { value }))
+                        .map_err(|v| v.into_anyhow())
+                        .with_context(|| format!("Failed to set component {}", desc.name()))?;
+                },
                 Command::Despawn(id) => world
                     .despawn(id)
                     .map_err(|v| v.into_anyhow())
@@ -237,5 +272,44 @@ impl CommandBuffer {
     pub fn clear(&mut self) {
         self.inserts.clear();
         self.commands.clear()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{component, FetchExt, Query};
+
+    use super::*;
+
+    #[test]
+    fn set_missing() {
+        use alloc::string::String;
+        use alloc::string::ToString;
+
+        component! {
+            a: String,
+        }
+
+        let mut world = World::new();
+        let mut cmd = CommandBuffer::new();
+
+        let mut query = Query::new((a().modified().satisfied(), a().cloned()));
+
+        let id = EntityBuilder::new().spawn(&mut world);
+
+        assert!(query.collect_vec(&world).is_empty());
+
+        cmd.set_missing(id, a(), "Foo".into())
+            .set_missing(id, a(), "Bar".into());
+
+        cmd.apply(&mut world).unwrap();
+
+        assert_eq!(query.collect_vec(&world), [(true, "Foo".to_string())]);
+        assert_eq!(query.collect_vec(&world), [(false, "Foo".to_string())]);
+
+        cmd.set_missing(id, a(), "Baz".into());
+        cmd.apply(&mut world).unwrap();
+
+        assert_eq!(query.collect_vec(&world), [(false, "Foo".to_string())]);
     }
 }
