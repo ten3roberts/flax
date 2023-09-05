@@ -296,6 +296,7 @@ impl ComponentUpdater for WriteDedupDyn {
             let dst = data.storage.at_mut(slot).unwrap();
 
             if (self.cmp)(self.value, dst) {
+                desc.drop(self.value);
                 return;
             }
 
