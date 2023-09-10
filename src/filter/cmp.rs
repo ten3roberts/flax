@@ -138,8 +138,8 @@ where
         })
     }
 
-    fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
-        self.fetch.filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.fetch.filter_arch(data)
     }
 
     #[inline]
@@ -213,8 +213,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        Q::fetch_next(chunk, slot)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        Q::fetch_next(chunk)
     }
 }
 

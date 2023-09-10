@@ -36,7 +36,7 @@ impl<T> ComponentValue for T where T: Send + Sync + 'static {}
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ComponentKey {
     pub(crate) id: Entity,
-    /// The object entity if the component is a pair
+    /// The object entity if the component is a relation
     pub(crate) object: Option<Entity>,
 }
 

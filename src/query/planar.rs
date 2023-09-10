@@ -48,7 +48,11 @@ impl Planar {
         fetch.searcher(&mut searcher);
 
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
-            if !fetch.filter_arch(arch) {
+            if !fetch.filter_arch(FetchAccessData {
+                world,
+                arch,
+                arch_id,
+            }) {
                 return;
             }
 
@@ -248,7 +252,11 @@ where
         } else {
             let arch = self.state.world.archetypes.get(arch_id);
 
-            if !self.state.fetch.filter_arch(arch) {
+            if !self.state.fetch.filter_arch(FetchAccessData {
+                world: self.state.world,
+                arch,
+                arch_id,
+            }) {
                 return None;
             }
 

@@ -1,6 +1,7 @@
 use crate::{
-    archetype::{Archetype, Slice, Slot},
+    archetype::{Archetype, Slice},
     fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, UnionFilter},
+    filter::StaticFilter,
     system::Access,
     Fetch, FetchItem,
 };
@@ -41,8 +42,8 @@ where
         Some(And(self.0.prepare(data)?, self.1.prepare(data)?))
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        self.0.filter_arch(arch) && self.1.filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.0.filter_arch(data) && self.1.filter_arch(data)
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
@@ -85,11 +86,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        (
-            L::fetch_next(&mut chunk.0, slot),
-            R::fetch_next(&mut chunk.1, slot),
-        )
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        (L::fetch_next(&mut chunk.0), R::fetch_next(&mut chunk.1))
     }
 }
 
@@ -117,8 +115,8 @@ where
         Some(Not(self.0.prepare(data)))
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        !self.0.filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        !self.0.filter_arch(data)
     }
 
     #[inline]
@@ -155,7 +153,7 @@ where
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<R, T> ops::BitOr<R> for Not<T> {
@@ -216,8 +214,8 @@ where
         Some(Union(self.0.prepare(data)?))
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        self.0.filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.0.filter_arch(data)
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
@@ -257,8 +255,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        T::fetch_next(chunk, slot)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        T::fetch_next(chunk)
     }
 }
 
@@ -280,9 +278,9 @@ macro_rules! tuple_impl {
                 Some( Or(($(inner.$idx.prepare(data),)*)) )
             }
 
-            fn filter_arch(&self, arch: &Archetype) -> bool {
+            fn filter_arch(&self, data: FetchAccessData) -> bool {
                 let inner = &self.0;
-                $(inner.$idx.filter_arch(arch))||*
+                $(inner.$idx.filter_arch(data))||*
             }
 
             fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
@@ -299,6 +297,12 @@ macro_rules! tuple_impl {
             }
         }
 
+        impl<$($ty: StaticFilter, )*> StaticFilter for Or<($($ty,)*)> {
+            fn filter_static(&self, arch: &Archetype) -> bool {
+                let inner = &self.0;
+                $(inner.$idx.filter_static(arch))||*
+            }
+        }
 
         impl<'w, 'q, $($ty, )*> PreparedFetch<'q> for Or<($(Option<$ty>,)*)>
         where 'w: 'q, $($ty: PreparedFetch<'q>,)*
@@ -320,7 +324,7 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            unsafe fn fetch_next(_: &mut Self::Chunk, _:Slot) -> Self::Item {}
+            unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 
             #[inline]
             unsafe fn create_chunk(&mut self, _: Slice) -> Self::Chunk {}

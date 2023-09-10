@@ -21,7 +21,7 @@ impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
 
     #[inline]
     // See: <https://godbolt.org/z/8fWa136b9>
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         let old = chunk.as_ptr();
         chunk.advance(1);
         &*old
@@ -57,8 +57,8 @@ where
     }
 
     #[inline]
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        arch.has(self.key())
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        data.arch.has(self.key())
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {

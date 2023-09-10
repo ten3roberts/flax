@@ -6,7 +6,7 @@ use core::{
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::{Archetype, Slice, Slot},
+    archetype::{Slice, Slot},
     system::Access,
     Fetch, FetchItem,
 };
@@ -45,8 +45,8 @@ where
         Some(Cloned(self.0.prepare(data)?))
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        self.0.filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.0.filter_arch(data)
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
@@ -77,8 +77,8 @@ where
         self.0.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        F::fetch_next(chunk, slot).clone()
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        F::fetch_next(chunk).clone()
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {

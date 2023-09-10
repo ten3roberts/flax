@@ -4,15 +4,17 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    entity::EntityLocation,
     system::Access,
-    ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
+    ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, RelationExt,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 
 pub trait FetchSource {
-    fn resolve(&self, arch: &Archetype, world: &World) -> Option<EntityLocation>;
+    fn resolve<'a>(
+        &self,
+        data: FetchAccessData<'a>,
+    ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)>;
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result;
 }
 
@@ -33,15 +35,22 @@ impl FromRelation {
 }
 
 impl FetchSource for FromRelation {
-    fn resolve(&self, arch: &Archetype, world: &World) -> Option<EntityLocation> {
-        let (key, _) = arch.relations_like(self.relation).next()?;
+    fn resolve<'a>(
+        &self,
+        data: FetchAccessData<'a>,
+    ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
+        let (key, _) = data.arch.relations_like(self.relation).next()?;
         let object = key.object().unwrap();
+        let loc = data
+            .world
+            .location(object)
+            .expect("Relation contains invalid entity");
 
-        Some(
-            world
-                .location(object)
-                .expect("Relation contains invalid entity"),
-        )
+        Some((
+            loc.arch_id,
+            data.world.archetypes.get(loc.arch_id),
+            Some(loc.slot),
+        ))
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -50,8 +59,17 @@ impl FetchSource for FromRelation {
 }
 
 impl FetchSource for Entity {
-    fn resolve(&self, _: &Archetype, world: &World) -> Option<EntityLocation> {
-        world.location(*self).ok()
+    fn resolve<'a>(
+        &self,
+        data: FetchAccessData<'a>,
+    ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
+        let loc = data.world.location(*self).ok()?;
+
+        Some((
+            loc.arch_id,
+            data.world.archetypes.get(loc.arch_id),
+            Some(loc.slot),
+        ))
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -97,28 +115,26 @@ where
     type Prepared = PreparedSource<'w, Q::Prepared>;
 
     fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let loc = self.source.resolve(data.arch, data.world)?;
-
-        let arch = data.world.archetypes.get(loc.arch_id);
+        let (arch_id, arch, slot) = self.source.resolve(data.into())?;
 
         // Bounce to the resolved archetype
         let fetch = self.fetch.prepare(FetchPrepareData {
             arch,
-            arch_id: loc.arch_id,
+            arch_id,
             old_tick: data.old_tick,
             new_tick: data.new_tick,
             world: data.world,
         })?;
 
         Some(PreparedSource {
-            slot: loc.slot,
+            slot,
             fetch,
             _marker: PhantomData,
         })
     }
 
-    fn filter_arch(&self, _: &crate::archetype::Archetype) -> bool {
-        true
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.source.resolve(data).is_some()
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -130,13 +146,10 @@ where
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-        let loc = self.source.resolve(data.arch, data.world);
-
-        if let Some(loc) = loc {
-            let arch = data.world.archetypes.get(loc.arch_id);
+        if let Some((arch_id, arch, _)) = self.source.resolve(data) {
             self.fetch.access(
                 FetchAccessData {
-                    arch_id: loc.arch_id,
+                    arch_id,
                     world: data.world,
                     arch,
                 },
@@ -167,17 +180,23 @@ where
 
     type Chunk = Q::Chunk;
 
-    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
-        self.fetch.create_chunk(Slice::single(self.slot))
+    unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
+        let slice = if let Some(slot) = self.slot {
+            Slice::single(slot)
+        } else {
+            slice
+        };
+
+        self.fetch.create_chunk(slice)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         Q::fetch_shared_chunk(chunk, 0)
     }
 }
 
 pub struct PreparedSource<'w, Q> {
-    slot: Slot,
+    slot: Option<Slot>,
     fetch: Q,
     _marker: PhantomData<&'w mut ()>,
 }
@@ -186,7 +205,7 @@ pub struct PreparedSource<'w, Q> {
 mod test {
     use itertools::Itertools;
 
-    use crate::{child_of, component, entity_ids, name, FetchExt, Query, Topo};
+    use crate::{child_of, component, entity_ids, name, FetchExt, Query, Topo, World};
 
     use super::*;
 
@@ -294,3 +313,49 @@ mod test {
         );
     }
 }
+
+// pub struct Transitive<Q> {
+//     pub(crate) fetch: Q,
+//     pub(crate) relation: Entity,
+// }
+
+// impl<'w, Q: Fetch<'w>> Fetch<'w> for Transitive<Q> {
+//     const MUTABLE: bool = Q::MUTABLE;
+
+//     type Prepared = PreparedTransitive<Q>;
+
+//     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+//         let cur = data.arch_id;
+//         let cur_arch = data.arch;
+//         loop {
+//             if let Some(prepared) = self.fetch.prepare(FetchPrepareData {
+//                 arch: cur_arch,
+//                 arch_id: cur,
+//                 ..data
+//             }) {
+//                 //
+//             }
+
+//             let (key, _) = cur_arch.relations_like(self.relation).next()?;
+
+//             cur = data
+//                 .world
+//                 .location(key.object.unwrap())
+//                 .expect("invalid relation");
+
+//             cur_arch = data.world.archetypes.get(cur);
+//         }
+//     }
+
+//     fn filter_arch(&self, arch: &Archetype) -> bool {
+//         true
+//     }
+
+//     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
+//         todo!()
+//     }
+
+//     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//         todo!()
+//     }
+// }

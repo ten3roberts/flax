@@ -35,7 +35,7 @@ impl<'w> Fetch<'w> for EntityRefs {
         })
     }
 
-    fn filter_arch(&self, _: &crate::archetype::Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -63,21 +63,26 @@ pub struct PreparedEntityRef<'a> {
 pub struct Batch<'a> {
     pub(crate) world: &'a World,
     pub(crate) arch: &'a Archetype,
+    slot: Slot,
 }
 
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
     type Chunk = Batch<'q>;
 
-    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
+    unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             world: self.world,
             arch: self.arch,
+            slot: slice.start,
         }
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        let slot = chunk.slot;
+        chunk.slot += 1;
+
         EntityRef {
             arch: chunk.arch,
             world: chunk.world,
@@ -91,7 +96,29 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
 mod test {
     use itertools::Itertools;
 
-    use crate::{component, name, Entity, EntityIds, FetchExt, Query, World};
+    use crate::{component, name, BatchSpawn, Entity, EntityIds, FetchExt, Query, World};
+
+    #[test]
+    fn entity_refs_chunks() {
+        component! {
+            a: i32,
+        }
+
+        let mut batch = BatchSpawn::new(32);
+        batch.set(a(), (0..).map(|v| (v % 8) - 4)).unwrap();
+
+        let mut world = World::new();
+        batch.spawn(&mut world);
+
+        let mut query = Query::new(super::EntityRefs).filter(a().ge(0));
+        let res = query
+            .borrow(&world)
+            .iter()
+            .map(|v| v.get_copy(a()).unwrap())
+            .collect_vec();
+
+        assert_eq!(res, &[0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]);
+    }
 
     #[test]
     fn entity_refs() {

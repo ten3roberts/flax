@@ -127,7 +127,7 @@ async fn tokio_subscribe() {
     let (tx, mut rx) = mpsc::unbounded_channel();
     world.subscribe(tx.filter_components([a().key()]));
 
-    world.subscribe(Arc::downgrade(&notify).filter_arch(a().with() | b().with()));
+    world.subscribe(Arc::downgrade(&notify).filter_arch(filter::Or((a().with(), b().with()))));
 
     let id = Entity::builder().set(a(), 5).spawn(&mut world);
 

@@ -67,7 +67,11 @@ where
         fetch.searcher(&mut searcher);
 
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
-            if !fetch.filter_arch(arch) {
+            if !fetch.filter_arch(FetchAccessData {
+                world,
+                arch,
+                arch_id,
+            }) {
                 return;
             }
 
@@ -116,7 +120,7 @@ where
                 // self is a mutable reference, so this is the only reference to the slot
                 unsafe {
                     let mut chunk = p.fetch.create_chunk(Slice::single(loc.slot));
-                    Ok(<Q::Prepared>::fetch_next(&mut chunk, loc.slot))
+                    Ok(<Q::Prepared>::fetch_next(&mut chunk))
                 }
             }
             Err(e) => Err(e.clone()),

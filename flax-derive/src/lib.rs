@@ -166,8 +166,8 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
             }
 
             #[inline]
-            fn filter_arch(&self, arch: &#crate_name::archetype::Archetype) -> bool {
-                #(#crate_name::Fetch::filter_arch(&self.#field_names, arch))&&*
+            fn filter_arch(&self, data: #crate_name::fetch::FetchAccessData) -> bool {
+                #(#crate_name::Fetch::filter_arch(&self.#field_names, data))&&*
             }
 
             fn describe(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -387,9 +387,9 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
             type Chunk = (#(<<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::Chunk,)*);
 
             #[inline]
-            unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: #crate_name::archetype::Slot) -> Self::Item {
+            unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
                 Self::Item {
-                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::fetch_next(&mut chunk.#field_idx, slot),)*
+                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::fetch_next(&mut chunk.#field_idx),)*
                 }
             }
 

@@ -1,5 +1,5 @@
 use super::{FetchAccessData, FmtQuery, PreparedFetch, ReadOnlyFetch};
-use crate::{archetype::Slot, query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
+use crate::{query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
 use alloc::vec::Vec;
 use core::{fmt, ops::Deref};
 
@@ -30,8 +30,8 @@ where
     }
 
     #[inline]
-    fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
-        self.0.filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.0.filter_arch(data)
     }
 
     #[inline]
@@ -68,8 +68,8 @@ where
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        F::fetch_next(chunk, slot)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        F::fetch_next(chunk)
     }
 }
 

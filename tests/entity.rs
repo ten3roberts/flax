@@ -77,7 +77,7 @@ fn entity_hierarchy() {
     let (tx, rx) = flume::unbounded::<Event>();
 
     world.subscribe(
-        tx.filter_arch(name().with() & child_of.with_relation())
+        tx.filter_arch((name().with(), child_of.with_relation()))
             .filter_components([name().key()]),
     );
 

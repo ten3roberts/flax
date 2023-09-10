@@ -101,7 +101,7 @@ fn subscribe_inverted() {
 
     let mut world = World::new();
     let (tx, rx) = flume::unbounded();
-    world.subscribe(tx.filter_arch(a().with() & b().without()));
+    world.subscribe(tx.filter_arch((a().with(), b().without())));
 
     let id = Entity::builder()
         .set(a(), 1.5)

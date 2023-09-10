@@ -44,7 +44,11 @@ impl State {
         let mut deps: BTreeMap<_, _> = BTreeMap::new();
 
         searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
-            if !fetch.filter_arch(arch) {
+            if !fetch.filter_arch(FetchAccessData {
+                world,
+                arch,
+                arch_id,
+            }) {
                 return;
             }
 

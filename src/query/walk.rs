@@ -1,5 +1,6 @@
 use crate::{
     archetype::{Slice, Slot},
+    fetch::FetchAccessData,
     filter::{All, And, Filtered},
     ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
 };
@@ -131,7 +132,11 @@ impl GraphState {
         self.archetypes_index.clear();
 
         for (arch_id, arch) in world.archetypes.iter() {
-            if fetch.filter_arch(arch) {
+            if fetch.filter_arch(FetchAccessData {
+                world,
+                arch,
+                arch_id,
+            }) {
                 let index = self.archetypes.len();
                 self.archetypes.push(arch_id);
                 assert!(self.archetypes_index.insert(arch_id, index).is_none())

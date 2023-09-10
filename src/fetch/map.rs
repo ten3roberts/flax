@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
-use crate::{archetype::Slot, Fetch, FetchItem};
+use crate::{Fetch, FetchItem};
 
-use super::{FmtQuery, PreparedFetch};
+use super::{FetchAccessData, FmtQuery, PreparedFetch};
 
 /// Maps the result of a query to another type on the query level.
 ///
@@ -41,8 +41,8 @@ where
         })
     }
 
-    fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
-        self.query.filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.query.filter_arch(data)
     }
 
     fn access(&self, data: super::FetchAccessData, dst: &mut Vec<crate::system::Access>) {
@@ -69,8 +69,8 @@ where
         (self.func, self.query.create_chunk(slots))
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        (chunk.0)(Q::fetch_next(&mut chunk.1, slot))
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        (chunk.0)(Q::fetch_next(&mut chunk.1))
     }
 
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {

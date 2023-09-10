@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt::Formatter;
 use itertools::Itertools;
 
-use crate::archetype::{Archetype, CellGuard, Change, Slot};
+use crate::archetype::{CellGuard, Change, Slot};
 use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
 use crate::system::Access;
 use crate::util::Ptr;
@@ -78,8 +78,8 @@ where
         })
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        self.component.filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.component.filter_arch(data)
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
@@ -165,7 +165,7 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         let old = chunk.as_ptr();
         chunk.advance(1);
         &*old
@@ -229,7 +229,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
         })
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -290,7 +290,7 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use itertools::Either;
 
 use crate::{
-    archetype::{Archetype, Slice, Slot},
+    archetype::{Slice, Slot},
     fetch::FetchPrepareData,
     fetch::PreparedFetch,
     system::Access,
@@ -33,7 +33,7 @@ where
         Some(PreparedOpt(self.0.prepare(data)))
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -83,8 +83,8 @@ where
         self.0.as_mut().map(|v| v.create_chunk(slots))
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        chunk.as_mut().map(|v| F::fetch_next(v, slot))
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        chunk.as_mut().map(|v| F::fetch_next(v))
     }
 }
 
@@ -120,7 +120,7 @@ where
         })
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -163,9 +163,9 @@ where
         }
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         match chunk {
-            Either::Left(v) => F::fetch_next(v, slot),
+            Either::Left(v) => F::fetch_next(v),
             Either::Right(v) => v,
         }
     }
