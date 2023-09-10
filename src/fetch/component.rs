@@ -2,7 +2,7 @@ use atomic_refcell::AtomicRef;
 
 use crate::{archetype::Slot, system::AccessKind, util::Ptr, Component, ComponentValue};
 
-use super::{read_only::ReadOnlyFetch, *};
+use super::{read_only::RandomFetch, *};
 
 #[doc(hidden)]
 pub struct ReadComponent<'a, T> {
@@ -28,7 +28,7 @@ impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     }
 }
 
-impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for ReadComponent<'w, T> {
+impl<'w, 'q, T: ComponentValue> RandomFetch<'q> for ReadComponent<'w, T> {
     #[inline]
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.borrow.get_unchecked(slot)

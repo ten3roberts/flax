@@ -11,7 +11,7 @@ use crate::{
     Fetch, FetchItem,
 };
 
-use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch, TransformFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch, TransformFetch};
 
 #[derive(Debug, Clone)]
 /// Component which cloned the value.
@@ -86,9 +86,9 @@ where
     }
 }
 
-impl<'q, V, F> ReadOnlyFetch<'q> for Cloned<F>
+impl<'q, V, F> RandomFetch<'q> for Cloned<F>
 where
-    F: ReadOnlyFetch<'q>,
+    F: RandomFetch<'q>,
     F::Item: Deref<Target = V>,
     V: 'static + Clone,
 {

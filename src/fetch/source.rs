@@ -5,52 +5,53 @@ use alloc::vec::Vec;
 use crate::{
     archetype::{Archetype, Slice, Slot},
     system::Access,
-    ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, RelationExt,
+    ArchetypeId, Entity, Fetch, FetchItem,
 };
 
-use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch};
 
 pub trait FetchSource {
-    fn resolve<'a>(
+    fn resolve<'a, 'w, Q: Fetch<'w>>(
         &self,
+        fetch: &Q,
         data: FetchAccessData<'a>,
     ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)>;
+
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result;
 }
 
 /// Selects the fetch value from the first parent/object of the specified relation
 pub struct FromRelation {
-    relation: Entity,
-    name: &'static str,
-}
-
-impl FromRelation {
-    /// Resolves the fetch value from relation
-    pub fn new<T: ComponentValue, R: RelationExt<T>>(relation: R) -> Self {
-        Self {
-            relation: relation.id(),
-            name: relation.vtable().name,
-        }
-    }
+    pub(crate) relation: Entity,
+    pub(crate) name: &'static str,
 }
 
 impl FetchSource for FromRelation {
-    fn resolve<'a>(
+    fn resolve<'a, 'w, Q: Fetch<'w>>(
         &self,
+        fetch: &Q,
         data: FetchAccessData<'a>,
     ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
-        let (key, _) = data.arch.relations_like(self.relation).next()?;
-        let object = key.object().unwrap();
-        let loc = data
-            .world
-            .location(object)
-            .expect("Relation contains invalid entity");
+        for (key, _) in data.arch.relations_like(self.relation) {
+            let object = key.object().unwrap();
 
-        Some((
-            loc.arch_id,
-            data.world.archetypes.get(loc.arch_id),
-            Some(loc.slot),
-        ))
+            let loc = data
+                .world
+                .location(object)
+                .expect("Relation contains invalid entity");
+
+            let arch = data.world.archetypes.get(loc.arch_id);
+
+            if fetch.filter_arch(FetchAccessData {
+                arch,
+                arch_id: loc.arch_id,
+                ..data
+            }) {
+                return Some((loc.arch_id, arch, Some(loc.slot)));
+            }
+        }
+
+        None
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -59,8 +60,9 @@ impl FetchSource for FromRelation {
 }
 
 impl FetchSource for Entity {
-    fn resolve<'a>(
+    fn resolve<'a, 'w, Q: Fetch<'w>>(
         &self,
+        _fetch: &Q,
         data: FetchAccessData<'a>,
     ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
         let loc = data.world.location(*self).ok()?;
@@ -74,6 +76,57 @@ impl FetchSource for Entity {
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.fmt(f)
+    }
+}
+
+/// Traverse the edges of a relation recursively to find the first entity which matches the fetch
+pub struct Traverse {
+    pub(crate) relation: Entity,
+}
+
+fn traverse_resolve<'a, 'w, Q: Fetch<'w>>(
+    relation: Entity,
+    fetch: &Q,
+    data: FetchAccessData<'a>,
+    slot: Option<Slot>,
+) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
+    if fetch.filter_arch(data) {
+        return (data.arch_id, data.arch, slot).into();
+    }
+
+    for (key, _) in data.arch.relations_like(relation) {
+        let object = key.object().unwrap();
+
+        let loc = data
+            .world
+            .location(object)
+            .expect("Relation contains invalid entity");
+
+        let data = FetchAccessData {
+            arch_id: loc.arch_id,
+            arch: data.world.archetypes.get(loc.arch_id),
+            world: data.world,
+        };
+
+        if let Some(v) = traverse_resolve(relation, fetch, data, Some(loc.slot)) {
+            return Some(v);
+        }
+    }
+
+    None
+}
+impl FetchSource for Traverse {
+    #[inline]
+    fn resolve<'a, 'w, Q: Fetch<'w>>(
+        &self,
+        fetch: &Q,
+        data: FetchAccessData<'a>,
+    ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
+        return traverse_resolve(self.relation, fetch, data, None);
+    }
+
+    fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "transitive({})", self.relation)
     }
 }
 
@@ -107,7 +160,7 @@ where
 impl<'w, Q, S> Fetch<'w> for Source<Q, S>
 where
     Q: Fetch<'w>,
-    Q::Prepared: for<'x> ReadOnlyFetch<'x>,
+    Q::Prepared: for<'x> RandomFetch<'x>,
     S: FetchSource,
 {
     const MUTABLE: bool = Q::MUTABLE;
@@ -115,7 +168,7 @@ where
     type Prepared = PreparedSource<'w, Q::Prepared>;
 
     fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let (arch_id, arch, slot) = self.source.resolve(data.into())?;
+        let (arch_id, arch, slot) = self.source.resolve(&self.fetch, data.into())?;
 
         // Bounce to the resolved archetype
         let fetch = self.fetch.prepare(FetchPrepareData {
@@ -134,7 +187,7 @@ where
     }
 
     fn filter_arch(&self, data: FetchAccessData) -> bool {
-        self.source.resolve(data).is_some()
+        self.source.resolve(&self.fetch, data).is_some()
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -146,7 +199,7 @@ where
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-        if let Some((arch_id, arch, _)) = self.source.resolve(data) {
+        if let Some((arch_id, arch, _)) = self.source.resolve(&self.fetch, data) {
             self.fetch.access(
                 FetchAccessData {
                     arch_id,
@@ -170,7 +223,7 @@ where
 
 impl<'w, 'q, Q> PreparedFetch<'q> for PreparedSource<'w, Q>
 where
-    Q: 'w + ReadOnlyFetch<'q>,
+    Q: 'w + RandomFetch<'q>,
 {
     type Item = Q::Item;
 
@@ -178,20 +231,22 @@ where
         self.fetch.filter_slots(slots)
     }
 
-    type Chunk = Q::Chunk;
+    type Chunk = (Q::Chunk, bool);
 
     unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
-        let slice = if let Some(slot) = self.slot {
-            Slice::single(slot)
+        if let Some(slot) = self.slot {
+            (self.fetch.create_chunk(Slice::single(slot)), true)
         } else {
-            slice
-        };
-
-        self.fetch.create_chunk(slice)
+            (self.fetch.create_chunk(slice), false)
+        }
     }
 
     unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
-        Q::fetch_shared_chunk(chunk, 0)
+        if chunk.1 {
+            Q::fetch_shared_chunk(&chunk.0, 0)
+        } else {
+            Q::fetch_next(&mut chunk.0)
+        }
     }
 }
 
@@ -211,6 +266,7 @@ mod test {
 
     component! {
         a: u32,
+        relation(id): (),
     }
 
     #[test]
@@ -252,6 +308,111 @@ mod test {
                 ("child.1", Some(("root", 4))),
                 ("child.1.1", Some(("child.1", 8))),
                 ("child.2", Some(("root", 4))),
+            ]
+        );
+    }
+
+    #[test]
+    fn multi_parent_fetch() {
+        let mut world = World::new();
+
+        let child = Entity::builder()
+            .set(name(), "child".into())
+            .set(a(), 8)
+            .spawn(&mut world);
+
+        let parent = Entity::builder()
+            .set(name(), "parent".into())
+            .spawn(&mut world);
+
+        let parent2 = Entity::builder()
+            .set(name(), "parent2".into())
+            .set(a(), 8)
+            .spawn(&mut world);
+
+        world.set(child, relation(parent), ()).unwrap();
+        world.set(child, relation(parent2), ()).unwrap();
+
+        let mut query = Query::new((
+            name().deref(),
+            (name().deref(), a().copied()).relation(relation).opt(),
+        ))
+        .with_strategy(Topo::new(relation));
+
+        assert_eq!(
+            query.borrow(&world).iter().collect_vec(),
+            [
+                ("parent", None),
+                ("parent2", None),
+                ("child", Some(("parent2", 8))),
+            ]
+        );
+    }
+
+    #[test]
+    fn traverse() {
+        let mut world = World::new();
+
+        let root = Entity::builder()
+            .set(name(), "root".into())
+            .set(a(), 5)
+            .spawn(&mut world);
+
+        let root3 = Entity::builder()
+            .set(name(), "root".into())
+            .spawn(&mut world);
+
+        let root2 = Entity::builder()
+            .set(name(), "root2".into())
+            .set(a(), 7)
+            .spawn(&mut world);
+
+        let child_1 = Entity::builder()
+            .set(name(), "child_1".into())
+            .set(relation(root), ())
+            .spawn(&mut world);
+
+        let _child_3 = Entity::builder()
+            .set(name(), "child_3".into())
+            .set(relation(root2), ())
+            .spawn(&mut world);
+
+        let _child_4 = Entity::builder()
+            .set(name(), "child_4".into())
+            .set(relation(root3), ())
+            .spawn(&mut world);
+
+        let _child_5 = Entity::builder()
+            .set(name(), "child_5".into())
+            .set(relation(root3), ())
+            .set(relation(root2), ())
+            .spawn(&mut world);
+
+        let _child_2 = Entity::builder()
+            .set(name(), "child_2".into())
+            .set(relation(root), ())
+            .spawn(&mut world);
+
+        let _child_1_1 = Entity::builder()
+            .set(name(), "child_1_1".into())
+            .set(relation(child_1), ())
+            .spawn(&mut world);
+
+        let mut query = Query::new((
+            name().deref(),
+            (name().deref(), a().copied()).traverse(relation),
+        ));
+
+        assert_eq!(
+            query.borrow(&world).iter().sorted().collect_vec(),
+            [
+                ("child_1", ("root", 5)),
+                ("child_1_1", ("root", 5)),
+                ("child_2", ("root", 5)),
+                ("child_3", ("root2", 7)),
+                ("child_5", ("root2", 7)),
+                ("root", ("root", 5)),
+                ("root2", ("root2", 7)),
             ]
         );
     }
@@ -313,49 +474,3 @@ mod test {
         );
     }
 }
-
-// pub struct Transitive<Q> {
-//     pub(crate) fetch: Q,
-//     pub(crate) relation: Entity,
-// }
-
-// impl<'w, Q: Fetch<'w>> Fetch<'w> for Transitive<Q> {
-//     const MUTABLE: bool = Q::MUTABLE;
-
-//     type Prepared = PreparedTransitive<Q>;
-
-//     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-//         let cur = data.arch_id;
-//         let cur_arch = data.arch;
-//         loop {
-//             if let Some(prepared) = self.fetch.prepare(FetchPrepareData {
-//                 arch: cur_arch,
-//                 arch_id: cur,
-//                 ..data
-//             }) {
-//                 //
-//             }
-
-//             let (key, _) = cur_arch.relations_like(self.relation).next()?;
-
-//             cur = data
-//                 .world
-//                 .location(key.object.unwrap())
-//                 .expect("invalid relation");
-
-//             cur_arch = data.world.archetypes.get(cur);
-//         }
-//     }
-
-//     fn filter_arch(&self, arch: &Archetype) -> bool {
-//         true
-//     }
-
-//     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-//         todo!()
-//     }
-
-//     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-//         todo!()
-//     }
-// }

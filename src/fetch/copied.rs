@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use crate::{archetype::Slice, system::Access, Fetch, FetchItem};
 
-use super::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch, TransformFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch, TransformFetch};
 
 #[derive(Debug, Clone)]
 /// Component which copied the value.
@@ -83,9 +83,9 @@ where
     }
 }
 
-impl<'q, F, V> ReadOnlyFetch<'q> for Copied<F>
+impl<'q, F, V> RandomFetch<'q> for Copied<F>
 where
-    F: ReadOnlyFetch<'q>,
+    F: RandomFetch<'q>,
     F::Item: Deref<Target = V>,
     V: 'static + Copy,
 {
