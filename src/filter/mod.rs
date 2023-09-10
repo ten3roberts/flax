@@ -107,10 +107,10 @@ where
     }
 
     #[inline]
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        self.fetch.filter_arch(arch)
-            && self.filter.filter_arch(arch)
-            && (!arch.has(component_info().key()) || self.include_components)
+    fn filter_arch(&self, data: FetchAccessData<'_>) -> bool {
+        self.fetch.filter_arch(data)
+            && self.filter.filter_arch(data)
+            && (!data.arch.has(component_info().key()) || self.include_components)
     }
 
     #[inline]
@@ -152,8 +152,8 @@ where
         self.fetch.create_chunk(slots)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        Q::fetch_next(chunk, slot)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        Q::fetch_next(chunk)
     }
 }
 
@@ -249,15 +249,15 @@ impl<'a> Fetch<'a> for With {
     type Prepared = All;
 
     fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
+        if data.arch.has(self.component) {
             Some(All)
         } else {
             None
         }
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        arch.has(self.component)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        data.arch.has(self.component)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -266,6 +266,12 @@ impl<'a> Fetch<'a> for With {
 
     #[inline]
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for With {
+    fn filter_static(&self, arch: &Archetype) -> bool {
+        arch.has(self.component)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -285,15 +291,15 @@ impl<'w> Fetch<'w> for Without {
     type Prepared = All;
 
     fn prepare(&self, data: FetchPrepareData) -> Option<Self::Prepared> {
-        if self.filter_arch(data.arch) {
+        if !data.arch.has(self.component) {
             Some(All)
         } else {
             None
         }
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        !arch.has(self.component)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        !data.arch.has(self.component)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -302,6 +308,12 @@ impl<'w> Fetch<'w> for Without {
 
     #[inline]
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for Without {
+    fn filter_static(&self, arch: &Archetype) -> bool {
+        !arch.has(self.component)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -323,7 +335,20 @@ impl<'w> Fetch<'w> for WithObject {
         Some(All)
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.filter_static(data.arch)
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "with (*)({})", self.object)
+    }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for WithObject {
+    fn filter_static(&self, arch: &Archetype) -> bool {
         arch.components().any(|v| {
             if let Some(v) = v.key().object {
                 if v == self.object {
@@ -334,13 +359,6 @@ impl<'w> Fetch<'w> for WithObject {
             false
         })
     }
-
-    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "with (*)({})", self.object)
-    }
-
-    #[inline]
-    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
 pub(crate) struct ArchetypeFilter<F>(pub(crate) F);
@@ -365,8 +383,8 @@ impl<'w, F: Fn(&Archetype) -> bool> Fetch<'w> for ArchetypeFilter<F> {
         Some(All)
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        (self.0)(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        (self.0)(data.arch)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -396,8 +414,8 @@ impl<'w> Fetch<'w> for WithRelation {
         Some(All)
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        arch.relations_like(self.relation).next().is_some()
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.filter_static(data.arch)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -406,6 +424,12 @@ impl<'w> Fetch<'w> for WithRelation {
 
     #[inline]
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for WithRelation {
+    fn filter_static(&self, arch: &Archetype) -> bool {
+        arch.relations_like(self.relation).next().is_some()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -428,8 +452,8 @@ impl<'a> Fetch<'a> for WithoutRelation {
         Some(All)
     }
 
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        arch.relations_like(self.relation).next().is_none()
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        self.filter_static(data.arch)
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -438,6 +462,12 @@ impl<'a> Fetch<'a> for WithoutRelation {
 
     #[inline]
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for WithoutRelation {
+    fn filter_static(&self, arch: &Archetype) -> bool {
+        arch.relations_like(self.relation).next().is_none()
+    }
 }
 
 /// Allows a fetch to be used by reference.
@@ -472,8 +502,8 @@ where
     }
 
     #[inline]
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        (*self.0).filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        (*self.0).filter_arch(data)
     }
 
     #[inline]
@@ -514,8 +544,8 @@ where
     }
 
     #[inline]
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        (*self).filter_arch(arch)
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        (*self).filter_arch(data)
     }
 
     #[inline]
@@ -550,7 +580,7 @@ impl<'q> PreparedFetch<'q> for BatchSize {
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for BatchSize {
@@ -570,7 +600,7 @@ impl<'w> Fetch<'w> for BatchSize {
     }
 
     #[inline]
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -587,14 +617,14 @@ pub trait StaticFilter {
     fn filter_static(&self, arch: &Archetype) -> bool;
 }
 
-impl<F> StaticFilter for F
-where
-    for<'x> F: Fetch<'x>,
-{
-    fn filter_static(&self, arch: &Archetype) -> bool {
-        <F as Fetch>::filter_arch(self, arch)
-    }
-}
+// impl<F> StaticFilter for F
+// where
+//     for<'x> F: Fetch<'x>,
+// {
+//     fn filter_static(&self, data: FetchAccessData) -> bool {
+//         <F as Fetch>::filter_arch(self, data)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

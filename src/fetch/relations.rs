@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use smallvec::SmallVec;
 
 use crate::{
-    archetype::{Archetype, CellGuard, Slot},
+    archetype::{CellGuard, Slot},
     component::dummy,
     system::{Access, AccessKind},
     Component, ComponentValue, Entity, Fetch, FetchItem, RelationExt,
@@ -40,7 +40,7 @@ where
         Some(PreparedRelations { borrows })
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -77,6 +77,7 @@ pub struct PreparedRelations<'a, T> {
 
 pub struct Batch<'a, T> {
     borrows: &'a [(Entity, CellGuard<'a, [T]>)],
+    slot: Slot,
 }
 
 impl<'w, 'q, T> PreparedFetch<'q> for PreparedRelations<'w, T>
@@ -87,13 +88,17 @@ where
 
     type Chunk = Batch<'q, T>;
 
-    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
+    unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             borrows: &self.borrows,
+            slot: slice.start,
         }
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        let slot = chunk.slot;
+        chunk.slot += 1;
+
         RelationsIter {
             borrows: chunk.borrows.iter(),
             slot,

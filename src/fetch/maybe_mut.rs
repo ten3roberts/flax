@@ -38,8 +38,8 @@ impl<'w, T: ComponentValue> Fetch<'w> for MaybeMut<T> {
         })
     }
 
-    fn filter_arch(&self, arch: &crate::archetype::Archetype) -> bool {
-        arch.has(self.0.key())
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        data.arch.has(self.0.key())
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
@@ -82,21 +82,26 @@ pub struct Batch<'a> {
     cell: &'a Cell,
     new_tick: u32,
     ids: &'a [Entity],
+    slot: Slot,
 }
 
 impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     type Item = MutGuard<'q, T>;
     type Chunk = Batch<'q>;
 
-    unsafe fn create_chunk(&'q mut self, _: crate::archetype::Slice) -> Self::Chunk {
+    unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             cell: self.cell,
             new_tick: self.new_tick,
             ids: self.entities,
+            slot: slice.start,
         }
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        let slot = chunk.slot;
+        chunk.slot += 1;
+
         MutGuard {
             slot,
             cell: chunk.cell,

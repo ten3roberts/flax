@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt::{self, Formatter};
 
 use crate::{
-    archetype::{Archetype, CellMutGuard, Slice, Slot},
+    archetype::{Archetype, CellMutGuard, Slice},
     system::{Access, AccessKind},
     util::PtrMut,
     Component, ComponentValue, Fetch, FetchItem,
@@ -36,8 +36,8 @@ where
     }
 
     #[inline]
-    fn filter_arch(&self, arch: &Archetype) -> bool {
-        arch.has(self.0.key())
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        data.arch.has(self.0.key())
     }
 
     #[inline]
@@ -88,7 +88,7 @@ impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T>
 
     #[inline]
     // See: <https://godbolt.org/z/8fWa136b9>
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         let old = chunk.as_ptr();
         chunk.advance(1);
         &mut *old

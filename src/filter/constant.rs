@@ -1,11 +1,13 @@
 use crate::{
-    archetype::{Archetype, Slice, Slot},
+    archetype::Slice,
     fetch::{FetchAccessData, FetchPrepareData, PreparedFetch},
     system::Access,
     Fetch, FetchItem,
 };
 use alloc::vec::Vec;
 use core::fmt::{self, Formatter};
+
+use super::StaticFilter;
 
 #[derive(Debug, Clone)]
 /// A filter that yields, well, nothing
@@ -26,7 +28,7 @@ impl<'a> Fetch<'a> for Nothing {
     }
 
     #[inline(always)]
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         false
     }
 
@@ -35,6 +37,12 @@ impl<'a> Fetch<'a> for Nothing {
     }
 
     fn access(&self, _data: FetchAccessData, _dst: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for Nothing {
+    fn filter_static(&self, _: &crate::archetype::Archetype) -> bool {
+        false
+    }
 }
 
 impl<'q> PreparedFetch<'q> for Nothing {
@@ -49,7 +57,7 @@ impl<'q> PreparedFetch<'q> for Nothing {
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
 /// Yields all entities
@@ -69,7 +77,7 @@ impl<'w> Fetch<'w> for All {
         Some(All)
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -78,6 +86,12 @@ impl<'w> Fetch<'w> for All {
     }
 
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for All {
+    fn filter_static(&self, _: &crate::archetype::Archetype) -> bool {
+        true
+    }
 }
 
 impl<'q> PreparedFetch<'q> for All {
@@ -89,7 +103,7 @@ impl<'q> PreparedFetch<'q> for All {
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for Slice {
@@ -105,7 +119,7 @@ impl<'w> Fetch<'w> for Slice {
         Some(*self)
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -131,7 +145,7 @@ impl<'q> PreparedFetch<'q> for Slice {
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
 impl<'q> FetchItem<'q> for bool {
@@ -149,7 +163,7 @@ impl<'w> Fetch<'w> for bool {
     }
 
     #[inline(always)]
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         *self
     }
 
@@ -159,6 +173,12 @@ impl<'w> Fetch<'w> for bool {
 
     #[inline]
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for bool {
+    fn filter_static(&self, _: &crate::archetype::Archetype) -> bool {
+        *self
+    }
 }
 
 impl<'q> PreparedFetch<'q> for bool {
@@ -172,7 +192,7 @@ impl<'q> PreparedFetch<'q> for bool {
     }
 
     #[inline]
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         *chunk
     }
 }

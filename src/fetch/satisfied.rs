@@ -1,11 +1,8 @@
 use alloc::vec::Vec;
 
-use crate::{
-    archetype::{Slice, Slot},
-    Fetch, FetchItem,
-};
+use crate::{archetype::Slice, Fetch, FetchItem};
 
-use super::{FmtQuery, PreparedFetch};
+use super::{FetchAccessData, FmtQuery, PreparedFetch};
 
 /// Yields true iff `F` would match the query
 pub struct Satisfied<F>(pub(crate) F);
@@ -20,14 +17,14 @@ impl<'w, F: Fetch<'w>> Fetch<'w> for Satisfied<F> {
     type Prepared = PreparedSatisfied<F::Prepared>;
 
     fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        if self.0.filter_arch(data.arch) {
+        if self.0.filter_arch(data.into()) {
             Some(PreparedSatisfied(self.0.prepare(data)))
         } else {
             Some(PreparedSatisfied(None))
         }
     }
 
-    fn filter_arch(&self, _: &crate::archetype::Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -55,7 +52,7 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
         }
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         *chunk
     }
 

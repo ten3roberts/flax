@@ -94,7 +94,11 @@ impl State {
         self.roots.clear();
 
         for (arch_id, arch) in world.archetypes.iter() {
-            if !fetch.filter_arch(arch) {
+            if !fetch.filter_arch(FetchAccessData {
+                world,
+                arch,
+                arch_id,
+            }) {
                 continue;
             }
 

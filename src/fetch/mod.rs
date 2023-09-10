@@ -16,7 +16,7 @@ mod transform;
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    filter::RefFetch,
+    filter::{RefFetch, StaticFilter},
     system::Access,
     util::Ptr,
     ArchetypeId, ArchetypeSearcher, Entity, World,
@@ -63,6 +63,16 @@ pub struct FetchAccessData<'w> {
     pub arch_id: ArchetypeId,
 }
 
+impl<'w> From<FetchPrepareData<'w>> for FetchAccessData<'w> {
+    fn from(value: FetchPrepareData<'w>) -> Self {
+        Self {
+            world: value.world,
+            arch: value.arch,
+            arch_id: value.arch_id,
+        }
+    }
+}
+
 /// Represents the world data necessary for preparing a fetch
 #[derive(Copy, Clone)]
 pub struct FetchPrepareData<'w> {
@@ -103,8 +113,8 @@ pub trait Fetch<'w>: for<'q> FetchItem<'q> {
     /// Returns `None` if the archetype does not match.
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared>;
 
-    /// Rough filter to exclude or include archetypes.
-    fn filter_arch(&self, arch: &Archetype) -> bool;
+    /// Returns true if the archetype matches the fetch
+    fn filter_arch(&self, data: FetchAccessData) -> bool;
 
     /// Returns which components and how will be accessed for an archetype.
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>);
@@ -148,8 +158,7 @@ pub trait PreparedFetch<'q> {
     /// prepared archetype.
     ///
     /// The callee is responsible for assuring disjoint calls.
-    /// Repeated calls must use increasing adjacent values for `slot`
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item;
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item;
 
     #[inline]
     /// Filter the slots to visit
@@ -182,8 +191,8 @@ where
         (*self).create_chunk(slots)
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
-        F::fetch_next(chunk, slot)
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        F::fetch_next(chunk)
     }
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -210,7 +219,7 @@ impl<'w> Fetch<'w> for () {
         Some(())
     }
 
-    fn filter_arch(&self, _arch: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -238,7 +247,7 @@ impl<'q> PreparedFetch<'q> for () {
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
     #[inline]
-    unsafe fn fetch_next(_: &mut Self::Chunk, _: Slot) -> Self::Item {}
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
 // impl<'q, F> PreparedFetch<'q> for Option<F>
@@ -289,7 +298,7 @@ impl<'w> Fetch<'w> for EntityIds {
         })
     }
 
-    fn filter_arch(&self, _: &Archetype) -> bool {
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
         true
     }
 
@@ -310,7 +319,7 @@ impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
         Ptr::new(self.entities[slots.as_range()].as_ptr())
     }
 
-    unsafe fn fetch_next(chunk: &mut Self::Chunk, _: Slot) -> Self::Item {
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         let old = chunk.as_ptr();
         *chunk = chunk.add(1);
         *old
@@ -366,9 +375,9 @@ macro_rules! tuple_impl {
             type Chunk = ($($ty::Chunk,)*);
 
             #[inline]
-            unsafe fn fetch_next(chunk: &mut Self::Chunk, slot: Slot) -> Self::Item {
+            unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
                 ($(
-                    $ty::fetch_next(&mut chunk.$idx, slot),
+                    $ty::fetch_next(&mut chunk.$idx),
                 )*)
             }
 
@@ -416,8 +425,8 @@ macro_rules! tuple_impl {
             }
 
             #[inline]
-            fn filter_arch(&self, arch: &Archetype) -> bool {
-                ( $((self.$idx).filter_arch(arch)) && * )
+            fn filter_arch(&self, data:FetchAccessData) -> bool {
+                ( $((self.$idx).filter_arch(data)) && * )
             }
 
             #[inline]
@@ -434,6 +443,14 @@ macro_rules! tuple_impl {
             fn searcher(&self, searcher: &mut ArchetypeSearcher) {
                 $((self.$idx).searcher(searcher));*
             }
+        }
+
+        impl< $($ty: StaticFilter, )*> StaticFilter for ($($ty,)*)
+        {
+            fn filter_static(&self, arch: &Archetype) -> bool {
+                ( $((self.$idx).filter_static(arch)) && * )
+            }
+
         }
     };
 }

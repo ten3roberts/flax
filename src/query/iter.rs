@@ -66,7 +66,7 @@ where
             None
         } else {
             // let fetch = unsafe { &mut *(self.fetch as *mut Q::Batch) };
-            let item = unsafe { Q::fetch_next(&mut self.fetch, self.pos) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch) };
             self.pos += 1;
             Some(item)
         }
@@ -81,7 +81,7 @@ where
         if self.pos == self.end {
             None
         } else {
-            let item = unsafe { Q::fetch_next(&mut self.fetch, self.pos) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch) };
             let id = self.arch.entities[self.pos];
             self.pos += 1;
             Some((id, item))
@@ -93,7 +93,7 @@ where
             None
         } else {
             let slot = self.pos;
-            let item = unsafe { Q::fetch_next(&mut self.fetch, slot) };
+            let item = unsafe { Q::fetch_next(&mut self.fetch) };
             let id = self.arch.entities[slot];
             self.pos += 1;
 
