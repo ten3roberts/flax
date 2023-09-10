@@ -231,7 +231,7 @@ impl<'w> Fetch<'w> for () {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl<'q> ReadOnlyFetch<'q> for () {
+impl<'q> RandomFetch<'q> for () {
     #[inline]
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
     #[inline]
@@ -326,7 +326,7 @@ impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
     }
 }
 
-impl<'w, 'q> ReadOnlyFetch<'q> for ReadEntities<'w> {
+impl<'w, 'q> RandomFetch<'q> for ReadEntities<'w> {
     #[inline]
     unsafe fn fetch_shared(&self, slot: usize) -> Self::Item {
         self.entities[slot]
@@ -347,8 +347,8 @@ macro_rules! tuple_impl {
 
         }
 
-        impl<'q, $($ty, )*> ReadOnlyFetch<'q> for ($($ty,)*)
-        where $($ty: ReadOnlyFetch<'q>,)*
+        impl<'q, $($ty, )*> RandomFetch<'q> for ($($ty,)*)
+        where $($ty: RandomFetch<'q>,)*
         {
 
             #[inline(always)]

@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 use crate::{
     archetype::{Slice, Slot},
     fetch::{
-        FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, ReadOnlyFetch, TransformFetch,
+        FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, RandomFetch, TransformFetch,
     },
     system::Access,
     Fetch, FetchItem,
@@ -124,7 +124,7 @@ impl<'q, F: FetchItem<'q>, M> FetchItem<'q> for Cmp<F, M> {
 impl<'w, F, M> Fetch<'w> for Cmp<F, M>
 where
     F: Fetch<'w>,
-    F::Prepared: for<'x> ReadOnlyFetch<'x>,
+    F::Prepared: for<'x> RandomFetch<'x>,
     M: for<'x> CmpMethod<<F::Prepared as PreparedFetch<'x>>::Item> + 'w,
 {
     const MUTABLE: bool = F::MUTABLE;
@@ -161,9 +161,9 @@ pub struct PreparedCmp<'w, F, M> {
     method: &'w M,
 }
 
-impl<'w, 'q, F, M> ReadOnlyFetch<'q> for PreparedCmp<'w, F, M>
+impl<'w, 'q, F, M> RandomFetch<'q> for PreparedCmp<'w, F, M>
 where
-    F: for<'x> ReadOnlyFetch<'x>,
+    F: for<'x> RandomFetch<'x>,
     M: for<'x> CmpMethod<<F as PreparedFetch<'x>>::Item> + 'w,
 {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
@@ -177,7 +177,7 @@ where
 
 impl<'w, 'q, Q, M> PreparedFetch<'q> for PreparedCmp<'w, Q, M>
 where
-    Q: for<'x> ReadOnlyFetch<'x>,
+    Q: for<'x> RandomFetch<'x>,
     M: for<'x> CmpMethod<<Q as PreparedFetch<'x>>::Item> + 'w,
 {
     type Item = <Q as PreparedFetch<'q>>::Item;

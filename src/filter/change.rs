@@ -3,7 +3,7 @@ use core::fmt::Formatter;
 use itertools::Itertools;
 
 use crate::archetype::{CellGuard, Change, Slot};
-use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, ReadOnlyFetch};
+use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch};
 use crate::system::Access;
 use crate::util::Ptr;
 use crate::{
@@ -43,7 +43,7 @@ where
     type Item = &'q T;
 }
 
-impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedChangeFilter<'w, T> {
+impl<'w, 'q, T: ComponentValue> RandomFetch<'q> for PreparedChangeFilter<'w, T> {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         unsafe { self.data.get().get_unchecked(slot) }
     }
@@ -263,7 +263,7 @@ impl<'w> core::fmt::Debug for PreparedRemoveFilter<'w> {
     }
 }
 
-impl<'q, 'w> ReadOnlyFetch<'q> for PreparedRemoveFilter<'w> {
+impl<'q, 'w> RandomFetch<'q> for PreparedRemoveFilter<'w> {
     #[inline]
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
 

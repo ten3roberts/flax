@@ -8,7 +8,7 @@ use super::{
     cloned::Cloned,
     copied::Copied,
     opt::{Opt, OptOr},
-    source::{FetchSource, FromRelation},
+    source::{FetchSource, FromRelation, Traverse},
     transform::Added,
     Map, Modified, Satisfied, Source, TransformFetch,
 };
@@ -127,15 +127,36 @@ pub trait FetchExt: Sized {
 
     /// Follows a relation to resolve the fetch.
     ///
-    /// This effectively allows you to for example fetch from the parent of an entity.
+    /// This allows you to for example fetch from the parent of an entity.
     fn relation<T, R>(self, relation: R) -> Source<Self, FromRelation>
     where
         R: RelationExt<T>,
         T: ComponentValue,
     {
-        Source::new(self, FromRelation::new(relation))
+        Source::new(
+            self,
+            FromRelation {
+                relation: relation.id(),
+                name: relation.vtable().name,
+            },
+        )
     }
 
+    /// Traverse the edges of a relation recursively to find the first entity which matches the fetch
+    ///
+    /// This will attempt to resolve a fetch from and including the source entity, to the roots of the relation.
+    fn traverse<T, R>(self, relation: R) -> Source<Self, Traverse>
+    where
+        R: RelationExt<T>,
+        T: ComponentValue,
+    {
+        Source::new(
+            self,
+            Traverse {
+                relation: relation.id(),
+            },
+        )
+    }
     /// Transform the fetch into a fetch where each constituent part tracks and yields for
     /// modification events.
     ///

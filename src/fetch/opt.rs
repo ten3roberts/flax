@@ -11,7 +11,7 @@ use crate::{
     Fetch,
 };
 
-use super::{FetchAccessData, FetchItem, ReadOnlyFetch, TransformFetch};
+use super::{FetchAccessData, FetchItem, RandomFetch, TransformFetch};
 
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
@@ -50,9 +50,9 @@ where
 #[doc(hidden)]
 pub struct PreparedOpt<F>(pub(crate) Option<F>);
 
-impl<'q, F> ReadOnlyFetch<'q> for PreparedOpt<F>
+impl<'q, F> RandomFetch<'q> for PreparedOpt<F>
 where
-    F: ReadOnlyFetch<'q>,
+    F: RandomFetch<'q>,
 {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.0.as_ref().map(|fetch| fetch.fetch_shared(slot))

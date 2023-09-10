@@ -8,7 +8,7 @@ use crate::{
     Component, ComponentValue, Entity, Fetch, FetchItem,
 };
 
-use super::{FetchAccessData, PreparedFetch, ReadOnlyFetch};
+use super::{FetchAccessData, PreparedFetch, RandomFetch};
 
 /// A query for conservative mutablility.
 ///
@@ -112,7 +112,7 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     }
 }
 
-impl<'w, 'q, T: ComponentValue> ReadOnlyFetch<'q> for PreparedMaybeMut<'w, T> {
+impl<'w, 'q, T: ComponentValue> RandomFetch<'q> for PreparedMaybeMut<'w, T> {
     #[inline]
     unsafe fn fetch_shared(&'q self, slot: usize) -> Self::Item {
         MutGuard {

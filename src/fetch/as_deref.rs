@@ -1,4 +1,4 @@
-use super::{FetchAccessData, FmtQuery, PreparedFetch, ReadOnlyFetch};
+use super::{FetchAccessData, FmtQuery, PreparedFetch, RandomFetch};
 use crate::{query::ArchetypeSearcher, system::Access, Fetch, FetchItem};
 use alloc::vec::Vec;
 use core::{fmt, ops::Deref};
@@ -73,9 +73,9 @@ where
     }
 }
 
-impl<'q, F, V> ReadOnlyFetch<'q> for AsDeref<F>
+impl<'q, F, V> RandomFetch<'q> for AsDeref<F>
 where
-    F: ReadOnlyFetch<'q, Item = &'q V>,
+    F: RandomFetch<'q, Item = &'q V>,
     V: 'static + Deref,
 {
     unsafe fn fetch_shared(&'q self, slot: crate::archetype::Slot) -> Self::Item {
