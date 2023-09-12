@@ -1,6 +1,5 @@
-use flax::*;
+use flax::{filter::Or, *};
 use itertools::Itertools;
-use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
 component! {
@@ -328,4 +327,48 @@ fn sparse_and() {
     let mut schedule = Schedule::from([system_a, system_b]);
     let batches = schedule.batch_info(&world);
     assert_eq!(batches.len(), 1);
+}
+
+#[test]
+fn entity_filter() {
+    component! {
+        index: usize,
+    }
+
+    let mut world = World::new();
+
+    let ids = (0..10)
+        .map(|i| {
+            Entity::builder()
+                .set(a(), 5.4)
+                .set(index(), i)
+                .set(b(), "Foo".into())
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let ids2 = (10..20)
+        .map(|i| {
+            Entity::builder()
+                .set(a(), 5.4)
+                .set(index(), i)
+                .spawn(&mut world)
+        })
+        .collect_vec();
+
+    let ids3 = (20..40)
+        .map(|i| Entity::builder().set(index(), i).spawn(&mut world))
+        .collect_vec();
+
+    let mut query = Query::new(index().copied()).filter(Or((ids[5], ids2[7])));
+
+    assert_eq!(query.borrow(&world).iter().sorted().collect_vec(), &[5, 17]);
+    let mut query = Query::new((entity_ids(), Or((ids[5], ids2[7])).satisfied()));
+
+    let all_ids = ids.iter().chain(ids2.iter()).chain(ids3.iter());
+    let expected = all_ids
+        .map(|&id| (id, id == ids[5] || id == ids2[7]))
+        .collect_vec();
+
+    assert_eq!(query.borrow(&world).iter().sorted().collect_vec(), expected);
 }

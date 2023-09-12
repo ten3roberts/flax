@@ -1,8 +1,8 @@
 use crate::{
-    archetype::Slice,
+    archetype::{Slice, Slot},
     fetch::{FetchAccessData, FetchPrepareData, PreparedFetch},
     system::Access,
-    Fetch, FetchItem,
+    Entity, Fetch, FetchItem,
 };
 use alloc::vec::Vec;
 use core::fmt::{self, Formatter};
@@ -104,6 +104,72 @@ impl<'q> PreparedFetch<'q> for All {
 
     #[inline]
     unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
+}
+
+impl<'w> FetchItem<'w> for Entity {
+    type Item = Entity;
+}
+
+impl<'w> Fetch<'w> for Entity {
+    const MUTABLE: bool = false;
+    type Prepared = PreparedEntity;
+
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
+        let loc = data.world.location(*self).ok()?;
+
+        if data.arch_id == loc.arch_id {
+            Some(PreparedEntity {
+                slot: loc.slot,
+                id: *self,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "entity {:?}", self)
+    }
+
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        if let Ok(loc) = data.world.location(*self) {
+            data.arch_id == loc.arch_id
+        } else {
+            false
+        }
+    }
+
+    #[inline]
+    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
+}
+
+#[doc(hidden)]
+pub struct PreparedEntity {
+    slot: Slot,
+    id: Entity,
+}
+
+impl<'w> PreparedFetch<'w> for PreparedEntity {
+    type Item = Entity;
+
+    type Chunk = Entity;
+
+    unsafe fn create_chunk(&'w mut self, slots: Slice) -> Self::Chunk {
+        assert!(slots.start == self.slot && slots.end == self.slot);
+        self.id
+    }
+
+    unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
+        *chunk
+    }
+
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        if slots.contains(self.slot) {
+            Slice::single(self.slot)
+        } else {
+            Slice::new(slots.end, slots.end)
+        }
+    }
 }
 
 impl<'q> FetchItem<'q> for Slice {
