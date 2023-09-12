@@ -1,6 +1,6 @@
 use crate::{
     archetype::{Slice, Slot},
-    fetch::{FetchAccessData, FetchPrepareData, PreparedFetch},
+    fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch},
     system::Access,
     Entity, Fetch, FetchItem,
 };
@@ -147,6 +147,16 @@ impl<'w> Fetch<'w> for Entity {
 pub struct PreparedEntity {
     slot: Slot,
     id: Entity,
+}
+
+impl<'q> RandomFetch<'q> for PreparedEntity {
+    unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {
+        self.id
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, _: Slot) -> Self::Item {
+        *chunk
+    }
 }
 
 impl<'w> PreparedFetch<'w> for PreparedEntity {
