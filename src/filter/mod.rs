@@ -21,8 +21,8 @@ use crate::{
 
 pub use change::{ChangeFilter, RemovedFilter};
 pub use cmp::{Cmp, Equal, Greater, GreaterEq, Less, LessEq};
-pub use constant::*;
-pub use set::*;
+pub use constant::{All, Nothing};
+pub use set::{And, Not, Or, Union};
 
 macro_rules! gen_bitops {
     ($ty:ident[$($p: tt),*]) => {
