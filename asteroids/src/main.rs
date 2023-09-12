@@ -1,22 +1,11 @@
+use ::rand::{rngs::StdRng, Rng, SeedableRng};
 use anyhow::{Context, Result};
 use flax::{
-    component, entity_ids,
     events::{EventKind, EventSubscriber},
-    BoxedSystem, CommandBuffer, Component, Debuggable, Entity, EntityBorrow, EntityBuilder,
-    EntityIds, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow, Schedule, SharedResource,
-    System, World,
+    filter::ChangeFilter,
+    *,
 };
-use itertools::Itertools;
-use macroquad::{
-    color::hsl_to_rgb,
-    math::*,
-    prelude::{is_key_down, Color, KeyCode, BLACK, BLUE, DARKPURPLE, GRAY, GREEN, ORANGE},
-    shapes::{draw_circle, draw_poly, draw_triangle},
-    text::draw_text,
-    time::get_frame_time,
-    window::{clear_background, next_frame, screen_height, screen_width},
-};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use macroquad::{color::hsl_to_rgb, math::*, prelude::*};
 use std::f32::consts::TAU;
 use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;
@@ -73,6 +62,7 @@ async fn main() -> Result<()> {
 
     let dt = 0.02;
 
+    // Use a channel to subscribe to any player being despawned asynchronously
     let (player_dead_tx, player_dead_rx) = flume::unbounded();
     world.subscribe(
         player_dead_tx
@@ -109,6 +99,7 @@ async fn main() -> Result<()> {
     loop {
         if player_dead_rx.try_recv().is_ok() {
             world.despawn_many(asteroid().with());
+
             create_player().spawn(&mut world);
         }
 
@@ -117,13 +108,8 @@ async fn main() -> Result<()> {
         while acc > 0.0 {
             acc -= dt;
             let batches = physics_schedule.batch_info(&world);
-            tracing::debug!(
-                "Batches: {:#?}",
-                batches
-                    .iter()
-                    .map(|v| v.iter().map(|v| v.name()).collect_vec())
-                    .collect_vec()
-            );
+            let batches = batches.to_names();
+            tracing::debug!(?batches, "physics batches",);
             physics_schedule.execute_seq(&mut world)?;
         }
 
@@ -205,21 +191,23 @@ fn create_bullet(player: Entity) -> EntityBuilder {
             Box::new(move |world, coll| {
                 *world.get_mut(coll.a, health()).unwrap() = 0.0;
 
-                if let Ok(mut health) = world.get_mut(coll.b, health()) {
-                    if *health <= 0.0 {
-                        return;
-                    }
+                let Ok(mut health) = world.get_mut(coll.b, health()) else {
+                    return;
+                };
 
-                    *health -= BULLET_DAMAGE;
+                if *health <= 0.0 {
+                    return;
+                }
 
-                    if *health <= 0.0 && player != coll.b {
-                        if let Ok(mut material) = world.get_mut(player, material()) {
-                            *material += world
-                                .get_mut(coll.b, self::material())
-                                .as_deref()
-                                .copied()
-                                .unwrap_or_default()
-                        }
+                *health -= BULLET_DAMAGE;
+
+                if *health <= 0.0 && player != coll.b {
+                    if let Ok(mut material) = world.get_mut(player, material()) {
+                        *material += world
+                            .get_mut(coll.b, self::material())
+                            .as_deref()
+                            .copied()
+                            .unwrap_or_default()
                     }
                 }
             }),
@@ -251,6 +239,7 @@ fn create_explosion(
     (0..count).map(move |_| {
         let dir = rng.gen_range(0.0..TAU);
         let speed = rng.gen_range(speed * 0.5..speed);
+
         create_particle(size, lifetime, color)
             .set(velocity(), speed * vec2(dir.cos(), dir.sin()))
             .set(position(), pos)
@@ -276,37 +265,42 @@ fn particle_system() -> BoxedSystem {
         .boxed()
 }
 
+#[derive(Fetch)]
+struct CameraQuery {
+    pos: Mutable<Vec2>,
+    vel: Mutable<Vec2>,
+    view: Mutable<Mat3>,
+}
+
 /// System which makes the camera track the player smoothly.
 ///
 /// Uses two different queries, one for the player and one for the camera.
 fn camera_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new((position(), velocity())).with(player()))
-        .with_query(Query::new((
-            position().as_mut(),
-            velocity().as_mut(),
-            camera().as_mut(),
-        )))
+        .with_query(Query::new(CameraQuery {
+            pos: position().as_mut(),
+            vel: velocity().as_mut(),
+            view: camera().as_mut(),
+        }))
         .build(
             move |mut players: QueryBorrow<(Component<Vec2>, Component<Vec2>), _>,
-                  mut cameras: QueryBorrow<(Mutable<Vec2>, Mutable<Vec2>, Mutable<Mat3>)>|
+                  mut cameras: QueryBorrow<CameraQuery>|
                   -> Result<()> {
                 if let Some((player_pos, player_vel)) = players.first() {
-                    let (camera_pos, camera_vel, camera) = cameras
-                        .first()
-                        .ok_or_else(|| anyhow::anyhow!("No camera"))?;
+                    for camera in &mut cameras {
+                        *camera.pos = camera.pos.lerp(*player_pos, dt).lerp(*player_pos, dt);
+                        *camera.vel = camera.vel.lerp(*player_vel, dt * 0.1);
 
-                    *camera_pos = camera_pos.lerp(*player_pos, dt).lerp(*player_pos, dt);
-                    *camera_vel = camera_vel.lerp(*player_vel, dt * 0.1);
+                        let screen_size = vec2(screen_width(), screen_height());
 
-                    let screen_size = vec2(screen_width(), screen_height());
-
-                    *camera = Mat3::from_scale_angle_translation(
-                        Vec2::ONE,
-                        0.0,
-                        *camera_pos - screen_size * 0.5,
-                    )
-                    .inverse();
+                        *camera.view = Mat3::from_scale_angle_translation(
+                            Vec2::ONE,
+                            0.0,
+                            *camera.pos - screen_size * 0.5,
+                        )
+                        .inverse();
+                    }
                 }
                 Ok(())
             },
@@ -352,6 +346,8 @@ impl Shape {
         }
     }
 }
+
+/// Represents a collision between two entities
 struct Collision {
     a: Entity,
     b: Entity,
@@ -447,6 +443,7 @@ fn collision_system() -> BoxedSystem {
                     }
                 }
 
+                // ensure there are no borrows when callbacks are executed
                 drop((a, b));
 
                 for collision in collisions {
@@ -501,8 +498,8 @@ struct PlayerQuery {
     material: Component<f32>,
 }
 
-impl Default for PlayerQuery {
-    fn default() -> Self {
+impl PlayerQuery {
+    fn new() -> Self {
         Self {
             id: entity_ids(),
             player: player(),
@@ -516,13 +513,19 @@ impl Default for PlayerQuery {
     }
 }
 
+impl Default for PlayerQuery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn player_system(dt: f32) -> BoxedSystem {
     let mut current_weapon_cooldown = 0.0;
     let mut current_plume_cooldown = 0.0;
 
     System::builder()
         .with_name("player_system")
-        .with_query(Query::new(PlayerQuery::default()))
+        .with_query(Query::new(PlayerQuery::new()))
         .with_cmd_mut()
         .build(
             move |mut q: QueryBorrow<PlayerQuery>, cmd: &mut CommandBuffer| {
@@ -582,10 +585,10 @@ fn despawn_out_of_bounds() -> BoxedSystem {
     System::builder()
         .with_name("despawn_out_of_bounds")
         .with_query(Query::new(position()).with(player()))
-        .with_query(Query::new((position(), health().as_mut())).without(player()))
+        .with_query(Query::new((position().modified(), health().as_mut())).without(player()))
         .build(
             |mut player: QueryBorrow<Component<Vec2>, _>,
-             mut asteroids: QueryBorrow<(Component<Vec2>, Mutable<f32>), _>| {
+             mut asteroids: QueryBorrow<(ChangeFilter<Vec2>, Mutable<f32>), _>| {
                 if let Some(player_pos) = player.first() {
                     for (asteroid, health) in &mut asteroids {
                         if player_pos.distance(*asteroid) > 2500.0 {
@@ -613,9 +616,9 @@ fn despawn_dead() -> BoxedSystem {
              mut q: QueryBorrow<(EntityIds, Component<Vec2>, Component<_>, Opt<_>), _>,
              cmd: &mut CommandBuffer| {
                 let rng = resources.get().unwrap();
-                for (id, pos, vel, mat) in &mut q {
+                for (id, pos, vel, material) in &mut q {
                     cmd.despawn(id);
-                    if let Some(mat) = mat {
+                    if let Some(mat) = material {
                         create_explosion(
                             &mut *rng,
                             (mat / 50.0) as _,
@@ -651,12 +654,12 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                   cmd: &mut CommandBuffer| {
                 let rng = resources.get().unwrap();
 
-                let (player_pos, difficulty) = match players.first() {
-                    Some(v) => v,
-                    None => return,
+                let Some((player_pos, difficulty)) = players.first() else {
+                    return;
                 };
 
                 let existing = existing.count();
+
                 tracing::debug!(
                     ?existing,
                     max_count,
@@ -668,16 +671,16 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                 (existing..max_count).for_each(|_| {
                     // Spawn around player
                     let dir = rng.gen_range(0f32..TAU);
-                    let pos =
-                        *player_pos + vec2(dir.cos(), dir.sin()) * rng.gen_range(512.0..2048.0);
+                    let dir = vec2(dir.cos(), dir.sin());
+                    let pos = *player_pos + dir * rng.gen_range(512.0..2048.0);
 
                     let size = rng.gen_range(0.2..1.0);
                     let radius = size * ASTEROID_SIZE;
                     let health = size * 100.0;
 
                     let dir = rng.gen_range(0f32..TAU);
-                    let vel =
-                        vec2(dir.cos(), dir.sin()) * rng.gen_range(30.0..80.0) * difficulty.sqrt();
+                    let dir = vec2(dir.cos(), dir.sin());
+                    let vel = dir * rng.gen_range(30.0..80.0) * difficulty.sqrt();
 
                     builder
                         .set(position(), pos)
@@ -687,7 +690,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                             shape(),
                             Shape::Polygon {
                                 radius,
-                                sides: rng.gen_range(4..16),
+                                sides: rng.gen_range(3..16),
                             },
                         )
                         .set(mass(), radius * radius)
@@ -696,7 +699,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                         .set(self::health(), health)
                         .set(color(), hsl_to_rgb(0.75, 0.5, 0.5))
                         .set(velocity(), vel)
-                        .set(angular_velocity(), rng.gen_range(-2.0..2.0))
+                        .set(angular_velocity(), rng.gen_range(-4.0..4.0))
                         .spawn_into(cmd);
                 })
             },
