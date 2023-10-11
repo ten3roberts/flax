@@ -15,7 +15,7 @@ use crate::{
     name,
     query::QueryOne,
     writer::{EntityWriter, FnWriter, Missing, Replace, SingleComponentWriter, WriteDedup},
-    Component, ComponentKey, ComponentValue, Entity, Fetch, RelationExt, World,
+    ArchetypeId, Component, ComponentKey, ComponentValue, Entity, Fetch, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
@@ -266,7 +266,7 @@ impl<'a> EntityRefMut<'a> {
         let loc = self.loc();
         EntityRef {
             arch: self.world.archetypes.get(loc.arch_id),
-            slot: loc.slot,
+            loc,
             id: self.id,
             world: self.world,
         }
@@ -278,7 +278,7 @@ impl<'a> EntityRefMut<'a> {
         let loc = self.loc();
         EntityRef {
             arch: self.world.archetypes.get(loc.arch_id),
-            slot: loc.slot,
+            loc,
             id: self.id,
             world: self.world,
         }
@@ -303,7 +303,7 @@ impl<'a> EntityRefMut<'a> {
 pub struct EntityRef<'a> {
     pub(crate) world: &'a World,
     pub(crate) arch: &'a Archetype,
-    pub(crate) slot: Slot,
+    pub(crate) loc: EntityLocation,
     pub(crate) id: Entity,
 }
 
@@ -314,7 +314,7 @@ impl<'a> EntityRef<'a> {
         component: Component<T>,
     ) -> Result<AtomicRef<'a, T>, MissingComponent> {
         self.arch
-            .get(self.slot, component)
+            .get(self.loc.slot, component)
             .ok_or_else(|| MissingComponent {
                 id: self.id,
                 desc: component.desc(),
@@ -327,7 +327,7 @@ impl<'a> EntityRef<'a> {
         component: Component<T>,
     ) -> Result<RefMut<'a, T>, MissingComponent> {
         self.arch
-            .get_mut(self.slot, component, self.world.advance_change_tick())
+            .get_mut(self.loc.slot, component, self.world.advance_change_tick())
             .ok_or_else(|| MissingComponent {
                 id: self.id,
                 desc: component.desc(),
@@ -357,7 +357,7 @@ impl<'a> EntityRef<'a> {
         let change_tick = self.world.advance_change_tick();
 
         self.arch
-            .update(self.slot, component, FnWriter::new(f), change_tick)
+            .update(self.loc.slot, component, FnWriter::new(f), change_tick)
     }
 
     /// Updates a component in place
@@ -369,7 +369,11 @@ impl<'a> EntityRef<'a> {
         let tick = self.world.advance_change_tick();
 
         self.arch
-            .update(self.slot, component, WriteDedup::new(value), tick)
+            .update(self.loc.slot, component, WriteDedup::new(value), tick)
+    }
+
+    pub fn query_one<'q, Q: Fetch<'q>>(&'q self, query: &'q Q) -> QueryOne<'q, Q> {
+        QueryOne::new(query, self.world, self.arch, self.loc)
     }
 
     /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
@@ -377,7 +381,7 @@ impl<'a> EntityRef<'a> {
         &self,
         component: Component<T>,
     ) -> core::result::Result<Option<AtomicRef<T>>, BorrowError> {
-        self.arch.try_get(self.slot, component)
+        self.arch.try_get(self.loc.slot, component)
     }
 
     /// Attempt to concurrently access a component mutably using and fail if the component is already borrowed
@@ -386,7 +390,7 @@ impl<'a> EntityRef<'a> {
         component: Component<T>,
     ) -> core::result::Result<Option<RefMut<T>>, BorrowMutError> {
         self.arch
-            .try_get_mut(self.slot, component, self.world.advance_change_tick())
+            .try_get_mut(self.loc.slot, component, self.world.advance_change_tick())
     }
 
     /// Returns all relations to other entities of the specified kind
@@ -395,7 +399,7 @@ impl<'a> EntityRef<'a> {
         &self,
         relation: impl RelationExt<T>,
     ) -> RelationIter<'a, T> {
-        RelationIter::new(relation, self.arch, self.slot)
+        RelationIter::new(relation, self.arch, self.loc.slot)
     }
 
     /// Returns all relations to other entities of the specified kind
@@ -407,7 +411,7 @@ impl<'a> EntityRef<'a> {
         RelationIterMut::new(
             relation,
             self.arch,
-            self.slot,
+            self.loc.slot,
             self.world.advance_change_tick(),
         )
     }
@@ -423,7 +427,7 @@ impl<'a> Debug for EntityRef<'a> {
         EntityFormatter {
             world: self.world,
             arch: self.arch,
-            slot: self.slot,
+            slot: self.loc.slot,
             id: self.id,
         }
         .fmt(f)

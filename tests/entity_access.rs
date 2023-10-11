@@ -1,4 +1,4 @@
-use flax::{component, name, Entity, World};
+use flax::{component, name, Entity, FetchExt, World};
 
 #[test]
 fn entity_access() {
@@ -16,4 +16,21 @@ fn entity_access() {
         .spawn(&mut world);
 
     let entity = world.entity(id).unwrap();
+
+    let query = &(name().cloned(), a());
+    let query2 = &(name().cloned(), a().as_mut());
+    {
+        let mut query = entity.query_one(query);
+        assert_eq!(query.get(), Some(("a".into(), &5)));
+    }
+
+    {
+        let mut query = entity.query_one(query2);
+        *query.get().unwrap().1 += 1;
+
+        assert_eq!(query.get(), Some(("a".into(), &mut 6)));
+    }
+
+    let mut query = entity.query_one(query);
+    assert_eq!(query.get(), Some(("a".into(), &6)));
 }
