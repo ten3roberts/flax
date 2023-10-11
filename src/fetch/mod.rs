@@ -3,6 +3,7 @@ mod cloned;
 mod component;
 mod component_mut;
 mod copied;
+mod entity_access;
 mod entity_ref;
 mod ext;
 mod map;
@@ -19,7 +20,7 @@ use crate::{
     filter::{RefFetch, StaticFilter},
     system::Access,
     util::Ptr,
-    ArchetypeId, ArchetypeSearcher, Entity, World,
+    ArchetypeId, ArchetypeSearcher, Entity, EntityRef, World,
 };
 use alloc::vec::Vec;
 use core::fmt::Debug;
@@ -29,6 +30,7 @@ pub use as_deref::*;
 pub use cloned::*;
 pub use component::*;
 pub use component_mut::*;
+pub use entity_access::EntityAccess;
 pub use entity_ref::*;
 pub use ext::FetchExt;
 pub use map::Map;
@@ -347,6 +349,21 @@ macro_rules! tuple_impl {
 
         }
 
+        impl<'q, $($ty, )*> EntityAccess<'q> for ($($ty,)*)
+            where $($ty: EntityAccess<'q>,)*
+        {
+            type Item = ($($ty::Item,)*);
+
+            fn get(&'q self, entity: &'q EntityRef) -> Option<Self::Item> {
+                Some(
+                    ($(
+                        (self.$idx).get(entity)?,
+                    )*)
+                )
+            }
+
+
+        }
         impl<'q, $($ty, )*> RandomFetch<'q> for ($($ty,)*)
         where $($ty: RandomFetch<'q>,)*
         {
