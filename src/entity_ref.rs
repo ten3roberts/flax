@@ -13,8 +13,9 @@ use crate::{
     error::MissingComponent,
     format::EntityFormatter,
     name,
+    query::QueryOne,
     writer::{EntityWriter, FnWriter, Missing, Replace, SingleComponentWriter, WriteDedup},
-    Component, ComponentKey, ComponentValue, Entity, RelationExt, World,
+    Component, ComponentKey, ComponentValue, Entity, Fetch, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
@@ -104,6 +105,10 @@ impl<'a> EntityRefMut<'a> {
                 id: self.id,
                 desc: component.desc(),
             })
+    }
+
+    pub fn query_one<Q: Fetch<'a>>(&self, query: Q) -> Option<QueryOne<'a, Q>> {
+        todo!()
     }
 
     /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
