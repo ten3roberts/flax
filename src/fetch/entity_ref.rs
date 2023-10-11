@@ -2,8 +2,9 @@ use alloc::vec::Vec;
 
 use crate::{
     archetype::{Archetype, Slot},
+    entity::EntityLocation,
     system::{Access, AccessKind},
-    EntityRef, Fetch, FetchItem, World,
+    ArchetypeId, EntityRef, Fetch, FetchItem, World,
 };
 
 use super::{FetchAccessData, PreparedFetch};
@@ -32,6 +33,7 @@ impl<'w> Fetch<'w> for EntityRefs {
         Some(PreparedEntityRef {
             arch: data.arch,
             world: data.world,
+            arch_id: data.arch_id,
         })
     }
 
@@ -57,12 +59,14 @@ impl<'w> Fetch<'w> for EntityRefs {
 pub struct PreparedEntityRef<'a> {
     world: &'a World,
     arch: &'a Archetype,
+    arch_id: ArchetypeId,
 }
 
 #[doc(hidden)]
 pub struct Batch<'a> {
     pub(crate) world: &'a World,
     pub(crate) arch: &'a Archetype,
+    pub(crate) arch_id: ArchetypeId,
     slot: Slot,
 }
 
@@ -75,6 +79,7 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
             world: self.world,
             arch: self.arch,
             slot: slice.start,
+            arch_id: self.arch_id,
         }
     }
 
@@ -86,7 +91,10 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
         EntityRef {
             arch: chunk.arch,
             world: chunk.world,
-            slot,
+            loc: EntityLocation {
+                arch_id: chunk.arch_id,
+                slot,
+            },
             id: *chunk.arch.entities.get_unchecked(slot),
         }
     }

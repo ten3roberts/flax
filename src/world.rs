@@ -1066,7 +1066,7 @@ impl World {
         Ok(EntityRef {
             world: self,
             arch,
-            slot: loc.slot,
+            loc,
             id,
         })
     }
