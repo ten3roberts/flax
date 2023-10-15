@@ -73,7 +73,16 @@ pub(crate) fn update_entity_loc(
     *ns.get_mut(id).expect("Entity is not valid") = loc;
 }
 
+/// The main entry point of the ECS
+///
 /// Holds the entities and components of the ECS.
+///
+/// Provides methods to spawn, despawn and access entities and components.
+///
+/// More advanced methods for component accesses are provided through the [`EntityRef`] and [`EntityRefMut`] acquired through [`Self::entity`] and
+/// [`Self::entity_mut`], respectively.
+///
+/// For efficient iteration, change tracking, and graph traversal, see [`Query`](crate::Query)
 pub struct World {
     entities: EntityStores,
     pub(crate) archetypes: Archetypes,

@@ -1,16 +1,14 @@
-use core::{mem, ops::Deref};
-
 use crate::{
     archetype::{Archetype, Slice},
     entity::EntityLocation,
     fetch::{FetchPrepareData, PreparedFetch},
-    EntityRef, Fetch, FetchItem, World,
+    Fetch, FetchItem, World,
 };
 
+/// Execute a query on a single entity
 pub struct QueryOne<'w, Q: Fetch<'w>> {
     prepared: Option<Q::Prepared>,
     loc: EntityLocation,
-    // item: <Q::Prepared as PreparedFetch<'static>>::Item,
 }
 
 impl<'w, Q: Fetch<'w>> QueryOne<'w, Q> {
@@ -31,7 +29,7 @@ impl<'w, Q: Fetch<'w>> QueryOne<'w, Q> {
         Self { prepared, loc }
     }
 
-    /// Fetches the query item from the entity, or `None` if the entity does not match the query
+    /// Fetch the query item from the entity, or `None` if the entity does not match the query
     pub fn get(&mut self) -> Option<<Q as FetchItem<'_>>::Item> {
         match &mut self.prepared {
             Some(prepared) => {

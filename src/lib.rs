@@ -235,10 +235,12 @@ pub mod query;
 mod relation;
 /// System execution
 pub mod schedule;
+
+#[cfg(feature = "serde")]
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein
-#[cfg(feature = "serde")]
 pub mod serialize;
+
 /// Provides tuple utilities like `cloned`
 mod util;
 /// vtable implementation for dynamic dispatching
@@ -260,7 +262,7 @@ pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
 pub use metadata::{Debuggable, Exclusive};
-pub(crate) use query::ArchetypeSearcher;
+
 pub use query::{
     Children, Dfs, DfsBorrow, DfsIter, EntityBorrow, EntityQuery, Planar, Query, QueryBorrow,
     QueryIter, Topo,
@@ -268,8 +270,10 @@ pub use query::{
 pub use relation::{Relation, RelationExt, RelationIter, RelationIterMut};
 pub use schedule::{Schedule, ScheduleBuilder, SystemInfo};
 pub use system::{BoxedSystem, SharedResource, System, SystemBuilder};
-pub(crate) use vtable::ComponentVTable;
 pub use world::{MigratedEntities, ReservedEntityIter, World};
+
+pub(crate) use query::ArchetypeSearcher;
+pub(crate) use vtable::ComponentVTable;
 
 #[cfg(feature = "derive")]
 pub use flax_derive::*;

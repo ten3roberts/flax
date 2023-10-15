@@ -20,17 +20,17 @@ fn entity_access() {
     let query = &(name().cloned(), a());
     let query2 = &(name().cloned(), a().as_mut());
     {
-        let mut query = entity.query_one(query);
+        let mut query = entity.query(query);
         assert_eq!(query.get(), Some(("a".into(), &5)));
     }
 
     {
-        let mut query = entity.query_one(query2);
+        let mut query = entity.query(query2);
         *query.get().unwrap().1 += 1;
 
         assert_eq!(query.get(), Some(("a".into(), &mut 6)));
     }
 
-    let mut query = entity.query_one(query);
+    let mut query = entity.query(query);
     assert_eq!(query.get(), Some(("a".into(), &6)));
 }
