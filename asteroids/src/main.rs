@@ -51,7 +51,11 @@ component! {
 #[macroquad::main("Asteroids")]
 async fn main() -> Result<()> {
     registry()
-        .with(HierarchicalLayer::default())
+        .with(
+            HierarchicalLayer::default()
+                .with_span_retrace(true)
+                .with_deferred_spans(true),
+        )
         .with(tracing_subscriber::filter::LevelFilter::INFO)
         .init();
 

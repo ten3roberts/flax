@@ -1,5 +1,6 @@
 use flax::{
     components::{child_of, name},
+    relation::RelationExt,
     *,
 };
 use itertools::Itertools;

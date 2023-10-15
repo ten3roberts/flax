@@ -124,7 +124,7 @@ macro_rules! component {
             static VTABLE: &$crate::vtable::ComponentVTable<$ty> =
                 &$crate::vtable::ComponentVTable::new(stringify!($name), &META);
             use $crate::entity::EntityKind;
-            use $crate::RelationExt;
+            use $crate::relation::RelationExt;
             $crate::Component::static_init(&COMPONENT_ID, EntityKind::COMPONENT, VTABLE).of($obj)
         }
 

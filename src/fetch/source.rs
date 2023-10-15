@@ -145,7 +145,7 @@ pub struct Source<Q, S> {
 
 impl<Q, S> Source<Q, S> {
     /// Creates a new source fetch
-    pub fn new(fetch: Q, source: S) -> Self {
+    pub const fn new(fetch: Q, source: S) -> Self {
         Self { fetch, source }
     }
 }

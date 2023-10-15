@@ -324,7 +324,8 @@ impl DerefMut for ChangeList {
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 /// Represents a change for a slice of entities for a specific component
-pub(crate) enum ChangeKind {
+#[doc(hidden)]
+pub enum ChangeKind {
     /// Component was modified
     Modified = 0,
     /// Component was added

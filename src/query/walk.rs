@@ -3,7 +3,8 @@ use crate::{
     component::ComponentValue,
     fetch::FetchAccessData,
     filter::{All, And, Filtered},
-    Entity, Fetch, FetchItem, RelationExt, World,
+    relation::RelationExt,
+    Entity, Fetch, FetchItem, World,
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},

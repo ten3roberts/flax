@@ -11,8 +11,9 @@ use crate::{
     component::ComponentValue,
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
+    relation::RelationExt,
     system::{Access, AccessKind},
-    Entity, Fetch, FetchItem, RelationExt, World,
+    Entity, Fetch, FetchItem, World,
 };
 
 use super::{

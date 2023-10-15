@@ -53,7 +53,8 @@ mod test {
         use crate::{
             entity_ids,
             events::{Event, EventKind, EventSubscriber},
-            relations_like, Entity, EntityIds, Query, QueryBorrow, RelationExt, Relations, World,
+            relation::RelationExt,
+            relations_like, Entity, EntityIds, Query, QueryBorrow, Relations, World,
         };
         use alloc::{sync::Arc, vec, vec::Vec};
         use itertools::Itertools;

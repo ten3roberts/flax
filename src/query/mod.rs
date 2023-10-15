@@ -18,9 +18,10 @@ use crate::{
     component::ComponentValue,
     fetch::FmtQuery,
     filter::{All, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
+    relation::RelationExt,
     system::Access,
     util::TuplePush,
-    Component, Entity, Fetch, FetchItem, RelationExt, World,
+    Component, Entity, Fetch, FetchItem, World,
 };
 use alloc::vec::Vec;
 

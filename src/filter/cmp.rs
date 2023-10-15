@@ -29,19 +29,19 @@ trait CmpMethod<L> {
 
 #[doc(hidden)]
 #[derive(Debug, Clone)]
-pub struct Less<R>(pub(crate) R);
+pub struct Less<R>(pub R);
 #[doc(hidden)]
 #[derive(Debug, Clone)]
-pub struct Greater<R>(pub(crate) R);
+pub struct Greater<R>(pub R);
 #[doc(hidden)]
 #[derive(Debug, Clone)]
-pub struct Equal<R>(pub(crate) R);
+pub struct Equal<R>(pub R);
 #[doc(hidden)]
 #[derive(Debug, Clone)]
-pub struct LessEq<R>(pub(crate) R);
+pub struct LessEq<R>(pub R);
 #[doc(hidden)]
 #[derive(Debug, Clone)]
-pub struct GreaterEq<R>(pub(crate) R);
+pub struct GreaterEq<R>(pub R);
 
 impl<L, R> CmpMethod<L> for Less<R>
 where
@@ -112,7 +112,7 @@ pub struct Cmp<F, C> {
 
 impl<F, C> Cmp<F, C> {
     /// Creates a new comparison filter
-    pub fn new(fetch: F, method: C) -> Self {
+    pub const fn new(fetch: F, method: C) -> Self {
         Self { fetch, method }
     }
 }
