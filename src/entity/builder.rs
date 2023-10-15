@@ -31,7 +31,7 @@ impl Child {
 /// insertion into the world.
 ///
 /// ```rust
-/// # use flax::*;
+/// # use flax::{*, components::*};
 /// # use glam::*;
 /// # component! {
 /// #     health: f32,
