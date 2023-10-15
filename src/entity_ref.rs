@@ -7,7 +7,7 @@ use atomic_refcell::{AtomicRef, BorrowError, BorrowMutError};
 use once_cell::unsync::OnceCell;
 
 use crate::{
-    archetype::{Archetype, RefMut, Slot},
+    archetype::{Archetype, RefMut},
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::MissingComponent,
@@ -15,7 +15,7 @@ use crate::{
     name,
     query::QueryOne,
     writer::{EntityWriter, FnWriter, Missing, Replace, SingleComponentWriter, WriteDedup},
-    ArchetypeId, Component, ComponentKey, ComponentValue, Entity, Fetch, RelationExt, World,
+    Component, ComponentKey, ComponentValue, Entity, Fetch, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
@@ -107,8 +107,11 @@ impl<'a> EntityRefMut<'a> {
             })
     }
 
-    pub fn query_one<Q: Fetch<'a>>(&self, query: Q) -> Option<QueryOne<'a, Q>> {
-        todo!()
+    /// Perform a query on the entity
+    pub fn query<'q, Q: Fetch<'q>>(&'q self, query: &'q Q) -> QueryOne<'q, Q> {
+        let loc = self.loc();
+        let arch = self.world.archetypes.get(self.loc().arch_id);
+        QueryOne::new(query, self.world, arch, loc)
     }
 
     /// Attempt concurrently access a component mutably using and fail if the component is already borrowed
@@ -372,7 +375,8 @@ impl<'a> EntityRef<'a> {
             .update(self.loc.slot, component, WriteDedup::new(value), tick)
     }
 
-    pub fn query_one<'q, Q: Fetch<'q>>(&'q self, query: &'q Q) -> QueryOne<'q, Q> {
+    /// Perform a query on the entity
+    pub fn query<'q, Q: Fetch<'q>>(&'q self, query: &'q Q) -> QueryOne<'q, Q> {
         QueryOne::new(query, self.world, self.arch, self.loc)
     }
 
