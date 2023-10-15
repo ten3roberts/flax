@@ -1,8 +1,9 @@
 use crate::{
-    archetype::{Slice, Slot},
+    archetype::{ArchetypeId, Slice, Slot},
+    component::ComponentValue,
     fetch::FetchAccessData,
     filter::{All, And, Filtered},
-    ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
+    Entity, Fetch, FetchItem, RelationExt, World,
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -361,7 +362,11 @@ mod test {
     use alloc::{string::String, vec, vec::Vec};
     use itertools::Itertools;
 
-    use crate::{child_of, filter::With, name, Component};
+    use crate::{
+        components::{child_of, name},
+        filter::With,
+        Component,
+    };
 
     use super::*;
 

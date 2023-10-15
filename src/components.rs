@@ -6,7 +6,7 @@ use alloc::string::String;
 use crate::component;
 use crate::Exclusive;
 
-use crate::ComponentDesc;
+use crate::component::ComponentDesc;
 use crate::Debuggable;
 
 component! {

@@ -3,10 +3,11 @@ mod input;
 mod traits;
 
 use crate::{
-    archetype::ArchetypeInfo,
+    archetype::{ArchetypeId, ArchetypeInfo},
+    component::ComponentKey,
     query::{QueryData, QueryStrategy},
     util::TuplePush,
-    ArchetypeId, CommandBuffer, ComponentKey, Fetch, FetchItem, Query, World,
+    CommandBuffer, Fetch, FetchItem, Query, World,
 };
 use alloc::{
     boxed::Box,

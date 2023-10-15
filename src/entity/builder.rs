@@ -1,6 +1,8 @@
 use crate::{
-    buffer::ComponentBuffer, error::Result, CommandBuffer, Component, ComponentDesc,
-    ComponentValue, Entity, RelationExt, World,
+    buffer::ComponentBuffer,
+    component::{ComponentDesc, ComponentValue},
+    error::Result,
+    CommandBuffer, Component, Entity, RelationExt, World,
 };
 use alloc::{boxed::Box, vec::Vec};
 
@@ -207,7 +209,7 @@ impl From<&mut EntityBuilder> for EntityBuilder {
 
 #[cfg(test)]
 mod test {
-    use crate::{error::MissingComponent, *};
+    use crate::{component, components::name, error::MissingComponent, Entity, Error, World};
 
     #[test]
     fn builder() {

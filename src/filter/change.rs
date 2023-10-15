@@ -3,12 +3,13 @@ use core::fmt::Formatter;
 use itertools::Itertools;
 
 use crate::archetype::{CellGuard, Change, Slot};
+use crate::component::ComponentValue;
 use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch};
 use crate::system::Access;
 use crate::util::Ptr;
 use crate::{
     archetype::{ChangeKind, ChangeList, Slice},
-    Component, ComponentValue, Fetch, FetchItem,
+    Component, Fetch, FetchItem,
 };
 
 static EMPTY_CHANGELIST: ChangeList = ChangeList::new();

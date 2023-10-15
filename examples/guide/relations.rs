@@ -1,4 +1,7 @@
-use flax::*;
+use flax::{
+    components::{child_of, name},
+    *,
+};
 use itertools::Itertools;
 use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;

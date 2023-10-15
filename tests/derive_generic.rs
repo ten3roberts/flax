@@ -9,7 +9,7 @@ fn derive_fetch_generic() {
 
     use glam::*;
 
-    use flax::{Fetch, *};
+    use flax::{component::ComponentValue, Fetch, *};
 
     #[derive(Fetch)]
     #[fetch(item_derives = [Debug, PartialEq])]

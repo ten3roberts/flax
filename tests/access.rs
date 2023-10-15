@@ -1,5 +1,7 @@
 use std::{thread::sleep, time::Duration};
 
+use flax::components::name;
+
 #[test]
 fn access() {
     use flax::*;

@@ -193,6 +193,7 @@
 
 #![warn(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::redundant_explicit_links)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
@@ -203,14 +204,16 @@ pub mod archetype;
 pub mod buffer;
 /// Contains a commandbuffer
 pub mod commands;
-mod component;
+/// Low level component construction
+pub mod component;
 /// Provides entity identifiers
 pub mod entity;
 /// Filter items yielded queries
 pub mod filter;
 /// System execution
 pub mod system;
-mod world;
+/// Contains the main ecs world
+pub mod world;
 
 pub mod components;
 mod entity_ref;
@@ -248,12 +251,9 @@ pub mod vtable;
 mod writer;
 
 // Required due to macro
-pub use archetype::{ArchetypeId, BatchSpawn, RefMut};
+pub use archetype::{BatchSpawn, RefMut};
 pub use commands::CommandBuffer;
-pub use component::{
-    Component, ComponentDesc, ComponentFn, ComponentKey, ComponentValue, RelationFn,
-};
-pub use components::{child_of, component_info, is_static, name};
+pub use component::Component;
 pub use entity::{entity_ids, Entity, EntityBuilder};
 pub use entity_ref::{EntityRef, EntityRefMut};
 pub use entry::{Entry, OccupiedEntry, VacantEntry};
@@ -261,6 +261,7 @@ pub use error::Error;
 pub use fetch::{
     relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
 };
+
 pub use metadata::{Debuggable, Exclusive};
 
 pub use query::{
@@ -270,7 +271,7 @@ pub use query::{
 pub use relation::{Relation, RelationExt, RelationIter, RelationIterMut};
 pub use schedule::{Schedule, ScheduleBuilder, SystemInfo};
 pub use system::{BoxedSystem, SharedResource, System, SystemBuilder};
-pub use world::{MigratedEntities, ReservedEntityIter, World};
+pub use world::World;
 
 pub(crate) use query::ArchetypeSearcher;
 pub(crate) use vtable::ComponentVTable;

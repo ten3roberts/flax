@@ -1,4 +1,4 @@
-use flax::{component, name, Entity, FetchExt, World};
+use flax::{component, components::name, Entity, FetchExt, World};
 
 #[test]
 fn entity_access() {

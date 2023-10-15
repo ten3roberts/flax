@@ -1,8 +1,8 @@
 use crate::{
-    archetype::{Archetype, Slice},
+    archetype::{Archetype, ArchetypeId, Slice},
     fetch::{FetchPrepareData, PreparedFetch},
     filter::Filtered,
-    ArchetypeId, Entity, Fetch, World,
+    Entity, Fetch, World,
 };
 
 use super::{ArchetypeChunks, Chunk};

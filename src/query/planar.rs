@@ -3,13 +3,13 @@ use core::{iter::Flatten, slice::IterMut};
 use smallvec::SmallVec;
 
 use crate::{
-    archetype::Slice,
+    archetype::{ArchetypeId, Slice},
     entity::EntityLocation,
     error::{MissingComponent, Result},
     fetch::{FetchAccessData, PreparedFetch},
     filter::{All, Filtered},
     system::{Access, AccessKind},
-    ArchetypeId, Entity, Error, Fetch, FetchItem, World,
+    Entity, Error, Fetch, FetchItem, World,
 };
 
 use super::{

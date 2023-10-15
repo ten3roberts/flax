@@ -238,7 +238,9 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{component, entity_ids, name, BatchSpawn, CommandBuffer, FetchExt, Query, World};
+    use crate::{
+        component, components::name, entity_ids, BatchSpawn, CommandBuffer, FetchExt, Query, World,
+    };
 
     #[test]
     fn cmp_mut() {

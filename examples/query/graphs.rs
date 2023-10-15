@@ -1,4 +1,4 @@
-use flax::{child_of, entity_ids, name, Dfs, Entity, Query, Topo, World};
+use flax::{components::{name, child_of}, entity_ids, Dfs, Entity, Query, Topo, World};
 use tracing_subscriber::{prelude::*, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 

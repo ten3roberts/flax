@@ -8,14 +8,15 @@ use once_cell::unsync::OnceCell;
 
 use crate::{
     archetype::{Archetype, RefMut},
+    component::{ComponentKey, ComponentValue},
+    components::name,
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::MissingComponent,
     format::EntityFormatter,
-    name,
     query::QueryOne,
     writer::{EntityWriter, FnWriter, Missing, Replace, SingleComponentWriter, WriteDedup},
-    Component, ComponentKey, ComponentValue, Entity, Fetch, RelationExt, World,
+    Component, Entity, Fetch, RelationExt, World,
 };
 use crate::{RelationIter, RelationIterMut};
 
@@ -479,7 +480,11 @@ impl Display for EntityRefMut<'_> {
 #[cfg(test)]
 mod test {
 
-    use crate::{component, components::name, is_static, EntityBuilder, FetchExt, Query};
+    use crate::{
+        component,
+        components::{is_static, name},
+        EntityBuilder, FetchExt, Query,
+    };
 
     use super::*;
 

@@ -2,7 +2,10 @@ use core::{alloc::Layout, any::TypeId, marker::PhantomData, mem, ptr::NonNull};
 
 use once_cell::sync::OnceCell;
 
-use crate::{buffer::ComponentBuffer, ComponentDesc, ComponentValue};
+use crate::{
+    buffer::ComponentBuffer,
+    component::{ComponentDesc, ComponentValue},
+};
 
 #[doc(hidden)]
 pub struct LazyComponentBuffer {

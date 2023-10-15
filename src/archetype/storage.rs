@@ -4,7 +4,7 @@ use alloc::{
     alloc::alloc, alloc::dealloc, alloc::handle_alloc_error, alloc::realloc, alloc::Layout,
 };
 
-use crate::{ComponentDesc, ComponentKey, ComponentValue};
+use crate::component::{ComponentDesc, ComponentKey, ComponentValue};
 
 use super::Slot;
 

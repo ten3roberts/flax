@@ -79,7 +79,7 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{component, name, Entity, FetchExt, Query, World};
+    use crate::{component, components::name, Entity, FetchExt, Query, World};
 
     component! {
         a: i32,

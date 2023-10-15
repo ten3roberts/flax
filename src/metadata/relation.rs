@@ -1,4 +1,4 @@
-use crate::ComponentValue;
+use crate::component::{ComponentDesc, ComponentValue};
 
 use super::Metadata;
 
@@ -26,7 +26,7 @@ pub struct Exclusive;
 //pub struct Symmetric;
 
 impl<T: ComponentValue> Metadata<T> for Exclusive {
-    fn attach(_: crate::ComponentDesc, buffer: &mut crate::buffer::ComponentBuffer) {
+    fn attach(_: ComponentDesc, buffer: &mut crate::buffer::ComponentBuffer) {
         buffer.set(exclusive(), Exclusive);
     }
 }

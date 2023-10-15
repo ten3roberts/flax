@@ -2,7 +2,11 @@ use core::mem;
 
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{error::Result, Component, ComponentDesc, ComponentKey, ComponentValue, Entity, Error};
+use crate::{
+    component::{ComponentDesc, ComponentKey, ComponentValue},
+    error::Result,
+    Component, Entity, Error,
+};
 
 use super::Storage;
 

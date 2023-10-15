@@ -12,11 +12,11 @@ use atomic_refcell::{AtomicRef, BorrowError, BorrowMutError};
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, ArchetypeInfo, Slot},
+    archetype::{Archetype, ArchetypeId, ArchetypeInfo, Slot},
     archetypes::Archetypes,
     buffer::ComponentBuffer,
-    component::dummy,
-    components::{component_info, name},
+    component::{dummy, ComponentDesc, ComponentKey, ComponentValue},
+    components::{self, component_info, is_static, name},
     entity::{entity_ids, Entity, EntityIndex, EntityKind, EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
@@ -24,13 +24,11 @@ use crate::{
     events::EventSubscriber,
     filter::{ArchetypeFilter, StaticFilter},
     format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
-    is_static,
     relation::Relation,
     writer::{
         self, EntityWriter, FnWriter, Replace, ReplaceDyn, SingleComponentWriter, WriteDedup,
     },
-    ArchetypeId, BatchSpawn, Component, ComponentDesc, ComponentKey, ComponentVTable,
-    ComponentValue, Error, Fetch, Query, RefMut, RelationExt,
+    BatchSpawn, Component, ComponentVTable, Error, Fetch, Query, RefMut, RelationExt,
 };
 
 #[derive(Debug, Default)]
@@ -82,7 +80,7 @@ pub(crate) fn update_entity_loc(
 /// More advanced methods for component accesses are provided through the [`EntityRef`] and [`EntityRefMut`] acquired through [`Self::entity`] and
 /// [`Self::entity_mut`], respectively.
 ///
-/// For efficient iteration, change tracking, and graph traversal, see [`Query`](crate::Query)
+/// For efficient iteration, change tracking, and graph traversal, see [`Query`]
 pub struct World {
     entities: EntityStores,
     pub(crate) archetypes: Archetypes,
@@ -920,7 +918,7 @@ impl World {
 
         let mut meta = desc.get_meta();
         meta.set(component_info(), desc);
-        meta.set(crate::name(), desc.name().into());
+        meta.set(components::name(), desc.name().into());
 
         self.set_with(id, &mut meta).unwrap();
         component

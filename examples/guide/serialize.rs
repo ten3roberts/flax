@@ -3,7 +3,7 @@ fn main() {}
 
 #[cfg(feature = "serde")]
 fn main() -> anyhow::Result<()> {
-    use flax::*;
+    use flax::{components::name, *};
     use glam::*;
     use rand::{distributions::Standard, rngs::StdRng, Rng, SeedableRng};
 

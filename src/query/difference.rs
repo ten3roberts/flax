@@ -1,6 +1,8 @@
 use core::iter::Peekable;
 
-use crate::{component_info, ArchetypeId, ComponentDesc, Fetch, World};
+use crate::{
+    archetype::ArchetypeId, component::ComponentDesc, components::component_info, Fetch, World,
+};
 
 /// Returns all items in left not in right
 struct SetDifference<T, L: Iterator<Item = T>, R: Iterator<Item = T>> {

@@ -7,10 +7,12 @@ use alloc::{
 use smallvec::SmallVec;
 
 use crate::{
+    archetype::ArchetypeId,
+    component::ComponentValue,
     fetch::{FetchAccessData, PreparedFetch},
     filter::Filtered,
     system::{Access, AccessKind},
-    ArchetypeId, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
+    Entity, Fetch, FetchItem, RelationExt, World,
 };
 
 use super::{
@@ -256,7 +258,10 @@ mod test {
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
-    use crate::{component_info, name, Debuggable, FetchExt, Query, World};
+    use crate::{
+        components::{component_info, name},
+        Debuggable, FetchExt, Query, World,
+    };
     use alloc::string::ToString;
 
     use super::*;

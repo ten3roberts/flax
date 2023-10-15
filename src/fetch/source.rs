@@ -3,9 +3,9 @@ use core::{fmt::Debug, marker::PhantomData};
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::{Archetype, Slice, Slot},
+    archetype::{Archetype, ArchetypeId, Slice, Slot},
     system::Access,
-    ArchetypeId, Entity, Fetch, FetchItem,
+    Entity, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch};
@@ -268,7 +268,11 @@ pub struct PreparedSource<'w, Q> {
 mod test {
     use itertools::Itertools;
 
-    use crate::{child_of, component, entity_ids, name, FetchExt, Query, Topo, World};
+    use crate::{
+        component,
+        components::{child_of, name},
+        entity_ids, FetchExt, Query, Topo, World,
+    };
 
     use super::*;
 

@@ -8,7 +8,8 @@ use serde::{
 
 use crate::{
     archetype::{BatchSpawn, Storage},
-    Component, ComponentDesc, ComponentValue, Entity, EntityBuilder, World,
+    component::{ComponentDesc, ComponentValue},
+    Component, Entity, EntityBuilder, World,
 };
 
 use super::{RowFields, SerializeFormat, WorldFields};
@@ -62,7 +63,7 @@ impl DeserializeBuilder {
         Default::default()
     }
 
-    /// Register a component using the component name.
+    /// Register a component using the component's name
     ///
     /// See [`Self::with_name`]
     pub fn with<T>(&mut self, component: Component<T>) -> &mut Self
