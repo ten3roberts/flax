@@ -230,12 +230,12 @@ where
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         if let Some(slot) = self.slot {
             if self.fetch.filter_slots(Slice::single(slot)).is_empty() {
-                return Slice::new(slots.end, slots.end);
+                Slice::new(slots.end, slots.end)
             } else {
-                return slots;
+                slots
             }
         } else {
-            return self.fetch.filter_slots(slots);
+            self.fetch.filter_slots(slots)
         }
     }
 
