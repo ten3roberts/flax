@@ -5,13 +5,14 @@ use crate::{
     component::{ComponentKey, ComponentValue},
     fetch::{FetchAccessData, PreparedFetch},
     filter::{All, Filtered},
+    relation::RelationExt,
     system::{Access, AccessKind},
     FetchItem,
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 use smallvec::SmallVec;
 
-use crate::{Entity, Fetch, RelationExt, World};
+use crate::{Entity, Fetch, World};
 
 use super::{borrow::QueryBorrowState, Chunk, PreparedArchetype, QueryStrategy};
 

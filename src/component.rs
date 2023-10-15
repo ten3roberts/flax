@@ -21,8 +21,9 @@ use crate::{
     fetch::MaybeMut,
     filter::{ChangeFilter, RemovedFilter, With, WithRelation, Without, WithoutRelation},
     metadata::Metadata,
+    relation::RelationExt,
     vtable::{ComponentVTable, UntypedVTable},
-    Entity, Mutable, RelationExt,
+    Entity, Mutable,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
@@ -248,7 +249,7 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Transform this into a mutable fetch
-    pub fn as_mut(self) -> Mutable<T> {
+    pub const fn as_mut(self) -> Mutable<T> {
         Mutable(self)
     }
 
@@ -258,7 +259,9 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Construct a fine grained change detection filter.
-    pub(crate) fn into_change_filter(self, kind: ChangeKind) -> ChangeFilter<T> {
+    ///
+    /// Prefer [`TransformFetch`](crate::fetch::TransformFetch) if not in a const context
+    pub fn into_change_filter(self, kind: ChangeKind) -> ChangeFilter<T> {
         ChangeFilter::new(self, kind)
     }
 

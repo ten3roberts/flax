@@ -24,11 +24,11 @@ use crate::{
     events::EventSubscriber,
     filter::{ArchetypeFilter, StaticFilter},
     format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
-    relation::Relation,
+    relation::{Relation, RelationExt},
     writer::{
         self, EntityWriter, FnWriter, Replace, ReplaceDyn, SingleComponentWriter, WriteDedup,
     },
-    BatchSpawn, Component, ComponentVTable, Error, Fetch, Query, RefMut, RelationExt,
+    BatchSpawn, Component, ComponentVTable, Error, Fetch, Query, RefMut,
 };
 
 #[derive(Debug, Default)]

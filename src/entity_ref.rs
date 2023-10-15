@@ -15,10 +15,10 @@ use crate::{
     error::MissingComponent,
     format::EntityFormatter,
     query::QueryOne,
+    relation::{RelationExt, RelationIter, RelationIterMut},
     writer::{EntityWriter, FnWriter, Missing, Replace, SingleComponentWriter, WriteDedup},
-    Component, Entity, Fetch, RelationExt, World,
+    Component, Entity, Fetch, World,
 };
-use crate::{RelationIter, RelationIterMut};
 
 /// Borrow all the components of an entity at once.
 ///

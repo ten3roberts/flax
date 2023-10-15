@@ -18,7 +18,7 @@ use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch, Trans
 ///
 /// This is useful as the query item is 'static
 /// See [crate::Component::as_mut]
-pub struct Cloned<F>(pub(crate) F);
+pub struct Cloned<F>(pub F);
 
 impl<'q, F> FetchItem<'q> for Cloned<F>
 where

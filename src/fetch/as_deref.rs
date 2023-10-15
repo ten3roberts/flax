@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use core::{fmt, ops::Deref};
 
 /// Dereferences the fetch item
-pub struct AsDeref<F>(pub(crate) F);
+pub struct AsDeref<F>(pub F);
 
 impl<'q, F, V> FetchItem<'q> for AsDeref<F>
 where

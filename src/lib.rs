@@ -115,7 +115,7 @@
 //! details.
 //!
 //! ```rust
-//! # use flax::*;
+//! # use flax::{*, components::*};
 //! component! {
 //!     child_of(parent): () => [ Debuggable ],
 //! }
@@ -235,7 +235,8 @@ pub mod format;
 pub mod metadata;
 /// Query the world
 pub mod query;
-mod relation;
+/// Low level relation construction
+pub mod relation;
 /// System execution
 pub mod schedule;
 
@@ -268,7 +269,7 @@ pub use query::{
     Children, Dfs, DfsBorrow, DfsIter, EntityBorrow, EntityQuery, Planar, Query, QueryBorrow,
     QueryIter, Topo,
 };
-pub use relation::{Relation, RelationExt, RelationIter, RelationIterMut};
+pub use relation::RelationExt;
 pub use schedule::{Schedule, ScheduleBuilder, SystemInfo};
 pub use system::{BoxedSystem, SharedResource, System, SystemBuilder};
 pub use world::World;

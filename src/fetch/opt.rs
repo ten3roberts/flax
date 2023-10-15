@@ -96,7 +96,8 @@ pub struct OptOr<F, V> {
 }
 
 impl<F, V> OptOr<F, V> {
-    pub(crate) fn new(inner: F, or: V) -> Self {
+    /// Creates a new `OptOr` fetch modifier
+    pub const fn new(inner: F, or: V) -> Self {
         Self {
             fetch: inner,
             value: or,

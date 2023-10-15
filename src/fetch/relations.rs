@@ -9,8 +9,9 @@ use smallvec::SmallVec;
 use crate::{
     archetype::{CellGuard, Slot},
     component::{dummy, ComponentValue},
+    relation::RelationExt,
     system::{Access, AccessKind},
-    Component, Entity, Fetch, FetchItem, RelationExt,
+    Component, Entity, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch};

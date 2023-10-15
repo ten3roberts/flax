@@ -2,7 +2,8 @@ use crate::{
     buffer::ComponentBuffer,
     component::{ComponentDesc, ComponentValue},
     error::Result,
-    CommandBuffer, Component, Entity, RelationExt, World,
+    relation::RelationExt,
+    CommandBuffer, Component, Entity, World,
 };
 use alloc::{boxed::Box, vec::Vec};
 

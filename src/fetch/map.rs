@@ -13,6 +13,13 @@ pub struct Map<Q, F> {
     pub(crate) func: F,
 }
 
+impl<Q, F> Map<Q, F> {
+    /// Creates a new mapped query
+    pub const fn new(query: Q, func: F) -> Self {
+        Self { query, func }
+    }
+}
+
 impl<'q, Q, F, T> FetchItem<'q> for Map<Q, F>
 where
     Q: FetchItem<'q>,

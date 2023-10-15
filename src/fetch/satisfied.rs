@@ -5,7 +5,7 @@ use crate::{archetype::Slice, Fetch, FetchItem};
 use super::{FetchAccessData, FmtQuery, PreparedFetch};
 
 /// Yields true iff `F` would match the query
-pub struct Satisfied<F>(pub(crate) F);
+pub struct Satisfied<F>(pub F);
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Satisfied<F> {
     type Item = bool;
