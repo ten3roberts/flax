@@ -133,7 +133,7 @@ mod test {
 
     use glam::{vec3, Vec3};
 
-    use crate::{component, filter::Or, name, FetchExt, Query, System, World};
+    use crate::{component, components::name, filter::Or, FetchExt, Query, System, World};
 
     use super::*;
 

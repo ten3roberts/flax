@@ -8,7 +8,7 @@ component! {
 #[test]
 #[cfg(feature = "flume")]
 fn entity_ref() {
-    use flax::{entity_ids, Query};
+    use flax::{components::name, entity_ids, Query};
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
@@ -67,6 +67,7 @@ fn entity_ref() {
 #[cfg(feature = "flume")]
 fn entity_hierarchy() {
     use flax::{
+        components::{child_of, name},
         error::MissingComponent,
         events::{Event, EventSubscriber},
     };

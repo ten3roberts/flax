@@ -1,11 +1,12 @@
 use core::marker::PhantomData;
 
 use crate::{
-    archetype::Slice,
+    archetype::{ArchetypeId, Slice},
+    component::{ComponentKey, ComponentValue},
     fetch::{FetchAccessData, PreparedFetch},
     filter::{All, Filtered},
     system::{Access, AccessKind},
-    ArchetypeId, ComponentKey, ComponentValue, FetchItem,
+    FetchItem,
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 use smallvec::SmallVec;
@@ -390,7 +391,10 @@ mod test {
     use alloc::collections::BTreeSet;
     use itertools::Itertools;
 
-    use crate::{child_of, entity_ids, name, CommandBuffer, Error, FetchExt, Query};
+    use crate::{
+        components::{child_of, name},
+        entity_ids, CommandBuffer, Error, FetchExt, Query,
+    };
 
     use super::*;
 

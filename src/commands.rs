@@ -5,8 +5,9 @@ use anyhow::Context;
 
 use crate::{
     buffer::MultiComponentBuffer,
+    component::{ComponentDesc, ComponentValue},
     writer::{MissingDyn, SingleComponentWriter, WriteDedupDyn},
-    BatchSpawn, Component, ComponentDesc, ComponentValue, Entity, EntityBuilder, World,
+    BatchSpawn, Component, Entity, EntityBuilder, World,
 };
 
 type DeferFn = Box<dyn Fn(&mut World) -> anyhow::Result<()> + Send + Sync>;

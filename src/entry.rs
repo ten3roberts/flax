@@ -2,8 +2,9 @@ use core::mem;
 
 use crate::{
     archetype::RefMut,
+    component::ComponentValue,
     writer::{Replace, SingleComponentWriter},
-    Component, ComponentValue, Entity, World,
+    Component, Entity, World,
 };
 
 /// Entry like api for an entity's component

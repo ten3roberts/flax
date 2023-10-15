@@ -7,9 +7,10 @@ pub use ser::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    component::{ComponentKey, ComponentValue},
     filter::And,
     filter::{All, StaticFilter},
-    Component, ComponentKey, ComponentValue,
+    Component,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -1,4 +1,4 @@
-use flax::*;
+use flax::{components::name, *};
 use itertools::Itertools;
 use pretty_assertions::assert_eq;
 
@@ -21,7 +21,7 @@ fn no_changes() {
 #[test]
 #[cfg(feature = "flume")]
 fn change_detection() {
-    use flax::*;
+    use flax::{components::name, *};
     use glam::{Quat, Vec3};
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
@@ -130,7 +130,10 @@ fn change_detection() {
 #[test]
 #[cfg(feature = "flume")]
 fn clear_events() {
-    use flax::events::{Event, EventSubscriber};
+    use flax::{
+        components::{component_info, name},
+        events::{Event, EventSubscriber},
+    };
 
     let mut world = World::new();
 
@@ -170,7 +173,10 @@ fn clear_events() {
 #[test]
 #[cfg(feature = "flume")]
 fn despawn() {
-    use flax::events::{Event, EventSubscriber};
+    use flax::{
+        components::{component_info, name},
+        events::{Event, EventSubscriber},
+    };
 
     let mut world = World::new();
 

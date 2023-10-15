@@ -4,12 +4,13 @@ use alloc::vec::Vec;
 use itertools::{Either, Itertools};
 
 use crate::{
-    archetype::{CellData, Slice, Slot},
+    archetype::{ArchetypeId, CellData, Slice, Slot},
     buffer::ComponentBuffer,
+    component::{ComponentDesc, ComponentValue},
     entity::EntityLocation,
     metadata::exclusive,
     world::update_entity_loc,
-    ArchetypeId, ComponentDesc, ComponentValue, Entity, World,
+    Entity, World,
 };
 
 /// Describes a modification to the components of an entity within the context of an archetype

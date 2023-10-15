@@ -13,10 +13,11 @@ use core::{
 
 use crate::{
     archetype::{Archetype, Slice, Slot},
-    component_info,
+    component::ComponentKey,
+    components::component_info,
     fetch::{FetchAccessData, FetchPrepareData, PreparedFetch},
     system::Access,
-    ArchetypeSearcher, ComponentKey, Entity, Fetch, FetchItem,
+    ArchetypeSearcher, Entity, Fetch, FetchItem,
 };
 
 pub use change::{ChangeFilter, RemovedFilter};
@@ -634,10 +635,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        archetype::{Change, ChangeKind, ChangeList},
+        archetype::{ArchetypeId, Change, ChangeKind, ChangeList},
         component,
         filter::change::PreparedRemoveFilter,
-        ArchetypeId, World,
+        World,
     };
 
     use super::*;

@@ -15,11 +15,11 @@ mod source;
 mod transform;
 
 use crate::{
-    archetype::{Archetype, Slice, Slot},
+    archetype::{Archetype, ArchetypeId, Slice, Slot},
     filter::{RefFetch, StaticFilter},
     system::Access,
     util::Ptr,
-    ArchetypeId, ArchetypeSearcher, Entity, EntityRef, World,
+    ArchetypeSearcher, Entity, World,
 };
 use alloc::vec::Vec;
 use core::fmt::Debug;

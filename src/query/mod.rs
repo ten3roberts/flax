@@ -15,11 +15,12 @@ use core::fmt::Debug;
 
 use crate::{
     archetype::Slot,
+    component::ComponentValue,
     fetch::FmtQuery,
     filter::{All, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
     system::Access,
     util::TuplePush,
-    Component, ComponentValue, Entity, Fetch, FetchItem, RelationExt, World,
+    Component, Entity, Fetch, FetchItem, RelationExt, World,
 };
 use alloc::vec::Vec;
 
@@ -34,7 +35,7 @@ pub use planar::*;
 pub use searcher::ArchetypeSearcher;
 pub use topo::{Topo, TopoBorrow, TopoIter};
 
-/// Similar to [`Query`](crate::Query), except optimized to only fetch a single entity.
+/// Similar to [`Query`], except optimized to only fetch a single entity.
 ///
 /// This has the advantage of locking fewer archetypes, and allowing for better multithreading
 /// scheduling.
@@ -324,7 +325,9 @@ where
 mod test {
     use pretty_assertions::assert_eq;
 
-    use crate::{error::MissingComponent, filter::Or, name, Entity, Error, FetchExt, Query};
+    use crate::{
+        components::name, error::MissingComponent, filter::Or, Entity, Error, FetchExt, Query,
+    };
 
     use super::*;
 

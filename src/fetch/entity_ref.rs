@@ -1,10 +1,11 @@
 use alloc::vec::Vec;
 
 use crate::{
+    archetype::ArchetypeId,
     archetype::{Archetype, Slot},
     entity::EntityLocation,
     system::{Access, AccessKind},
-    ArchetypeId, EntityRef, Fetch, FetchItem, World,
+    EntityRef, Fetch, FetchItem, World,
 };
 
 use super::{FetchAccessData, PreparedFetch};
@@ -104,7 +105,9 @@ impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
 mod test {
     use itertools::Itertools;
 
-    use crate::{component, name, BatchSpawn, Entity, EntityIds, FetchExt, Query, World};
+    use crate::{
+        component, components::name, BatchSpawn, Entity, EntityIds, FetchExt, Query, World,
+    };
 
     #[test]
     fn entity_refs_chunks() {

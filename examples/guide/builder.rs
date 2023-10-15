@@ -1,4 +1,8 @@
-use flax::{filter::All, *};
+use flax::{
+    components::{child_of, name},
+    filter::All,
+    *,
+};
 use itertools::Itertools;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing::info_span;

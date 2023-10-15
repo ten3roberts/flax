@@ -1,7 +1,11 @@
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
-use flax::{metadata::debuggable, *};
+use flax::{
+    components::{child_of, name},
+    metadata::debuggable,
+    *,
+};
 use glam::{vec3, Quat, Vec3};
 use itertools::Itertools;
 use rand::{rngs::StdRng, Rng, SeedableRng};

@@ -3,7 +3,7 @@ use core::{any::Any, fmt::Debug};
 use crate::{
     archetype::{Slot, Storage},
     buffer::ComponentBuffer,
-    component, ComponentDesc, ComponentValue,
+    component::{ComponentDesc, ComponentValue},
 };
 
 use super::Metadata;

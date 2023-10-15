@@ -9,9 +9,10 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, BorrowError, BorrowMutError};
 use itertools::Itertools;
 
 use crate::{
+    component::{ComponentDesc, ComponentKey, ComponentValue},
     events::{EventData, EventKind, EventSubscriber},
     writer::ComponentUpdater,
-    Component, ComponentDesc, ComponentKey, ComponentValue, Entity,
+    Component, Entity,
 };
 
 /// Unique archetype id

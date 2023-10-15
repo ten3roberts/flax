@@ -164,6 +164,7 @@ fn moving_changes() {
     use std::iter::repeat;
 
     use flax::{
+        components::name,
         events::{Event, EventKind, EventSubscriber},
         *,
     };

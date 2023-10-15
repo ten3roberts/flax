@@ -2,8 +2,9 @@ use core::fmt::{self, Debug, Formatter};
 
 use crate::{
     archetype::{Archetype, Slot},
+    component::ComponentKey,
     metadata::debuggable,
-    ComponentKey, Entity, Fetch, Query, World,
+    Entity, Fetch, Query, World,
 };
 
 /// Debug formats the world with the given filter.
@@ -63,7 +64,9 @@ impl<'a> Debug for EntitiesFormatter<'a> {
         let mut list = f.debug_map();
 
         for &id in self.ids {
-            let Ok(loc) = self.world.location(id) else { continue };
+            let Ok(loc) = self.world.location(id) else {
+                continue;
+            };
 
             let arch = self.world.archetypes.get(loc.arch_id);
 
@@ -220,7 +223,7 @@ impl<'a> Debug for ChildrenFormatter<'a> {
 mod tests {
     use core::fmt::Write;
 
-    use crate::{child_of, name};
+    use crate::components::{child_of, name};
 
     use super::*;
 

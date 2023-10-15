@@ -9,11 +9,11 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     archetype::{Archetype, Cell, RefMut, Slot},
-    component::dummy,
+    component::{dummy, ComponentKey, ComponentValue},
     entity::EntityKind,
     filter::{WithRelation, WithoutRelation},
     vtable::{ComponentVTable, UntypedVTable},
-    Component, ComponentKey, ComponentValue, Entity,
+    Component, Entity,
 };
 
 /// Relation helper trait

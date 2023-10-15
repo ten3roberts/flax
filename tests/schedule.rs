@@ -1,6 +1,6 @@
 use flax::{
-    component, name, BoxedSystem, CommandBuffer, Entity, EntityBuilder, FetchExt, Query,
-    QueryBorrow, Schedule, System, World,
+    component, components::name, BoxedSystem, CommandBuffer, Entity, EntityBuilder, FetchExt,
+    Query, QueryBorrow, Schedule, System, World,
 };
 use itertools::Itertools;
 

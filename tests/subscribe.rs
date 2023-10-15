@@ -8,7 +8,10 @@ component! {
 #[test]
 #[cfg(feature = "flume")]
 fn subscribe() {
-    use flax::events::{Event, EventKind, EventSubscriber};
+    use flax::{
+        components::name,
+        events::{Event, EventKind, EventSubscriber},
+    };
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
@@ -94,7 +97,10 @@ fn subscribe() {
 #[test]
 #[cfg(feature = "flume")]
 fn subscribe_inverted() {
-    use flax::events::{Event, EventKind, EventSubscriber};
+    use flax::{
+        components::name,
+        events::{Event, EventKind, EventSubscriber},
+    };
     use flume::TryRecvError;
     use itertools::Itertools;
     use pretty_assertions::assert_eq;

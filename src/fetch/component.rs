@@ -1,6 +1,6 @@
 use atomic_refcell::AtomicRef;
 
-use crate::{archetype::Slot, system::AccessKind, util::Ptr, Component, ComponentValue};
+use crate::{archetype::Slot, component::ComponentValue, system::AccessKind, util::Ptr, Component};
 
 use super::{read_only::RandomFetch, *};
 

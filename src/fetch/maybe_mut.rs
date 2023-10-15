@@ -4,8 +4,9 @@ use core::marker::PhantomData;
 
 use crate::{
     archetype::{Cell, RefMut, Slot},
+    component::ComponentValue,
     system::{Access, AccessKind},
-    Component, ComponentValue, Entity, Fetch, FetchItem,
+    Component, Entity, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, PreparedFetch, RandomFetch};

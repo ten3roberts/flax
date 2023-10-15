@@ -1,8 +1,9 @@
 use crate::{
-    archetype::{Archetype, Storage},
-    component_info,
+    archetype::{Archetype, ArchetypeId, Storage},
+    component::{ComponentKey, ComponentValue},
+    components::component_info,
     filter::{All, And, StaticFilter},
-    ArchetypeId, Component, ComponentKey, ComponentValue, Entity, World,
+    Component, Entity, World,
 };
 
 use alloc::{boxed::Box, collections::BTreeMap, string::String};

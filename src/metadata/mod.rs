@@ -1,6 +1,9 @@
-use crate::buffer::ComponentBuffer;
-use crate::components::name;
-use crate::{ComponentDesc, ComponentValue};
+use crate::{
+    buffer::ComponentBuffer,
+    component::{ComponentDesc, ComponentValue},
+    components::name,
+};
+
 mod debuggable;
 mod relation;
 

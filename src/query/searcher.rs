@@ -1,7 +1,11 @@
 use alloc::vec::Vec;
 use core::cmp;
 
-use crate::{archetype::Archetype, archetypes::Archetypes, ArchetypeId, ComponentKey};
+use crate::{
+    archetype::{Archetype, ArchetypeId},
+    archetypes::Archetypes,
+    component::ComponentKey,
+};
 
 #[derive(Default, Debug, Clone)]
 /// Declares search terms for a queries archetypes

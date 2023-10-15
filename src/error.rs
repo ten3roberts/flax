@@ -1,6 +1,6 @@
 use core::fmt::Display;
 
-use crate::{ComponentDesc, Entity};
+use crate::{component::ComponentDesc, Entity};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]

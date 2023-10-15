@@ -1,11 +1,12 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
-    archetype::Archetype,
+    archetype::{Archetype, ArchetypeId},
+    component::ComponentDesc,
     entity::{EntityKind, EntityStore, EntityStoreIter, EntityStoreIterMut},
     events::EventSubscriber,
     metadata::exclusive,
-    ArchetypeId, ComponentDesc, Entity,
+    Entity,
 };
 
 pub(crate) struct Archetypes {

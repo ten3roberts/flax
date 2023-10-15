@@ -1,7 +1,10 @@
 use alloc::vec::Vec;
 
 use crate::{
-    archetype::Archetype, filter::StaticFilter, ComponentDesc, ComponentKey, ComponentValue, Entity,
+    archetype::Archetype,
+    component::{ComponentDesc, ComponentKey, ComponentValue},
+    filter::StaticFilter,
+    Entity,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

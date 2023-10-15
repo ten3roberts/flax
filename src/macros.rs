@@ -105,7 +105,7 @@ macro_rules! component {
         $vis fn $name($obj: $crate::Entity) -> $crate::Component<$ty> {
 
             static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
-            fn meta(_desc: $crate::ComponentDesc) -> $crate::buffer::ComponentBuffer {
+            fn meta(_desc: $crate::component::ComponentDesc) -> $crate::buffer::ComponentBuffer {
                 let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
                 <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
@@ -138,7 +138,7 @@ macro_rules! component {
         $(#[$outer])*
         $vis fn $name() -> $crate::Component<$ty> {
         static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
-            fn meta(_desc: $crate::ComponentDesc) -> $crate::buffer::ComponentBuffer {
+            fn meta(_desc: $crate::component::ComponentDesc) -> $crate::buffer::ComponentBuffer {
                 let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
                 <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
@@ -183,7 +183,7 @@ macro_rules! component_vtable {
     ($name:tt: $ty: ty $(=> [$($metadata: ty),*])?) => {
 
         {
-            fn meta(_desc: $crate::ComponentDesc) -> $crate::buffer::ComponentBuffer {
+            fn meta(_desc: $crate::component::ComponentDesc) -> $crate::buffer::ComponentBuffer {
                 let mut _buffer = $crate::buffer::ComponentBuffer::new();
 
                 <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);

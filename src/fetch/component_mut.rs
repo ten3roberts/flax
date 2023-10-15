@@ -4,9 +4,10 @@ use core::fmt::{self, Formatter};
 
 use crate::{
     archetype::{Archetype, CellMutGuard, Slice},
+    component::ComponentValue,
     system::{Access, AccessKind},
     util::PtrMut,
-    Component, ComponentValue, Fetch, FetchItem,
+    Component, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch};

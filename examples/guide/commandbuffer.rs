@@ -1,5 +1,8 @@
 use anyhow::Context;
-use flax::*;
+use flax::{
+    components::{child_of, name},
+    *,
+};
 use glam::{vec2, Mat4, Vec2};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing_subscriber::{prelude::*, registry};

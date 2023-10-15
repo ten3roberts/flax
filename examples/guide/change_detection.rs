@@ -1,8 +1,8 @@
 use std::{thread::sleep, time::Duration};
 
 use flax::{
-    component, entity_ids, name, CommandBuffer, Entity, FetchExt, Query, QueryBorrow, Schedule,
-    System, World,
+    component, components::name, entity_ids, CommandBuffer, Entity, FetchExt, Query, QueryBorrow,
+    Schedule, System, World,
 };
 use itertools::Itertools;
 use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};

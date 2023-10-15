@@ -6,7 +6,7 @@ use core::{
 
 use atomic_refcell::{AtomicRef, AtomicRefMut};
 
-use crate::{ComponentValue, Entity};
+use crate::{component::ComponentValue, Entity};
 
 use super::{CellData, Changes, Slice, Slot};
 
