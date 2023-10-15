@@ -10,7 +10,10 @@ use crate::component::ComponentDesc;
 use crate::Debuggable;
 
 component! {
-    /// A name for an entity of component
+    /// An opinionated name component, so that different libraries can agree on a "name" or "label"
+    /// kind of component.
+    ///
+    /// This name will be used in *Display* and *Debug* impls of entities to make them more readable, as opposed to just the id.
     pub name: String => [ Debuggable ],
     /// Exclusive parent-child relation ship.
     ///
