@@ -201,7 +201,7 @@ where
     }
 }
 
-/// See: [crate::RelationIter]
+/// See: [RelationIter]
 pub struct RelationIterMut<'a, T> {
     entities: &'a [Entity],
     cells: Range<'a, ComponentKey, Cell>,
