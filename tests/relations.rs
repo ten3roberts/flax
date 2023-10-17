@@ -256,3 +256,28 @@ fn many_detach() {
 
     world.despawn_recursive(parent, child_of).unwrap();
 }
+
+#[test]
+fn exclusive() {
+    component! {
+        child_of(parent): () => [ Exclusive ],
+    }
+
+    let mut world = World::new();
+
+    let id1 = Entity::builder().spawn(&mut world);
+    let id2 = Entity::builder().spawn(&mut world);
+
+    let id3 = Entity::builder()
+        .set_default(child_of(id1))
+        .spawn(&mut world);
+
+    let entity = world.entity_mut(id3).unwrap();
+
+    assert_eq!(entity.relations(child_of).map(|v| v.0).collect_vec(), [id1]);
+
+    world.set(id3, child_of(id2), ()).unwrap();
+
+    let entity = world.entity_mut(id3).unwrap();
+    assert_eq!(entity.relations(child_of).map(|v| v.0).collect_vec(), [id2])
+}
