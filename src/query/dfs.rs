@@ -285,6 +285,7 @@ where
         F: 'w,
     {
         while let Some((slot, id, item)) = chunk.next_full() {
+            let edge_value = edge.map(|v| &v[slot]);
             let value = (visit)(item, edge.map(|v| &v[slot]), value);
 
             // Iterate the archetypes which contain all references to `id`
@@ -292,7 +293,7 @@ where
                 let arch_id = dfs.state.archetypes[arch_index];
                 let arch = world.archetypes.get(arch_id);
 
-                let edge = arch.borrow::<T>(ComponentKey::new(id, Some(dfs.relation)));
+                let edge = arch.borrow::<T>(ComponentKey::new(dfs.relation, Some(id)));
 
                 let p = unsafe { &mut *prepared.add(arch_index) };
 
@@ -544,7 +545,7 @@ mod test {
         Query::new((entity_ids(), name()))
             .with_strategy(Dfs::new(child_of))
             .borrow(&world)
-            .traverse(&Vec::new(), |(id, name), _, prefix| {
+            .traverse(&Vec::new(), |(id, name), v, prefix| {
                 let mut p = prefix.clone();
                 p.push(name.clone());
 
