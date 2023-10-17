@@ -5,13 +5,18 @@ use tracing_tree::HierarchicalLayer;
 
 fn main() -> anyhow::Result<()> {
     registry().with(HierarchicalLayer::default()).init();
+    basic()?;
+    exclusive()?;
+    Ok(())
+}
+
+fn basic() -> anyhow::Result<()> {
+    let mut world = World::new();
 
     // ANCHOR: relation_basic
     component! {
         child_of(id): (),
     }
-
-    let mut world = World::new();
 
     let parent = Entity::builder()
         .set(name(), "Parent".into())
@@ -91,5 +96,38 @@ fn main() -> anyhow::Result<()> {
     tracing::info!("World: {world:#?}");
     // ANCHOR_END: lifetime
 
+    Ok(())
+}
+
+fn exclusive() -> anyhow::Result<()> {
+    let mut world = World::new();
+
+    // ANCHOR: exclusive
+    component! {
+        child_of(parent): () => [ Exclusive ],
+    }
+
+    let id1 = Entity::builder().spawn(&mut world);
+    let id2 = Entity::builder().spawn(&mut world);
+
+    let id3 = Entity::builder()
+        .set_default(child_of(id1))
+        .spawn(&mut world);
+
+    let entity = world.entity_mut(id3).unwrap();
+
+    tracing::info!(
+        "relations of {id3}: {:?}",
+        entity.relations(child_of).map(|v| v.0).collect_vec()
+    );
+
+    world.set(id3, child_of(id2), ()).unwrap();
+
+    let entity = world.entity_mut(id3).unwrap();
+    tracing::info!(
+        "relations of {id3}: {:?}",
+        entity.relations(child_of).map(|v| v.0).collect_vec()
+    );
+    // ANCHOR_END: exclusive
     Ok(())
 }

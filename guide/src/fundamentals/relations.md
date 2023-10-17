@@ -51,6 +51,20 @@ The following shows a more complete example of how to traverse and calculate the
 {{ #include ../../../examples/guide/springs.rs:main }}
 ```
 
+# Exclusive relations
+
+Relations can be declared as exclusive, which means that only one relation of that type can exist on an entity at a time. This is useful for cases where you want to have a single parent or outgoing connection. 
+
+**Note**: This does not prevent multiple entities from referencing the same entity, but rather an entity referencing multiple entities.
+
+When a new relation is added to an entity, any existing relation of the same type will be removed.
+
+This is the case for the included [`child_of`](https://docs.rs/flax/latest/flax/components/fn.child_of.html) relation.
+
+```rust
+{{ #include ../../../examples/guide/relations.rs:exclusive }}
+```
+
 ## Lifetime
 
 Relations are managed by the ECS and will automatically be cleaned up. When an entity is despawned all relations which reference it will be removed from the ECS. As such, a relation will never point to an invalid entity.
