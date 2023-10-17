@@ -156,3 +156,103 @@ fn multiple_hierarchies() {
     assert_eq!(relations[0].0, root);
     assert_eq!(&*relations[0].1, "RelationValue");
 }
+
+#[test]
+fn many_detach() {
+    component! {
+        child_of(id): (),
+    }
+
+    let mut world = World::new();
+
+    let parent = Entity::builder()
+        .set(name(), "Parent".into())
+        .spawn(&mut world);
+
+    let child1 = Entity::builder()
+        .set(name(), "Child1".into())
+        .set_default(child_of(parent))
+        .spawn(&mut world);
+
+    let child2 = Entity::builder()
+        .set(name(), "Child2".into())
+        .set_default(child_of(parent))
+        .spawn(&mut world);
+
+    // ANCHOR_END: relation_basic
+
+    // ANCHOR: many_to_many
+    let parent2 = Entity::builder()
+        .set(name(), "Parent2".into())
+        .spawn(&mut world);
+
+    world.set(child1, child_of(parent2), ()).unwrap();
+
+    tracing::info!("World: {world:#?}");
+
+    // Connect child1 with two entities via springs of different strength
+    world.set(child1, child_of(child2), ()).unwrap();
+    world.set(child1, child_of(parent2), ()).unwrap();
+
+    tracing::info!(
+        "Connections from child1({child1}): {:?}",
+        Query::new(relations_like(child_of))
+            .borrow(&world)
+            .get(child1)
+            .unwrap()
+            .collect_vec()
+    );
+
+    // ANCHOR_END: many_to_many
+    // ANCHOR: query
+
+    // Mathes a relation exactly
+    let children_of_parent: Vec<Entity> = Query::new(entity_ids())
+        .with(child_of(parent))
+        .borrow(&world)
+        .iter()
+        .sorted()
+        .collect_vec();
+
+    assert_eq!(children_of_parent, [child1, child2]);
+
+    let children_of_parent2: Vec<Entity> = Query::new(entity_ids())
+        .with(child_of(parent2))
+        .borrow(&world)
+        .iter()
+        .sorted()
+        .collect_vec();
+
+    assert_eq!(children_of_parent2, [child1]);
+
+    // Matches a relation with any parent
+    let all_children: Vec<Entity> = Query::new(entity_ids())
+        .filter(child_of.with_relation())
+        .borrow(&world)
+        .iter()
+        .sorted()
+        .collect_vec();
+
+    assert_eq!(all_children, [child1, child2]);
+
+    let roots = Query::new(entity_ids())
+        .filter(child_of.without_relation())
+        .borrow(&world)
+        .iter()
+        .sorted()
+        .collect_vec();
+
+    assert_eq!(roots, [parent, parent2]);
+
+    // ANCHOR_END: query
+
+    // ANCHOR: lifetime
+
+    assert!(world.has(child1, child_of(parent2)));
+
+    world.despawn(parent2).unwrap();
+
+    assert!(!world.has(child1, child_of(parent2)));
+
+    world.despawn_recursive(parent, child_of).unwrap();
+}
