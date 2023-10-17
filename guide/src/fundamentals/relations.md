@@ -6,21 +6,24 @@ The linked entity is referred to as the `object` of a relation, while the entity
 
 This allows forming hierarchies such as *parent-child* relations for transforms and UI, as well as arbitrary graphs.
 
-A relation is used as a *parameterized* component, which requires an `Entity` to be fully instantiated.
+A relation is used like a component which takes an `Entity` to be constructed.
 
 Relations are most easily declared using the
-[component](https://docs.rs/flax/latest/flax/macro.component.html) macro.
+[component](https://docs.rs/flax/latest/flax/macro.component.html) macro, but can be constructed dynamically as well. See [dynamic_components](../diving_deeper/dynamic_components.md)
+
+For example, declaring a child relationship that connects to a parent can be done like so:
 
 ```rust
 {{ #include ../../../examples/guide/relations.rs:relation_basic }}
 ```
 
-Important to note is that the same `child_of` component with different `object`
-arguments are distinct, and can as such exist on an entity at the same time,
-allowing many-many relationships between entities;
+The function like `(id)` parameter is what separates a component from a relation. The name of the parameter does not matter, and is only used for hover documentation. 
 
-There is no limitation of the number of relations an entity can have. As such,
-an entity can have multiple relations to other entities, allowing for any kind of graphs inside the ecs.
+Since the value of the relation in this case is `()`, `set_default` can be used as a shorthand over `set`
+
+Two relations of the same type but with different *objects* behave like two separate components and will not interfere. This allows having many-to-many relationships between entities, if so desired.
+
+This allows constructing many different kinds of graphs inside the ECS.
 
 ```rust
 {{ #include ../../../examples/guide/relations.rs:many_to_many }}
@@ -36,12 +39,19 @@ See the [Graphs](../query/graphs.md) chapter in queries.
 ```rust
 {{ #include ../../../examples/guide/relations.rs:query }}
 ```
+## Associated values
+
+In addition to linking between entities, a relation can also store additional data just like a component. This can be used to create weighted graphs or storing other additional information such as physical joint parameters
+
+The following shows a more complete example of how to traverse and calculate the forces between entities connected via springs using hook's law.
+
+```rust
+{{ #include ../../../examples/guide/springs.rs:main }}
+```
 
 ## Lifetime
 
-When an entity is despawned, all relations to it present on other components
-will be removed and dropped. As such, no entity will have a relation to an
-entity which does not exist.
+Relations are managed by the ECS and will automatically be cleaned up. When an entity is despawned all relations which reference it will be removed from the ECS. As such, a relation will never point to an invalid entity.
 
 ```rust
 {{ #include ../../../examples/guide/relations.rs:lifetime }}

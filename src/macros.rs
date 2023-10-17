@@ -11,10 +11,10 @@
 /// ```rust,ignore
 /// flax::component! {
 ///     // component
-///     name: type, // component
+///     pub name: type, // component
 ///
 ///     // component with metadata/reflection
-///     name: type => [ Metadata, ... ],
+///     pub(crate) name: type => [ Metadata, ... ],
 ///
 ///     // relational component
 ///     name(object): type
@@ -26,6 +26,11 @@
 ///     name,
 /// }
 /// ```
+/// # Visibility
+///
+/// Components are by default only visible to the module they were declared in. However, any
+/// visibility qualifier can be added before the name to expose it.
+///
 ///
 /// # Metadata
 ///
