@@ -215,6 +215,11 @@ impl Archetypes {
             let dst = self.get_mut(dst_id);
             dst.remove_link(component);
         }
+
+        for (key, &dst_id) in &arch.outgoing {
+            self.get_mut(dst_id).incoming.remove(key);
+        }
+
         self.gen = self.gen.wrapping_add(1);
 
         arch

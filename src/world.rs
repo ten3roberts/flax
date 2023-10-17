@@ -445,6 +445,7 @@ impl World {
 
         Ok(())
     }
+
     /// Removes all instances of relations and component of the given entities
     /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
     /// on all the children.
@@ -452,6 +453,7 @@ impl World {
         let change_tick = self.advance_change_tick();
         let archetypes = Query::new(())
             .filter(ArchetypeFilter(|arch: &Archetype| {
+                // Filter any subject or relation kind
                 arch.components()
                     .any(|v| v.key().id == id || v.key().object == Some(id))
             }))
