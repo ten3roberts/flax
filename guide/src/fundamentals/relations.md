@@ -41,7 +41,9 @@ See the [Graphs](../query/graphs.md) chapter in queries.
 ```
 ## Associated values
 
-In addition to linking between entities, a relation can also store additional data just like a component. This can be used to create weighted graphs or storing other additional information such as physical joint parameters
+In addition to linking between entities, a relation can also store additional data just like a component. This can be used to create weighted graphs or storing other additional information such as physical joint parameters.
+
+Since relations behave like separate components, each value on a relation is specific to that link, and as such saves you the hassle of managing a separate list of values for each connection on an entity.
 
 The following shows a more complete example of how to traverse and calculate the forces between entities connected via springs using hook's law.
 
