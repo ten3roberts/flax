@@ -47,19 +47,15 @@ where
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         let relation = self.relation.id();
-        dst.extend(data.arch.cells().keys().filter_map(move |k| {
-            if k.target.is_some() && k.id == relation {
-                return Some(Access {
-                    kind: AccessKind::Archetype {
-                        id: data.arch_id,
-                        component: *k,
-                    },
-                    mutable: false,
-                });
-            }
+        let val = data.arch.relations_like(relation).map(|v| Access {
+            kind: AccessKind::Archetype {
+                id: data.arch_id,
+                component: *v.0,
+            },
+            mutable: false,
+        });
 
-            None
-        }))
+        dst.extend(val);
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
@@ -145,7 +141,7 @@ pub fn nth_relation<T: ComponentValue>(relation: impl RelationExt<T>, n: usize) 
     }
 }
 
-/// Returns a the nth relation of a specified type
+/// Returns the *nth* relation of a specified type
 #[derive(Debug, Clone)]
 pub struct NthRelation<T: ComponentValue> {
     relation: Relation<T>,
@@ -163,7 +159,7 @@ where
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let borrow = data
             .arch
-            .relations_like(self.relation.id())
+            .relations_like(self.relation.id)
             .nth(self.n)
             .map(|(desc, cell)| (desc.target.unwrap(), cell.borrow()))?;
 
@@ -176,19 +172,19 @@ where
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         let relation = self.relation.id;
-        dst.extend(data.arch.cells().keys().filter_map(move |k| {
-            if k.target.is_some() && k.id == relation {
-                return Some(Access {
-                    kind: AccessKind::Archetype {
-                        id: data.arch_id,
-                        component: *k,
-                    },
-                    mutable: false,
-                });
-            }
+        let val = data
+            .arch
+            .relations_like(relation)
+            .nth(self.n)
+            .map(|v| Access {
+                kind: AccessKind::Archetype {
+                    id: data.arch_id,
+                    component: *v.0,
+                },
+                mutable: false,
+            });
 
-            None
-        }))
+        dst.extend(val);
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
