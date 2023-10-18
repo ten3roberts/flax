@@ -1,12 +1,12 @@
 # Relations
 
-A relation is a component which *links* to another `Entity`, similar to a foreign key in a database.
+A relation is a component which *links* to another `Entity`, similar to a foreign key in a database. This can be used to construct different kinds of graphs and trees inside the ECS.
+
+The links between entities are managed by the ECS itself and will always be valid, see [Lifetime](#lifetime)
 
 The linked entity is referred to as the `object` of a relation, while the entity the component is attached to is called the `subject`.
 
 This allows forming hierarchies such as *parent-child* relations for transforms and UI, as well as arbitrary graphs.
-
-A relation is used like a component which takes an `Entity` to be constructed.
 
 Relations are most easily declared using the
 [component](https://docs.rs/flax/latest/flax/macro.component.html) macro, but can be constructed dynamically as well. See [dynamic_components](../diving_deeper/dynamic_components.md)
@@ -17,7 +17,7 @@ For example, declaring a child relationship that connects to a parent can be don
 {{ #include ../../../examples/guide/relations.rs:relation_basic }}
 ```
 
-The function like `(id)` parameter is what separates a component from a relation. The name of the parameter does not matter, and is only used for hover documentation. 
+The parameter to the component function determines the object entity or target of the relation.
 
 Since the value of the relation in this case is `()`, `set_default` can be used as a shorthand over `set`
 
