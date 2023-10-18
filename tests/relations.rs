@@ -207,13 +207,16 @@ fn many_detach() {
         Query::new((
             entity_ids(),
             nth_relation(child_of, 0),
-            // nth_relation(child_of, 2).opt()
+            nth_relation(child_of, 2).opt()
         ))
         .borrow(&world)
         .iter()
         .sorted()
         .collect_vec(),
-        [(child1, (parent, &"first")), (child2, (parent, &"first"))]
+        [
+            (child1, (parent, &"first"), Some((parent2, &"third"))),
+            (child2, (parent, &"first"), None)
+        ]
     );
     // ANCHOR_END: many_to_many
     // ANCHOR: query
