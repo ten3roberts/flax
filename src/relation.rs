@@ -31,6 +31,15 @@ where
     fn with_relation(self) -> WithRelation;
     /// Construct a new filter yielding entities without this kind of relation
     fn without_relation(self) -> WithoutRelation;
+
+    /// Convert this into a concrete relation representation
+    fn as_relation(&self) -> Relation<T> {
+        Relation {
+            id: self.id(),
+            vtable: self.vtable(),
+            marker: PhantomData,
+        }
+    }
 }
 
 impl<T, F> RelationExt<T> for F
@@ -69,7 +78,7 @@ where
 
 /// Represents a relation which can connect to entities
 pub struct Relation<T> {
-    id: Entity,
+    pub(crate) id: Entity,
     vtable: &'static UntypedVTable,
     marker: PhantomData<T>,
 }
@@ -136,10 +145,12 @@ where
 }
 
 impl<T: ComponentValue> RelationExt<T> for Relation<T> {
+    #[inline]
     fn id(&self) -> Entity {
         self.id
     }
 
+    #[inline]
     fn vtable(&self) -> &'static UntypedVTable {
         self.vtable
     }

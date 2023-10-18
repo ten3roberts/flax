@@ -42,8 +42,7 @@ fn basic() -> anyhow::Result<()> {
 
     tracing::info!("World: {world:#?}");
 
-    // Connect child1 with two entities via springs of different strength
-    world.set(child1, child_of(child2), ())?;
+    // Give child1 yet one more parent
     world.set(child1, child_of(parent2), ())?;
 
     tracing::info!(

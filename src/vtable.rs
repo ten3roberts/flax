@@ -80,6 +80,15 @@ pub struct ComponentVTable<T> {
     marker: PhantomData<T>,
 }
 
+impl<T> core::fmt::Debug for ComponentVTable<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ComponentVTable")
+            .field("name", &self.inner.name)
+            .field("type_name", &self.inner.type_name)
+            .finish()
+    }
+}
+
 impl<T> core::ops::Deref for ComponentVTable<T> {
     type Target = UntypedVTable;
 
