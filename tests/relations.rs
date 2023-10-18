@@ -1,5 +1,6 @@
 use flax::{
     components::{child_of, name},
+    fetch::nth_relation,
     filter::All,
     relation::RelationExt,
     *,
@@ -160,7 +161,7 @@ fn multiple_hierarchies() {
 #[test]
 fn many_detach() {
     component! {
-        child_of(id): (),
+        child_of(id): &'static str,
     }
 
     let mut world = World::new();
@@ -171,12 +172,12 @@ fn many_detach() {
 
     let child1 = Entity::builder()
         .set(name(), "Child1".into())
-        .set_default(child_of(parent))
+        .set(child_of(parent), "first")
         .spawn(&mut world);
 
     let child2 = Entity::builder()
         .set(name(), "Child2".into())
-        .set_default(child_of(parent))
+        .set(child_of(parent), "first")
         .spawn(&mut world);
 
     // ANCHOR_END: relation_basic
@@ -186,23 +187,34 @@ fn many_detach() {
         .set(name(), "Parent2".into())
         .spawn(&mut world);
 
-    world.set(child1, child_of(parent2), ()).unwrap();
+    world.set(child1, child_of(parent2), "second").unwrap();
 
     tracing::info!("World: {world:#?}");
 
-    // Connect child1 with two entities via springs of different strength
-    world.set(child1, child_of(child2), ()).unwrap();
-    world.set(child1, child_of(parent2), ()).unwrap();
+    world.set(child1, child_of(child2), "second").unwrap();
+    world.set(child1, child_of(parent2), "third").unwrap();
 
-    tracing::info!(
-        "Connections from child1({child1}): {:?}",
+    assert_eq!(
         Query::new(relations_like(child_of))
             .borrow(&world)
             .get(child1)
             .unwrap()
-            .collect_vec()
+            .collect_vec(),
+        [(parent, &"first"), (child2, &"second"), (parent2, &"third")]
     );
 
+    assert_eq!(
+        Query::new((
+            entity_ids(),
+            nth_relation(child_of, 0),
+            // nth_relation(child_of, 2).opt()
+        ))
+        .borrow(&world)
+        .iter()
+        .sorted()
+        .collect_vec(),
+        [(child1, (parent, &"first")), (child2, (parent, &"first"))]
+    );
     // ANCHOR_END: many_to_many
     // ANCHOR: query
 
