@@ -418,7 +418,7 @@ fn schedule_par() {
     }
 
     #[derive(Fetch, Debug, Clone)]
-    struct BattleObject {
+    struct BattleTarget {
         id: EntityIds,
         pos: Component<Vec2>,
         health: Mutable<f32>,
@@ -431,14 +431,14 @@ fn schedule_par() {
             range: range(),
             pos: pos(),
         }))
-        .with_query(Query::new(BattleObject {
+        .with_query(Query::new(BattleTarget {
             id: EntityIds,
             pos: pos(),
             health: health().as_mut(),
         }))
         .with_name("battle")
         .build(
-            |mut sub: QueryBorrow<BattleSubject>, mut obj: QueryBorrow<BattleObject>| {
+            |mut sub: QueryBorrow<BattleSubject>, mut obj: QueryBorrow<BattleTarget>| {
                 eprintln!("Prepared queries, commencing battles");
                 for a in sub.iter() {
                     for b in obj.iter() {

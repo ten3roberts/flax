@@ -2,9 +2,9 @@
 
 A relation is a component which *links* to another `Entity`, similar to a foreign key in a database. This can be used to construct different kinds of graphs and trees inside the ECS.
 
-The links between entities are managed by the ECS itself and will always be valid, see [Lifetime](#lifetime)
+The links between entities are managed by the ECS itself and will always be valid, see [Lifetime](#lifetime).
 
-The linked entity is referred to as the `object` of a relation, while the entity the component is attached to is called the `subject`.
+The linked entity is referred to as the `target` of a relation, while the entity the component is attached to is called the `subject`.
 
 This allows forming hierarchies such as *parent-child* relations for transforms and UI, as well as arbitrary graphs.
 
@@ -17,11 +17,11 @@ For example, declaring a child relationship that connects to a parent can be don
 {{ #include ../../../examples/guide/relations.rs:relation_basic }}
 ```
 
-The parameter to the component function determines the object entity or target of the relation.
+The parameter to the component function determines the target entity of the relation.
 
 Since the value of the relation in this case is `()`, `set_default` can be used as a shorthand over `set`
 
-Two relations of the same type but with different *objects* behave like two separate components and will not interfere. This allows having many-to-many relationships between entities, if so desired.
+Two relations of the same type but with different *targets* behave like two separate components and will not interfere. This allows having many-to-many relationships between entities, if so desired.
 
 This allows constructing many different kinds of graphs inside the ECS.
 
