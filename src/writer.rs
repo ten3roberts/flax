@@ -420,7 +420,7 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
                     // Component does not exist yet, so defer a move
 
                     // Exclusive relation
-                    if key.object.is_some() && desc.meta_ref().has(exclusive()) {
+                    if key.target.is_some() && desc.meta_ref().has(exclusive()) {
                         if exclusive_relations.contains(&key.id) {
                             panic!("Multiple exclusive relations");
                         }

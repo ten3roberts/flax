@@ -17,7 +17,7 @@ and new functionality can be added to existing entities and components.
 
 In Flax, there are 3 fundamental building blocks.
 
-[Entity](https://docs.rs/flax/latest/flax/struct.Entity.html). A unique identifier for the objects of the program. Has a managed lifecycle.
+[Entity](https://docs.rs/flax/latest/flax/struct.Entity.html). A unique identifier for the entities of the program. Has a managed lifecycle.
 
 [Component](https://docs.rs/flax/latest/flax/struct.Component.html), data which
 can be added to an Entity. Has a unique Id, which works as the key for storing

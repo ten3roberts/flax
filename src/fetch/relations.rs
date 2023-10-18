@@ -34,7 +34,7 @@ where
         let borrows: SmallVec<[_; 4]> = {
             data.arch
                 .relations_like(self.component.id())
-                .map(|(desc, cell)| (desc.object.unwrap(), cell.borrow()))
+                .map(|(desc, cell)| (desc.target.unwrap(), cell.borrow()))
                 .collect()
         };
 
@@ -48,7 +48,7 @@ where
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         let relation = self.component.key().id;
         dst.extend(data.arch.cells().keys().filter_map(move |k| {
-            if k.object.is_some() && k.id == relation {
+            if k.target.is_some() && k.id == relation {
                 return Some(Access {
                     kind: AccessKind::Archetype {
                         id: data.arch_id,
@@ -107,7 +107,7 @@ where
     }
 }
 
-/// Iterates the relation object and data for the yielded query item
+/// Iterates the relation targets and data for the yielded query item
 pub struct RelationsIter<'a, T> {
     borrows: slice::Iter<'a, (Entity, CellGuard<'a, [T]>)>,
     slot: Slot,

@@ -146,9 +146,9 @@ impl GraphState {
 
             // Go backwards through the relations
             for (key, _) in arch.relations_like(relation) {
-                let object = key.object.unwrap();
+                let target = key.target.unwrap();
 
-                self.edges.entry(object).or_default().push(arch_id);
+                self.edges.entry(target).or_default().push(arch_id);
             }
         }
     }
