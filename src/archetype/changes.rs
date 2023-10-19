@@ -13,6 +13,10 @@ use super::{Slice, Slot};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[doc(hidden)]
+// Contains ranges of changes for the same change tick
+// Sorted by the start range of the slices
+//
+// Adjacent of the same tick are merged together
 pub struct ChangeList {
     inner: Vec<Change>,
 }
@@ -121,9 +125,132 @@ impl ChangeList {
         res
     }
 
+    pub(crate) fn swap_remove_with(
+        &mut self,
+        slot: Slot,
+        other: Slot,
+        mut on_removed: impl FnMut(Change),
+    ) {
+        let mut dst = Vec::new();
+
+        // let mut start_range = self
+        //     .inner
+        //     .iter()
+        //     .take_while(|v| v.slice.end >= slot)
+        //     .count();
+
+        let changes_count = self
+            .inner
+            .iter()
+            .take_while(|v| v.slice.start <= slot)
+            .count();
+
+        let (changes, rest) = self.inner.split_at_mut(changes_count);
+
+        let other_start_range = rest.iter().take_while(|v| v.slice.start < other).count();
+
+        let mut other_slice = &mut rest[other_start_range..];
+
+        let mut empty_tail = 0;
+        for v in &mut *other_slice {
+            assert_eq!(v.slice.end, other + 1);
+            // 0 or more in the tail may become empty
+            v.slice.end = other;
+            assert!(v.slice.start == other || empty_tail == 0);
+
+            if v.slice.is_empty() {
+                empty_tail += 1;
+            }
+        }
+
+        let mut start_range = 0;
+        let mut i = start_range;
+
+        for change in changes {
+            on_removed(Change::single(slot, change.tick));
+            let slice = change.slice;
+
+            // There is a change for the same tick, so we can directly substitute
+            if let Some(idx) = other_slice.iter().position(|v| v.tick == change.tick) {
+                // Remove from those to split in later
+                let len = other_slice.len();
+                other_slice.swap(idx, len - 1);
+                other_slice = &mut other_slice[..len - 2];
+                empty_tail += 1;
+
+                dst.insert(0, *change);
+                panic!("Reusing");
+                i += 1;
+                continue;
+            }
+
+            // There was no change in the same tick for the swapped in slot, so we need to fix
+            // this slice instead
+
+            // We need to handle this range
+            //
+            // Easy: Truncate from start
+            assert!(slice.start <= slot);
+            if slice.end <= slot {
+                // phew, not inside
+                dst.insert(0, *change);
+            }
+            if slice.start == slot {
+                if slice.end > slot + 1 {
+                    dst.push(Change {
+                        tick: change.tick,
+                        slice: Slice::new(slot + 1, slice.end),
+                    });
+                }
+            }
+            // Truncate end
+            else if slice.end == slot + 1 {
+                // From above we know that start != slot
+                dst.push(Change {
+                    tick: change.tick,
+                    slice: Slice::new(slice.start, slot),
+                });
+            }
+            // Oh no, it is in the middle
+            else {
+                let left = Change {
+                    tick: change.tick,
+                    slice: Slice::new(slice.start, slot),
+                };
+                let mid = Change {
+                    tick: change.tick,
+                    slice: Slice::single(slot),
+                };
+                let right = Change {
+                    tick: change.tick,
+                    slice: Slice::new(slot + 1, slice.end),
+                };
+
+                // Keep this
+                *change = left;
+                assert_eq!(start_range, i);
+                start_range += 1;
+                dst.push(right);
+            }
+
+            i += 1;
+        }
+
+        let other_slice = other_slice.iter().map(|v| Change::single(slot, v.tick));
+        dst.splice(0..0, other_slice);
+
+        self.inner.splice(start_range..changes_count, dst);
+
+        for v in &self.inner[self.inner.len() - empty_tail..] {
+            assert!(v.slice.is_empty());
+        }
+
+        self.inner.truncate(self.inner.len() - empty_tail);
+    }
+
     // Swap removes slot with the last slot
     // The supplied slot must be the >= all other stored slots
-    pub(crate) fn swap_remove_with(
+    pub(crate) fn swap_remove_with2(
         &mut self,
         slot: Slot,
         last: Slot,
