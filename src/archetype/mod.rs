@@ -174,7 +174,7 @@ impl Cell {
         unsafe { dst.storage.append(&mut data.storage) }
 
         data.changes.zip_map(&mut dst.changes, |_, a, b| {
-            a.drain(..).for_each(|mut change| {
+            a.inner.drain(..).for_each(|mut change| {
                 change.slice.start += dst_start;
                 change.slice.end += dst_start;
 
@@ -732,9 +732,11 @@ impl Archetype {
             cell.take(slot, &mut on_move)
         }
 
+        let last = self.len() - 1;
+
         // Remove the component removals for slot
         for removed in self.removals.values_mut() {
-            removed.remove(slot, |_| {});
+            removed.swap_remove_with(slot, last, |_| {});
         }
 
         self.remove_slot(slot)
@@ -814,7 +816,7 @@ impl Archetype {
         // Make sure to carry over removed events
         for (key, removed) in &mut self.removals {
             let dst = dst.removals.entry(*key).or_default();
-            removed.drain(..).for_each(|mut change| {
+            removed.inner.drain(..).for_each(|mut change| {
                 change.slice.start += dst_slots.start;
                 change.slice.end += dst_slots.start;
 

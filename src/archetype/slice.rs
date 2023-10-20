@@ -5,7 +5,7 @@ use alloc::collections::BTreeSet;
 use super::Slot;
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-/// Represents a contiguous range of slots within and archetype
+/// Represents a contiguous range of slots within an archetype
 pub struct Slice {
     pub(crate) start: Slot,
     pub(crate) end: Slot,
