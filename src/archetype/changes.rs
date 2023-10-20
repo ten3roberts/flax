@@ -132,20 +132,6 @@ impl ChangeList {
         swap: Slot,
         mut on_removed: impl FnMut(Change),
     ) {
-        let mut dst = Vec::new();
-
-        // let mut start_range = self
-        //     .inner
-        //     .iter()
-        //     .take_while(|v| v.slice.end >= slot)
-        //     .count();
-
-        let changes_count = self
-            .inner
-            .iter()
-            .take_while(|v| v.slice.start <= slot)
-            .count();
-
         let mut other_changes = Vec::new();
 
         // Truncate all ranges from the swapped slot
@@ -155,7 +141,7 @@ impl ChangeList {
                 // 0 or more in the tail may become empty
                 if v.slice.end == swap + 1 {
                     v.slice.end = swap;
-                    other_changes.push(Change::single(swap, v.tick));
+                    other_changes.push(Change::single(slot, v.tick));
                 }
 
                 !v.slice.is_empty()
@@ -172,7 +158,9 @@ impl ChangeList {
             let change = &mut changes[i];
 
             let slice = change.slice;
-            if slice.end <= slot || slice.start > slot {
+            if slice.start > slot {
+                break;
+            } else if slice.end <= slot {
                 // phew, not containing the slot, skip
                 i += 1;
                 continue;
@@ -232,10 +220,12 @@ impl ChangeList {
                 };
 
                 *change = left;
-                dst.insert(i + 1, right);
+                changes.insert(i + 1, right);
                 i += 2;
             }
         }
+
+        assert!(other_changes.len() <= 1);
 
         for change in other_changes {
             self.set(change);
