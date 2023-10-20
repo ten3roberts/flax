@@ -176,7 +176,7 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let cur = match self
             .cursor
-            .find_slice(self.data.changes().get(self.kind), slots)
+            .find_slice(self.data.changes().get(self.kind).as_slice(), slots)
         {
             Some(v) => v,
             None => return Slice::new(slots.end, slots.end),
@@ -225,7 +225,7 @@ impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
             .unwrap_or(&EMPTY_CHANGELIST);
 
         Some(PreparedRemoveFilter {
-            changes,
+            changes: changes.as_slice(),
             cursor: ChangeCursor::new(data.old_tick),
         })
     }

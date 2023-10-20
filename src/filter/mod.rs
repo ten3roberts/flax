@@ -654,7 +654,7 @@ mod tests {
         changes.set(Change::new(Slice::new(784, 800), 7));
         changes.set(Change::new(Slice::new(945, 1139), 8));
 
-        let filter = PreparedRemoveFilter::new(&changes, 2);
+        let filter = PreparedRemoveFilter::new(&changes.inner, 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
