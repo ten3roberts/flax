@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use itertools::Itertools;
 use smallvec::SmallVec;
 
-use super::{Slice, Slot};
+use super::{Remainder, Slice, Slot};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[doc(hidden)]
@@ -46,59 +46,194 @@ impl ChangeList {
         })
     }
 
-    pub(crate) fn set(&mut self, mut change: Change) -> &mut Self {
+    fn merge_from(&mut self, mut i: usize) {
+        let changes = &mut self.inner;
+        let Change { mut slice, tick } = changes[i];
+
+        // Merge forward
+        while let Some(next) = changes.get_mut(i + 1) {
+            if next.tick == tick {
+                if let Some(u) = slice.union(&next.slice) {
+                    eprintln!("Merged forward in set {slice:?} {next:?} into {u:?}");
+                    slice = u;
+                    changes[i].slice = u;
+                    changes.remove(i + 1);
+                    continue;
+                }
+            }
+
+            if let Some(diff) = next.slice.difference(slice) {
+                eprintln!("Subtracting start {next:?} => {diff:?}");
+                assert!(diff.start > next.slice.start);
+                next.slice = diff;
+                if diff.is_empty() {
+                    changes.remove(i + 1);
+                    continue;
+                }
+            }
+
+            i += 1;
+        }
+    }
+
+    pub(crate) fn set(&mut self, value: Change) -> &mut Self {
+        eprintln!("set {value:?}");
         let mut insert_point = 0;
         let mut i = 0;
-        let mut joined = false;
+
+        #[cfg(feature = "internal_assert")]
+        self.assert_normal("Not sorted before");
+
+        let changes = &mut self.inner;
+
+        while i < changes.len() {
+            let change = &mut changes[i];
+            let slice = change.slice;
+
+            if slice.start < value.slice.start {
+                // TODO: break
+                insert_point = i + 1;
+            }
+
+            // Merge
+            match change.tick.cmp(&value.tick) {
+                // Remove the incoming changes range from the existing ones
+                core::cmp::Ordering::Less => {
+                    // Remove overlaps with existing intervals of previous ticks
+                    match slice.subtract(&value.slice) {
+                        Remainder::NoOverlap => {
+                            i += 1;
+                        }
+                        Remainder::FullOverlap => {
+                            eprintln!("Removing {i} {change:?}");
+                            changes.remove(i);
+                        }
+                        Remainder::Left(l) => {
+                            eprintln!("{slice:?} => {l:?}");
+                            change.slice = l;
+                            i += 1;
+                        }
+                        Remainder::Right(r) => {
+                            eprintln!("{slice:?} => {r:?}");
+                            change.slice = r;
+                            i += 1;
+                        }
+                        Remainder::Split(l, r) => {
+                            eprintln!("{slice:?} => {l:?}, {l:?}");
+                            change.slice = l;
+                            let tick = change.tick;
+                            changes.insert(i + 1, Change::new(r, tick));
+                            i += 2;
+                        }
+                    }
+                }
+                core::cmp::Ordering::Equal => {
+                    // Attempt to merge
+                    if slice.start <= value.slice.start && value.slice.start <= slice.end {
+                        change.slice = Slice::new(slice.start, value.slice.end.max(slice.end));
+                        eprintln!("Merge: {slice:?} {value:?} => {change:?}");
+
+                        // Merge forward
+                        self.merge_from(i);
+
+                        #[cfg(feature = "internal_assert")]
+                        self.assert_normal(&alloc::format!(
+                            "Not sorted after `set` inserting: {value:?}"
+                        ));
+
+                        return self;
+                    }
+
+                    i += 1;
+                }
+                core::cmp::Ordering::Greater => unreachable!(),
+            }
+        }
+
+        eprintln!("Insert at {insert_point}");
+        self.inner.insert(insert_point, value);
+
+        #[cfg(feature = "internal_assert")]
+        self.assert_normal(&alloc::format!(
+            "Not sorted after `set` inserting: {value:?}"
+        ));
+
+        self
+    }
+
+    pub(crate) fn set_slot(&mut self, slot: Slot, tick: u32) -> &mut Self {
+        let mut insert_point = 0;
+        let mut i = 0;
 
         #[cfg(feature = "internal_assert")]
         self.assert_normal("Not sorted at beginning");
 
-        self.inner.retain_mut(|v| {
-            if change.slice.is_empty() {
-                return true;
+        let changes = &mut self.inner;
+
+        while i < changes.len() {
+            let change = &mut changes[i];
+            let slice = change.slice;
+
+            if slice.start < slot {
+                insert_point = i + 1;
             }
-            // Remove older changes which are a subset of the newer slots
-            if v.tick < change.tick {
-                if let Some(diff) = v.slice.difference(change.slice) {
-                    v.slice = diff;
+
+            // Merge
+            match change.tick.cmp(&tick) {
+                // Remove the incoming changes range from the existing ones
+                core::cmp::Ordering::Less => {
+                    // Remove overlaps with existing intervals of previous ticks
+                    match slice.subtract(&Slice::single(slot)) {
+                        Remainder::NoOverlap => {
+                            i += 1;
+                        }
+                        Remainder::FullOverlap => {
+                            changes.remove(i);
+                        }
+                        Remainder::Left(l) => {
+                            change.slice = l;
+                            i += 1;
+                        }
+                        Remainder::Right(r) => {
+                            change.slice = r;
+                            i += 1;
+                        }
+                        Remainder::Split(l, r) => {
+                            change.slice = l;
+                            let tick = change.tick;
+                            changes.insert(i + 1, Change::new(r, tick));
+                            i += 2;
+                        }
+                    }
+                }
+                core::cmp::Ordering::Equal => {
+                    // Attempt to merge
+                    if slice.start <= slot && slice.end >= slot {
+                        change.slice = Slice::new(slice.start, slot.max(slice.end));
+
+                        eprintln!("Merge: {slice:?} {slot:?} => {change:?}");
+                        self.merge_from(i);
+
+                        return self;
+                    }
+
+                    i += 1;
+                }
+                core::cmp::Ordering::Greater => {
+                    if slice.contains(slot) {
+                        return self;
+                    }
+                    i += 1;
                 }
             }
-            // Consume part of the change until there is none left
-            else if let Some(diff) = change.slice.difference(v.slice) {
-                change.slice = diff;
-            }
-
-            // Merge the change into an already existing change
-            // Do not change start as that will invalidate ordering
-            if v.slice < change.slice && v.tick == change.tick {
-                // Merge atop change of the same change
-                if let Some(u) = v.slice.union(&change.slice) {
-                    joined = true;
-                    v.slice = u;
-                }
-            }
-
-            if v.slice.is_empty() {
-                return false;
-            }
-
-            i += 1;
-
-            if v.slice < change.slice {
-                insert_point = i;
-            }
-
-            true
-        });
-
-        if !joined && !change.slice.is_empty() {
-            self.inner.insert(insert_point, change);
         }
+
+        self.inner
+            .insert(insert_point, Change::new(Slice::single(slot), tick));
 
         #[cfg(feature = "internal_assert")]
         self.assert_normal(&alloc::format!(
-            "Not sorted after `set` inserting: {change:?}"
+            "Not sorted after `set` inserting: {slot:?}"
         ));
 
         self
@@ -132,7 +267,7 @@ impl ChangeList {
         swap: Slot,
         mut on_removed: impl FnMut(Change),
     ) {
-        let mut other_changes = Vec::new();
+        let mut to_swap = None;
 
         // Truncate all ranges from the swapped slot
         if slot != swap {
@@ -141,19 +276,17 @@ impl ChangeList {
                 // 0 or more in the tail may become empty
                 if v.slice.end == swap + 1 {
                     v.slice.end = swap;
-                    other_changes.push(Change::single(slot, v.tick));
+                    assert!(to_swap.is_none());
+                    to_swap = Some((slot, v.tick));
                 }
 
                 !v.slice.is_empty()
-                // assert!(v.slice.start == other || empty_tail == 0);
-
-                // if v.slice.is_empty() {
-                //     empty_tail += 1;
-                // }
             });
         }
+
         let mut i = 0;
         let changes = &mut self.inner;
+
         while i < changes.len() {
             let change = &mut changes[i];
 
@@ -170,9 +303,10 @@ impl ChangeList {
 
             // We need to handle this range
 
-            // There is a change for the same tick, so we can directly substitute
-            if let Some(idx) = other_changes.iter().position(|v| v.tick == change.tick) {
-                other_changes.swap_remove(idx);
+            // There is a change for the same tick, so we can substitute directly
+            if to_swap.is_some_and(|v| v.1 == change.tick) {
+                eprintln!("Substituting");
+                to_swap = None;
                 i += 1;
                 continue;
             }
@@ -210,10 +344,6 @@ impl ChangeList {
                     tick: change.tick,
                     slice: Slice::new(slice.start, slot),
                 };
-                let mid = Change {
-                    tick: change.tick,
-                    slice: Slice::single(slot),
-                };
                 let right = Change {
                     tick: change.tick,
                     slice: Slice::new(slot + 1, slice.end),
@@ -225,10 +355,9 @@ impl ChangeList {
             }
         }
 
-        assert!(other_changes.len() <= 1);
-
-        for change in other_changes {
-            self.set(change);
+        if let Some((slot, tick)) = to_swap {
+            eprintln!("Setting {slot} {tick}");
+            self.set_slot(slot, tick);
         }
     }
 
@@ -715,24 +844,76 @@ mod tests {
     fn swap_remove() {
         let mut changes = ChangeList::default();
 
-        changes.set(Change::new(Slice::new(4, 7), 6));
-        changes.set(Change::new(Slice::new(1, 4), 2));
-        changes.set(Change::new(Slice::new(1, 3), 8));
         changes.set(Change::new(Slice::new(5, 6), 1));
+        changes.set(Change::new(Slice::new(1, 4), 2));
+        changes.set(Change::new(Slice::new(4, 7), 6));
+        changes.set(Change::new(Slice::new(1, 3), 8));
+
+        assert_eq!(
+            changes.as_slice(),
+            [
+                Change::new(Slice::new(1, 3), 8),
+                Change::new(Slice::new(3, 4), 2),
+                Change::new(Slice::new(4, 7), 6),
+            ]
+        );
+
         // changes.swap_remove(1);
         assert_eq!(changes.swap_remove_collect(6, 6), [Change::single(6, 6)]);
         assert_eq!(changes.swap_remove_collect(6, 6), []);
         assert_eq!(changes.swap_remove_collect(1, 5), [Change::single(1, 8)]);
 
-        changes.set(Change::new(Slice::new(3, 7), 3));
-        changes.set(Change::new(Slice::new(3, 4), 5));
-
-        // dbg!(&changes);
         assert_eq!(
-            changes.swap_remove_collect(4, 9),
-            [Change::single(4, 3), Change::single(4, 6)]
+            changes.as_slice(),
+            [
+                Change::new(Slice::new(1, 2), 6),
+                Change::new(Slice::new(2, 3), 8),
+                Change::new(Slice::new(3, 4), 2),
+                Change::new(Slice::new(4, 5), 6),
+            ]
         );
 
-        assert_eq!(changes.swap_remove_collect(4, 9), []);
+        changes.set(Change::new(Slice::new(3, 7), 8));
+        changes.set(Change::new(Slice::new(3, 4), 9));
+
+        assert_eq!(
+            changes.as_slice(),
+            [
+                Change::new(Slice::new(1, 2), 6),
+                Change::new(Slice::new(2, 3), 8),
+                Change::new(Slice::new(3, 4), 9),
+                Change::new(Slice::new(4, 7), 8),
+                // Change::new(Slice::new(3, 4), 2),
+                // Change::new(Slice::new(4, 5), 6),
+            ]
+        );
+
+        assert_eq!(changes.swap_remove_collect(4, 6), [Change::single(4, 8)]);
+
+        assert_eq!(
+            changes.as_slice(),
+            [
+                Change::new(Slice::new(1, 2), 6),
+                Change::new(Slice::new(2, 3), 8),
+                Change::new(Slice::new(3, 4), 9),
+                Change::new(Slice::new(4, 6), 8),
+                // Change::new(Slice::new(3, 4), 2),
+                // Change::new(Slice::new(4, 5), 6),
+            ]
+        );
+
+        assert_eq!(changes.swap_remove_collect(4, 9), [Change::single(4, 8)]);
+
+        assert_eq!(
+            changes.as_slice(),
+            [
+                Change::new(Slice::new(1, 2), 6),
+                Change::new(Slice::new(2, 3), 8),
+                Change::new(Slice::new(3, 4), 9),
+                Change::new(Slice::new(5, 6), 8),
+                // Change::new(Slice::new(3, 4), 2),
+                // Change::new(Slice::new(4, 5), 6),
+            ]
+        );
     }
 }

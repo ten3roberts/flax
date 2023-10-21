@@ -125,6 +125,51 @@ impl Slice {
         }
     }
 
+    pub(crate) fn subtract(&self, other: &Self) -> Remainder {
+        //    *------*
+        // *--*
+        if self.end <= other.start || self.start >= other.end {
+            Remainder::NoOverlap
+        }
+        //    *---------*
+        // *------------*
+        //
+        // *---------*
+        // *--------------*
+        else if other.start <= self.start && other.end >= self.end {
+            Remainder::FullOverlap
+        }
+        // 1.
+        //    *-----*
+        // *---*
+        //
+        // *--------*
+        // *---*
+        else if other.start <= self.start && other.end < self.end {
+            Remainder::Right(Self::new(other.end, self.end))
+        }
+        // 2.
+        // *-------*
+        //       *---*
+        //
+        // *-------*
+        //     *---*
+        else if other.start > self.start && other.end >= self.end {
+            Remainder::Left(Self::new(self.start, other.start))
+        }
+        // 3.
+        // *-------*
+        //   *---*
+        //
+        //
+        //
+        else {
+            let left = Self::new(self.start, other.start);
+            let right = Self::new(other.end, self.end);
+            Remainder::Split(left, right)
+        }
+    }
+
     /// Returns true if two slices have a non-zero overlap
     #[inline]
     pub fn overlaps(&self, other: Self) -> bool {
@@ -156,6 +201,14 @@ impl IntoIterator for Slice {
     fn into_iter(self) -> Self::IntoIter {
         self.start..self.end
     }
+}
+
+pub(crate) enum Remainder {
+    NoOverlap,
+    FullOverlap,
+    Left(Slice),
+    Right(Slice),
+    Split(Slice, Slice),
 }
 
 #[cfg(test)]
