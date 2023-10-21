@@ -64,7 +64,7 @@ impl ChangeList {
 
             if let Some(diff) = next.slice.difference(slice) {
                 eprintln!("Subtracting start {next:?} => {diff:?}");
-                assert!(diff.start > next.slice.start);
+                assert!(diff.start >= next.slice.start);
                 next.slice = diff;
                 if diff.is_empty() {
                     changes.remove(i + 1);
