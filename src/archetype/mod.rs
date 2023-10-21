@@ -156,9 +156,9 @@ impl Cell {
         });
 
         // Replace this slot with the last slot and move everything to the dst archetype
-        data.changes.swap_remove(slot, last, |kind, mut v| {
-            v.slice = Slice::single(dst_slot);
-            dst.changes.set(kind, v);
+        data.changes.swap_remove(slot, last, |kind, v| {
+            eprintln!("Moving {slot} => {dst_slot}");
+            dst.changes.set_slot(kind, dst_slot, v.tick);
         });
 
         // Do not notify of removal, since the component is still intact, but in another archetype
@@ -628,9 +628,13 @@ impl Archetype {
     /// # Safety
     /// The length of the passed data must be equal to the slice and the slice
     /// must point to a currently uninitialized region in the archetype.
-    pub(crate) unsafe fn extend(&mut self, src: &mut Storage, tick: u32) -> Option<()> {
+    pub(crate) unsafe fn extend(&mut self, src: &mut Storage, tick: u32) {
+        if src.is_empty() {
+            return;
+        }
+
         let len = self.len();
-        let cell = self.cells.get_mut(&src.desc().key())?;
+        let cell = self.cells.get_mut(&src.desc().key()).unwrap();
         let data = cell.data.get_mut();
 
         let slots = Slice::new(data.storage.len(), data.storage.len() + src.len());
@@ -640,8 +644,6 @@ impl Archetype {
         debug_assert!(data.storage.len() <= len);
 
         data.set_added(&self.entities[slots.as_range()], slots, tick);
-
-        Some(())
     }
 
     /// Move all components in `slot` to archetype of `dst`. The components not

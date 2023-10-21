@@ -49,6 +49,7 @@ impl ChangeList {
     fn merge_from(&mut self, mut i: usize) {
         let changes = &mut self.inner;
         let Change { mut slice, tick } = changes[i];
+        dbg!(slice, tick);
 
         // Merge forward
         while let Some(next) = changes.get_mut(i + 1) {
@@ -74,6 +75,8 @@ impl ChangeList {
 
             i += 1;
         }
+
+        eprintln!("Finished merging {self:?}");
     }
 
     pub(crate) fn set(&mut self, value: Change) -> &mut Self {
@@ -105,21 +108,21 @@ impl ChangeList {
                             i += 1;
                         }
                         Remainder::FullOverlap => {
-                            eprintln!("Removing {i} {change:?}");
+                            // eprintln!("Removing {i} {change:?}");
                             changes.remove(i);
                         }
                         Remainder::Left(l) => {
-                            eprintln!("{slice:?} => {l:?}");
+                            // eprintln!("{slice:?} => {l:?}");
                             change.slice = l;
                             i += 1;
                         }
                         Remainder::Right(r) => {
-                            eprintln!("{slice:?} => {r:?}");
+                            // eprintln!("{slice:?} => {r:?}");
                             change.slice = r;
                             i += 1;
                         }
                         Remainder::Split(l, r) => {
-                            eprintln!("{slice:?} => {l:?}, {l:?}");
+                            // eprintln!("{slice:?} => {l:?}, {l:?}");
                             change.slice = l;
                             let tick = change.tick;
                             changes.insert(i + 1, Change::new(r, tick));
@@ -131,7 +134,7 @@ impl ChangeList {
                     // Attempt to merge
                     if slice.start <= value.slice.start && value.slice.start <= slice.end {
                         change.slice = Slice::new(slice.start, value.slice.end.max(slice.end));
-                        eprintln!("Merge: {slice:?} {value:?} => {change:?}");
+                        // eprintln!("Merge: {slice:?} {value:?} => {change:?}");
 
                         // Merge forward
                         self.merge_from(i);
@@ -158,10 +161,13 @@ impl ChangeList {
             "Not sorted after `set` inserting: {value:?}"
         ));
 
+        eprintln!("After set: {self:?}");
+
         self
     }
 
     pub(crate) fn set_slot(&mut self, slot: Slot, tick: u32) -> &mut Self {
+        eprintln!("set_slot {self:?} {slot} {tick}");
         let mut insert_point = 0;
         let mut i = 0;
 
@@ -188,17 +194,21 @@ impl ChangeList {
                             i += 1;
                         }
                         Remainder::FullOverlap => {
+                            // eprintln!("Removing {i} {change:?}");
                             changes.remove(i);
                         }
                         Remainder::Left(l) => {
+                            // eprintln!("{slice:?} => {l:?}");
                             change.slice = l;
                             i += 1;
                         }
                         Remainder::Right(r) => {
+                            // eprintln!("{slice:?} => {r:?}");
                             change.slice = r;
                             i += 1;
                         }
                         Remainder::Split(l, r) => {
+                            // eprintln!("{slice:?} => {l:?}, {l:?}");
                             change.slice = l;
                             let tick = change.tick;
                             changes.insert(i + 1, Change::new(r, tick));
@@ -209,9 +219,15 @@ impl ChangeList {
                 core::cmp::Ordering::Equal => {
                     // Attempt to merge
                     if slice.start <= slot && slice.end >= slot {
-                        change.slice = Slice::new(slice.start, slot.max(slice.end));
+                        change.slice = Slice::new(slice.start, (slot + 1).max(slice.end));
 
-                        eprintln!("Merge: {slice:?} {slot:?} => {change:?}");
+                        // eprintln!("Merge: {slice:?} {slot:?} => {change:?}");
+
+                        #[cfg(feature = "internal_assert")]
+                        self.assert_normal(&alloc::format!(
+                            "Not sorted after `set` inserting: {slot:?}"
+                        ));
+
                         self.merge_from(i);
 
                         return self;
@@ -235,6 +251,8 @@ impl ChangeList {
         self.assert_normal(&alloc::format!(
             "Not sorted after `set` inserting: {slot:?}"
         ));
+
+        eprintln!("After set_slot: {self:?}");
 
         self
     }
@@ -673,8 +691,8 @@ impl Changes {
     }
 
     #[inline]
-    pub(crate) fn set(&mut self, kind: ChangeKind, change: Change) -> &mut Self {
-        self.map[kind as usize].set(change);
+    pub(crate) fn set_slot(&mut self, kind: ChangeKind, slot: Slot, tick: u32) -> &mut Self {
+        self.map[kind as usize].set_slot(slot, tick);
         self
     }
 

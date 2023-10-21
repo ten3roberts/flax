@@ -72,6 +72,8 @@ where
             guard.changes().set_track_modified()
         }
 
+        eprintln!("Changes: {:?}", guard.changes().get(ChangeKind::Modified));
+
         Some(PreparedChangeFilter {
             data: guard,
             kind: self.kind,
