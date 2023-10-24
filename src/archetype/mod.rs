@@ -157,7 +157,6 @@ impl Cell {
 
         // Replace this slot with the last slot and move everything to the dst archetype
         data.changes.swap_remove(slot, last, |kind, v| {
-            eprintln!("Moving {slot} => {dst_slot}");
             dst.changes.set_slot(kind, dst_slot, v.tick);
         });
 

@@ -250,7 +250,6 @@ mod util;
 /// vtable implementation for dynamic dispatching
 pub mod vtable;
 mod writer;
-mod intervals;
 
 // Required due to macro
 pub use archetype::{BatchSpawn, RefMut};
