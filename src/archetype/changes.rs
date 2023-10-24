@@ -25,15 +25,12 @@ impl ChangeList {
         Self { inner: Vec::new() }
     }
 
-    #[cfg(feature = "internal_assert")]
+    #[cfg(debug_assertions)]
     fn assert_normal(&self, msg: &str) {
-        let ordered = self
-            .iter()
-            .sorted_by_key(|v| v.slice.start)
-            .copied()
-            .collect_vec();
+        let this = self.iter().flat_map(|v| v.slice).collect_vec();
+        let ordered = self.iter().flat_map(|v| v.slice).dedup().collect_vec();
 
-        if ordered != self.inner {
+        if ordered != this {
             panic!("Not ordered {self:#?}\nexpected: {ordered:#?}\n\n{msg}");
         }
 
@@ -49,13 +46,11 @@ impl ChangeList {
     fn merge_from(&mut self, mut i: usize) {
         let changes = &mut self.inner;
         let Change { mut slice, tick } = changes[i];
-        dbg!(slice, tick);
 
         // Merge forward
         while let Some(next) = changes.get_mut(i + 1) {
             if next.tick == tick {
                 if let Some(u) = slice.union(&next.slice) {
-                    eprintln!("Merged forward in set {slice:?} {next:?} into {u:?}");
                     slice = u;
                     changes[i].slice = u;
                     changes.remove(i + 1);
@@ -64,7 +59,6 @@ impl ChangeList {
             }
 
             if let Some(diff) = next.slice.difference(slice) {
-                eprintln!("Subtracting start {next:?} => {diff:?}");
                 assert!(diff.start >= next.slice.start);
                 next.slice = diff;
                 if diff.is_empty() {
@@ -75,16 +69,14 @@ impl ChangeList {
 
             i += 1;
         }
-
-        eprintln!("Finished merging {self:?}");
     }
 
     pub(crate) fn set(&mut self, value: Change) -> &mut Self {
-        eprintln!("set {value:?}");
+        let orig = self.inner.clone();
         let mut insert_point = 0;
         let mut i = 0;
 
-        #[cfg(feature = "internal_assert")]
+        #[cfg(debug_assertions)]
         self.assert_normal("Not sorted before");
 
         let changes = &mut self.inner;
@@ -132,14 +124,14 @@ impl ChangeList {
                 }
                 core::cmp::Ordering::Equal => {
                     // Attempt to merge
-                    if slice.start <= value.slice.start && value.slice.start <= slice.end {
-                        change.slice = Slice::new(slice.start, value.slice.end.max(slice.end));
+                    if let Some(union) = slice.union(&value.slice) {
+                        change.slice = union;
                         // eprintln!("Merge: {slice:?} {value:?} => {change:?}");
 
                         // Merge forward
                         self.merge_from(i);
 
-                        #[cfg(feature = "internal_assert")]
+                        #[cfg(debug_assertions)]
                         self.assert_normal(&alloc::format!(
                             "Not sorted after `set` inserting: {value:?}"
                         ));
@@ -153,25 +145,21 @@ impl ChangeList {
             }
         }
 
-        eprintln!("Insert at {insert_point}");
         self.inner.insert(insert_point, value);
 
-        #[cfg(feature = "internal_assert")]
+        #[cfg(debug_assertions)]
         self.assert_normal(&alloc::format!(
-            "Not sorted after `set` inserting: {value:?}"
+            "Not sorted after `set` inserting: {value:?}\n\noriginal: {orig:?}"
         ));
-
-        eprintln!("After set: {self:?}");
 
         self
     }
 
     pub(crate) fn set_slot(&mut self, slot: Slot, tick: u32) -> &mut Self {
-        eprintln!("set_slot {self:?} {slot} {tick}");
         let mut insert_point = 0;
         let mut i = 0;
 
-        #[cfg(feature = "internal_assert")]
+        #[cfg(debug_assertions)]
         self.assert_normal("Not sorted at beginning");
 
         let changes = &mut self.inner;
@@ -223,12 +211,11 @@ impl ChangeList {
 
                         // eprintln!("Merge: {slice:?} {slot:?} => {change:?}");
 
-                        #[cfg(feature = "internal_assert")]
+                        self.merge_from(i);
+                        #[cfg(debug_assertions)]
                         self.assert_normal(&alloc::format!(
                             "Not sorted after `set` inserting: {slot:?}"
                         ));
-
-                        self.merge_from(i);
 
                         return self;
                     }
@@ -247,12 +234,10 @@ impl ChangeList {
         self.inner
             .insert(insert_point, Change::new(Slice::single(slot), tick));
 
-        #[cfg(feature = "internal_assert")]
+        #[cfg(debug_assertions)]
         self.assert_normal(&alloc::format!(
-            "Not sorted after `set` inserting: {slot:?}"
+            "Not sorted after `set_slot` inserting: {slot:?}"
         ));
-
-        eprintln!("After set_slot: {self:?}");
 
         self
     }
@@ -286,6 +271,7 @@ impl ChangeList {
         mut on_removed: impl FnMut(Change),
     ) {
         let mut to_swap = None;
+        let orig = self.inner.clone();
 
         // Truncate all ranges from the swapped slot
         if slot != swap {
@@ -294,7 +280,10 @@ impl ChangeList {
                 // 0 or more in the tail may become empty
                 if v.slice.end == swap + 1 {
                     v.slice.end = swap;
-                    assert!(to_swap.is_none());
+                    assert!(
+                        to_swap.is_none(),
+                        "Multiple changes for the same tick {slot} {swap} {orig:?}"
+                    );
                     to_swap = Some((slot, v.tick));
                 }
 
@@ -323,7 +312,6 @@ impl ChangeList {
 
             // There is a change for the same tick, so we can substitute directly
             if to_swap.is_some_and(|v| v.1 == change.tick) {
-                eprintln!("Substituting");
                 to_swap = None;
                 i += 1;
                 continue;
@@ -374,7 +362,6 @@ impl ChangeList {
         }
 
         if let Some((slot, tick)) = to_swap {
-            eprintln!("Setting {slot} {tick}");
             self.set_slot(slot, tick);
         }
     }
@@ -387,12 +374,14 @@ impl ChangeList {
         last: Slot,
         mut on_removed: impl FnMut(Change),
     ) {
-        #[cfg(feature = "internal_assert")]
-        self.assert_normal(&format!("Invalid before swap remove: {slot}, last: {last}"));
+        #[cfg(debug_assertions)]
+        self.assert_normal(&alloc::format!(
+            "Invalid before swap remove: {slot}, last: {last}"
+        ));
         // self.swap_out(slot, last).into_iter().for_each(on_removed);
         // return;
 
-        #[cfg(feature = "internal_assert")]
+        #[cfg(debug_assertions)]
         assert!(
             self.iter().all(|v| v.slice.end <= last + 1),
             "last: {last}, {self:#?}"
@@ -477,8 +466,9 @@ impl ChangeList {
         }
 
         self.inner.retain(|v| !v.slice.is_empty());
-        #[cfg(feature = "internal_assert")]
-        self.assert_normal(&format!(
+
+        #[cfg(debug_assertions)]
+        self.assert_normal(&alloc::format!(
             "Not sorted after `swap_remove` while removing: {slot}"
         ));
 
@@ -511,7 +501,7 @@ impl ChangeList {
         //      =========
         //      ===
 
-        #[cfg(feature = "internal_assert")]
+        #[cfg(debug_assertions)]
         self.assert_normal("Not sorted before `remove`");
 
         self.inner.drain(..).for_each(|v| {
@@ -546,7 +536,7 @@ impl ChangeList {
         result.append(&mut right);
 
         self.inner = result;
-        #[cfg(feature = "internal_assert")]
+        #[cfg(debug_assertions)]
         self.assert_normal(&alloc::format!(
             "Not sorted after `remove` while removing: {slot}"
         ));
@@ -933,5 +923,35 @@ mod tests {
                 // Change::new(Slice::new(4, 5), 6),
             ]
         );
+    }
+
+    #[test]
+    fn insert() {
+        let mut changes = ChangeList {
+            inner: vec![
+                Change::new(Slice::new(0, 2), 1),
+                Change::new(Slice::new(2, 3), 2),
+            ],
+        };
+
+        changes.set(Change::new(Slice::new(0, 3), 2));
+
+        assert_eq!(changes.as_slice(), [Change::new(Slice::new(0, 3), 2),]);
+    }
+
+    #[test]
+    fn insert2() {
+        let mut changes = ChangeList {
+            inner: vec![
+                Change::new(Slice::new(0, 2), 1),
+                Change::new(Slice::new(2, 3), 2),
+            ],
+        };
+
+        changes.set_slot(0, 2);
+        changes.set_slot(1, 2);
+        changes.set_slot(2, 2);
+
+        assert_eq!(changes.as_slice(), [Change::new(Slice::new(0, 3), 2),]);
     }
 }
