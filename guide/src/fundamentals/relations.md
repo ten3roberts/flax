@@ -8,6 +8,8 @@ The linked entity is referred to as the `target` of a relation, while the entity
 
 This allows forming hierarchies such as *parent-child* relations for transforms and UI, as well as arbitrary graphs.
 
+See the [`child_of`](https://docs.rs/flax/latest/flax/components/fn.child_of.html) relation for an example of a parent-child relation which uses the parent entity as the relation's *target*.
+
 Relations are most easily declared using the
 [component](https://docs.rs/flax/latest/flax/macro.component.html) macro, but can be constructed dynamically as well. See [dynamic_components](../diving_deeper/dynamic_components.md)
 
