@@ -5,9 +5,6 @@ use core::{
 
 use alloc::vec::Vec;
 
-use itertools::Itertools;
-use smallvec::SmallVec;
-
 use super::{Remainder, Slice, Slot};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -558,6 +555,7 @@ impl Changes {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
     use itertools::Itertools;
 
     use super::*;

@@ -654,7 +654,6 @@ mod tests {
         changes.set(Change::new(Slice::new(784, 800), 7));
         changes.set(Change::new(Slice::new(945, 1139), 8));
 
-        dbg!(&changes);
         let filter = PreparedRemoveFilter::new(changes.as_slice(), 2);
 
         // The whole "archetype"
