@@ -525,6 +525,19 @@ mod test {
 
         let all = BTreeSet::from_iter(ids.iter().copied());
 
+        let items = Query::new((name().cloned(), a().modified().copied())).collect_vec(&world);
+
+        assert_eq!(
+            items,
+            [
+                ("a".to_string(), 0),
+                ("b".to_string(), 1),
+                ("c".to_string(), 2),
+                ("d".to_string(), 3),
+                ("e".to_string(), 4),
+            ]
+        );
+
         let edges = BTreeMap::from([
             (ids[1], ids[0]),
             (ids[2], ids[1]),
@@ -534,6 +547,22 @@ mod test {
 
         from_edges(&mut world, &edges).unwrap();
 
+        let items = Query::new((name().cloned(), a().modified().copied()))
+            .borrow(&world)
+            .iter()
+            .sorted()
+            .collect_vec();
+
+        assert_eq!(
+            items,
+            [
+                ("a".to_string(), 0),
+                ("b".to_string(), 1),
+                ("c".to_string(), 2),
+                ("d".to_string(), 3),
+                ("e".to_string(), 4),
+            ]
+        );
         // let mut query = crate::Query::new((name().cloned(), a().copied()));
         let mut query = Query::new((entity_ids(), a().copied())).with_strategy(Dfs::new(child_of));
 
@@ -579,7 +608,7 @@ mod test {
         let mut query = Query::new((name().cloned(), a().modified().copied()))
             .with_strategy(Dfs::new(child_of));
 
-        let items = query.borrow(&world).iter().collect_vec();
+        let items = query.borrow(&world).iter().sorted().collect_vec();
 
         assert_eq!(
             items,
@@ -618,7 +647,7 @@ mod test {
                 *a *= -10;
             });
 
-        let items = query.borrow(&world).iter().collect_vec();
+        let items = query.borrow(&world).iter().sorted().collect_vec();
         assert_eq!(
             items,
             [

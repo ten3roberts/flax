@@ -58,7 +58,6 @@ debug = true
 std = ["itertools/use_std", "itertools/use_alloc", "anyhow/std"]
 default = ["std", "rayon", "flume"]
 serde = ["dep:serde", "erased-serde"]
-internal_assert = []
 derive = ["flax-derive"]
 
 [[example]]
