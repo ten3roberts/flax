@@ -156,9 +156,8 @@ impl Cell {
         });
 
         // Replace this slot with the last slot and move everything to the dst archetype
-        data.changes.swap_remove(slot, last, |kind, mut v| {
-            v.slice = Slice::single(dst_slot);
-            dst.changes.set(kind, v);
+        data.changes.swap_remove(slot, last, |kind, v| {
+            dst.changes.set_slot(kind, dst_slot, v.tick);
         });
 
         // Do not notify of removal, since the component is still intact, but in another archetype
@@ -174,7 +173,7 @@ impl Cell {
         unsafe { dst.storage.append(&mut data.storage) }
 
         data.changes.zip_map(&mut dst.changes, |_, a, b| {
-            a.drain(..).for_each(|mut change| {
+            a.inner.drain(..).for_each(|mut change| {
                 change.slice.start += dst_start;
                 change.slice.end += dst_start;
 
@@ -628,9 +627,13 @@ impl Archetype {
     /// # Safety
     /// The length of the passed data must be equal to the slice and the slice
     /// must point to a currently uninitialized region in the archetype.
-    pub(crate) unsafe fn extend(&mut self, src: &mut Storage, tick: u32) -> Option<()> {
+    pub(crate) unsafe fn extend(&mut self, src: &mut Storage, tick: u32) {
+        if src.is_empty() {
+            return;
+        }
+
         let len = self.len();
-        let cell = self.cells.get_mut(&src.desc().key())?;
+        let cell = self.cells.get_mut(&src.desc().key()).unwrap();
         let data = cell.data.get_mut();
 
         let slots = Slice::new(data.storage.len(), data.storage.len() + src.len());
@@ -640,8 +643,6 @@ impl Archetype {
         debug_assert!(data.storage.len() <= len);
 
         data.set_added(&self.entities[slots.as_range()], slots, tick);
-
-        Some(())
     }
 
     /// Move all components in `slot` to archetype of `dst`. The components not
@@ -732,9 +733,11 @@ impl Archetype {
             cell.take(slot, &mut on_move)
         }
 
+        let last = self.len() - 1;
+
         // Remove the component removals for slot
         for removed in self.removals.values_mut() {
-            removed.remove(slot, |_| {});
+            removed.swap_remove_with(slot, last, |_| {});
         }
 
         self.remove_slot(slot)
@@ -814,7 +817,7 @@ impl Archetype {
         // Make sure to carry over removed events
         for (key, removed) in &mut self.removals {
             let dst = dst.removals.entry(*key).or_default();
-            removed.drain(..).for_each(|mut change| {
+            removed.inner.drain(..).for_each(|mut change| {
                 change.slice.start += dst_slots.start;
                 change.slice.end += dst_slots.start;
 

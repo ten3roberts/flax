@@ -4,24 +4,33 @@
     <title>Asteroids</title>
     <style>
       body {
-        background-color: dimgray;
+        background-color: #1B1B1B;
       }
-      html,
-      body,
       canvas {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 800px;
-        height: 600px;
+        width: 1280px;
+        height: 720px;
+      }
+      .text {
+        color: #363B47;
+        font-family: 'Roboto', sans-serif;
+      }
+      .mid {
+        display: flex;
+        align-items: center;
+        flex-direction: column;
       }
     </style>
   </head>
 
   <body>
-    <canvas id="glcanvas" tabindex="1"></canvas>
-    <!-- Minified and statically hosted version of https://github.com/not-fl3/macroquad/blob/master/js/mq_js_bundle.js -->
+
+    <div class="mid">
+      <h1 class="text">Asteroids</h1>
+      <h2 class="text">Built using <a href="https://github.com/ten3roberts/flax">Flax</a></h2>
+      <canvas id="glcanvas" tabindex="1"></canvas>
+      <h3 class="text">Use WASD to move, and space to shoot</h3>
+      <!-- Minified and statically hosted version of https://github.com/not-fl3/macroquad/blob/master/js/mq_js_bundle.js -->
+    </div>
     <script src="https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js"></script>
     <script>
       load("asteroids.wasm");

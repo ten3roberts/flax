@@ -168,8 +168,7 @@ impl World {
 
         for (_, mut storage) in chunk.take_all() {
             unsafe {
-                arch.extend(&mut storage, change_tick)
-                    .expect("Component not in archetype");
+                arch.extend(&mut storage, change_tick);
             }
         }
 
@@ -893,8 +892,7 @@ impl World {
 
         for (_, mut storage) in chunk.take_all() {
             unsafe {
-                arch.extend(&mut storage, change_tick)
-                    .expect("Component not in archetype");
+                arch.extend(&mut storage, change_tick);
             }
         }
 
