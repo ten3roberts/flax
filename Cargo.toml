@@ -121,6 +121,11 @@ name = "systems"
 path = "./examples/guide/systems.rs"
 required-features = ["std", "rayon"]
 
+[[example]]
+name = "springs"
+path = "./examples/guide/springs.rs"
+required-features = ["std"]
+
 [[bench]]
 name = "benchmarks"
 harness = false

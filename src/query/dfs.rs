@@ -112,9 +112,9 @@ impl State {
             let mut root = true;
             for (key, _) in arch.relations_like(relation) {
                 root = false;
-                let object = key.object.unwrap();
+                let target = key.target.unwrap();
 
-                self.edges.entry(object).or_default().push(index);
+                self.edges.entry(target).or_default().push(index);
             }
 
             if root {
@@ -292,7 +292,7 @@ where
                 let arch_id = dfs.state.archetypes[arch_index];
                 let arch = world.archetypes.get(arch_id);
 
-                let edge = arch.borrow::<T>(ComponentKey::new(id, Some(dfs.relation)));
+                let edge = arch.borrow::<T>(ComponentKey::new(dfs.relation, Some(id)));
 
                 let p = unsafe { &mut *prepared.add(arch_index) };
 

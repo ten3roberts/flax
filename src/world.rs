@@ -444,6 +444,7 @@ impl World {
 
         Ok(())
     }
+
     /// Removes all instances of relations and component of the given entities
     /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
     /// on all the children.
@@ -451,8 +452,9 @@ impl World {
         let change_tick = self.advance_change_tick();
         let archetypes = Query::new(())
             .filter(ArchetypeFilter(|arch: &Archetype| {
+                // Filter any subject or relation kind
                 arch.components()
-                    .any(|v| v.key().id == id || v.key().object == Some(id))
+                    .any(|v| v.key().id == id || v.key().target == Some(id))
             }))
             .borrow(self)
             .archetypes()
@@ -463,7 +465,7 @@ impl World {
 
             let components = src.components().filter(|v| {
                 let key = v.key();
-                !(key.id == id || key.object == Some(id))
+                !(key.id == id || key.target == Some(id))
             });
 
             let (dst_id, dst) = self.archetypes.find_create(components);
@@ -1180,8 +1182,8 @@ impl World {
                     // Modify the relations to match new components
                     id.id = *new_ids.get(&id.id).unwrap_or(&id.id);
 
-                    if let Some(ref mut object) = id.object {
-                        *object = *new_ids.get(object).unwrap_or(object);
+                    if let Some(ref mut target) = id.target {
+                        *target = *new_ids.get(target).unwrap_or(target);
                     }
 
                     // Safety
@@ -1213,8 +1215,8 @@ impl World {
                         // Modify the relations to match new components
                         key.id = *new_ids.get(&key.id).unwrap_or(&key.id);
 
-                        if let Some(ref mut object) = key.object {
-                            *object = *new_ids.get(object).unwrap_or(object);
+                        if let Some(ref mut target) = key.target {
+                            *target = *new_ids.get(target).unwrap_or(target);
                         }
 
                         // Migrate custom components
@@ -1282,9 +1284,9 @@ impl MigratedEntities {
     /// If the types do not match
     pub fn get_component<T: ComponentValue>(&self, component: Component<T>) -> Component<T> {
         let id = self.get(component.key().id);
-        let object = component.key().object.map(|v| self.get(v));
+        let target = component.key().target.map(|v| self.get(v));
 
-        Component::from_raw_parts(ComponentKey::new(id, object), component.vtable)
+        Component::from_raw_parts(ComponentKey::new(id, target), component.vtable)
     }
 
     /// Returns the migrated relation
@@ -1298,7 +1300,7 @@ impl MigratedEntities {
 
         let component = self.get_component(component);
 
-        move |object| component.of(object)
+        move |target| component.of(target)
     }
 
     /// Returns the migrated ids
