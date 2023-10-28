@@ -8,13 +8,13 @@ publish = false
 
 [dependencies]
 flax = { path = "../", default-features = false, features = [ "flume", "derive", ] }
-macroquad = "0.3.25"
+macroquad = "0.4.4"
 # sapp-wasm = "=0.1.26"
 
-flume = { version = "0.10.14", default_features = false }
+flume = { version = "0.11.0", default_features = false }
 rand = { version = "0.8.5", default_features = false, features = ["std_rng"] }
-tracing = "0.1.37"
+tracing = "0.1.40"
 tracing-subscriber = "0.3.17"
-tracing-tree = "0.2.3"
-itertools = "0.10.5"
+tracing-tree = "0.2.5"
+itertools = "0.11.0"
 anyhow = "1.0.71"
