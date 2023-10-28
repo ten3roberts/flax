@@ -20,7 +20,7 @@ pub trait FetchSource {
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result;
 }
 
-/// Selects the fetch value from the first parent/object of the specified relation
+/// Selects the fetch value from the first target of the specified relation
 pub struct FromRelation {
     pub(crate) relation: Entity,
     pub(crate) name: &'static str,
@@ -33,11 +33,11 @@ impl FetchSource for FromRelation {
         data: FetchAccessData<'a>,
     ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
         for (key, _) in data.arch.relations_like(self.relation) {
-            let object = key.object().unwrap();
+            let target = key.target.unwrap();
 
             let loc = data
                 .world
-                .location(object)
+                .location(target)
                 .expect("Relation contains invalid entity");
 
             let arch = data.world.archetypes.get(loc.arch_id);
@@ -95,11 +95,11 @@ fn traverse_resolve<'a, 'w, Q: Fetch<'w>>(
     }
 
     for (key, _) in data.arch.relations_like(relation) {
-        let object = key.object().unwrap();
+        let target = key.target.unwrap();
 
         let loc = data
             .world
-            .location(object)
+            .location(target)
             .expect("Relation contains invalid entity");
 
         let data = FetchAccessData {

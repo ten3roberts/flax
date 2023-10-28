@@ -11,21 +11,26 @@
 /// ```rust,ignore
 /// flax::component! {
 ///     // component
-///     name: type, // component
+///     pub name: type, // component
 ///
 ///     // component with metadata/reflection
-///     name: type => [ Metadata, ... ],
+///     pub(crate) name: type => [ Metadata, ... ],
 ///
 ///     // relational component
-///     name(object): type
+///     name(target): type
 ///
 ///     // relation component with metadata/reflection
-///     name(object): type => [ Metadata, ... ]
+///     name(target): type => [ Metadata, ... ]
 ///
 ///     // static entity
 ///     name,
 /// }
 /// ```
+/// # Visibility
+///
+/// Components are by default only visible to the module they were declared in. However, any
+/// visibility qualifier can be added before the name to expose it.
+///
 ///
 /// # Metadata
 ///
@@ -45,7 +50,7 @@
 ///
 /// # Relations
 /// A component can be associated to another entity, which declares a relation of the component
-/// type between the subject (entity which has the component), and the object (the associated
+/// type between the subject (entity which has the component), and the target (the associated
 /// entity).
 ///
 /// Relation components with different associated entities are distinct.
@@ -96,7 +101,7 @@
 /// another *generationless* entity id.
 ///
 /// This allows for the parameterization of components with component ids being
-/// distinct with across different objects.
+/// distinct with across different target.
 macro_rules! component {
     // Relations
     ($(#[$outer:meta])* $vis: vis $name: ident( $obj: ident ): $ty: ty $(=> [$($metadata: ty),*])?, $($rest:tt)*) => {

@@ -83,7 +83,6 @@ fn relations() {
         .set(name(), "Jessica".to_string())
         .set(hobby(), "Reading")
         .spawn(&mut world);
-    dbg!(child_of(parent));
 
     let parent2 = EntityBuilder::new()
         .set(name(), "Jack".to_string())
