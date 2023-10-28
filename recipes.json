@@ -3,7 +3,7 @@
         "cmd": "cargo run -p asteroids"
     },
     "deploy-asteroids": {
-        "cmd": "cargo make asteroids"
+        "cmd": "./scripts/build_asteroids.sh"
     },
     "check": {
         "cmd": "cargo check --all-features --tests --examples"
