@@ -1,10 +1,12 @@
 use alloc::vec::Vec;
+use itertools::Itertools;
 
 use crate::{
-    archetype::Archetype,
+    archetype::{Archetype, Slice, Storage},
     component::{ComponentDesc, ComponentKey, ComponentValue},
     filter::StaticFilter,
-    Entity,
+    sink::Sink,
+    Component, Entity,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,17 +35,33 @@ pub enum EventKind {
 pub struct EventData<'a> {
     /// The affected entities
     pub ids: &'a [Entity],
+    /// The affected slots
+    pub slots: Slice,
     /// The affected component
     pub key: ComponentKey,
-    /// The kind of event
-    pub kind: EventKind,
 }
 
 /// Allows subscribing to events *inside* the ECS, such as components being added, removed, or
 /// modified.
+///
+/// Most implementations are through the [`Sink`] implementation, which sends a static event for
+/// each entity affected by the event.
 pub trait EventSubscriber: ComponentValue {
     /// Handle an incoming event
-    fn on_event(&self, event: &EventData);
+    fn on_added(&self, storage: &Storage, event: &EventData);
+    /// Handle an incoming event
+    ///
+    /// **Note**: Component storage is inaccessible during this call as it may be called *during*
+    /// itereation or while a query borrow is alive.
+    ///
+    /// Prefer to use this for cache validation and alike, as it *will* be called for intermediate
+    /// events.
+    fn on_modified(&self, event: &EventData);
+    /// Handle an incoming event
+    fn on_removed(&self, storage: &Storage, event: &EventData);
+
+    /// Returns true if the subscriber is still connected
+    fn is_connected(&self) -> bool;
 
     /// Returns true if the subscriber is interested in this archetype
     #[inline]
@@ -57,14 +75,11 @@ pub trait EventSubscriber: ComponentValue {
         true
     }
 
-    /// Returns true if the subscriber is still connected
-    fn is_connected(&self) -> bool;
-
     /// Filter each event before it is generated through a custom function
     fn filter<F>(self, func: F) -> FilterFunc<Self, F>
     where
         Self: Sized,
-        F: Fn(&EventData) -> bool,
+        F: Fn(EventKind, &EventData) -> bool,
     {
         FilterFunc {
             subscriber: self,
@@ -99,49 +114,112 @@ pub trait EventSubscriber: ComponentValue {
 }
 
 #[cfg(feature = "flume")]
-impl EventSubscriber for flume::Sender<Event> {
-    fn on_event(&self, event: &EventData) {
+impl<S> EventSubscriber for S
+where
+    S: 'static + Send + Sync + Sink<Event>,
+{
+    fn on_added(&self, _: &Storage, event: &EventData) {
         for &id in event.ids {
-            let _ = self.send(Event {
+            self.send(Event {
                 id,
                 key: event.key,
-                kind: event.kind,
+                kind: EventKind::Added,
+            });
+        }
+    }
+
+    fn on_modified(&self, event: &EventData) {
+        for &id in event.ids {
+            self.send(Event {
+                id,
+                key: event.key,
+                kind: EventKind::Modified,
+            });
+        }
+    }
+
+    fn on_removed(&self, _: &Storage, event: &EventData) {
+        for &id in event.ids {
+            self.send(Event {
+                id,
+                key: event.key,
+                kind: EventKind::Removed,
             });
         }
     }
 
     fn is_connected(&self) -> bool {
-        !self.is_disconnected()
+        <Self as Sink<Event>>::is_connected(self)
     }
 }
 
-#[cfg(feature = "tokio")]
-impl EventSubscriber for tokio::sync::mpsc::UnboundedSender<Event> {
-    fn on_event(&self, event: &EventData) {
-        for &id in event.ids {
-            let _ = self.send(Event {
-                id,
-                key: event.key,
-                kind: event.kind,
-            });
+/// Receive the component value of an event
+///
+/// This is a convenience wrapper around [`EventSubscriber`] that sends the component value along
+///
+/// **Note**: This only tracks addition and removal of components, not modification. This is due to
+/// a limitation with references lifetimes during iteration, as the values can't be accessed by the
+/// subscriber simultaneously.
+pub struct WithValue<T, S> {
+    component: Component<T>,
+    sink: S,
+}
+
+impl<T, S> WithValue<T, S> {
+    /// Create a new `WithValue` subscriber
+    pub fn new(component: Component<T>, sink: S) -> Self {
+        Self { component, sink }
+    }
+}
+
+#[cfg(feature = "flume")]
+impl<T: ComponentValue + Clone, S: 'static + Send + Sync + Sink<(Event, T)>> EventSubscriber
+    for WithValue<T, S>
+{
+    fn on_added(&self, storage: &Storage, event: &EventData) {
+        let values = storage.downcast_ref::<T>();
+        for (&id, slot) in event.ids.iter().zip_eq(event.slots.as_range()) {
+            let value = values[slot].clone();
+
+            self.sink.send((
+                Event {
+                    id,
+                    key: event.key,
+                    kind: EventKind::Added,
+                },
+                value,
+            ));
+        }
+    }
+
+    fn on_modified(&self, _: &EventData) {}
+
+    fn on_removed(&self, storage: &Storage, event: &EventData) {
+        let values = storage.downcast_ref::<T>();
+        for (&id, slot) in event.ids.iter().zip_eq(event.slots.as_range()) {
+            let value = values[slot].clone();
+
+            self.sink.send((
+                Event {
+                    id,
+                    key: event.key,
+                    kind: EventKind::Removed,
+                },
+                value,
+            ));
         }
     }
 
     fn is_connected(&self) -> bool {
-        !self.is_closed()
-    }
-}
-
-#[cfg(feature = "tokio")]
-impl EventSubscriber for alloc::sync::Weak<tokio::sync::Notify> {
-    fn on_event(&self, _: &EventData) {
-        if let Some(notify) = self.upgrade() {
-            notify.notify_one()
-        }
+        self.sink.is_connected()
     }
 
-    fn is_connected(&self) -> bool {
-        self.strong_count() > 0
+    fn matches_component(&self, desc: ComponentDesc) -> bool {
+        self.component.desc() == desc
+    }
+
+    fn matches_arch(&self, arch: &Archetype) -> bool {
+        arch.has(self.component.key())
     }
 }
 
@@ -156,9 +234,21 @@ where
     S: EventSubscriber,
     F: ComponentValue + StaticFilter,
 {
+    fn on_added(&self, storage: &Storage, event: &EventData) {
+        self.subscriber.on_added(storage, event)
+    }
+
+    fn on_modified(&self, event: &EventData) {
+        self.subscriber.on_modified(event);
+    }
+
+    fn on_removed(&self, storage: &Storage, event: &EventData) {
+        self.subscriber.on_removed(storage, event)
+    }
+
     #[inline]
-    fn on_event(&self, event: &EventData) {
-        self.subscriber.on_event(event);
+    fn is_connected(&self) -> bool {
+        self.subscriber.is_connected()
     }
 
     #[inline]
@@ -169,11 +259,6 @@ where
     #[inline]
     fn matches_component(&self, desc: ComponentDesc) -> bool {
         self.subscriber.matches_component(desc)
-    }
-
-    #[inline]
-    fn is_connected(&self) -> bool {
-        self.subscriber.is_connected()
     }
 }
 
@@ -186,12 +271,23 @@ pub struct FilterFunc<S, F> {
 impl<S, F> EventSubscriber for FilterFunc<S, F>
 where
     S: EventSubscriber,
-    F: ComponentValue + Fn(&EventData) -> bool,
+    F: ComponentValue + Fn(EventKind, &EventData) -> bool,
 {
-    #[inline]
-    fn on_event(&self, event: &EventData) {
-        if (self.filter)(event) {
-            self.subscriber.on_event(event);
+    fn on_added(&self, storage: &Storage, event: &EventData) {
+        if (self.filter)(EventKind::Added, event) {
+            self.subscriber.on_added(storage, event)
+        }
+    }
+
+    fn on_modified(&self, event: &EventData) {
+        if (self.filter)(EventKind::Modified, event) {
+            self.subscriber.on_modified(event)
+        }
+    }
+
+    fn on_removed(&self, storage: &Storage, event: &EventData) {
+        if (self.filter)(EventKind::Removed, event) {
+            self.subscriber.on_removed(storage, event)
         }
     }
 
@@ -221,9 +317,16 @@ impl<S> EventSubscriber for FilterComponents<S>
 where
     S: EventSubscriber,
 {
-    #[inline]
-    fn on_event(&self, event: &EventData) {
-        self.subscriber.on_event(event)
+    fn on_added(&self, storage: &Storage, event: &EventData) {
+        self.subscriber.on_added(storage, event)
+    }
+
+    fn on_modified(&self, event: &EventData) {
+        self.subscriber.on_modified(event)
+    }
+
+    fn on_removed(&self, storage: &Storage, event: &EventData) {
+        self.subscriber.on_removed(storage, event)
     }
 
     #[inline]
@@ -241,50 +344,3 @@ where
         self.subscriber.is_connected()
     }
 }
-
-// #[cfg(feature = "flume")]
-// TODO weak sender
-// impl<T> EventHandler<T> for flume::WeakSender<T> {
-//     fn on_event(&self, event: T) -> bool {
-//         self.send(event).is_ok()
-//     }
-// }
-
-// #[cfg(feature = "tokio")]
-// impl EventHandler for tokio::sync::mpsc::UnboundedSender<Event> {
-//     fn on_event(&self, event: BufferedEvent) {
-//         for id in event.arch.entities()[event.slots.as_range()] {
-//             self.send(Event {
-//                 id,
-//                 key: event.key,
-//                 kind: event.kind,
-//             })
-//         }
-//     }
-// }
-
-// #[cfg(feature = "tokio")]
-// impl<T> EventHandler<T> for tokio::sync::mpsc::Sender<T> {
-//     fn on_event(&self, event: T) -> bool {
-//         todo!()
-//     }
-// }
-
-// #[cfg(feature = "tokio")]
-// impl<T> EventHandler<T> for tokio::sync::broadcast::Sender<T> {
-//     fn on_event(&self, event: T) -> bool {
-//         todo!()
-//     }
-// }
-
-// #[cfg(feature = "tokio")]
-// impl EventHandler for alloc::sync::Weak<tokio::sync::Notify> {
-//     fn on_event(&self, _: BufferedEvent) -> bool {
-//         if let Some(notify) = self.upgrade() {
-//             notify.notify_one();
-//             true
-//         } else {
-//             false
-//         }
-//     }
-// }

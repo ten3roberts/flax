@@ -18,7 +18,7 @@ fn subscribing() {
 
     let mut world = World::new();
 
-    let (tx, rx) = flume::unbounded::<Event>();
+    let (tx, rx) = flume::unbounded();
     world.subscribe(tx.filter_components([a().key()]));
 
     let id = Entity::builder()
@@ -97,6 +97,97 @@ fn subscribing() {
         .for_each(|v| v.push('!'));
 
     assert_eq!(rx.drain().collect_vec(), []);
+
+    world.set(id2, b(), "Bar".to_string()).unwrap();
+}
+
+#[test]
+#[cfg(feature = "flume")]
+fn subscribing_with_value() {
+    use flax::{
+        events::{Event, EventKind, WithValue},
+        Entity, Query, World,
+    };
+    use itertools::Itertools;
+    use pretty_assertions::assert_eq;
+
+    let mut world = World::new();
+
+    let (tx, rx) = flume::unbounded::<(Event, i32)>();
+
+    world.subscribe(WithValue::new(a(), tx));
+
+    let id = Entity::builder()
+        .set(a(), 5)
+        .set(b(), "Foo".to_string())
+        .spawn(&mut world);
+
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [(
+            Event {
+                id,
+                key: a().key(),
+                kind: flax::events::EventKind::Added,
+            },
+            5
+        )]
+    );
+
+    let id2 = Entity::builder().set(a(), 7).spawn(&mut world);
+    world.set(id2, a(), 3).unwrap();
+
+    world.remove(id, a()).unwrap();
+
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [
+            (
+                Event {
+                    id: id2,
+                    kind: EventKind::Added,
+                    key: a().key(),
+                },
+                7
+            ),
+            (
+                Event {
+                    id,
+                    kind: EventKind::Removed,
+                    key: a().key(),
+                },
+                5
+            )
+        ]
+    );
+
+    *world.get_mut(id2, a()).unwrap() = 1;
+
+    world.set(id2, a(), 2).unwrap();
+
+    Query::new(a().as_mut())
+        .borrow(&world)
+        .iter()
+        .for_each(|v| *v *= -1);
+
+    Query::new(b().as_mut())
+        .borrow(&world)
+        .iter()
+        .for_each(|v| v.push('!'));
+
+    assert_eq!(world.remove(id2, a()).unwrap(), -2);
+
+    assert_eq!(
+        rx.drain().collect_vec(),
+        [(
+            Event {
+                id: id2,
+                kind: EventKind::Removed,
+                key: a().key()
+            },
+            -2
+        )]
+    );
 
     world.set(id2, b(), "Bar".to_string()).unwrap();
 }

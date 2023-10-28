@@ -114,13 +114,11 @@ impl<'a, T: Debug + ?Sized> Debug for CellGuard<'a, T> {
 
 /// A mutable reference to an entity's component with deferred change tracking.
 ///
-/// A modification invent is only generated *if* if this is mutably dereferenced.
+/// A modification invent is only generated *iff* this is mutably dereferenced.
 pub struct RefMut<'a, T> {
     guard: CellMutGuard<'a, T>,
-
     id: Entity,
     slot: Slot,
-    modified: bool,
     tick: u32,
 }
 
@@ -138,7 +136,6 @@ impl<'a, T: ComponentValue> RefMut<'a, T> {
             guard,
             id,
             slot,
-            modified: false,
             tick,
         })
     }
@@ -162,19 +159,10 @@ impl<'a, T> Deref for RefMut<'a, T> {
 impl<'a, T> DerefMut for RefMut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.modified = true;
-        self.guard.get_mut()
-    }
-}
+        self.guard
+            .data
+            .set_modified(&[self.id], Slice::single(self.slot), self.tick);
 
-impl<'a, T> Drop for RefMut<'a, T> {
-    #[inline]
-    fn drop(&mut self) {
-        if self.modified {
-            // SAFETY: `value` is not accessed beyond this point
-            self.guard
-                .data
-                .set_modified(&[self.id], Slice::single(self.slot), self.tick)
-        }
+        self.guard.get_mut()
     }
 }

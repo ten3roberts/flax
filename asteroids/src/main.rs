@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
     world.subscribe(
         player_dead_tx
             .filter_components([player().key()])
-            .filter(|v| v.kind == EventKind::Removed),
+            .filter(|v, _| v == EventKind::Removed),
     );
 
     // Setup everything required for the game logic and physics
