@@ -183,7 +183,7 @@ zero or more components attached to it.</p>
 and new functionality can be added to existing entities and components.</p>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
 <p>In Flax, there are 3 fundamental building blocks.</p>
-<p><a href="https://docs.rs/flax/latest/flax/struct.Entity.html">Entity</a>. A unique identifier for the objects of the program. Has a managed lifecycle.</p>
+<p><a href="https://docs.rs/flax/latest/flax/struct.Entity.html">Entity</a>. A unique identifier for the entities of the program. Has a managed lifecycle.</p>
 <p><a href="https://docs.rs/flax/latest/flax/struct.Component.html">Component</a>, data which
 can be added to an Entity. Has a unique Id, which works as the key for storing
 and retrieving the value, and a strongly typed value.</p>
@@ -1188,19 +1188,19 @@ in other situations where a mutable reference to the world is not available.</p>
 <p><code>flush</code> can be used to apply the commandbuffer to make the modifications visible
 to the following systems.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="relations"><a class="header" href="#relations">Relations</a></h1>
-<p>A relation is a component which <em>links</em> to another <code>Entity</code>, similar to a foreign key in a database.</p>
-<p>The linked entity is referred to as the <code>object</code> of a relation, while the entity the component is attached to is called the <code>subject</code>.</p>
+<p>A relation is a component which <em>links</em> to another <code>Entity</code>, similar to a foreign key in a database. This can be used to construct different kinds of graphs and trees inside the ECS.</p>
+<p>The links between entities are managed by the ECS itself and will always be valid, see <a href="fundamentals/relations.html#lifetime">Lifetime</a>.</p>
+<p>The linked entity is referred to as the <code>target</code> of a relation, while the entity the component is attached to is called the <code>subject</code>.</p>
 <p>This allows forming hierarchies such as <em>parent-child</em> relations for transforms and UI, as well as arbitrary graphs.</p>
-<p>A relation is used as a <em>parameterized</em> component, which requires an <code>Entity</code> to be fully instantiated.</p>
+<p>See the <a href="https://docs.rs/flax/latest/flax/components/fn.child_of.html"><code>child_of</code></a> relation for an example of a parent-child relation which uses the parent entity as the relation's <em>target</em>.</p>
 <p>Relations are most easily declared using the
-<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro.</p>
+<a href="https://docs.rs/flax/latest/flax/macro.component.html">component</a> macro, but can be constructed dynamically as well. See <a href="fundamentals/../diving_deeper/dynamic_components.html">dynamic_components</a></p>
+<p>For example, declaring a child relationship that connects to a parent can be done like so:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    component! {
-        spring_joint(other): f32 =&gt; [Debuggable],
+        child_of(id): (),
     }
-
-    let mut world = World::new();
 
     let parent = Entity::builder()
         .set(name(), &quot;Parent&quot;.into())
@@ -1215,13 +1215,11 @@ to the following systems.</p>
         .set(name(), &quot;Child2&quot;.into())
         .set_default(child_of(parent))
         .spawn(&amp;mut world);
-
 <span class="boring">}</span></code></pre></pre>
-<p>Important to note is that the same <code>child_of</code> component with different <code>object</code>
-arguments are distinct, and can as such exist on an entity at the same time,
-allowing many-many relationships between entities;</p>
-<p>There is no limitation of the number of relations an entity can have. As such,
-an entity can have multiple relations to other entities, allowing for any kind of graphs inside the ecs.</p>
+<p>The parameter to the component function determines the target entity of the relation.</p>
+<p>Since the value of the relation in this case is <code>()</code>, <code>set_default</code> can be used as a shorthand over <code>set</code></p>
+<p>Two relations of the same type but with different <em>targets</em> behave like two separate components and will not interfere. This allows having many-to-many relationships between entities, if so desired.</p>
+<p>This allows constructing many different kinds of graphs inside the ECS.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    let parent2 = Entity::builder()
@@ -1232,13 +1230,12 @@ an entity can have multiple relations to other entities, allowing for any kind o
 
     tracing::info!(&quot;World: {world:#?}&quot;);
 
-    // Connect child1 with two entities via springs of different strength
-    world.set(child1, spring_joint(child2), 1.5)?;
-    world.set(child1, spring_joint(parent2), 7.4)?;
+    // Give child1 yet one more parent
+    world.set(child1, child_of(parent2), ())?;
 
     tracing::info!(
         &quot;Connections from child1({child1}): {:?}&quot;,
-        Query::new(relations_like(spring_joint))
+        Query::new(relations_like(child_of))
             .borrow(&amp;world)
             .get(child1)?
             .collect_vec()
@@ -1250,40 +1247,126 @@ an entity can have multiple relations to other entities, allowing for any kind o
 used to exclude components.</p>
 <p>See the <a href="fundamentals/../query/graphs.html">Graphs</a> chapter in queries.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
-</span>    let children_of_parent = Query::new(entity_ids())
+</span><span class="boring">fn main() {
+</span>    // Mathes a relation exactly
+    let children_of_parent: Vec&lt;Entity&gt; = Query::new(entity_ids())
         .with(child_of(parent))
-        .borrow(&amp;world)
-        .iter()
-        .collect_vec();
+        .collect_vec(&amp;world);
 
     tracing::info!(&quot;Children: {children_of_parent:?}&quot;);
 
-    let all_children = Query::new(entity_ids())
+    // Matches a relation with any parent
+    let all_children: Vec&lt;Entity&gt; = Query::new(entity_ids())
         .filter(child_of.with_relation())
-        .borrow(&amp;world)
-        .iter()
-        .collect_vec();
+        .collect_vec(&amp;world);
 
     tracing::info!(&quot;Children: {all_children:?}&quot;);
 
     let roots = Query::new(entity_ids())
         .filter(child_of.without_relation())
-        .borrow(&amp;world)
-        .iter()
-        .collect_vec();
+        .collect_vec(&amp;world);
 
     tracing::info!(&quot;Roots: {roots:?}&quot;);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="associated-values"><a class="header" href="#associated-values">Associated values</a></h2>
+<p>In addition to linking between entities, a relation can also store additional data just like a component. This can be used to create weighted graphs or storing other additional information such as physical joint parameters.</p>
+<p>Since relations behave like separate components, each value on a relation is specific to that link, and as such saves you the hassle of managing a separate list of values for each connection on an entity.</p>
+<p>The following shows a more complete example of how to traverse and calculate the forces between entities connected via springs using hook's law.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    struct Spring {
+        strength: f32,
+        length: f32,
+    }
 
+    impl Spring {
+        fn new(strength: f32, length: f32) -&gt; Self {
+            Self { strength, length }
+        }
+    }
+    component! {
+        spring_joint(id): Spring,
+        position: Vec2,
+    }
+
+    let id1 = Entity::builder()
+        .set(name(), &quot;a&quot;.into())
+        .set(position(), vec2(1.0, 4.0))
+        .spawn(&amp;mut world);
+
+    // Connect id2 to id1 with a spring of strength 2.0
+    let id2 = Entity::builder()
+        .set(name(), &quot;b&quot;.into())
+        .set(spring_joint(id1), Spring::new(2.0, 1.0))
+        .set(position(), vec2(2.0, 0.0))
+        .spawn(&amp;mut world);
+
+    let _id3 = Entity::builder()
+        .set(name(), &quot;c&quot;.into())
+        .set(spring_joint(id1), Spring::new(2.0, 3.0))
+        .set(position(), vec2(2.0, 3.0))
+        .spawn(&amp;mut world);
+
+    let _id4 = Entity::builder()
+        .set(name(), &quot;d&quot;.into())
+        .set(spring_joint(id2), Spring::new(5.0, 0.5))
+        .set(position(), vec2(1.0, 0.0))
+        .spawn(&amp;mut world);
+
+    let mut query = Query::new((entity_ids(), name().cloned(), position()))
+        .with_strategy(Dfs::new(spring_joint));
+
+    query
+        .borrow(&amp;world)
+        .traverse(&amp;None, |(id, name, &amp;pos), strength, parent| {
+            if let (Some(spring), Some((parent_name, parent_pos))) = (strength, parent) {
+                let distance = pos.distance(*parent_pos) - spring.length;
+                let force = distance * spring.strength;
+                tracing::info!(&quot;spring acting with {force:.1}N between {parent_name} and {name}&quot;);
+            } else {
+                tracing::info!(%id, name, &quot;root&quot;);
+            }
+
+            Some((name, pos))
+        });
+<span class="boring">}</span></code></pre></pre>
+<h1 id="exclusive-relations"><a class="header" href="#exclusive-relations">Exclusive relations</a></h1>
+<p>Relations can be declared as exclusive, which means that only one relation of that type can exist on an entity at a time. This is useful for cases where you want to have a single parent or outgoing connection. </p>
+<p><strong>Note</strong>: This does not prevent multiple entities from referencing the same entity, but rather an entity referencing multiple entities.</p>
+<p>When a new relation is added to an entity, any existing relation of the same type will be removed.</p>
+<p>This is the case for the included <a href="https://docs.rs/flax/latest/flax/components/fn.child_of.html"><code>child_of</code></a> relation.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>    component! {
+        child_of(parent): () =&gt; [ Exclusive ],
+    }
+
+    let id1 = Entity::builder().spawn(&amp;mut world);
+    let id2 = Entity::builder().spawn(&amp;mut world);
+
+    let id3 = Entity::builder()
+        .set_default(child_of(id1))
+        .spawn(&amp;mut world);
+
+    let entity = world.entity_mut(id3).unwrap();
+
+    tracing::info!(
+        &quot;relations of {id3}: {:?}&quot;,
+        entity.relations(child_of).map(|v| v.0).collect_vec()
+    );
+
+    world.set(id3, child_of(id2), ()).unwrap();
+
+    let entity = world.entity_mut(id3).unwrap();
+    tracing::info!(
+        &quot;relations of {id3}: {:?}&quot;,
+        entity.relations(child_of).map(|v| v.0).collect_vec()
+    );
 <span class="boring">}</span></code></pre></pre>
 <h2 id="lifetime"><a class="header" href="#lifetime">Lifetime</a></h2>
-<p>When an entity is despawned, all relations to it present on other components
-will be removed and dropped. As such, no entity will have a relation to an
-entity which does not exist.</p>
+<p>Relations are managed by the ECS and will automatically be cleaned up. When an entity is despawned all relations which reference it will be removed from the ECS. As such, a relation will never point to an invalid entity.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span>
-<span class="boring">fn main() {
+</span><span class="boring">fn main() {
 </span>    tracing::info!(
         &quot;has relation to: {parent2}: {}&quot;,
         world.has(child1, child_of(parent2))
@@ -2006,7 +2089,7 @@ entity as the generation is not needed.</p>
     assert!(world.get(child, child_of(parent)).is_err());
 
 <span class="boring">}</span></code></pre></pre>
-<p>When despawning either the relation component or object entity, the &quot;parent&quot;,
+<p>When despawning either the relation component or target entity, the &quot;parent&quot;,
 the component is removed from all entities.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="serialization-and-deserialization"><a class="header" href="#serialization-and-deserialization">Serialization and deserialization</a></h1>
 <p>While the built in reflection system could be used for serialization, similar
