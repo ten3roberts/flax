@@ -41,7 +41,7 @@ fn change_detection() {
     world.subscribe(
         removed_tx
             .filter_components([rotation().key()])
-            .filter(|v| v.kind == EventKind::Removed),
+            .filter(|kind, _| kind == EventKind::Removed),
     );
 
     let mut rng = StdRng::seed_from_u64(83);
