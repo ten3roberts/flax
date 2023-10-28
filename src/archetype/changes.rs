@@ -18,10 +18,6 @@ pub struct ChangeList {
 }
 
 impl ChangeList {
-    pub(crate) const fn new() -> Self {
-        Self { inner: Vec::new() }
-    }
-
     // #[cfg(debug_assertions)]
     // fn assert_normal(&self, msg: &str) {
     //     let this = self.iter().flat_map(|v| v.slice).collect_vec();

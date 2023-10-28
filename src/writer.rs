@@ -147,8 +147,7 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
             (src, dst, dst_id)
         };
 
-        let (dst_slot, swapped) =
-            unsafe { src.move_to(dst, src_loc.slot, |c, ptr| c.drop(ptr), tick) };
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, src_loc.slot, |c, ptr| c.drop(ptr)) };
 
         // Insert the missing component
         let pushed = unsafe {
@@ -455,8 +454,7 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
             .get_disjoint(src_loc.arch_id, dst_id)
             .unwrap();
 
-        let (dst_slot, swapped) =
-            unsafe { src.move_to(dst, src_loc.slot, |c, ptr| c.drop(ptr), tick) };
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, src_loc.slot, |c, ptr| c.drop(ptr)) };
 
         // Insert the missing components
         for (desc, src) in self.buffer.drain() {
