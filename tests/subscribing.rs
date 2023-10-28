@@ -10,7 +10,6 @@ component! {
 #[cfg(feature = "flume")]
 fn subscribing() {
     use flax::{
-        entity_ids,
         events::{Event, EventKind, EventSubscriber},
         Entity, Query, World,
     };
@@ -21,10 +20,6 @@ fn subscribing() {
 
     let (tx, rx) = flume::unbounded::<Event>();
     world.subscribe(tx.filter_components([a().key()]));
-
-    let mut q = Query::new(entity_ids()).filter(a().removed());
-
-    q.borrow(&world);
 
     let id = Entity::builder()
         .set(a(), 5)
@@ -104,8 +99,6 @@ fn subscribing() {
     assert_eq!(rx.drain().collect_vec(), []);
 
     world.set(id2, b(), "Bar".to_string()).unwrap();
-
-    assert_eq!(q.borrow(&world).iter().collect_vec(), [id]);
 }
 
 #[tokio::test]

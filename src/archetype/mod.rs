@@ -267,8 +267,6 @@ impl Cell {
 /// Stored as columns of contiguous component data.
 pub struct Archetype {
     cells: BTreeMap<ComponentKey, Cell>,
-    /// Stores removals of components which transferred the entities to this archetype
-    removals: BTreeMap<ComponentKey, ChangeList>,
     /// Slot to entity id
     pub(crate) entities: Vec<Entity>,
 
@@ -295,7 +293,6 @@ impl Archetype {
     pub(crate) fn empty() -> Self {
         Self {
             cells: BTreeMap::new(),
-            removals: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
             children: Default::default(),
@@ -320,7 +317,6 @@ impl Archetype {
 
         Self {
             cells,
-            removals: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
             children: Default::default(),
@@ -374,10 +370,6 @@ impl Archetype {
 
         let existing = self.children.insert(component, id);
         debug_assert!(existing.is_none());
-    }
-
-    fn push_removed(&mut self, key: ComponentKey, change: Change) {
-        self.removals.entry(key).or_default().set(change);
     }
 
     pub(crate) fn borrow<T: ComponentValue>(
@@ -439,10 +431,6 @@ impl Archetype {
             storage,
             entities: self.entities.len(),
         }
-    }
-
-    pub(crate) fn removals(&self, component: ComponentKey) -> Option<&ChangeList> {
-        self.removals.get(&component)
     }
 
     /// Get a component from the entity at `slot`
@@ -659,11 +647,8 @@ impl Archetype {
         dst: &mut Self,
         slot: Slot,
         mut on_drop: impl FnMut(ComponentDesc, *mut u8),
-        tick: u32,
     ) -> (Slot, Option<(Entity, Slot)>) {
         let id = self.entity(slot).expect("Invalid entity");
-
-        let last = self.len() - 1;
 
         let dst_slot = dst.allocate(id);
 
@@ -682,19 +667,7 @@ impl Archetype {
                 });
 
                 cell.take(slot, &mut on_drop);
-                // Make the destination know of the component that was removed for the entity to
-                // get there
-                dst.push_removed(key, Change::new(Slice::single(dst_slot), tick));
             }
-        }
-
-        // Make sure to carry over removed events
-        for (key, removed) in &mut self.removals {
-            let dst = dst.removals.entry(*key).or_default();
-            removed.swap_remove_with(slot, last, |mut v| {
-                v.slice = Slice::single(dst_slot);
-                dst.set(v);
-            })
         }
 
         let swapped = self.remove_slot(slot);
@@ -733,13 +706,6 @@ impl Archetype {
             cell.take(slot, &mut on_move)
         }
 
-        let last = self.len() - 1;
-
-        // Remove the component removals for slot
-        for removed in self.removals.values_mut() {
-            removed.swap_remove_with(slot, last, |_| {});
-        }
-
         self.remove_slot(slot)
     }
 
@@ -766,7 +732,7 @@ impl Archetype {
     ///
     /// Leaves `self` empty.
     /// Returns the new location of all entities
-    pub fn move_all(&mut self, dst: &mut Self, tick: u32) -> Vec<(Entity, Slot)> {
+    pub fn move_all(&mut self, dst: &mut Self) -> Vec<(Entity, Slot)> {
         let len = self.len();
         if len == 0 {
             return Vec::new();
@@ -810,19 +776,7 @@ impl Archetype {
                 });
 
                 cell.clear();
-                dst.push_removed(*key, Change::new(dst_slots, tick))
             }
-        }
-
-        // Make sure to carry over removed events
-        for (key, removed) in &mut self.removals {
-            let dst = dst.removals.entry(*key).or_default();
-            removed.inner.drain(..).for_each(|mut change| {
-                change.slice.start += dst_slots.start;
-                change.slice.end += dst_slots.start;
-
-                dst.set(change);
-            })
         }
 
         debug_assert_eq!(self.len(), 0);
@@ -911,8 +865,6 @@ impl Archetype {
                 kind: EventKind::Removed,
             })
         }
-
-        self.removals.clear();
 
         ArchetypeDrain {
             entities: mem::take(&mut self.entities),
