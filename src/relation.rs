@@ -26,11 +26,20 @@ where
     /// Returns the vtable of the relation
     fn vtable(&self) -> &'static UntypedVTable;
     /// Instantiate the relation
-    fn of(&self, object: Entity) -> Component<T>;
+    fn of(&self, target: Entity) -> Component<T>;
     /// Construct a new filter yielding entities with this kind of relation
     fn with_relation(self) -> WithRelation;
     /// Construct a new filter yielding entities without this kind of relation
     fn without_relation(self) -> WithoutRelation;
+
+    /// Convert this into a concrete relation representation
+    fn as_relation(&self) -> Relation<T> {
+        Relation {
+            id: self.id(),
+            vtable: self.vtable(),
+            marker: PhantomData,
+        }
+    }
 }
 
 impl<T, F> RelationExt<T> for F
@@ -46,8 +55,8 @@ where
         (self)(dummy()).vtable()
     }
 
-    fn of(&self, object: Entity) -> Component<T> {
-        (self)(object)
+    fn of(&self, target: Entity) -> Component<T> {
+        (self)(target)
     }
 
     fn with_relation(self) -> WithRelation {
@@ -69,7 +78,7 @@ where
 
 /// Represents a relation which can connect to entities
 pub struct Relation<T> {
-    id: Entity,
+    pub(crate) id: Entity,
     vtable: &'static UntypedVTable,
     marker: PhantomData<T>,
 }
@@ -136,16 +145,18 @@ where
 }
 
 impl<T: ComponentValue> RelationExt<T> for Relation<T> {
+    #[inline]
     fn id(&self) -> Entity {
         self.id
     }
 
+    #[inline]
     fn vtable(&self) -> &'static UntypedVTable {
         self.vtable
     }
 
-    fn of(&self, object: Entity) -> Component<T> {
-        Component::from_raw_parts(ComponentKey::new(self.id, Some(object)), self.vtable)
+    fn of(&self, target: Entity) -> Component<T> {
+        Component::from_raw_parts(ComponentKey::new(self.id, Some(target)), self.vtable)
     }
 
     #[inline]
@@ -195,7 +206,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let (&key, cell) = self.cells.next()?;
         // Safety: the type matches the relation ext
-        Some((key.object().unwrap(), unsafe {
+        Some((key.target.unwrap(), unsafe {
             cell.get::<T>(self.slot).unwrap()
         }))
     }
@@ -240,7 +251,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let (&key, cell) = self.cells.next()?;
         Some((
-            key.object().unwrap(),
+            key.target.unwrap(),
             cell.get_mut::<T>(self.entities[self.slot], self.slot, self.change_tick)
                 .unwrap(),
         ))

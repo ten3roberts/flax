@@ -37,8 +37,8 @@ impl<T> ComponentValue for T where T: Send + Sync + 'static {}
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ComponentKey {
     pub(crate) id: Entity,
-    /// The object entity if the component is a relation
-    pub(crate) object: Option<Entity>,
+    /// The target entity if the component is a relation
+    pub(crate) target: Option<Entity>,
 }
 
 #[cfg(feature = "serde")]
@@ -49,7 +49,7 @@ impl Serialize for ComponentKey {
     {
         let mut seq = serializer.serialize_tuple_struct("ComponentId", 2)?;
         seq.serialize_field(&self.id)?;
-        seq.serialize_field(&self.object)?;
+        seq.serialize_field(&self.target)?;
 
         seq.end()
     }
@@ -71,7 +71,7 @@ impl<'de> Deserialize<'de> for ComponentKey {
             ) -> smallvec::alloc::fmt::Result {
                 write!(
                     formatter,
-                    "A tuple of a component id and optional relation object"
+                    "A tuple of a component id and optional relation target"
                 )
             }
 
@@ -82,11 +82,11 @@ impl<'de> Deserialize<'de> for ComponentKey {
                 let id = seq
                     .next_element()?
                     .ok_or_else(|| Error::invalid_length(0, &self))?;
-                let object = seq
+                let target = seq
                     .next_element()?
                     .ok_or_else(|| Error::invalid_length(1, &self))?;
 
-                Ok(ComponentKey::new(id, object))
+                Ok(ComponentKey::new(id, target))
             }
         }
 
@@ -98,17 +98,17 @@ impl ComponentKey {
     /// Returns true if the component is a relation
     #[inline]
     pub fn is_relation(&self) -> bool {
-        self.object.is_some()
+        self.target.is_some()
     }
 
-    pub(crate) fn new(id: Entity, object: Option<Entity>) -> Self {
-        Self { id, object }
+    pub(crate) fn new(id: Entity, target: Option<Entity>) -> Self {
+        Self { id, target }
     }
 
     #[inline]
-    /// Returns the object of the relation
-    pub fn object(&self) -> Option<Entity> {
-        self.object
+    /// Returns the target of the relation
+    pub fn target(&self) -> Option<Entity> {
+        self.target
     }
 
     #[inline]
@@ -126,7 +126,7 @@ impl Display for ComponentKey {
 
 impl Debug for ComponentKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        match self.object {
+        match self.target {
             Some(s) => write!(f, "{}({s})", self.id),
             None => Debug::fmt(&self.id, f),
         }
@@ -136,9 +136,8 @@ impl Debug for ComponentKey {
 /// Type alias for a function which instantiates a component
 pub type ComponentFn<T> = fn() -> Component<T>;
 
-/// Type alias for a function which instantiates a relation with the specified
-/// object
-pub type RelationFn<T> = fn(object: Entity) -> Component<T>;
+/// Type alias for a function which instantiates a relation with the specified target
+pub type RelationFn<T> = fn(target: Entity) -> Component<T>;
 
 crate::component! {
     pub(crate) dummy,
@@ -175,8 +174,8 @@ impl<T> Clone for Component<T> {
 
 impl<T> fmt::Debug for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self.key.object {
-            Some(object) => write!(f, "{}({}) {}", self.vtable.name, object, self.key.id()),
+        match self.key.target {
+            Some(target) => write!(f, "{}({}) {}", self.vtable.name, target, self.key.id()),
             None => write!(f, "{} {}", self.vtable.name, self.key.id),
         }
     }
@@ -184,8 +183,8 @@ impl<T> fmt::Debug for Component<T> {
 
 impl<T> Display for Component<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self.key.object {
-            Some(object) => write!(f, "{}({}) {}", self.vtable.name, object, self.key.id()),
+        match self.key.target {
+            Some(target) => write!(f, "{}({}) {}", self.vtable.name, target, self.key.id()),
             None => write!(f, "{} {}", self.vtable.name, self.key.id),
         }
     }
@@ -237,7 +236,7 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Get the component's base id.
-    /// This is the id without any relation object
+    /// This is the id without any relation target
     #[inline(always)]
     pub fn id(&self) -> Entity {
         self.key.id
@@ -311,9 +310,9 @@ impl<T: ComponentValue> RelationExt<T> for Component<T> {
         self.key().id
     }
 
-    fn of(&self, object: Entity) -> Component<T> {
+    fn of(&self, target: Entity) -> Component<T> {
         Self {
-            key: ComponentKey::new(self.key().id, Some(object)),
+            key: ComponentKey::new(self.key().id, Some(target)),
             ..*self
         }
     }
@@ -355,8 +354,8 @@ impl PartialEq for ComponentDesc {
 
 impl core::fmt::Debug for ComponentDesc {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self.key.object {
-            Some(object) => write!(f, "{}({}) {}", self.vtable.name, object, self.key.id()),
+        match self.key.target {
+            Some(target) => write!(f, "{}({}) {}", self.vtable.name, target, self.key.id()),
             None => write!(f, "{} {}", self.vtable.name, self.key.id),
         }
     }
@@ -449,7 +448,7 @@ impl ComponentDesc {
 
     #[inline]
     pub(crate) fn is_relation(&self) -> bool {
-        self.key.object.is_some()
+        self.key.target.is_some()
     }
 
     pub(crate) fn get_meta(&self) -> ComponentBuffer {

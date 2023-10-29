@@ -89,15 +89,15 @@ fn get_ordered_archetypes(
         },
     }
 
-    // Find relations to other objects, and visit them as well
+    // Find relations to other targets, and visit them as well
     let relations = arch.relations_like(relation);
     let mut is_reachable = false;
     let mut is_root = true;
     for (key, _) in relations {
         is_root = false;
-        let parent = key.object.unwrap();
+        let target = key.target.unwrap();
 
-        let loc = world.location(parent).unwrap();
+        let loc = world.location(target).unwrap();
         // Part of the visited set
         if let Some(arch) = archetypes.get(&loc.arch_id) {
             if get_ordered_archetypes(world, archetypes, arch_id, arch, relation, visited, ordered)

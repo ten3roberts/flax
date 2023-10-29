@@ -69,8 +69,8 @@ impl State {
                 .relations_like(relation)
                 .map(|(key, _)| {
                     assert_eq!(key.id, relation);
-                    let object = key.object().unwrap();
-                    let loc = world.location(object).unwrap();
+                    let target = key.target.unwrap();
+                    let loc = world.location(target).unwrap();
                     loc.arch_id
                 })
                 .collect();
