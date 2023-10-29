@@ -20,7 +20,7 @@ use crate::{
     ArchetypeSearcher, Entity, Fetch, FetchItem,
 };
 
-pub use change::{ChangeFilter, RemovedFilter};
+pub use change::ChangeFilter;
 pub use cmp::{Cmp, Equal, Greater, GreaterEq, Less, LessEq};
 pub use constant::{All, Nothing};
 pub use set::{And, Not, Or, Union};
@@ -165,7 +165,6 @@ gen_bitops! {
     ChangeFilter[T];
     Nothing[];
     Or[T];
-    RemovedFilter[T];
     WithTarget[];
     WithRelation[];
     With[];
@@ -637,7 +636,7 @@ mod tests {
     use crate::{
         archetype::{ArchetypeId, Change, ChangeKind, ChangeList},
         component,
-        filter::change::PreparedRemoveFilter,
+        filter::change::ChangeFetch,
         World,
     };
 
@@ -654,7 +653,7 @@ mod tests {
         changes.set(Change::new(Slice::new(784, 800), 7));
         changes.set(Change::new(Slice::new(945, 1139), 8));
 
-        let filter = PreparedRemoveFilter::new(changes.as_slice(), 2);
+        let filter = ChangeFetch::new(changes.as_slice(), 2);
 
         // The whole "archetype"
         let slots = Slice::new(0, 1238);
@@ -690,8 +689,8 @@ mod tests {
         let slots = Slice::new(0, 1000);
 
         // Or
-        let a = PreparedRemoveFilter::new(changes_1.as_slice(), 1);
-        let b = PreparedRemoveFilter::new(changes_2.as_slice(), 2);
+        let a = ChangeFetch::new(changes_1.as_slice(), 1);
+        let b = ChangeFetch::new(changes_2.as_slice(), 2);
 
         let filter = Or((Some(a), Some(b)));
 
@@ -707,8 +706,8 @@ mod tests {
 
         // And
 
-        let a = PreparedRemoveFilter::new(changes_1.as_slice(), 1);
-        let b = PreparedRemoveFilter::new(changes_2.as_slice(), 2);
+        let a = ChangeFetch::new(changes_1.as_slice(), 1);
+        let b = ChangeFetch::new(changes_2.as_slice(), 2);
 
         let filter = And(a, b);
 

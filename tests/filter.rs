@@ -67,7 +67,7 @@ fn filters() {
 
     // Construct a new interted query
 
-    let mut query = Query::new(a().cloned()).filter(a().added());
+    let mut query = Query::new(a().cloned().added());
 
     let items = query
         .borrow(&world)
@@ -82,25 +82,11 @@ fn filters() {
 
     world.set(id2, a(), 29.5).unwrap();
 
-    let items = query
-        .borrow(&world)
-        .iter()
-        .sorted_by_key(|v| (v * 256.0) as i64)
-        .collect_vec();
+    assert_eq!(query.collect_vec(&world), &[29.5]);
 
-    assert_eq!(items, &[29.5]);
+    world.set(id2, a(), 29.5).unwrap();
 
-    let mut query = Query::new(entity_ids()).filter(a().removed());
-
-    let items = query.borrow(&world).iter().collect_vec();
-
-    assert_eq!(items, []);
-    world.remove(id2, a()).unwrap();
-    eprintln!("Removed {id2}");
-
-    let items = query.borrow(&world).iter().collect_vec();
-
-    assert_eq!(items, [id2]);
+    assert_eq!(query.collect_vec(&world), &[]);
 }
 
 #[test]

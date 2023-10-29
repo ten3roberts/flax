@@ -258,13 +258,12 @@ impl World {
     pub fn clear(&mut self, id: Entity) -> Result<()> {
         let EntityLocation { arch_id, slot } = self.init_location(id)?;
 
-        let change_tick = self.advance_change_tick();
         let (src, dst) = self
             .archetypes
             .get_disjoint(arch_id, self.archetypes.root)
             .unwrap();
 
-        let (dst_slot, swapped) = unsafe { src.move_to(dst, slot, |c, p| c.drop(p), change_tick) };
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, slot, |c, p| c.drop(p)) };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -297,7 +296,6 @@ impl World {
         mut f: impl FnMut(ComponentKey) -> bool,
     ) -> EntityLocation {
         let src = self.archetypes.get(loc.arch_id);
-        let change_tick = self.advance_change_tick();
 
         let dst_components: SmallVec<[ComponentDesc; 8]> =
             src.components().filter(|v| f(v.key())).collect();
@@ -306,8 +304,7 @@ impl World {
 
         let (src, dst) = self.archetypes.get_disjoint(loc.arch_id, dst_id).unwrap();
 
-        let (dst_slot, swapped) =
-            unsafe { src.move_to(dst, loc.slot, |c, p| c.drop(p), change_tick) };
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, loc.slot, |c, p| c.drop(p)) };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -449,7 +446,6 @@ impl World {
     /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
     /// on all the children.
     pub fn detach(&mut self, id: Entity) {
-        let change_tick = self.advance_change_tick();
         let archetypes = Query::new(())
             .filter(ArchetypeFilter(|arch: &Archetype| {
                 // Filter any subject or relation kind
@@ -470,7 +466,7 @@ impl World {
 
             let (dst_id, dst) = self.archetypes.find_create(components);
 
-            for (id, slot) in src.move_all(dst, change_tick) {
+            for (id, slot) in src.move_all(dst) {
                 *self.location_mut(id).expect("Entity id was not valid") = EntityLocation {
                     slot,
                     arch_id: dst_id,
@@ -616,8 +612,6 @@ impl World {
             }
         };
 
-        let change_tick = self.advance_change_tick();
-
         assert_ne!(src_id, dst_id);
         // Borrow disjoint
         let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
@@ -630,15 +624,10 @@ impl World {
 
         // Capture the ONE moved value
         let mut on_drop = Some(on_drop);
-        let (dst_slot, swapped) = src.move_to(
-            dst,
-            slot,
-            |_, p| {
-                let drop = on_drop.take().expect("On drop called more than once");
-                (drop)(p);
-            },
-            change_tick,
-        );
+        let (dst_slot, swapped) = src.move_to(dst, slot, |_, p| {
+            let drop = on_drop.take().expect("On drop called more than once");
+            (drop)(p);
+        });
 
         debug_assert_eq!(dst.entity(dst_slot), Some(id));
 

@@ -8,11 +8,9 @@ use crate::fetch::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch
 use crate::system::Access;
 use crate::util::Ptr;
 use crate::{
-    archetype::{ChangeKind, ChangeList, Slice},
+    archetype::{ChangeKind, Slice},
     Component, Fetch, FetchItem,
 };
-
-static EMPTY_CHANGELIST: ChangeList = ChangeList::new();
 
 #[derive(Clone)]
 /// Filter which only yields for change events
@@ -63,7 +61,7 @@ where
 
     type Prepared = PreparedChangeFilter<'w, T>;
 
-    fn prepare(&'w self, data: crate::fetch::FetchPrepareData<'w>) -> Option<Self::Prepared> {
+    fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
         let cell = data.arch.cell(self.component.key())?;
         let guard = cell.borrow();
 
@@ -187,68 +185,15 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
     }
 }
 
-#[derive(Clone)]
-/// Filter which only yields removed components.
-///
-/// See: [`Component::removed`](crate::Component::removed)
-pub struct RemovedFilter<T> {
-    component: Component<T>,
-}
-
-impl<T: ComponentValue> core::fmt::Debug for RemovedFilter<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("RemovedFilter")
-            .field("component", &self.component)
-            .finish()
-    }
-}
-
-impl<T: ComponentValue> RemovedFilter<T> {
-    /// Create a new removed filter
-    pub(crate) fn new(component: Component<T>) -> Self {
-        Self { component }
-    }
-}
-
-impl<'q, T: ComponentValue> FetchItem<'q> for RemovedFilter<T> {
-    type Item = ();
-}
-impl<'w, T: ComponentValue> Fetch<'w> for RemovedFilter<T> {
-    const MUTABLE: bool = false;
-
-    type Prepared = PreparedRemoveFilter<'w>;
-
-    fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let changes = data
-            .arch
-            .removals(self.component.key())
-            .unwrap_or(&EMPTY_CHANGELIST);
-
-        Some(PreparedRemoveFilter {
-            changes: changes.as_slice(),
-            cursor: ChangeCursor::new(data.old_tick),
-        })
-    }
-
-    fn filter_arch(&self, _: FetchAccessData) -> bool {
-        true
-    }
-
-    #[inline]
-    fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
-
-    fn describe(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f, "removed {}", self.component.name())
-    }
-}
-
 #[doc(hidden)]
-pub struct PreparedRemoveFilter<'w> {
+#[cfg(test)]
+pub struct ChangeFetch<'w> {
     changes: &'w [Change],
     cursor: ChangeCursor,
 }
 
-impl<'w> PreparedRemoveFilter<'w> {
+#[cfg(test)]
+impl<'w> ChangeFetch<'w> {
     pub fn new(changes: &'w [Change], new_tick: u32) -> Self {
         Self {
             changes,
@@ -257,14 +202,8 @@ impl<'w> PreparedRemoveFilter<'w> {
     }
 }
 
-impl<'w> core::fmt::Debug for PreparedRemoveFilter<'w> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("PreparedRemoveFilter")
-            .finish_non_exhaustive()
-    }
-}
-
-impl<'q, 'w> RandomFetch<'q> for PreparedRemoveFilter<'w> {
+#[cfg(test)]
+impl<'q, 'w> RandomFetch<'q> for ChangeFetch<'w> {
     #[inline]
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
 
@@ -272,7 +211,8 @@ impl<'q, 'w> RandomFetch<'q> for PreparedRemoveFilter<'w> {
     unsafe fn fetch_shared_chunk(_: &Self::Chunk, _: Slot) -> Self::Item {}
 }
 
-impl<'w, 'q> PreparedFetch<'q> for PreparedRemoveFilter<'w> {
+#[cfg(test)]
+impl<'w, 'q> PreparedFetch<'q> for ChangeFetch<'w> {
     type Item = ();
     type Chunk = ();
 
@@ -311,7 +251,7 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let mut filter = PreparedRemoveFilter {
+        let mut filter = ChangeFetch {
             changes: &changes[..],
             cursor: ChangeCursor::new(2),
         };
@@ -342,7 +282,7 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let filter = PreparedRemoveFilter {
+        let filter = ChangeFetch {
             changes: &changes[..],
             cursor: ChangeCursor::new(2),
         };
@@ -369,7 +309,7 @@ mod test {
             Change::new(Slice::new(100, 200), 4),
         ];
 
-        let filter = PreparedRemoveFilter {
+        let filter = ChangeFetch {
             changes: &changes[..],
             cursor: ChangeCursor::new(2),
         };

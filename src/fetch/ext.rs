@@ -175,8 +175,8 @@ pub trait FetchExt: Sized {
         self.transform_fetch(Modified)
     }
 
-    /// Transform the fetch into a fetch where each constituent part tracks and yields for insert
-    /// events.
+    /// Transform the fetch into a fetch where each constituent part tracks and yields for
+    /// component addition events.
     ///
     /// This is different from E.g; `(a().modified(), b().modified())` as it implies only when
     /// *both* `a` and `b` are modified in the same iteration, which is seldom useful.
