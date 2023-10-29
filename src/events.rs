@@ -113,7 +113,6 @@ pub trait EventSubscriber: ComponentValue {
     }
 }
 
-#[cfg(feature = "flume")]
 impl<S> EventSubscriber for S
 where
     S: 'static + Send + Sync + Sink<Event>,
@@ -172,7 +171,6 @@ impl<T, S> WithValue<T, S> {
     }
 }
 
-#[cfg(feature = "flume")]
 impl<T: ComponentValue + Clone, S: 'static + Send + Sync + Sink<(Event, T)>> EventSubscriber
     for WithValue<T, S>
 {
