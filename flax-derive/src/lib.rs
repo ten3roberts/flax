@@ -408,7 +408,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct ParsedField<'a> {
     ty: &'a Type,
     ident: &'a Ident,
