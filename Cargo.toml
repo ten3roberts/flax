@@ -1,6 +1,6 @@
 [package]
 name = "flax"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 authors = ["Tei Leelo Roberts <ten3roberts@gmail.com>"]
 description = "An ergonomic archetypical ECS"
@@ -16,7 +16,7 @@ members = ["flax-derive", "asteroids"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flax-derive = { path = "./flax-derive", version = "0.5.0", optional = true }
+flax-derive = { path = "./flax-derive", version = "0.6.0", optional = true }
 
 flume = { version = "0.11.0", default_features = false, optional = true }
 
