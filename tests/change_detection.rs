@@ -41,7 +41,7 @@ fn change_detection() {
     world.subscribe(
         removed_tx
             .filter_components([rotation().key()])
-            .filter(|v| v.kind == EventKind::Removed),
+            .filter(|kind, _| kind == EventKind::Removed),
     );
 
     let mut rng = StdRng::seed_from_u64(83);
@@ -88,29 +88,10 @@ fn change_detection() {
         ids[20..40]
     );
 
-    let mut query = Query::new((entity_ids(), position(), rotation().removed()));
-
-    assert_eq!(
-        query
-            .borrow(&world)
-            .iter()
-            .map(|v| v.0)
-            .sorted()
-            .collect_vec(),
-        vec![]
-    );
-
     world.remove(ids[11], rotation()).unwrap();
     world.remove(ids[12], rotation()).unwrap();
     world.remove(ids[30], rotation()).unwrap();
 
-    {
-        let mut borrow = query.borrow(&world);
-        assert_eq!(
-            borrow.iter().map(|v| v.0).sorted().collect_vec(),
-            vec![ids[11], ids[12], ids[30]]
-        );
-    }
     let removed = removed_rx
         .drain()
         .inspect(|v| eprintln!("removed: {v:?}"))
@@ -143,15 +124,9 @@ fn clear_events() {
             .filter_arch(component_info().without()),
     );
 
-    let mut query = Query::new(entity_ids()).filter(name().removed());
-
     let id = Entity::builder().set(name(), "id".into()).spawn(&mut world);
 
-    assert_eq!(query.collect_vec(&world), &[]);
-
     world.clear(id).unwrap();
-
-    assert_eq!(query.collect_vec(&world), &[id]);
 
     assert_eq!(
         rx.drain().collect_vec(),

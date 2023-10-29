@@ -8,15 +8,18 @@ component! {
 #[test]
 #[cfg(feature = "flume")]
 fn entity_ref() {
-    use flax::{components::name, entity_ids, Query};
+    use flax::{
+        components::name,
+        events::{Event, EventKind, EventSubscriber},
+    };
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
 
     let mut world = World::new();
-    // let (tx, changes) = flume::unbounded();
-    // world.subscribe(tx.filter_components([a().key(), b().key()]));
+    let (tx, changes) = flume::unbounded();
+    world.subscribe(tx.filter_components([a().key(), b().key()]));
 
-    let mut query = Query::new(entity_ids()).filter(a().removed());
+    // let mut query = Query::new(entity_ids()).filter(a().removed());
 
     let id = Entity::builder()
         .set(name(), "a".into())
@@ -24,43 +27,43 @@ fn entity_ref() {
         .set(b(), "Foo".into())
         .spawn(&mut world);
 
-    // assert_eq!(
-    //     changes.drain().collect_vec(),
-    //     [
-    //         Event {
-    //             id,
-    //             key: a().key(),
-    //             kind: EventKind::Added
-    //         },
-    //         Event {
-    //             id,
-    //             key: b().key(),
-    //             kind: EventKind::Added
-    //         }
-    //     ]
-    // );
+    assert_eq!(
+        changes.drain().collect_vec(),
+        [
+            Event {
+                id,
+                key: a().key(),
+                kind: EventKind::Added
+            },
+            Event {
+                id,
+                key: b().key(),
+                kind: EventKind::Added
+            }
+        ]
+    );
 
     // assert_eq!(query.borrow(&world).iter().collect_vec(), []);
 
     world.clear(id).unwrap();
 
-    // assert_eq!(
-    //     changes.drain().collect_vec(),
-    //     [
-    //         Event {
-    //             id,
-    //             key: a().key(),
-    //             kind: EventKind::Removed
-    //         },
-    //         Event {
-    //             id,
-    //             key: b().key(),
-    //             kind: EventKind::Removed
-    //         }
-    //     ]
-    // );
+    assert_eq!(
+        changes.drain().collect_vec(),
+        [
+            Event {
+                id,
+                key: a().key(),
+                kind: EventKind::Removed
+            },
+            Event {
+                id,
+                key: b().key(),
+                kind: EventKind::Removed
+            }
+        ]
+    );
 
-    assert_eq!(query.borrow(&world).iter().collect_vec(), [id]);
+    // assert_eq!(query.borrow(&world).iter().collect_vec(), [id]);
 }
 
 #[test]

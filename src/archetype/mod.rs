@@ -10,7 +10,7 @@ use itertools::Itertools;
 
 use crate::{
     component::{ComponentDesc, ComponentKey, ComponentValue},
-    events::{EventData, EventKind, EventSubscriber},
+    events::{EventData, EventSubscriber},
     writer::ComponentUpdater,
     Component, Entity,
 };
@@ -97,30 +97,48 @@ pub(crate) struct CellData {
 impl CellData {
     /// Sets the specified entities and slots as modified and invokes subscribers
     /// **Note**: `ids` must be the slice of entities pointed to by `slice`
-    pub(crate) fn set_modified(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
-        debug_assert_eq!(ids.len(), slice.len());
-        let component = self.key;
-        self.on_event(EventData {
-            ids,
-            key: component,
-            kind: EventKind::Modified,
-        });
-
+    pub(crate) fn set_modified(&mut self, ids: &[Entity], slots: Slice, change_tick: u32) {
+        debug_assert_eq!(ids.len(), slots.len());
         self.changes
-            .set_modified_if_tracking(Change::new(slice, change_tick));
+            .set_modified_if_tracking(Change::new(slots, change_tick));
+
+        let event = EventData {
+            ids,
+            slots,
+            key: self.key,
+        };
+
+        for handler in self.subscribers.iter() {
+            handler.on_modified(&event)
+        }
     }
 
     /// Sets the specified entities and slots as modified and invokes subscribers
     /// **Note**: `ids` must be the slice of entities pointed to by `slice`
-    pub(crate) fn set_added(&mut self, ids: &[Entity], slice: Slice, change_tick: u32) {
-        let component = self.key;
-        self.on_event(EventData {
-            ids,
-            key: component,
-            kind: EventKind::Added,
-        });
+    pub(crate) fn set_added(&mut self, ids: &[Entity], slots: Slice, change_tick: u32) {
+        self.changes.set_added(Change::new(slots, change_tick));
 
-        self.changes.set_added(Change::new(slice, change_tick));
+        let event = EventData {
+            ids,
+            slots,
+            key: self.key,
+        };
+
+        for handler in self.subscribers.iter() {
+            handler.on_added(&self.storage, &event);
+        }
+    }
+
+    pub(crate) fn set_removed(&mut self, ids: &[Entity], slots: Slice) {
+        let event = EventData {
+            ids,
+            slots,
+            key: self.key,
+        };
+
+        for handler in self.subscribers.iter() {
+            handler.on_removed(&self.storage, &event);
+        }
     }
 }
 
@@ -267,8 +285,6 @@ impl Cell {
 /// Stored as columns of contiguous component data.
 pub struct Archetype {
     cells: BTreeMap<ComponentKey, Cell>,
-    /// Stores removals of components which transferred the entities to this archetype
-    removals: BTreeMap<ComponentKey, ChangeList>,
     /// Slot to entity id
     pub(crate) entities: Vec<Entity>,
 
@@ -282,20 +298,10 @@ pub struct Archetype {
 unsafe impl Send for Cell {}
 unsafe impl Sync for Cell {}
 
-impl CellData {
-    #[inline]
-    fn on_event(&self, event: EventData) {
-        for handler in self.subscribers.iter() {
-            handler.on_event(&event)
-        }
-    }
-}
-
 impl Archetype {
     pub(crate) fn empty() -> Self {
         Self {
             cells: BTreeMap::new(),
-            removals: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
             children: Default::default(),
@@ -320,7 +326,6 @@ impl Archetype {
 
         Self {
             cells,
-            removals: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
             children: Default::default(),
@@ -374,10 +379,6 @@ impl Archetype {
 
         let existing = self.children.insert(component, id);
         debug_assert!(existing.is_none());
-    }
-
-    fn push_removed(&mut self, key: ComponentKey, change: Change) {
-        self.removals.entry(key).or_default().set(change);
     }
 
     pub(crate) fn borrow<T: ComponentValue>(
@@ -439,10 +440,6 @@ impl Archetype {
             storage,
             entities: self.entities.len(),
         }
-    }
-
-    pub(crate) fn removals(&self, component: ComponentKey) -> Option<&ChangeList> {
-        self.removals.get(&component)
     }
 
     /// Get a component from the entity at `slot`
@@ -659,11 +656,8 @@ impl Archetype {
         dst: &mut Self,
         slot: Slot,
         mut on_drop: impl FnMut(ComponentDesc, *mut u8),
-        tick: u32,
     ) -> (Slot, Option<(Entity, Slot)>) {
         let id = self.entity(slot).expect("Invalid entity");
-
-        let last = self.len() - 1;
 
         let dst_slot = dst.allocate(id);
 
@@ -675,26 +669,10 @@ impl Archetype {
                 cell.move_to(slot, dst_cell, dst_slot);
             } else {
                 // Notify the subscribers that the component was removed
-                data.on_event(EventData {
-                    ids: &[id],
-                    key,
-                    kind: EventKind::Removed,
-                });
+                data.set_removed(&[id], Slice::single(slot));
 
                 cell.take(slot, &mut on_drop);
-                // Make the destination know of the component that was removed for the entity to
-                // get there
-                dst.push_removed(key, Change::new(Slice::single(dst_slot), tick));
             }
-        }
-
-        // Make sure to carry over removed events
-        for (key, removed) in &mut self.removals {
-            let dst = dst.removals.entry(*key).or_default();
-            removed.swap_remove_with(slot, last, |mut v| {
-                v.slice = Slice::single(dst_slot);
-                dst.set(v);
-            })
         }
 
         let swapped = self.remove_slot(slot);
@@ -724,20 +702,9 @@ impl Archetype {
         for cell in self.cells.values_mut() {
             let data = cell.data.get_mut();
             // data.on_event(&self.entities, Slice::single(slot), EventKind::Removed);
-            data.on_event(EventData {
-                ids: &[id],
-                key: data.key,
-                kind: EventKind::Removed,
-            });
+            data.set_removed(&[id], Slice::single(slot));
 
             cell.take(slot, &mut on_move)
-        }
-
-        let last = self.len() - 1;
-
-        // Remove the component removals for slot
-        for removed in self.removals.values_mut() {
-            removed.swap_remove_with(slot, last, |_| {});
         }
 
         self.remove_slot(slot)
@@ -766,7 +733,7 @@ impl Archetype {
     ///
     /// Leaves `self` empty.
     /// Returns the new location of all entities
-    pub fn move_all(&mut self, dst: &mut Self, tick: u32) -> Vec<(Entity, Slot)> {
+    pub fn move_all(&mut self, dst: &mut Self) -> Vec<(Entity, Slot)> {
         let len = self.len();
         if len == 0 {
             return Vec::new();
@@ -803,26 +770,10 @@ impl Archetype {
                 // unsafe { dst.storage.get_mut().append(storage) }
             } else {
                 // Notify the subscribers that the component was removed
-                data.on_event(EventData {
-                    ids: &entities[slots.as_range()],
-                    key: data.key,
-                    kind: EventKind::Removed,
-                });
+                data.set_removed(&entities[slots.as_range()], slots);
 
                 cell.clear();
-                dst.push_removed(*key, Change::new(dst_slots, tick))
             }
-        }
-
-        // Make sure to carry over removed events
-        for (key, removed) in &mut self.removals {
-            let dst = dst.removals.entry(*key).or_default();
-            removed.inner.drain(..).for_each(|mut change| {
-                change.slice.start += dst_slots.start;
-                change.slice.end += dst_slots.start;
-
-                dst.set(change);
-            })
         }
 
         debug_assert_eq!(self.len(), 0);
@@ -852,11 +803,7 @@ impl Archetype {
             let data = cell.data.get_mut();
             // Notify the subscribers that the component was removed
             // data.on_event(&self.entities, slots, EventKind::Removed);
-            data.on_event(EventData {
-                ids: &self.entities[slots.as_range()],
-                key: data.key,
-                kind: EventKind::Removed,
-            });
+            data.set_removed(&self.entities[slots.as_range()], slots);
 
             cell.clear()
         }
@@ -905,14 +852,8 @@ impl Archetype {
         let slots = self.slots();
         for cell in self.cells.values_mut() {
             let data = cell.data.get_mut();
-            data.on_event(EventData {
-                ids: &self.entities[slots.as_range()],
-                key: data.key,
-                kind: EventKind::Removed,
-            })
+            data.set_removed(&self.entities[slots.as_range()], slots)
         }
-
-        self.removals.clear();
 
         ArchetypeDrain {
             entities: mem::take(&mut self.entities),

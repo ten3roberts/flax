@@ -245,6 +245,8 @@ pub mod schedule;
 /// entities therein
 pub mod serialize;
 
+/// Provides a sink trait for sending events
+pub mod sink;
 /// Provides tuple utilities like `cloned`
 mod util;
 /// vtable implementation for dynamic dispatching

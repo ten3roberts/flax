@@ -65,7 +65,7 @@ mod test {
         let (tx, rx) = flume::unbounded();
         world.subscribe(
             tx.filter_arch(a.with_relation())
-                .filter(|v| v.key.id == a.id()),
+                .filter(|_, v| v.key.id == a.id()),
         );
 
         type Expected<'a> = &'a [(Entity, Vec<(Entity, &'a Arc<()>)>)];
