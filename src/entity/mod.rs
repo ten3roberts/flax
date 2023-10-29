@@ -18,7 +18,6 @@ pub(crate) const DEFAULT_GEN: EntityGen = unsafe { EntityGen::new_unchecked(1) }
 #[derive(PartialOrd, Clone, Copy, PartialEq, Eq, Ord, Hash)]
 pub struct Entity {
     pub(crate) index: EntityIndex,
-    /// Object
     pub(crate) gen: EntityGen,
     pub(crate) kind: EntityKind,
 }

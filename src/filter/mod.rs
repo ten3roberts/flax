@@ -165,7 +165,7 @@ gen_bitops! {
     ChangeFilter[T];
     Nothing[];
     Or[T];
-    WithObject[];
+    WithTarget[];
     WithRelation[];
     With[];
     WithoutRelation[];
@@ -318,15 +318,15 @@ impl StaticFilter for Without {
 
 #[derive(Debug, Clone)]
 /// Yields all entities with the relation of the specified kind
-pub(crate) struct WithObject {
-    pub(crate) object: Entity,
+pub(crate) struct WithTarget {
+    pub(crate) target: Entity,
 }
 
-impl<'q> FetchItem<'q> for WithObject {
+impl<'q> FetchItem<'q> for WithTarget {
     type Item = ();
 }
 
-impl<'w> Fetch<'w> for WithObject {
+impl<'w> Fetch<'w> for WithTarget {
     const MUTABLE: bool = false;
 
     type Prepared = All;
@@ -340,18 +340,18 @@ impl<'w> Fetch<'w> for WithObject {
     }
 
     fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "with (*)({})", self.object)
+        write!(f, "with (*)({})", self.target)
     }
 
     #[inline]
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl StaticFilter for WithObject {
+impl StaticFilter for WithTarget {
     fn filter_static(&self, arch: &Archetype) -> bool {
         arch.components().any(|v| {
-            if let Some(v) = v.key().object {
-                if v == self.object {
+            if let Some(v) = v.key().target {
+                if v == self.target {
                     return true;
                 }
             }

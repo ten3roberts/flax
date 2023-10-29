@@ -43,5 +43,5 @@ entity as the generation is not needed.
 {{ #include ../../../examples/guide/dynamic_components.rs:relation }}
 ```
 
-When despawning either the relation component or object entity, the "parent",
+When despawning either the relation component or target entity, the "parent",
 the component is removed from all entities.

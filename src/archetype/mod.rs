@@ -99,6 +99,9 @@ impl CellData {
     /// **Note**: `ids` must be the slice of entities pointed to by `slice`
     pub(crate) fn set_modified(&mut self, ids: &[Entity], slots: Slice, change_tick: u32) {
         debug_assert_eq!(ids.len(), slots.len());
+        self.changes
+            .set_modified_if_tracking(Change::new(slots, change_tick));
+
         let event = EventData {
             ids,
             slots,
@@ -108,14 +111,13 @@ impl CellData {
         for handler in self.subscribers.iter() {
             handler.on_modified(&event)
         }
-
-        self.changes
-            .set_modified_if_tracking(Change::new(slots, change_tick));
     }
 
     /// Sets the specified entities and slots as modified and invokes subscribers
     /// **Note**: `ids` must be the slice of entities pointed to by `slice`
     pub(crate) fn set_added(&mut self, ids: &[Entity], slots: Slice, change_tick: u32) {
+        self.changes.set_added(Change::new(slots, change_tick));
+
         let event = EventData {
             ids,
             slots,
@@ -125,8 +127,6 @@ impl CellData {
         for handler in self.subscribers.iter() {
             handler.on_added(&self.storage, &event);
         }
-
-        self.changes.set_added(Change::new(slots, change_tick));
     }
 
     pub(crate) fn set_removed(&mut self, ids: &[Entity], slots: Slice) {
