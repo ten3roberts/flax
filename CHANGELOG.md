@@ -2,6 +2,78 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2023-10-29
+
+### Features
+
+- Ignore fields in fetch transformation
+- Set_missing
+- CommandBuffer::set_dedup
+- Remove fetch slot indexing and allow acces to world in filters
+- Traverse relations in query
+- Make entity ids a filter
+- QueryOne
+- Allow constructing query modifiers in const contexts
+- Document exclusive relations
+- Nth_relation
+- Improve change list removal
+- Allow access to storage in event subscription
+
+### Bug Fixes
+
+- Invalid batching when world archetypes are modifed during execution
+- Doctest
+- [**breaking**] Don't automatically prune archetypes
+- Include input lifetime in `SystemContext`
+- Miri
+- Implement RandomFetch for entity ids
+- Source for slot filtering
+- Broken link
+- Invalid archetype for a transitive archetype connection
+- Clarify associated values for relations
+- Clarify value uniqueness
+- [**breaking**] Clear up naming with relation target
+- Nth_relation access granularity
+- Always merge changes on set
+- Correctness of `Changes::set` for existing overlaps
+- Overlapping slots in change list
+- Clarify target terms
+- Remove erronous cfg guard
+- Unused variable
+- Debug not implemented for `Type`
+
+### Documentation
+
+- Systems
+
+### Refactor
+
+- [**breaking**] Replace wrapper generics with explicit functions in system builder
+- Make `IntoInput` safe
+
+### Testing
+
+- Schedule tuple input
+
+### Miscellaneous Tasks
+
+- Update changelog
+- Update README.md
+- Implement ExtractDyn for tuples of 4
+- Fix warnings
+- Cleanup asteroids
+- Update toolchain for asteroids
+- [**breaking**] Reduce root exports
+- Clippy
+- Fix doctests
+- Document `name` special handling
+- Wording
+- Remove debug scaffolding
+- Fix no-std tests
+- Give asteroids a face lift
+- Update dependencies
+- [**breaking**] Remove `removed` filter
+
 ## [0.5.0] - 2023-08-11
 
 ### Features
