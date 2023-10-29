@@ -33,6 +33,8 @@ fn basic() -> anyhow::Result<()> {
         .spawn(&mut world);
     // ANCHOR_END: relation_basic
 
+    let _ = child2;
+
     // ANCHOR: many_to_many
     let parent2 = Entity::builder()
         .set(name(), "Parent2".into())
