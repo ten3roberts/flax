@@ -71,6 +71,9 @@ where
     R: PreparedFetch<'q>,
 {
     type Item = (L::Item, R::Item);
+    type Chunk = (L::Chunk, R::Chunk);
+
+    const HAS_FILTER: bool = L::HAS_FILTER || R::HAS_FILTER;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -78,8 +81,6 @@ where
 
         self.1.filter_slots(l)
     }
-
-    type Chunk = (L::Chunk, R::Chunk);
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         (self.0.create_chunk(slots), self.1.create_chunk(slots))
@@ -134,9 +135,11 @@ where
     F: PreparedFetch<'q>,
 {
     type Item = ();
+    type Chunk = ();
+
+    const HAS_FILTER: bool = F::HAS_FILTER;
 
     #[inline]
-
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         if let Some(fetch) = &mut self.0 {
             let v = fetch.filter_slots(slots);
@@ -146,8 +149,6 @@ where
             slots
         }
     }
-
-    type Chunk = ();
 
     #[inline]
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
@@ -231,6 +232,8 @@ impl<T> UnionFilter for Union<T>
 where
     T: UnionFilter,
 {
+    const HAS_UNION_FILTER: bool = T::HAS_UNION_FILTER;
+
     unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
         self.0.filter_union(slots)
     }
@@ -241,6 +244,7 @@ where
     T: PreparedFetch<'q> + UnionFilter,
 {
     type Item = T::Item;
+    const HAS_FILTER: bool = T::HAS_UNION_FILTER;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -270,7 +274,7 @@ macro_rules! tuple_impl {
         impl<'w, $($ty, )*> Fetch<'w> for Or<($($ty,)*)>
         where $($ty: Fetch<'w>,)*
         {
-            const MUTABLE: bool =  $($ty::MUTABLE )|*;
+            const MUTABLE: bool =  $($ty::MUTABLE )||*;
             type Prepared       = Or<($(Option<$ty::Prepared>,)*)>;
 
             fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
@@ -310,6 +314,9 @@ macro_rules! tuple_impl {
             type Item = ();
             type Chunk = ();
 
+            // && because `x || true` == true
+            const HAS_FILTER: bool =  $($ty::HAS_FILTER )&&*;
+
             unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
                 let inner = &mut self.0;
                 let end = Slice::new(slots.end, slots.end);
@@ -334,6 +341,8 @@ macro_rules! tuple_impl {
         impl<'q, $($ty, )*> UnionFilter for Or<($(Option<$ty>,)*)>
         where $($ty: PreparedFetch<'q>,)*
         {
+            const HAS_UNION_FILTER: bool =  $($ty::HAS_FILTER )&&*;
+
             unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
                 let inner = &mut self.0;
                 let end = Slice::new(slots.end, slots.end);

@@ -140,6 +140,7 @@ where
     F: PreparedFetch<'q>,
 {
     type Item = Q::Item;
+    const HAS_FILTER: bool = Q::HAS_FILTER || F::HAS_FILTER;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -571,6 +572,7 @@ pub struct BatchSize(pub(crate) Slot);
 impl<'q> PreparedFetch<'q> for BatchSize {
     type Item = ();
     type Chunk = ();
+    const HAS_FILTER: bool = false;
 
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.start, slots.end.min(slots.start + self.0))

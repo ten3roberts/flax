@@ -14,6 +14,8 @@ impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
 
     type Chunk = Ptr<'q, T>;
 
+    const HAS_FILTER: bool = false;
+
     #[inline]
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         Ptr::new(self.borrow[slots.as_range()].as_ptr())

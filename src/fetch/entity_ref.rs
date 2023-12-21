@@ -74,6 +74,7 @@ pub struct Batch<'a> {
 impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
     type Item = EntityRef<'q>;
     type Chunk = Batch<'q>;
+    const HAS_FILTER: bool = false;
 
     unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
         Batch {

@@ -72,6 +72,8 @@ where
 
     type Chunk = (&'q F, Q::Chunk);
 
+    const HAS_FILTER: bool = Q::HAS_FILTER;
+
     unsafe fn create_chunk(&'q mut self, slots: crate::archetype::Slice) -> Self::Chunk {
         (self.func, self.query.create_chunk(slots))
     }

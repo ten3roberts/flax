@@ -15,7 +15,9 @@ use super::{FetchAccessData, FetchItem, RandomFetch, TransformFetch};
 
 /// Transform a fetch into a optional fetch
 #[derive(Debug, Clone)]
-pub struct Opt<F>(pub(crate) F);
+pub struct Opt<F> {
+    pub(crate) fetch: F,
+}
 
 impl<'q, F: FetchItem<'q>> FetchItem<'q> for Opt<F> {
     type Item = Option<F::Item>;
@@ -30,7 +32,7 @@ where
     type Prepared = PreparedOpt<F::Prepared>;
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(PreparedOpt(self.0.prepare(data)))
+        Some(PreparedOpt(self.fetch.prepare(data)))
     }
 
     fn filter_arch(&self, _: FetchAccessData) -> bool {
@@ -38,12 +40,12 @@ where
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
-        self.0.access(data, dst)
+        self.fetch.access(data, dst)
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("opt ")?;
-        self.0.describe(f)
+        self.fetch.describe(f)
     }
 }
 
@@ -70,10 +72,14 @@ where
     type Item = Option<F::Item>;
     type Chunk = Option<F::Chunk>;
 
+    const HAS_FILTER: bool = F::HAS_FILTER;
+
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         if let Some(fetch) = &mut self.0 {
             fetch.filter_slots(slots)
+        } else if Self::HAS_FILTER {
+            Slice::new(slots.end, slots.end)
         } else {
             slots
         }
@@ -148,10 +154,14 @@ where
     type Item = &'q V;
     type Chunk = Either<F::Chunk, &'q V>;
 
+    const HAS_FILTER: bool = F::HAS_FILTER;
+
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         if let Some(fetch) = &mut self.fetch {
             fetch.filter_slots(slots)
+        } else if Self::HAS_FILTER {
+            Slice::new(slots.end, slots.end)
         } else {
             slots
         }
@@ -179,7 +189,9 @@ where
     type Output = Opt<F::Output>;
 
     fn transform_fetch(self, method: K) -> Self::Output {
-        Opt(self.0.transform_fetch(method))
+        Opt {
+            fetch: self.fetch.transform_fetch(method),
+        }
     }
 }
 

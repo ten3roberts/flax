@@ -90,6 +90,8 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     type Item = MutGuard<'q, T>;
     type Chunk = Batch<'q>;
 
+    const HAS_FILTER: bool = false;
+
     unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             cell: self.cell,

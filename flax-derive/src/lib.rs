@@ -211,11 +211,15 @@ fn derive_union(params: &Params) -> TokenStream {
 
     let prep_ty = params.w_ty();
 
+    // Make sure not to *or* ignored fields
     let filter_fields = fields.iter().filter(|v| !v.attrs.ignore).map(|v| v.ident);
+    let filter_types = fields.iter().filter(|v| !v.attrs.ignore).map(|v| v.ty);
 
     quote! {
         #[automatically_derived]
         impl #impl_generics #crate_name::fetch::UnionFilter for #prepared_name #prep_ty where #prepared_name #prep_ty: #crate_name::fetch::PreparedFetch<'q> {
+            const HAS_UNION_FILTER: bool = #(<<#filter_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::HAS_FILTER)&&*;
+
             unsafe fn filter_union(&mut self, slots: #crate_name::archetype::Slice) -> #crate_name::archetype::Slice {
                 #crate_name::fetch::PreparedFetch::filter_slots(&mut #crate_name::filter::Union((#(&mut self.#filter_fields,)*)), slots)
             }
@@ -385,6 +389,8 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
         {
             type Item = #item_name #item_ty;
             type Chunk = (#(<<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::Chunk,)*);
+
+            const HAS_FILTER: bool = #(<<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::PreparedFetch<'q>>::HAS_FILTER)||*;
 
             #[inline]
             unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
