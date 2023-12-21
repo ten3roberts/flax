@@ -42,6 +42,8 @@ impl<'q, F: PreparedFetch<'q>> PreparedFetch<'q> for PreparedSatisfied<F> {
     type Item = bool;
     type Chunk = bool;
 
+    const HAS_FILTER: bool = true;
+
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         match &mut self.0 {
             Some(f) => {

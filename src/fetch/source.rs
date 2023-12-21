@@ -226,6 +226,7 @@ where
     Q: 'w + RandomFetch<'q>,
 {
     type Item = Q::Item;
+    const HAS_FILTER: bool = Q::HAS_FILTER;
 
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         if let Some(slot) = self.slot {

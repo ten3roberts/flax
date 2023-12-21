@@ -19,7 +19,7 @@ use super::{
 pub trait FetchExt: Sized {
     /// Transform the fetch into an optional fetch, yielding Some or None
     fn opt(self) -> Opt<Self> {
-        Opt(self)
+        Opt { fetch: self }
     }
 
     /// Transform the fetch into a fetch with a provided default.

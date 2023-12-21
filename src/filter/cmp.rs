@@ -182,6 +182,8 @@ where
 {
     type Item = <Q as PreparedFetch<'q>>::Item;
 
+    const HAS_FILTER: bool = true;
+
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         let slots = self.fetch.filter_slots(slots);

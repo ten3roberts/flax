@@ -85,6 +85,8 @@ where
 
     type Chunk = Batch<'q, T>;
 
+    const HAS_FILTER: bool = false;
+
     unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
         Batch {
             borrows: &self.borrows,
@@ -213,6 +215,8 @@ where
     type Item = (Entity, &'q T);
 
     type Chunk = NthBatch<'q, T>;
+
+    const HAS_FILTER: bool = false;
 
     unsafe fn create_chunk(&'q mut self, slice: crate::archetype::Slice) -> Self::Chunk {
         NthBatch {

@@ -145,6 +145,13 @@ pub trait PreparedFetch<'q> {
     /// A chunk accessing a disjoint set of the borrow sequentially
     type Chunk: 'q;
 
+    /// Indicates if the fetch will provide any filtering of slots.
+    ///
+    /// If `false`, this fetch will unconditionally yield.
+    ///
+    /// This is used to influence the default behavior of optional queries.
+    const HAS_FILTER: bool;
+
     /// Creates a chunk to access a slice of the borrow
     ///
     /// # Safety
@@ -173,6 +180,10 @@ pub trait PreparedFetch<'q> {
 
 /// Allows filtering the constituent parts of a fetch using a set union
 pub trait UnionFilter {
+    /// The union may not have the same filter behavior as a normal filter as sub-filters
+    /// are combined using *or* instead of *and*. This means any non-filter will cause the
+    /// whole tuple to always yield.
+    const HAS_UNION_FILTER: bool;
     // Filter the slots using a union operation of the constituent part
     ///
     /// # Safety
@@ -186,6 +197,8 @@ where
 {
     type Item = F::Item;
     type Chunk = F::Chunk;
+
+    const HAS_FILTER: bool = F::HAS_FILTER;
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         (*self).create_chunk(slots)
@@ -205,6 +218,8 @@ impl<'q> FetchItem<'q> for () {
 }
 
 impl UnionFilter for () {
+    const HAS_UNION_FILTER: bool = false;
+
     unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
         slots
     }
@@ -242,6 +257,8 @@ impl<'q> PreparedFetch<'q> for () {
     type Item = ();
 
     type Chunk = ();
+
+    const HAS_FILTER: bool = false;
 
     #[inline]
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
@@ -312,8 +329,9 @@ impl<'w> Fetch<'w> for EntityIds {
 
 impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
     type Item = Entity;
-
     type Chunk = Ptr<'q, Entity>;
+
+    const HAS_FILTER: bool = false;
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         Ptr::new(self.entities[slots.as_range()].as_ptr())
@@ -374,6 +392,8 @@ macro_rules! tuple_impl {
             type Item = ($($ty::Item,)*);
             type Chunk = ($($ty::Chunk,)*);
 
+            const HAS_FILTER: bool =  $($ty::HAS_FILTER )||*;
+
             #[inline]
             unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
                 ($(
@@ -401,6 +421,8 @@ macro_rules! tuple_impl {
             where $($ty: PreparedFetch<'q>,)*
         {
 
+            const HAS_UNION_FILTER: bool =  $($ty::HAS_FILTER )&&*;
+
             #[inline]
             unsafe fn filter_union(&mut self, slots: Slice) -> Slice {
                 [
@@ -416,7 +438,7 @@ macro_rules! tuple_impl {
         impl<'w, $($ty, )*> Fetch<'w> for ($($ty,)*)
         where $($ty: Fetch<'w>,)*
         {
-            const MUTABLE: bool =  $($ty::MUTABLE )|*;
+            const MUTABLE: bool =  $($ty::MUTABLE )||*;
             type Prepared       = ($($ty::Prepared,)*);
 
             #[inline]

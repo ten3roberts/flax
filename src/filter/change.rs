@@ -159,6 +159,8 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T
     type Item = &'q T;
     type Chunk = Ptr<'q, T>;
 
+    const HAS_FILTER: bool = true;
+
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         Ptr::new(self.data.get()[slots.as_range()].as_ptr())
     }
@@ -215,6 +217,7 @@ impl<'q, 'w> RandomFetch<'q> for ChangeFetch<'w> {
 impl<'w, 'q> PreparedFetch<'q> for ChangeFetch<'w> {
     type Item = ();
     type Chunk = ();
+    const HAS_FILTER: bool = true;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {

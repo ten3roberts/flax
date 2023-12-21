@@ -73,6 +73,8 @@ where
     type Item = V;
     type Chunk = F::Chunk;
 
+    const HAS_FILTER: bool = F::HAS_FILTER;
+
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
         self.0.create_chunk(slots)
     }

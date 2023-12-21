@@ -49,6 +49,7 @@ impl<'q> PreparedFetch<'q> for Nothing {
     type Item = ();
     type Chunk = ();
 
+    const HAS_FILTER: bool = false;
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
         Slice::new(slots.end, slots.end)
     }
@@ -99,6 +100,8 @@ impl<'q> PreparedFetch<'q> for All {
 
     type Chunk = ();
 
+    const HAS_FILTER: bool = false;
+
     #[inline]
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
 
@@ -112,6 +115,7 @@ impl<'w> FetchItem<'w> for Entity {
 
 impl<'w> Fetch<'w> for Entity {
     const MUTABLE: bool = false;
+
     type Prepared = PreparedEntity;
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
@@ -161,8 +165,9 @@ impl<'q> RandomFetch<'q> for PreparedEntity {
 
 impl<'w> PreparedFetch<'w> for PreparedEntity {
     type Item = Entity;
-
     type Chunk = Entity;
+
+    const HAS_FILTER: bool = false;
 
     unsafe fn create_chunk(&'w mut self, slots: Slice) -> Self::Chunk {
         assert!(slots.start == self.slot && slots.end == self.slot);
@@ -188,7 +193,6 @@ impl<'q> FetchItem<'q> for Slice {
 
 impl<'w> Fetch<'w> for Slice {
     const MUTABLE: bool = false;
-
     type Prepared = Self;
 
     fn prepare(&'w self, _: FetchPrepareData<'w>) -> Option<Self::Prepared> {
@@ -210,6 +214,8 @@ impl<'w> Fetch<'w> for Slice {
 impl<'q> PreparedFetch<'q> for Slice {
     type Item = ();
     type Chunk = ();
+
+    const HAS_FILTER: bool = true;
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
@@ -259,8 +265,9 @@ impl StaticFilter for bool {
 
 impl<'q> PreparedFetch<'q> for bool {
     type Item = bool;
-
     type Chunk = bool;
+
+    const HAS_FILTER: bool = true;
 
     #[inline]
     unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {

@@ -230,3 +230,48 @@ fn query_changes() {
         [&ids[10..40], &ids[(40 + 41)..(40 + 80)]].concat()
     );
 }
+
+#[test]
+fn added_opt_union() {
+    component! {
+        a: i32,
+        b: i32,
+    }
+
+    let mut world = World::new();
+
+    // let mut query = Query::new((a(), b().modified().opt_or_default()));
+    let mut query = Query::new((a(), b().opt_or_default()).modified());
+
+    let id = Entity::builder().set(a(), 5).spawn(&mut world);
+
+    assert_eq!(query.borrow(&world).iter().collect_vec(), [(&5, &0)]);
+    assert_eq!(query.borrow(&world).iter().collect_vec(), []);
+
+    world.set(id, b(), 2).unwrap();
+
+    assert_eq!(query.borrow(&world).iter().collect_vec(), [(&5, &2)]);
+    assert_eq!(query.borrow(&world).iter().collect_vec(), []);
+}
+
+#[test]
+fn added_opt_and() {
+    component! {
+        a: i32,
+        b: i32,
+    }
+
+    let mut world = World::new();
+
+    // let mut query = Query::new((a(), b().modified().opt_or_default()));
+    let mut query = Query::new((a(), b().opt_or_default().modified()));
+
+    let id = Entity::builder().set(a(), 5).spawn(&mut world);
+
+    assert_eq!(query.borrow(&world).iter().collect_vec(), []);
+
+    world.set(id, b(), 2).unwrap();
+
+    assert_eq!(query.borrow(&world).iter().collect_vec(), [(&5, &2)]);
+    assert_eq!(query.borrow(&world).iter().collect_vec(), []);
+}

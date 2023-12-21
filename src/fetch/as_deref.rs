@@ -56,8 +56,9 @@ where
     V: 'static + Deref,
 {
     type Item = &'q V::Target;
-
     type Chunk = F::Chunk;
+
+    const HAS_FILTER: bool = F::HAS_FILTER;
 
     unsafe fn filter_slots(&mut self, slots: crate::archetype::Slice) -> crate::archetype::Slice {
         self.0.filter_slots(slots)
