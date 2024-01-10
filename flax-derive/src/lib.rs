@@ -125,10 +125,11 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
     let item_fields = fields
         .iter()
         .map(|v| {
+            let vis = v.vis;
             let ident = v.ident;
             let ty = v.ty;
             quote! {
-                #ident: <#ty as #crate_name::fetch::FetchItem<'q>>::Item,
+                #vis #ident: <#ty as #crate_name::fetch::FetchItem<'q>>::Item,
             }
         })
         .collect::<TokenStream>();
@@ -257,9 +258,10 @@ fn derive_transform(params: &Params) -> Result<TokenStream> {
                 format_ident!("{}", c).to_token_stream()
             };
 
+            let vis = field.vis;
             let ident = field.ident;
             quote! {
-               #ident: #ty,
+               #vis #ident: #ty,
             }
         });
 
@@ -416,6 +418,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
 
 #[derive(Clone)]
 struct ParsedField<'a> {
+    vis: &'a Visibility,
     ty: &'a Type,
     ident: &'a Ident,
     attrs: FieldAttrs,
@@ -431,6 +434,7 @@ impl<'a> ParsedField<'a> {
             .ok_or(Error::new(field.span(), "Only named fields are supported"))?;
 
         Ok(Self {
+            vis: &field.vis,
             ty: &field.ty,
             ident,
             attrs,
