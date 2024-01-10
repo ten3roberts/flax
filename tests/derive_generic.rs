@@ -1,23 +1,30 @@
 #[test]
 #[cfg(feature = "derive")]
 fn derive_fetch_generic() {
+    use flax::{Entity, FetchExt, Query, World};
+    use glam::{vec3, Quat, Vec3};
+
     flax::component! {
         position: Vec3 => [flax::Debuggable],
         rotation: Quat => [flax::Debuggable],
         scale: Vec3 => [flax::Debuggable],
     }
 
-    use glam::*;
+    mod inner {
 
-    use flax::{component::ComponentValue, Fetch, *};
+        use flax::{component::ComponentValue, Fetch, *};
+        use glam::Quat;
 
-    #[derive(Fetch)]
-    #[fetch(item_derives = [Debug, PartialEq])]
-    struct TransformQuery<V: ComponentValue> {
-        pos: Component<V>,
-        rot: Opt<Component<Quat>>,
-        scale: Opt<Component<V>>,
+        #[derive(Fetch)]
+        #[fetch(item_derives = [Debug, PartialEq])]
+        pub struct TransformQuery<V: ComponentValue> {
+            pub pos: Component<V>,
+            pub rot: Opt<Component<Quat>>,
+            pub scale: Opt<Component<V>>,
+        }
     }
+
+    use inner::{TransformQuery, TransformQueryItem};
 
     let mut world = World::new();
 
