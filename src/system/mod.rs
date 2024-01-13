@@ -602,6 +602,11 @@ impl BoxedSystem {
         let input = input.into_input();
         let ctx = SystemContext::new(world, &mut cmd, &input);
         self.inner.execute(&ctx)?;
+
+        ctx.cmd_mut()
+            .apply(&mut ctx.world.borrow_mut())
+            .expect("Failed to apply commandbuffer");
+
         Ok(())
     }
 
