@@ -35,7 +35,7 @@ pub use map::Map;
 pub use maybe_mut::{MaybeMut, MutGuard};
 pub use opt::*;
 pub use read_only::*;
-pub use relations::{nth_relation, relations_like, Relations, RelationsIter};
+pub use relations::{nth_relation, relations_like, NthRelation, Relations, RelationsIter};
 pub use satisfied::Satisfied;
 pub use source::Source;
 pub use transform::{Added, Modified, TransformFetch};
