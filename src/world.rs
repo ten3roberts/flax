@@ -1,4 +1,9 @@
-use alloc::{borrow::ToOwned, collections::BTreeMap, sync::Arc, vec::Vec};
+use alloc::{
+    borrow::ToOwned,
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    vec::Vec,
+};
 use core::{
     fmt,
     fmt::Formatter,
@@ -421,9 +426,11 @@ impl World {
         self.flush_reserved();
         let mut stack = alloc::vec![id];
 
+        let mut archetypes = BTreeSet::new();
+
         while let Some(id) = stack.pop() {
             let relation_key = relation.of(id).key();
-            for (_, arch) in self
+            for (arch_id, arch) in self
                 .archetypes
                 .iter_mut()
                 .filter(|(_, arch)| arch.has(relation_key))
@@ -435,8 +442,13 @@ impl World {
                 }
 
                 stack.extend_from_slice(arch.entities());
-                arch.clear();
+                archetypes.insert(arch_id);
+                arch.clear()
             }
+        }
+
+        for arch_id in archetypes {
+            self.archetypes.despawn(arch_id);
         }
 
         Ok(())
