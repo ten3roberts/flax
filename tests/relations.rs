@@ -273,6 +273,45 @@ fn many_detach() {
 }
 
 #[test]
+fn despawn_recursive() {
+    component! {
+        child_of(id): &'static str,
+    }
+
+    let mut world = World::new();
+
+    let parent = Entity::builder()
+        .set(name(), "parent".into())
+        .spawn(&mut world);
+
+    let child1 = Entity::builder()
+        .set(name(), "child1".into())
+        .set(child_of(parent), "first")
+        .spawn(&mut world);
+
+    let _child2 = Entity::builder()
+        .set(name(), "child2".into())
+        .set(child_of(child1), "first")
+        .spawn(&mut world);
+
+    let mut query = Query::new(name()).filter(parent.traverse(child_of));
+
+    assert_eq!(
+        query.borrow(&world).iter().sorted().collect_vec(),
+        &["child1", "child2", "parent",]
+    );
+
+    world.despawn_recursive(parent, child_of).unwrap();
+
+    assert!(query
+        .borrow(&world)
+        .iter()
+        .sorted()
+        .collect_vec()
+        .is_empty());
+}
+
+#[test]
 fn exclusive() {
     component! {
         child_of(parent): () => [ Exclusive ],
