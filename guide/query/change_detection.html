@@ -194,9 +194,9 @@ for each entity.</p>
     let health_changes = System::builder()
         .with_query(query)
         .build(|mut query: QueryBorrow&lt;_&gt;| {
-            info_span!(&quot;health_changes&quot;);
+            info_span!("health_changes");
             for (name, health) in &amp;mut query {
-                tracing::info!(&quot;{name:?}: is now at {health} health&quot;);
+                tracing::info!("{name:?}: is now at {health} health");
             }
         });
 
@@ -214,15 +214,15 @@ mutable access.</p>
         .filter(health().le(0.0).modified());
 
     let cleanup = System::builder()
-        .with_name(&quot;cleanup&quot;)
+        .with_name("cleanup")
         .with_query(query)
         .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (name, id, is_player) in &amp;mut q {
                 if is_player {
-                    tracing::info!(&quot;Player died&quot;);
+                    tracing::info!("Player died");
                 }
-                tracing::info!(name, is_player, &quot;Despawning {id}&quot;);
+                tracing::info!(name, is_player, "Despawning {id}");
                 cmd.despawn(id);
             }
         });
@@ -236,7 +236,7 @@ needs to be something to modify the health of entities.</p>
 </span>
 <span class="boring">fn main() {
 </span>    let player_id = Entity::builder()
-        .set(name(), &quot;player&quot;.into())
+        .set(name(), "player".into())
         .set(health(), 100.0)
         .set_default(player())
         .spawn(&amp;mut world);
@@ -244,7 +244,7 @@ needs to be something to modify the health of entities.</p>
     let enemies = (0..10)
         .map(|i| {
             Entity::builder()
-                .set(name(), format!(&quot;enemy.{i}&quot;))
+                .set(name(), format!("enemy.{i}"))
                 .set(health(), 50.0)
                 .spawn(&amp;mut world)
         })
@@ -275,7 +275,7 @@ needs to be something to modify the health of entities.</p>
         .with_query(Query::new((name().opt(), health().as_mut(), poison())))
         .for_each(|(name, health, poison)| {
             *health -= poison;
-            tracing::info!(&quot;{name:?} suffered {poison} in poison damage&quot;);
+            tracing::info!("{name:?} suffered {poison} in poison damage");
         });
 
 <span class="boring">}</span></code></pre></pre>
@@ -295,7 +295,7 @@ is not a requirement for change detection.</p>
     while world.is_alive(player_id) {
         schedule
             .execute_par(&amp;mut world)
-            .expect(&quot;Failed to run schedule&quot;);
+            .expect("Failed to run schedule");
 
         sleep(Duration::from_millis(1000));
     }

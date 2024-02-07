@@ -204,7 +204,7 @@ are lazily allocated due to lack of compile time unique ids.</p>
     {
         let val = world.get(id, position())?;
 
-        println!(&quot;The entity is at: {val:?}&quot;);
+        println!("The entity is at: {val:?}");
     }
 
     // This will overwrite the previous value
@@ -216,7 +216,7 @@ are lazily allocated due to lack of compile time unique ids.</p>
         pos.1 += 1.0;
     }
 
-    println!(&quot;The entity is now at: {:?}&quot;, world.get(id, position())?);
+    println!("The entity is now at: {:?}", world.get(id, position())?);
 
 <span class="boring">}</span></code></pre></pre>
 <p>Accessing a component mutably does not require a mutable access to the world, as

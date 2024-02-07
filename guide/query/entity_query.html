@@ -201,7 +201,7 @@
 
     let mut borrow = query.borrow(&amp;world);
     let (width, height, vsync) = borrow.get().unwrap();
-    println!(&quot;width: {width} height: {height}, vsync: {vsync}&quot;);
+    println!("width: {width} height: {height}, vsync: {vsync}");
 
 <span class="boring">}</span></code></pre></pre>
 <p>In addition, an entity query can be used in a system</p>
@@ -213,10 +213,10 @@
         .build(|mut q: EntityBorrow&lt;_&gt;| {
             if let Ok((width, height, allow_vsync)) = q.get() {
                 println!(
-                    &quot;Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}&quot;
+                    "Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}"
                 );
             } else {
-                println!(&quot;No config change&quot;);
+                println!("No config change");
             }
         });
 

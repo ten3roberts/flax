@@ -189,16 +189,16 @@
     }
 
     let parent = Entity::builder()
-        .set(name(), &quot;Parent&quot;.into())
+        .set(name(), "Parent".into())
         .spawn(&amp;mut world);
 
     let child1 = Entity::builder()
-        .set(name(), &quot;Child1&quot;.into())
+        .set(name(), "Child1".into())
         .set_default(child_of(parent))
         .spawn(&amp;mut world);
 
     let child2 = Entity::builder()
-        .set(name(), &quot;Child2&quot;.into())
+        .set(name(), "Child2".into())
         .set_default(child_of(parent))
         .spawn(&amp;mut world);
 <span class="boring">}</span></code></pre></pre>
@@ -209,18 +209,18 @@
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    let parent2 = Entity::builder()
-        .set(name(), &quot;Parent2&quot;.into())
+        .set(name(), "Parent2".into())
         .spawn(&amp;mut world);
 
     world.set(child1, child_of(parent2), ())?;
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
 
     // Give child1 yet one more parent
     world.set(child1, child_of(parent2), ())?;
 
     tracing::info!(
-        &quot;Connections from child1({child1}): {:?}&quot;,
+        "Connections from child1({child1}): {:?}",
         Query::new(relations_like(child_of))
             .borrow(&amp;world)
             .get(child1)?
@@ -239,20 +239,20 @@ used to exclude components.</p>
         .with(child_of(parent))
         .collect_vec(&amp;world);
 
-    tracing::info!(&quot;Children: {children_of_parent:?}&quot;);
+    tracing::info!("Children: {children_of_parent:?}");
 
     // Matches a relation with any parent
     let all_children: Vec&lt;Entity&gt; = Query::new(entity_ids())
         .filter(child_of.with_relation())
         .collect_vec(&amp;world);
 
-    tracing::info!(&quot;Children: {all_children:?}&quot;);
+    tracing::info!("Children: {all_children:?}");
 
     let roots = Query::new(entity_ids())
         .filter(child_of.without_relation())
         .collect_vec(&amp;world);
 
-    tracing::info!(&quot;Roots: {roots:?}&quot;);
+    tracing::info!("Roots: {roots:?}");
 <span class="boring">}</span></code></pre></pre>
 <h2 id="associated-values"><a class="header" href="#associated-values">Associated values</a></h2>
 <p>In addition to linking between entities, a relation can also store additional data just like a component. This can be used to create weighted graphs or storing other additional information such as physical joint parameters.</p>
@@ -276,25 +276,25 @@ used to exclude components.</p>
     }
 
     let id1 = Entity::builder()
-        .set(name(), &quot;a&quot;.into())
+        .set(name(), "a".into())
         .set(position(), vec2(1.0, 4.0))
         .spawn(&amp;mut world);
 
     // Connect id2 to id1 with a spring of strength 2.0
     let id2 = Entity::builder()
-        .set(name(), &quot;b&quot;.into())
+        .set(name(), "b".into())
         .set(spring_joint(id1), Spring::new(2.0, 1.0))
         .set(position(), vec2(2.0, 0.0))
         .spawn(&amp;mut world);
 
     let _id3 = Entity::builder()
-        .set(name(), &quot;c&quot;.into())
+        .set(name(), "c".into())
         .set(spring_joint(id1), Spring::new(2.0, 3.0))
         .set(position(), vec2(2.0, 3.0))
         .spawn(&amp;mut world);
 
     let _id4 = Entity::builder()
-        .set(name(), &quot;d&quot;.into())
+        .set(name(), "d".into())
         .set(spring_joint(id2), Spring::new(5.0, 0.5))
         .set(position(), vec2(1.0, 0.0))
         .spawn(&amp;mut world);
@@ -308,16 +308,16 @@ used to exclude components.</p>
             if let (Some(spring), Some((parent_name, parent_pos))) = (strength, parent) {
                 let distance = pos.distance(*parent_pos) - spring.length;
                 let force = distance * spring.strength;
-                tracing::info!(&quot;spring acting with {force:.1}N between {parent_name} and {name}&quot;);
+                tracing::info!("spring acting with {force:.1}N between {parent_name} and {name}");
             } else {
-                tracing::info!(%id, name, &quot;root&quot;);
+                tracing::info!(%id, name, "root");
             }
 
             Some((name, pos))
         });
 <span class="boring">}</span></code></pre></pre>
 <h1 id="exclusive-relations"><a class="header" href="#exclusive-relations">Exclusive relations</a></h1>
-<p>Relations can be declared as exclusive, which means that only one relation of that type can exist on an entity at a time. This is useful for cases where you want to have a single parent or outgoing connection. </p>
+<p>Relations can be declared as exclusive, which means that only one relation of that type can exist on an entity at a time. This is useful for cases where you want to have a single parent or outgoing connection.</p>
 <p><strong>Note</strong>: This does not prevent multiple entities from referencing the same entity, but rather an entity referencing multiple entities.</p>
 <p>When a new relation is added to an entity, any existing relation of the same type will be removed.</p>
 <p>This is the case for the included <a href="https://docs.rs/flax/latest/flax/components/fn.child_of.html"><code>child_of</code></a> relation.</p>
@@ -337,7 +337,7 @@ used to exclude components.</p>
     let entity = world.entity_mut(id3).unwrap();
 
     tracing::info!(
-        &quot;relations of {id3}: {:?}&quot;,
+        "relations of {id3}: {:?}",
         entity.relations(child_of).map(|v| v.0).collect_vec()
     );
 
@@ -345,7 +345,7 @@ used to exclude components.</p>
 
     let entity = world.entity_mut(id3).unwrap();
     tracing::info!(
-        &quot;relations of {id3}: {:?}&quot;,
+        "relations of {id3}: {:?}",
         entity.relations(child_of).map(|v| v.0).collect_vec()
     );
 <span class="boring">}</span></code></pre></pre>
@@ -354,21 +354,21 @@ used to exclude components.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    tracing::info!(
-        &quot;has relation to: {parent2}: {}&quot;,
+        "has relation to: {parent2}: {}",
         world.has(child1, child_of(parent2))
     );
 
     world.despawn(parent2)?;
 
     tracing::info!(
-        &quot;has relation to: {parent2}: {}&quot;,
+        "has relation to: {parent2}: {}",
         world.has(child1, child_of(parent2))
     );
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
     world.despawn_recursive(parent, child_of)?;
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
 <span class="boring">}</span></code></pre></pre>
 
                     </main>

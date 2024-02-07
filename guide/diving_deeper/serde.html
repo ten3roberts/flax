@@ -197,7 +197,7 @@ components.</p>
     tracing_subscriber::fmt().init();
 
     use flax::serialize::{SerdeBuilder, SerializeFormat};
-    tracing::info!(&quot;It works&quot;);
+    tracing::info!("It works");
 
     let mut world = World::new();
 
@@ -210,7 +210,7 @@ components.</p>
         (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
     )?;
     batch.set(velocity(), (&amp;mut rng).sample_iter(Standard))?;
-    batch.set(name(), (0..).map(|v| format!(&quot;id.{v}&quot;)))?;
+    batch.set(name(), (0..).map(|v| format!("id.{v}")))?;
 
     batch.spawn(&amp;mut world);
 
@@ -220,7 +220,7 @@ components.</p>
         position(),
         (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
     )?;
-    batch.set(name(), (16..).map(|v| format!(&quot;id.{v}&quot;)))?;
+    batch.set(name(), (16..).map(|v| format!("id.{v}")))?;
     batch.spawn(&amp;mut world);
 
 <span class="boring">}</span></code></pre></pre>
@@ -237,7 +237,7 @@ it implements <code>Serialize</code>.</p>
     let json =
         serde_json::to_string_pretty(&amp;serializer.serialize(&amp;world, SerializeFormat::RowMajor))?;
 
-    // eprintln!(&quot;World: {json}&quot;);
+    // eprintln!("World: {json}");
 <span class="boring">}</span></code></pre></pre>
 <p>When deserializing a world it is often of interest in merging it or
 deserializing <em>into</em> another world.</p>
@@ -257,7 +257,7 @@ deserialization failed.</p>
         position(),
         (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
     )?;
-    batch.set(name(), (0..).map(|v| format!(&quot;other_id.{v}&quot;)))?;
+    batch.set(name(), (0..).map(|v| format!("other_id.{v}")))?;
     batch.spawn(&amp;mut world);
 
     let mut result = deserializer.deserialize(&amp;mut serde_json::Deserializer::from_str(&amp;json))?;
@@ -265,7 +265,7 @@ deserialization failed.</p>
     // Merge `result` into `world`
     world.merge_with(&amp;mut result);
 
-    // eprintln!(&quot;World: {world:#?}&quot;);
+    // eprintln!("World: {world:#?}");
 
 <span class="boring">}</span></code></pre></pre>
 

@@ -195,9 +195,9 @@ the world, like a function which only creates the <code>EntityBuilder</code>.</p
     world.set(player, health(), 100.0).unwrap();
     world.set(player, position(), (5.0, 2.3)).unwrap();
     world.set(player, is_player(), ()).unwrap();
-    world.set(player, name(), &quot;Player&quot;.into()).unwrap();
+    world.set(player, name(), "Player".into()).unwrap();
 
-    tracing::info!(&quot;Player: {:#?}&quot;, world.format_entities(&amp;[player]));
+    tracing::info!("Player: {:#?}", world.format_entities(&amp;[player]));
     world.despawn(player).unwrap();
 
     // Do this
@@ -205,10 +205,10 @@ the world, like a function which only creates the <code>EntityBuilder</code>.</p
         .set(health(), 100.0)
         .set(position(), (5.0, 2.3))
         .tag(is_player())
-        .set(name(), &quot;Player&quot;.into())
+        .set(name(), "Player".into())
         .spawn(&amp;mut world);
 
-    tracing::info!(&quot;Player: {:#?}&quot;, world.format_entities(&amp;[player]));
+    tracing::info!("Player: {:#?}", world.format_entities(&amp;[player]));
 
 <span class="boring">}</span></code></pre></pre>
 <p>When the entity builder is spawned, the held components are moved out into the
@@ -228,28 +228,28 @@ matching archetype in the world.</p>
                     position(),
                     (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0)),
                 )
-                .set(name(), format!(&quot;Enemy.{i}&quot;))
+                .set(name(), format!("Enemy.{i}"))
                 .spawn(&amp;mut world)
         })
         .collect_vec();
 
-    tracing::info!(&quot;Enemies: {enemies:?}&quot;);
+    tracing::info!("Enemies: {enemies:?}");
 <span class="boring">}</span></code></pre></pre>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
 </span>    let mut query = Query::new((name(), position(), is_player().opt(), health()));
     for (name, pos, is_player, health) in &amp;mut query.borrow(&amp;world) {
-        tracing::info!(&quot;name: {name}, pos: {pos:?}, player: {is_player:?}, health: {health}&quot;);
+        tracing::info!("name: {name}, pos: {pos:?}, player: {is_player:?}, health: {health}");
     }
 
     // Or to only get the non players
 
     {
         let mut query = Query::new((name(), position(), health())).without(is_player());
-        info_span!(&quot;enemies&quot;);
+        info_span!("enemies");
         for (name, pos, health) in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;name: {name}, pos: {pos:?}, health: {health}&quot;);
+            tracing::info!("name: {name}, pos: {pos:?}, health: {health}");
         }
     }
 
@@ -265,8 +265,8 @@ format of the archetype storage and is thus maximally efficient.</p>
 <span class="boring">fn main() {
 </span>    let mut trees = BatchSpawn::new(10000);
     trees
-        .set(name(), (0..).map(|i| format!(&quot;Tree.{i}&quot;)))
-        .expect(&quot;Invalid length&quot;);
+        .set(name(), (0..).map(|i| format!("Tree.{i}")))
+        .expect("Invalid length");
 
     trees
         .set(
@@ -276,11 +276,11 @@ format of the archetype storage and is thus maximally efficient.</p>
                 (f.cos() * (1.0 + f / 2.0), f.sin() * (1.0 + f / 2.0))
             }),
         )
-        .expect(&quot;Invalid length&quot;);
+        .expect("Invalid length");
 
     let trees = trees.spawn(&amp;mut world);
 
-    tracing::info!(&quot;Trees: {:#?}&quot;, world.format_entities(&amp;trees[0..100]));
+    tracing::info!("Trees: {:#?}", world.format_entities(&amp;trees[0..100]));
 
 <span class="boring">}</span></code></pre></pre>
 <h2 id="hierarchy"><a class="header" href="#hierarchy">Hierarchy</a></h2>
@@ -292,19 +292,19 @@ the world.</p>
 </span>
 <span class="boring">fn main() {
 </span>    let id = Entity::builder()
-        .set(name(), &quot;parent&quot;.into())
+        .set(name(), "parent".into())
         .attach(
             child_of,
             Entity::builder()
-                .set(name(), &quot;child1&quot;.into())
-                .attach(child_of, Entity::builder().set(name(), &quot;child1.1&quot;.into())),
+                .set(name(), "child1".into())
+                .attach(child_of, Entity::builder().set(name(), "child1.1".into())),
         )
-        .attach(child_of, Entity::builder().set(name(), &quot;child2&quot;.into()))
+        .attach(child_of, Entity::builder().set(name(), "child2".into()))
         .spawn(&amp;mut world);
 
-    tracing::info!(&quot;Parent: {id}&quot;);
+    tracing::info!("Parent: {id}");
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
 
 <span class="boring">}</span></code></pre></pre>
 

@@ -188,16 +188,16 @@ in other situations where a mutable reference to the world is not available.</p>
 
     let mut cmd = CommandBuffer::new();
 
-    cmd.spawn(Entity::builder().set(name(), &quot;a&quot;.into()));
+    cmd.spawn(Entity::builder().set(name(), "a".into()));
 
     cmd.apply(&amp;mut world)?;
 
     let id = Query::new(entity_ids())
-        .filter(name().eq(&quot;a&quot;))
+        .filter(name().eq("a"))
         .borrow(&amp;world)
         .iter()
         .next()
-        .context(&quot;Missing entity&quot;)?;
+        .context("Missing entity")?;
 
     cmd.set(id, position(), vec2(32.0, 2.6));
     let id2 = world.spawn();
@@ -205,7 +205,7 @@ in other situations where a mutable reference to the world is not available.</p>
     cmd.spawn_at(
         id,
         EntityBuilder::new()
-            .set(name(), &quot;b&quot;.into())
+            .set(name(), "b".into())
             .set(position(), vec2(4.6, 8.4)),
     );
 
@@ -235,17 +235,17 @@ in other situations where a mutable reference to the world is not available.</p>
     // Make sure there are always 64 entities in the world
     let mut rng = StdRng::seed_from_u64(42);
     let spawner = System::builder()
-        .with_name(&quot;spawn_entities&quot;)
+        .with_name("spawn_entities")
         .with_query(Query::new(()))
         .with_cmd_mut()
         .build(move |mut q: QueryBorrow&lt;()&gt;, cmd: &amp;mut CommandBuffer| {
             let count = q.count();
 
             for _ in count..64 {
-                tracing::info!(&quot;Spawning new entity&quot;);
+                tracing::info!("Spawning new entity");
                 cmd.spawn(
                     Entity::builder()
-                        .set(name(), &quot;entity&quot;.to_string())
+                        .set(name(), "entity".to_string())
                         .set(position(), rng.gen()),
                 );
             }
@@ -253,13 +253,13 @@ in other situations where a mutable reference to the world is not available.</p>
 
     // Ensure a world matrix to each entity with a position
     let add_world_matrix = System::builder()
-        .with_name(&quot;add_world_matrix&quot;)
+        .with_name("add_world_matrix")
         .with_query(Query::new((entity_ids(), position())).without(world_matrix()))
         .with_cmd_mut()
         .build(
             |mut q: QueryBorrow&lt;(EntityIds, Component&lt;Vec2&gt;), _&gt;, cmd: &amp;mut CommandBuffer| {
                 for (id, pos) in &amp;mut q {
-                    tracing::info!(&quot;Adding world matrix to {id}&quot;);
+                    tracing::info!("Adding world matrix to {id}");
                     cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));
                 }
             },
@@ -267,13 +267,13 @@ in other situations where a mutable reference to the world is not available.</p>
 
     // Update the world matrix if position changes
     let update_world_matrix = System::builder()
-        .with_name(&quot;update_world_matrix&quot;)
+        .with_name("update_world_matrix")
         .with_query(
             Query::new((entity_ids(), position(), world_matrix().as_mut()))
                 .filter(position().modified()),
         )
         .for_each(|(id, pos, ltw)| {
-            tracing::info!(&quot;Updating world matrix for {id}&quot;);
+            tracing::info!("Updating world matrix for {id}");
             *ltw = Mat4::from_translation(pos.extend(0.0));
         });
 
@@ -287,7 +287,7 @@ in other situations where a mutable reference to the world is not available.</p>
 
     schedule
         .execute_par(&amp;mut world)
-        .context(&quot;Failed to run schedule&quot;)?;
+        .context("Failed to run schedule")?;
 
 <span class="boring">}</span></code></pre></pre>
 <p>The commandbuffer will be applied at the end of the schedule automatically.</p>

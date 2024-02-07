@@ -182,7 +182,7 @@
 </span>        let mut query = Query::new(name());
 
         for name in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;Entity: {name:?}&quot;);
+            tracing::info!("Entity: {name:?}");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -193,7 +193,7 @@
 </span>        let mut query = Query::new((name(), position(), health()));
 
         for (name, pos, health) in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;Entity: {name:?} pos: {pos}, health: {health}&quot;);
+            tracing::info!("Entity: {name:?} pos: {pos}, health: {health}");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -223,7 +223,7 @@
 
         (&amp;mut query.borrow(&amp;world)).into_iter().for_each(
             |(name, pos, health): (&amp;String, &amp;Vec3, Option&lt;&amp;f32&gt;)| {
-                tracing::info!(&quot;Entity: {name:?} pos: {pos}, health: {health:?}&quot;);
+                tracing::info!("Entity: {name:?} pos: {pos}, health: {health:?}");
             },
         );
 

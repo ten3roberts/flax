@@ -188,7 +188,7 @@ the full tuple, I.e;</p>
 </span>    // Entities with mass
     (0..10).for_each(|i| {
         builder
-            .set(name(), format!(&quot;Entity.{i}&quot;))
+            .set(name(), format!("Entity.{i}"))
             .set(position(), rng.gen::&lt;Vec3&gt;() * 10.0)
             .set(velocity(), rng.gen())
             .set(mass(), rng.gen_range(10..30) as f32)
@@ -198,7 +198,7 @@ the full tuple, I.e;</p>
     // Entities without mass
     (0..100).for_each(|i| {
         builder
-            .set(name(), format!(&quot;Entity.{i}&quot;))
+            .set(name(), format!("Entity.{i}"))
             .set(position(), rng.gen::&lt;Vec3&gt;() * 0.5)
             .set(velocity(), rng.gen())
             .spawn(&amp;mut world);
@@ -207,7 +207,7 @@ the full tuple, I.e;</p>
     // Since this query accessed `position`, `velocity` **and** `mass` only the
     // first group of entities will be matched
     for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass())).borrow(&amp;world) {
-        tracing::debug!(&quot;pos: {pos}, vel: {vel}, mass: {mass}&quot;);
+        tracing::debug!("pos: {pos}, vel: {vel}, mass: {mass}");
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -220,9 +220,9 @@ the value yielded by the underlying fetch</p>
 </span>    // Use an optional fetch to yield an `Option&lt;T&gt;`, works for any query
     for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass().opt())).borrow(&amp;world) {
         if mass.is_some() {
-            tracing::debug!(&quot;Has mass&quot;);
+            tracing::debug!("Has mass");
         }
-        tracing::debug!(&quot;pos: {pos}, vel: {vel}, mass: {mass:?}&quot;);
+        tracing::debug!("pos: {pos}, vel: {vel}, mass: {mass:?}");
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -250,7 +250,7 @@ handle a 3d world.</p>
     }
 
     let create_world_matrix = System::builder()
-        .with_name(&quot;add_world_matrix&quot;)
+        .with_name("add_world_matrix")
         .with_query(
             Query::new(entity_ids())
                 .with(position())
@@ -260,14 +260,14 @@ handle a 3d world.</p>
         .build(
             |mut query: QueryBorrow&lt;EntityIds, _&gt;, cmd: &amp;mut CommandBuffer| {
                 for id in &amp;mut query {
-                    tracing::info!(&quot;Adding world matrix to {id}&quot;);
+                    tracing::info!("Adding world matrix to {id}");
                     cmd.set(id, world_matrix(), Mat4::IDENTITY);
                 }
             },
         );
 
     let update_world_matrix = System::builder()
-        .with_name(&quot;update_world_matrix&quot;)
+        .with_name("update_world_matrix")
         .with_query(
             Query::new((
                 entity_ids(),
@@ -279,7 +279,7 @@ handle a 3d world.</p>
             .filter(position().modified() | rotation().modified() | scale().modified()),
         )
         .for_each(|(id, world_matrix, pos, rot, scale)| {
-            tracing::info!(&quot;Updating world matrix for: {id} {pos} {rot} {scale}&quot;);
+            tracing::info!("Updating world matrix for: {id} {pos} {rot} {scale}");
             *world_matrix = Mat4::from_scale_rotation_translation(*scale, *rot, *pos);
         });
 
@@ -291,15 +291,15 @@ handle a 3d world.</p>
 
     let all_ids = Query::new(entity_ids()).borrow(&amp;world).iter().collect_vec();
 
-    tracing::info!(&quot;Schedule: {schedule:#?}&quot;);
+    tracing::info!("Schedule: {schedule:#?}");
 
     for _ in 0..10 {
         schedule
             .execute_par(&amp;mut world)
-            .expect(&quot;Failed to execute schedule&quot;);
+            .expect("Failed to execute schedule");
 
         for _ in 0..32 {
-            let id = *all_ids.choose(&amp;mut rng).expect(&quot;no ids&quot;);
+            let id = *all_ids.choose(&amp;mut rng).expect("no ids");
             let mut pos = world.get_mut(id, position())?;
             // Move a bit away from origin
             let dir = pos.normalize();
@@ -313,7 +313,7 @@ handle a 3d world.</p>
         sleep(Duration::from_secs(1))
     }
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
 
 <span class="boring">}</span></code></pre></pre>
 <h3 id="implementation-details"><a class="header" href="#implementation-details">Implementation details</a></h3>

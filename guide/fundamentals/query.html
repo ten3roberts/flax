@@ -206,7 +206,7 @@
     let mut query = Query::new((position(), health()));
 
     for (pos, health) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;pos: {pos:?}, health: {health}&quot;);
+        println!("pos: {pos:?}, health: {health}");
     }
 
 <span class="boring">
@@ -215,39 +215,39 @@
 </span><span class="boring">        distance: f32 =&gt; [ flax::Debuggable ],
 </span><span class="boring">    }
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;Spawning id3&quot;);
+</span><span class="boring">    println!("Spawning id3");
 </span><span class="boring">    let id3 = world.spawn();
 </span><span class="boring">    world.set(id3, position(), vec2(5.0, 6.0))?;
 </span><span class="boring">    world.set(id3, health(), 5.0)?;
 </span><span class="boring">
 </span><span class="boring">    for id in [id, id2, id3] {
-</span><span class="boring">        println!(&quot;Adding distance to {id}&quot;);
+</span><span class="boring">        println!("Adding distance to {id}");
 </span><span class="boring">        world.set(id, distance(), 0.0)?;
 </span><span class="boring">    }
 </span><span class="boring">
 </span><span class="boring">    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
 </span><span class="boring">        .filter(position().modified() &amp; health().gt(0.0));
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;Updating distances&quot;);
+</span><span class="boring">    println!("Updating distances");
 </span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        println!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">        *dist = pos.length();
 </span><span class="boring">    }
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;Running query again&quot;);
+</span><span class="boring">    println!("Running query again");
 </span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        println!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">        *dist = pos.length();
 </span><span class="boring">    }
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;... and again&quot;);
+</span><span class="boring">    println!("... and again");
 </span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        println!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">        *dist = pos.length();
 </span><span class="boring">    }
 </span><span class="boring">
@@ -264,12 +264,12 @@
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">    let mut update_distance = System::builder()
-</span><span class="boring">        .with_name(&quot;update_distance&quot;)
+</span><span class="boring">        .with_name("update_distance")
 </span><span class="boring">        .with_query(query)
 </span><span class="boring">        .build(
 </span><span class="boring">            |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
 </span><span class="boring">                for (id, pos, dist) in &amp;mut query {
-</span><span class="boring">                    println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">                    println!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">                    *dist = pos.length();
 </span><span class="boring">                }
 </span><span class="boring">            },
@@ -278,13 +278,13 @@
 </span><span class="boring">    update_distance.run(&amp;mut world);
 </span><span class="boring">
 </span><span class="boring">    let mut update_dist = System::builder()
-</span><span class="boring">        .with_name(&quot;update_distance&quot;)
+</span><span class="boring">        .with_name("update_distance")
 </span><span class="boring">        .with_query(
 </span><span class="boring">            Query::new((entity_ids(), position(), distance().as_mut()))
 </span><span class="boring">                .filter(position().modified()),
 </span><span class="boring">        )
 </span><span class="boring">        .for_each(|(id, pos, dist)| {
-</span><span class="boring">            tracing::debug!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">            tracing::debug!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">            *dist = pos.length();
 </span><span class="boring">        });
 </span><span class="boring">
@@ -295,21 +295,21 @@
 </span><span class="boring">
 </span><span class="boring">    // Despawn all entities with a distance &gt; 50
 </span><span class="boring">    let despawn = System::builder()
-</span><span class="boring">        .with_name(&quot;delete_outside_world&quot;)
+</span><span class="boring">        .with_name("delete_outside_world")
 </span><span class="boring">        .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
 </span><span class="boring">        .with_cmd_mut()
 </span><span class="boring">        .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
 </span><span class="boring">            for (id, &amp;dist) in &amp;mut q {
-</span><span class="boring">                println!(&quot;Despawning {id} at: {dist}&quot;);
+</span><span class="boring">                println!("Despawning {id} at: {dist}");
 </span><span class="boring">                cmd.despawn(id);
 </span><span class="boring">            }
 </span><span class="boring">        });
 </span><span class="boring">
 </span><span class="boring">    let debug_world = System::builder()
-</span><span class="boring">        .with_name(&quot;debug_world&quot;)
+</span><span class="boring">        .with_name("debug_world")
 </span><span class="boring">        .with_world()
 </span><span class="boring">        .build(|world: &amp;_| {
-</span><span class="boring">            tracing::debug!(&quot;World: {world:?}&quot;);
+</span><span class="boring">            tracing::debug!("World: {world:?}");
 </span><span class="boring">        });
 </span><span class="boring">
 </span><span class="boring">
@@ -332,7 +332,7 @@
 </span><span class="boring">    // Since this system will move non static entities out from the origin, they will
 </span><span class="boring">    // eventually be despawned
 </span><span class="boring">    let move_out = System::builder()
-</span><span class="boring">        .with_name(&quot;move_out&quot;)
+</span><span class="boring">        .with_name("move_out")
 </span><span class="boring">        .with_query(Query::new(position().as_mut()).filter(is_static().without()))
 </span><span class="boring">        .for_each(|pos| {
 </span><span class="boring">            let dir = pos.normalize_or_zero();
@@ -341,11 +341,11 @@
 </span><span class="boring">        });
 </span><span class="boring">
 </span><span class="boring">    // Spawn new entities with a random position each frame
-</span><span class="boring">    let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd_mut().build(
+</span><span class="boring">    let spawn = System::builder().with_name("spawner").with_cmd_mut().build(
 </span><span class="boring">        move |cmd: &amp;mut CommandBuffer| {
 </span><span class="boring">            for _ in 0..100 {
 </span><span class="boring">                let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-</span><span class="boring">                println!(&quot;Spawning new entity at: {pos:?}&quot;);
+</span><span class="boring">                println!("Spawning new entity at: {pos:?}");
 </span><span class="boring">                Entity::builder()
 </span><span class="boring">                    .set(position(), pos)
 </span><span class="boring">                    .set_default(distance())
@@ -358,11 +358,11 @@
 </span><span class="boring">
 </span><span class="boring">    // Count the number of entities in the world and log it
 </span><span class="boring">    let count = System::builder()
-</span><span class="boring">        .with_name(&quot;count&quot;)
+</span><span class="boring">        .with_name("count")
 </span><span class="boring">        .with_query(Query::new(()))
 </span><span class="boring">        .build(move |mut query: QueryBorrow&lt;()&gt;| {
 </span><span class="boring">            let count: usize = query.iter_batched().map(|v| v.len()).sum();
-</span><span class="boring">            println!(&quot;[{frame_count}]: {count}&quot;);
+</span><span class="boring">            println!("[{frame_count}]: {count}");
 </span><span class="boring">            frame_count += 1;
 </span><span class="boring">        });
 </span><span class="boring">
@@ -376,11 +376,11 @@
 </span><span class="boring">        .with_system(count)
 </span><span class="boring">        .build();
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;{schedule:#?}&quot;);
+</span><span class="boring">    println!("{schedule:#?}");
 </span><span class="boring">
 </span><span class="boring">    for i in 0..20 {
-</span><span class="boring">        println!(&quot;Frame: {i}&quot;);
-</span><span class="boring">        println!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;world));
+</span><span class="boring">        println!("Frame: {i}");
+</span><span class="boring">        println!("Batches: {:#?}", schedule.batch_info(&amp;world));
 </span><span class="boring">        schedule.execute_par(&amp;mut world)?;
 </span><span class="boring">    }
 </span><span class="boring">
@@ -408,7 +408,7 @@
 </span><span class="boring">
 </span><span class="boring">    let mut borrow = query.borrow(&amp;world);
 </span><span class="boring">    let (width, height, vsync) = borrow.get().unwrap();
-</span><span class="boring">    println!(&quot;width: {width} height: {height}, vsync: {vsync}&quot;);
+</span><span class="boring">    println!("width: {width} height: {height}, vsync: {vsync}");
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">    drop(borrow);
@@ -419,10 +419,10 @@
 </span><span class="boring">        .build(|mut q: EntityBorrow&lt;_&gt;| {
 </span><span class="boring">            if let Ok((width, height, allow_vsync)) = q.get() {
 </span><span class="boring">                println!(
-</span><span class="boring">                    &quot;Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}&quot;
+</span><span class="boring">                    "Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}"
 </span><span class="boring">                );
 </span><span class="boring">            } else {
-</span><span class="boring">                println!(&quot;No config change&quot;);
+</span><span class="boring">                println!("No config change");
 </span><span class="boring">            }
 </span><span class="boring">        });
 </span><span class="boring">
@@ -464,22 +464,22 @@ when an entity moves for every entity.</p>
         distance: f32 =&gt; [ flax::Debuggable ],
     }
 
-    println!(&quot;Spawning id3&quot;);
+    println!("Spawning id3");
     let id3 = world.spawn();
     world.set(id3, position(), vec2(5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
-        println!(&quot;Adding distance to {id}&quot;);
+        println!("Adding distance to {id}");
         world.set(id, distance(), 0.0)?;
     }
 
     let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
         .filter(position().modified() &amp; health().gt(0.0));
 
-    println!(&quot;Updating distances&quot;);
+    println!("Updating distances");
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
 
@@ -489,9 +489,9 @@ yields nothing.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
-</span>    println!(&quot;Running query again&quot;);
+</span>    println!("Running query again");
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
 <span class="boring">}</span></code></pre></pre>
@@ -501,9 +501,9 @@ yields nothing.</p>
 <span class="boring">fn main() {
 </span>    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
 
-    println!(&quot;... and again&quot;);
+    println!("... and again");
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
 

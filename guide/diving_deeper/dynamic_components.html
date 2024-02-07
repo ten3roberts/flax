@@ -186,7 +186,7 @@ spawned in the <code>STATIC</code> global namespace which is shared across all w
 
     let mut world = World::new();
 
-    let position: Component&lt;Vec2&gt; = world.spawn_component(&quot;position&quot;, |desc| {
+    let position: Component&lt;Vec2&gt; = world.spawn_component("position", |desc| {
         let mut buf = ComponentBuffer::new();
         &lt;Debug as MetaData&lt;Vec2&gt;&gt;::attach(desc, &amp;mut buf);
         buf
@@ -196,13 +196,13 @@ spawned in the <code>STATIC</code> global namespace which is shared across all w
         .set(position, vec2(1.0, 6.4))
         .spawn(&amp;mut world);
 
-    tracing::info!(&quot;world: {world:#?}&quot;);
+    tracing::info!("world: {world:#?}");
 
     // When `position` is despawned, it is removed from all entities.
     // This ensured that dead components never exist
     world.despawn(position.id())?;
 
-    tracing::info!(&quot;world: {world:#?}&quot;);
+    tracing::info!("world: {world:#?}");
 
     world.despawn(id)?;
 <span class="boring">}</span></code></pre></pre>
@@ -233,7 +233,7 @@ entity as the generation is not needed.</p>
         distance: f32,
     }
 
-    let child_of = world.spawn_relation::&lt;RelationData&gt;(&quot;child_of&quot;, |desc| {
+    let child_of = world.spawn_relation::&lt;RelationData&gt;("child_of", |desc| {
         let mut buf = ComponentBuffer::new();
         &lt;Debug as MetaData&lt;RelationData&gt;&gt;::attach(desc, &amp;mut buf);
         buf
@@ -247,7 +247,7 @@ entity as the generation is not needed.</p>
 
     let data = world.get(child, child_of(parent))?;
 
-    tracing::info!(&quot;Relation distance: {:?}&quot;, data.distance);
+    tracing::info!("Relation distance: {:?}", data.distance);
 
     drop(data);
 
@@ -255,7 +255,7 @@ entity as the generation is not needed.</p>
     assert!(world.get(child, child_of(parent)).is_err());
 
 <span class="boring">}</span></code></pre></pre>
-<p>When despawning either the relation component or target entity, the &quot;parent&quot;,
+<p>When despawning either the relation component or target entity, the "parent",
 the component is removed from all entities.</p>
 
                     </main>

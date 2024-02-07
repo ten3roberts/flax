@@ -185,7 +185,7 @@
 </span>    let id = world.spawn();
 
     if world.is_alive(id) {
-        println!(&quot;It is alive!&quot;);
+        println!("It is alive!");
     }
 <span class="boring">}</span></code></pre></pre>
 <p>When an entity is despawned, it can no longer be accessed.</p>
@@ -198,7 +198,7 @@ entities stay dead, this is not a zombie apocalypse we are working with.</p>
 </span>    world.despawn(id)?;
 
     if world.is_alive(id) {
-        println!(&quot;We've got a zombie on our hands&quot;);
+        println!("We've got a zombie on our hands");
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -207,7 +207,7 @@ iterator which takes entity ids from the world</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    let ids = world.spawn_many().take(10).collect_vec();
-    println!(&quot;ids: {ids:?}&quot;);
+    println!("ids: {ids:?}");
 <span class="boring">}</span></code></pre></pre>
 
                     </main>

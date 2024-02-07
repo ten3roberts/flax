@@ -194,7 +194,7 @@ execute on the world or a group of entities. Provides the logic of the program.<
 <div style="break-before: page; page-break-before: always;"></div><h1 id="fundamentals"><a class="header" href="#fundamentals">Fundamentals</a></h1>
 <p>This chapter goes through the basic of using Flax.</p>
 <p>To get started, add <code>flax</code> to the <code>Cargo.toml</code> file</p>
-<pre><code class="language-toml">flax = &quot;0.2&quot;
+<pre><code class="language-toml">flax = "0.2"
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="world"><a class="header" href="#world">World</a></h1>
 <p>The world holds the entities and components in the ECS.</p>
@@ -208,7 +208,7 @@ execute on the world or a group of entities. Provides the logic of the program.<
 </span>    let id = world.spawn();
 
     if world.is_alive(id) {
-        println!(&quot;It is alive!&quot;);
+        println!("It is alive!");
     }
 <span class="boring">}</span></code></pre></pre>
 <p>When an entity is despawned, it can no longer be accessed.</p>
@@ -221,7 +221,7 @@ entities stay dead, this is not a zombie apocalypse we are working with.</p>
 </span>    world.despawn(id)?;
 
     if world.is_alive(id) {
-        println!(&quot;We've got a zombie on our hands&quot;);
+        println!("We've got a zombie on our hands");
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -230,7 +230,7 @@ iterator which takes entity ids from the world</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    let ids = world.spawn_many().take(10).collect_vec();
-    println!(&quot;ids: {ids:?}&quot;);
+    println!("ids: {ids:?}");
 <span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="components"><a class="header" href="#components">Components</a></h1>
 <p>A component represents data which is attached to an entity.</p>
@@ -263,7 +263,7 @@ are lazily allocated due to lack of compile time unique ids.</p>
     {
         let val = world.get(id, position())?;
 
-        println!(&quot;The entity is at: {val:?}&quot;);
+        println!("The entity is at: {val:?}");
     }
 
     // This will overwrite the previous value
@@ -275,7 +275,7 @@ are lazily allocated due to lack of compile time unique ids.</p>
         pos.1 += 1.0;
     }
 
-    println!(&quot;The entity is now at: {:?}&quot;, world.get(id, position())?);
+    println!("The entity is now at: {:?}", world.get(id, position())?);
 
 <span class="boring">}</span></code></pre></pre>
 <p>Accessing a component mutably does not require a mutable access to the world, as
@@ -322,7 +322,7 @@ between different libraries and users.</p>
     let mut query = Query::new((position(), health()));
 
     for (pos, health) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;pos: {pos:?}, health: {health}&quot;);
+        println!("pos: {pos:?}, health: {health}");
     }
 
 <span class="boring">
@@ -331,39 +331,39 @@ between different libraries and users.</p>
 </span><span class="boring">        distance: f32 =&gt; [ flax::Debuggable ],
 </span><span class="boring">    }
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;Spawning id3&quot;);
+</span><span class="boring">    println!("Spawning id3");
 </span><span class="boring">    let id3 = world.spawn();
 </span><span class="boring">    world.set(id3, position(), vec2(5.0, 6.0))?;
 </span><span class="boring">    world.set(id3, health(), 5.0)?;
 </span><span class="boring">
 </span><span class="boring">    for id in [id, id2, id3] {
-</span><span class="boring">        println!(&quot;Adding distance to {id}&quot;);
+</span><span class="boring">        println!("Adding distance to {id}");
 </span><span class="boring">        world.set(id, distance(), 0.0)?;
 </span><span class="boring">    }
 </span><span class="boring">
 </span><span class="boring">    let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
 </span><span class="boring">        .filter(position().modified() &amp; health().gt(0.0));
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;Updating distances&quot;);
+</span><span class="boring">    println!("Updating distances");
 </span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        println!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">        *dist = pos.length();
 </span><span class="boring">    }
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;Running query again&quot;);
+</span><span class="boring">    println!("Running query again");
 </span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        println!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">        *dist = pos.length();
 </span><span class="boring">    }
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;... and again&quot;);
+</span><span class="boring">    println!("... and again");
 </span><span class="boring">    for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-</span><span class="boring">        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">        println!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">        *dist = pos.length();
 </span><span class="boring">    }
 </span><span class="boring">
@@ -380,12 +380,12 @@ between different libraries and users.</p>
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">    let mut update_distance = System::builder()
-</span><span class="boring">        .with_name(&quot;update_distance&quot;)
+</span><span class="boring">        .with_name("update_distance")
 </span><span class="boring">        .with_query(query)
 </span><span class="boring">        .build(
 </span><span class="boring">            |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
 </span><span class="boring">                for (id, pos, dist) in &amp;mut query {
-</span><span class="boring">                    println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">                    println!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">                    *dist = pos.length();
 </span><span class="boring">                }
 </span><span class="boring">            },
@@ -394,13 +394,13 @@ between different libraries and users.</p>
 </span><span class="boring">    update_distance.run(&amp;mut world);
 </span><span class="boring">
 </span><span class="boring">    let mut update_dist = System::builder()
-</span><span class="boring">        .with_name(&quot;update_distance&quot;)
+</span><span class="boring">        .with_name("update_distance")
 </span><span class="boring">        .with_query(
 </span><span class="boring">            Query::new((entity_ids(), position(), distance().as_mut()))
 </span><span class="boring">                .filter(position().modified()),
 </span><span class="boring">        )
 </span><span class="boring">        .for_each(|(id, pos, dist)| {
-</span><span class="boring">            tracing::debug!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+</span><span class="boring">            tracing::debug!("Updating distance for {id} with position: {pos:?}");
 </span><span class="boring">            *dist = pos.length();
 </span><span class="boring">        });
 </span><span class="boring">
@@ -411,21 +411,21 @@ between different libraries and users.</p>
 </span><span class="boring">
 </span><span class="boring">    // Despawn all entities with a distance &gt; 50
 </span><span class="boring">    let despawn = System::builder()
-</span><span class="boring">        .with_name(&quot;delete_outside_world&quot;)
+</span><span class="boring">        .with_name("delete_outside_world")
 </span><span class="boring">        .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
 </span><span class="boring">        .with_cmd_mut()
 </span><span class="boring">        .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
 </span><span class="boring">            for (id, &amp;dist) in &amp;mut q {
-</span><span class="boring">                println!(&quot;Despawning {id} at: {dist}&quot;);
+</span><span class="boring">                println!("Despawning {id} at: {dist}");
 </span><span class="boring">                cmd.despawn(id);
 </span><span class="boring">            }
 </span><span class="boring">        });
 </span><span class="boring">
 </span><span class="boring">    let debug_world = System::builder()
-</span><span class="boring">        .with_name(&quot;debug_world&quot;)
+</span><span class="boring">        .with_name("debug_world")
 </span><span class="boring">        .with_world()
 </span><span class="boring">        .build(|world: &amp;_| {
-</span><span class="boring">            tracing::debug!(&quot;World: {world:?}&quot;);
+</span><span class="boring">            tracing::debug!("World: {world:?}");
 </span><span class="boring">        });
 </span><span class="boring">
 </span><span class="boring">
@@ -448,7 +448,7 @@ between different libraries and users.</p>
 </span><span class="boring">    // Since this system will move non static entities out from the origin, they will
 </span><span class="boring">    // eventually be despawned
 </span><span class="boring">    let move_out = System::builder()
-</span><span class="boring">        .with_name(&quot;move_out&quot;)
+</span><span class="boring">        .with_name("move_out")
 </span><span class="boring">        .with_query(Query::new(position().as_mut()).filter(is_static().without()))
 </span><span class="boring">        .for_each(|pos| {
 </span><span class="boring">            let dir = pos.normalize_or_zero();
@@ -457,11 +457,11 @@ between different libraries and users.</p>
 </span><span class="boring">        });
 </span><span class="boring">
 </span><span class="boring">    // Spawn new entities with a random position each frame
-</span><span class="boring">    let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd_mut().build(
+</span><span class="boring">    let spawn = System::builder().with_name("spawner").with_cmd_mut().build(
 </span><span class="boring">        move |cmd: &amp;mut CommandBuffer| {
 </span><span class="boring">            for _ in 0..100 {
 </span><span class="boring">                let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-</span><span class="boring">                println!(&quot;Spawning new entity at: {pos:?}&quot;);
+</span><span class="boring">                println!("Spawning new entity at: {pos:?}");
 </span><span class="boring">                Entity::builder()
 </span><span class="boring">                    .set(position(), pos)
 </span><span class="boring">                    .set_default(distance())
@@ -474,11 +474,11 @@ between different libraries and users.</p>
 </span><span class="boring">
 </span><span class="boring">    // Count the number of entities in the world and log it
 </span><span class="boring">    let count = System::builder()
-</span><span class="boring">        .with_name(&quot;count&quot;)
+</span><span class="boring">        .with_name("count")
 </span><span class="boring">        .with_query(Query::new(()))
 </span><span class="boring">        .build(move |mut query: QueryBorrow&lt;()&gt;| {
 </span><span class="boring">            let count: usize = query.iter_batched().map(|v| v.len()).sum();
-</span><span class="boring">            println!(&quot;[{frame_count}]: {count}&quot;);
+</span><span class="boring">            println!("[{frame_count}]: {count}");
 </span><span class="boring">            frame_count += 1;
 </span><span class="boring">        });
 </span><span class="boring">
@@ -492,11 +492,11 @@ between different libraries and users.</p>
 </span><span class="boring">        .with_system(count)
 </span><span class="boring">        .build();
 </span><span class="boring">
-</span><span class="boring">    println!(&quot;{schedule:#?}&quot;);
+</span><span class="boring">    println!("{schedule:#?}");
 </span><span class="boring">
 </span><span class="boring">    for i in 0..20 {
-</span><span class="boring">        println!(&quot;Frame: {i}&quot;);
-</span><span class="boring">        println!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;world));
+</span><span class="boring">        println!("Frame: {i}");
+</span><span class="boring">        println!("Batches: {:#?}", schedule.batch_info(&amp;world));
 </span><span class="boring">        schedule.execute_par(&amp;mut world)?;
 </span><span class="boring">    }
 </span><span class="boring">
@@ -524,7 +524,7 @@ between different libraries and users.</p>
 </span><span class="boring">
 </span><span class="boring">    let mut borrow = query.borrow(&amp;world);
 </span><span class="boring">    let (width, height, vsync) = borrow.get().unwrap();
-</span><span class="boring">    println!(&quot;width: {width} height: {height}, vsync: {vsync}&quot;);
+</span><span class="boring">    println!("width: {width} height: {height}, vsync: {vsync}");
 </span><span class="boring">
 </span><span class="boring">
 </span><span class="boring">    drop(borrow);
@@ -535,10 +535,10 @@ between different libraries and users.</p>
 </span><span class="boring">        .build(|mut q: EntityBorrow&lt;_&gt;| {
 </span><span class="boring">            if let Ok((width, height, allow_vsync)) = q.get() {
 </span><span class="boring">                println!(
-</span><span class="boring">                    &quot;Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}&quot;
+</span><span class="boring">                    "Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}"
 </span><span class="boring">                );
 </span><span class="boring">            } else {
-</span><span class="boring">                println!(&quot;No config change&quot;);
+</span><span class="boring">                println!("No config change");
 </span><span class="boring">            }
 </span><span class="boring">        });
 </span><span class="boring">
@@ -580,22 +580,22 @@ when an entity moves for every entity.</p>
         distance: f32 =&gt; [ flax::Debuggable ],
     }
 
-    println!(&quot;Spawning id3&quot;);
+    println!("Spawning id3");
     let id3 = world.spawn();
     world.set(id3, position(), vec2(5.0, 6.0))?;
     world.set(id3, health(), 5.0)?;
 
     for id in [id, id2, id3] {
-        println!(&quot;Adding distance to {id}&quot;);
+        println!("Adding distance to {id}");
         world.set(id, distance(), 0.0)?;
     }
 
     let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
         .filter(position().modified() &amp; health().gt(0.0));
 
-    println!(&quot;Updating distances&quot;);
+    println!("Updating distances");
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
 
@@ -605,9 +605,9 @@ yields nothing.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
-</span>    println!(&quot;Running query again&quot;);
+</span>    println!("Running query again");
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
 <span class="boring">}</span></code></pre></pre>
@@ -617,9 +617,9 @@ yields nothing.</p>
 <span class="boring">fn main() {
 </span>    *world.get_mut(id2, position())? = vec2(8.0, 3.0);
 
-    println!(&quot;... and again&quot;);
+    println!("... and again");
     for (id, pos, dist) in &amp;mut query.borrow(&amp;world) {
-        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+        println!("Updating distance for {id} with position: {pos:?}");
         *dist = pos.length();
     }
 
@@ -645,12 +645,12 @@ queries, world access, and much more along with the logic to execute with it.</p
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>        let update_distance = System::builder()
-            .with_name(&quot;update_distance&quot;)
+            .with_name("update_distance")
             .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
             .build(
                 |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
                     for (id, pos, dist) in &amp;mut query {
-                        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                        println!("Updating distance for {id} with position: {pos:?}");
                         *dist = pos.length();
                     }
                 },
@@ -661,12 +661,12 @@ queries, world access, and much more along with the logic to execute with it.</p
 </span><span class="boring">fn main() {
 </span>        fn update_distance_system() -&gt; BoxedSystem {
             System::builder()
-                .with_name(&quot;update_distance&quot;)
+                .with_name("update_distance")
                 .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
                 .build(
                     |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
                         for (id, pos, dist) in &amp;mut query {
-                            println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                            println!("Updating distance for {id} with position: {pos:?}");
                             *dist = pos.length();
                         }
                     },
@@ -705,10 +705,10 @@ queries, world access, and much more along with the logic to execute with it.</p
 </span><span class="boring">fn main() {
 </span>    fn update_distance_system() -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;update_distance&quot;)
+            .with_name("update_distance")
             .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
             .for_each(|(id, pos, dist)| {
-                println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                println!("Updating distance for {id} with position: {pos:?}");
                 *dist = pos.length();
             })
             .boxed()
@@ -722,12 +722,12 @@ queries, world access, and much more along with the logic to execute with it.</p
 </span>    /// Despawn all entities with a distance &gt; 50
     fn despawn_system() -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;delete_outside_world&quot;)
+            .with_name("delete_outside_world")
             .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
             .with_cmd_mut()
             .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
                 for (id, &amp;dist) in &amp;mut q {
-                    println!(&quot;Despawning {id} at: {dist}&quot;);
+                    println!("Despawning {id} at: {dist}");
                     cmd.despawn(id);
                 }
             })
@@ -736,10 +736,10 @@ queries, world access, and much more along with the logic to execute with it.</p
 
     fn inspect_system() -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;debug_world&quot;)
+            .with_name("debug_world")
             .with_world()
             .build(|_world: &amp;_| {
-                // println!(&quot;World: {_world:#?}&quot;);
+                // println!("World: {_world:#?}");
             })
             .boxed()
     }
@@ -751,7 +751,7 @@ queries, world access, and much more along with the logic to execute with it.</p
 
     fn move_system() -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;move_out&quot;)
+            .with_name("move_out")
             .with_query(Query::new(position().as_mut()).filter(is_static().without()))
             .for_each(|pos| {
                 let dir = pos.normalize_or_zero();
@@ -767,12 +767,12 @@ queries, world access, and much more along with the logic to execute with it.</p
     // Spawn new entities with a random position each frame
     fn spawn_system(mut rng: StdRng, count: usize) -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;spawn&quot;)
+            .with_name("spawn")
             .with_cmd_mut()
             .build(move |cmd: &amp;mut CommandBuffer| {
                 for _ in 0..count {
                     let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-                    println!(&quot;Spawning new entity at: {pos:?}&quot;);
+                    println!("Spawning new entity at: {pos:?}");
                     Entity::builder()
                         .set(position(), pos)
                         .set_default(distance())
@@ -796,7 +796,7 @@ queries, world access, and much more along with the logic to execute with it.</p
         .build();
 
     for i in 0..20 {
-        println!(&quot;Frame: {i}&quot;);
+        println!("Frame: {i}");
         schedule.execute_par(&amp;mut world)?;
     }
 
@@ -812,21 +812,21 @@ as it may access anything.</p>
 </span><span class="boring">fn main() {
 </span>    // Despawn all entities with a distance &gt; 50
     let despawn = System::builder()
-        .with_name(&quot;delete_outside_world&quot;)
+        .with_name("delete_outside_world")
         .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (id, &amp;dist) in &amp;mut q {
-                println!(&quot;Despawning {id} at: {dist}&quot;);
+                println!("Despawning {id} at: {dist}");
                 cmd.despawn(id);
             }
         });
 
     let debug_world = System::builder()
-        .with_name(&quot;debug_world&quot;)
+        .with_name("debug_world")
         .with_world()
         .build(|world: &amp;_| {
-            tracing::debug!(&quot;World: {world:?}&quot;);
+            tracing::debug!("World: {world:?}");
         });
 
 <span class="boring">}</span></code></pre></pre>
@@ -845,21 +845,21 @@ sequence.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    let despawn = System::builder()
-        .with_name(&quot;delete_outside_world&quot;)
+        .with_name("delete_outside_world")
         .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (id, &amp;dist) in &amp;mut q {
-                println!(&quot;Despawning {id} at: {dist}&quot;);
+                println!("Despawning {id} at: {dist}");
                 cmd.despawn(id);
             }
         });
 
     let debug_world = System::builder()
-        .with_name(&quot;debug_world&quot;)
+        .with_name("debug_world")
         .with_world()
         .build(|world: &amp;_| {
-            tracing::debug!(&quot;World: {world:?}&quot;);
+            tracing::debug!("World: {world:?}");
         });
 
 
@@ -882,7 +882,7 @@ sequence.</p>
     // Since this system will move non static entities out from the origin, they will
     // eventually be despawned
     let move_out = System::builder()
-        .with_name(&quot;move_out&quot;)
+        .with_name("move_out")
         .with_query(Query::new(position().as_mut()).filter(is_static().without()))
         .for_each(|pos| {
             let dir = pos.normalize_or_zero();
@@ -891,11 +891,11 @@ sequence.</p>
         });
 
     // Spawn new entities with a random position each frame
-    let spawn = System::builder().with_name(&quot;spawner&quot;).with_cmd_mut().build(
+    let spawn = System::builder().with_name("spawner").with_cmd_mut().build(
         move |cmd: &amp;mut CommandBuffer| {
             for _ in 0..100 {
                 let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-                println!(&quot;Spawning new entity at: {pos:?}&quot;);
+                println!("Spawning new entity at: {pos:?}");
                 Entity::builder()
                     .set(position(), pos)
                     .set_default(distance())
@@ -908,11 +908,11 @@ sequence.</p>
 
     // Count the number of entities in the world and log it
     let count = System::builder()
-        .with_name(&quot;count&quot;)
+        .with_name("count")
         .with_query(Query::new(()))
         .build(move |mut query: QueryBorrow&lt;()&gt;| {
             let count: usize = query.iter_batched().map(|v| v.len()).sum();
-            println!(&quot;[{frame_count}]: {count}&quot;);
+            println!("[{frame_count}]: {count}");
             frame_count += 1;
         });
 
@@ -926,11 +926,11 @@ sequence.</p>
         .with_system(count)
         .build();
 
-    println!(&quot;{schedule:#?}&quot;);
+    println!("{schedule:#?}");
 
     for i in 0..20 {
-        println!(&quot;Frame: {i}&quot;);
-        println!(&quot;Batches: {:#?}&quot;, schedule.batch_info(&amp;world));
+        println!("Frame: {i}");
+        println!("Batches: {:#?}", schedule.batch_info(&amp;world));
         schedule.execute_par(&amp;mut world)?;
     }
 
@@ -957,9 +957,9 @@ the world, like a function which only creates the <code>EntityBuilder</code>.</p
     world.set(player, health(), 100.0).unwrap();
     world.set(player, position(), (5.0, 2.3)).unwrap();
     world.set(player, is_player(), ()).unwrap();
-    world.set(player, name(), &quot;Player&quot;.into()).unwrap();
+    world.set(player, name(), "Player".into()).unwrap();
 
-    tracing::info!(&quot;Player: {:#?}&quot;, world.format_entities(&amp;[player]));
+    tracing::info!("Player: {:#?}", world.format_entities(&amp;[player]));
     world.despawn(player).unwrap();
 
     // Do this
@@ -967,10 +967,10 @@ the world, like a function which only creates the <code>EntityBuilder</code>.</p
         .set(health(), 100.0)
         .set(position(), (5.0, 2.3))
         .tag(is_player())
-        .set(name(), &quot;Player&quot;.into())
+        .set(name(), "Player".into())
         .spawn(&amp;mut world);
 
-    tracing::info!(&quot;Player: {:#?}&quot;, world.format_entities(&amp;[player]));
+    tracing::info!("Player: {:#?}", world.format_entities(&amp;[player]));
 
 <span class="boring">}</span></code></pre></pre>
 <p>When the entity builder is spawned, the held components are moved out into the
@@ -990,28 +990,28 @@ matching archetype in the world.</p>
                     position(),
                     (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0)),
                 )
-                .set(name(), format!(&quot;Enemy.{i}&quot;))
+                .set(name(), format!("Enemy.{i}"))
                 .spawn(&amp;mut world)
         })
         .collect_vec();
 
-    tracing::info!(&quot;Enemies: {enemies:?}&quot;);
+    tracing::info!("Enemies: {enemies:?}");
 <span class="boring">}</span></code></pre></pre>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span>
 <span class="boring">fn main() {
 </span>    let mut query = Query::new((name(), position(), is_player().opt(), health()));
     for (name, pos, is_player, health) in &amp;mut query.borrow(&amp;world) {
-        tracing::info!(&quot;name: {name}, pos: {pos:?}, player: {is_player:?}, health: {health}&quot;);
+        tracing::info!("name: {name}, pos: {pos:?}, player: {is_player:?}, health: {health}");
     }
 
     // Or to only get the non players
 
     {
         let mut query = Query::new((name(), position(), health())).without(is_player());
-        info_span!(&quot;enemies&quot;);
+        info_span!("enemies");
         for (name, pos, health) in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;name: {name}, pos: {pos:?}, health: {health}&quot;);
+            tracing::info!("name: {name}, pos: {pos:?}, health: {health}");
         }
     }
 
@@ -1027,8 +1027,8 @@ format of the archetype storage and is thus maximally efficient.</p>
 <span class="boring">fn main() {
 </span>    let mut trees = BatchSpawn::new(10000);
     trees
-        .set(name(), (0..).map(|i| format!(&quot;Tree.{i}&quot;)))
-        .expect(&quot;Invalid length&quot;);
+        .set(name(), (0..).map(|i| format!("Tree.{i}")))
+        .expect("Invalid length");
 
     trees
         .set(
@@ -1038,11 +1038,11 @@ format of the archetype storage and is thus maximally efficient.</p>
                 (f.cos() * (1.0 + f / 2.0), f.sin() * (1.0 + f / 2.0))
             }),
         )
-        .expect(&quot;Invalid length&quot;);
+        .expect("Invalid length");
 
     let trees = trees.spawn(&amp;mut world);
 
-    tracing::info!(&quot;Trees: {:#?}&quot;, world.format_entities(&amp;trees[0..100]));
+    tracing::info!("Trees: {:#?}", world.format_entities(&amp;trees[0..100]));
 
 <span class="boring">}</span></code></pre></pre>
 <h2 id="hierarchy"><a class="header" href="#hierarchy">Hierarchy</a></h2>
@@ -1054,19 +1054,19 @@ the world.</p>
 </span>
 <span class="boring">fn main() {
 </span>    let id = Entity::builder()
-        .set(name(), &quot;parent&quot;.into())
+        .set(name(), "parent".into())
         .attach(
             child_of,
             Entity::builder()
-                .set(name(), &quot;child1&quot;.into())
-                .attach(child_of, Entity::builder().set(name(), &quot;child1.1&quot;.into())),
+                .set(name(), "child1".into())
+                .attach(child_of, Entity::builder().set(name(), "child1.1".into())),
         )
-        .attach(child_of, Entity::builder().set(name(), &quot;child2&quot;.into()))
+        .attach(child_of, Entity::builder().set(name(), "child2".into()))
         .spawn(&amp;mut world);
 
-    tracing::info!(&quot;Parent: {id}&quot;);
+    tracing::info!("Parent: {id}");
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
 
 <span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="commandbuffer"><a class="header" href="#commandbuffer">CommandBuffer</a></h1>
@@ -1084,16 +1084,16 @@ in other situations where a mutable reference to the world is not available.</p>
 
     let mut cmd = CommandBuffer::new();
 
-    cmd.spawn(Entity::builder().set(name(), &quot;a&quot;.into()));
+    cmd.spawn(Entity::builder().set(name(), "a".into()));
 
     cmd.apply(&amp;mut world)?;
 
     let id = Query::new(entity_ids())
-        .filter(name().eq(&quot;a&quot;))
+        .filter(name().eq("a"))
         .borrow(&amp;world)
         .iter()
         .next()
-        .context(&quot;Missing entity&quot;)?;
+        .context("Missing entity")?;
 
     cmd.set(id, position(), vec2(32.0, 2.6));
     let id2 = world.spawn();
@@ -1101,7 +1101,7 @@ in other situations where a mutable reference to the world is not available.</p>
     cmd.spawn_at(
         id,
         EntityBuilder::new()
-            .set(name(), &quot;b&quot;.into())
+            .set(name(), "b".into())
             .set(position(), vec2(4.6, 8.4)),
     );
 
@@ -1131,17 +1131,17 @@ in other situations where a mutable reference to the world is not available.</p>
     // Make sure there are always 64 entities in the world
     let mut rng = StdRng::seed_from_u64(42);
     let spawner = System::builder()
-        .with_name(&quot;spawn_entities&quot;)
+        .with_name("spawn_entities")
         .with_query(Query::new(()))
         .with_cmd_mut()
         .build(move |mut q: QueryBorrow&lt;()&gt;, cmd: &amp;mut CommandBuffer| {
             let count = q.count();
 
             for _ in count..64 {
-                tracing::info!(&quot;Spawning new entity&quot;);
+                tracing::info!("Spawning new entity");
                 cmd.spawn(
                     Entity::builder()
-                        .set(name(), &quot;entity&quot;.to_string())
+                        .set(name(), "entity".to_string())
                         .set(position(), rng.gen()),
                 );
             }
@@ -1149,13 +1149,13 @@ in other situations where a mutable reference to the world is not available.</p>
 
     // Ensure a world matrix to each entity with a position
     let add_world_matrix = System::builder()
-        .with_name(&quot;add_world_matrix&quot;)
+        .with_name("add_world_matrix")
         .with_query(Query::new((entity_ids(), position())).without(world_matrix()))
         .with_cmd_mut()
         .build(
             |mut q: QueryBorrow&lt;(EntityIds, Component&lt;Vec2&gt;), _&gt;, cmd: &amp;mut CommandBuffer| {
                 for (id, pos) in &amp;mut q {
-                    tracing::info!(&quot;Adding world matrix to {id}&quot;);
+                    tracing::info!("Adding world matrix to {id}");
                     cmd.set(id, world_matrix(), Mat4::from_translation(pos.extend(0.0)));
                 }
             },
@@ -1163,13 +1163,13 @@ in other situations where a mutable reference to the world is not available.</p>
 
     // Update the world matrix if position changes
     let update_world_matrix = System::builder()
-        .with_name(&quot;update_world_matrix&quot;)
+        .with_name("update_world_matrix")
         .with_query(
             Query::new((entity_ids(), position(), world_matrix().as_mut()))
                 .filter(position().modified()),
         )
         .for_each(|(id, pos, ltw)| {
-            tracing::info!(&quot;Updating world matrix for {id}&quot;);
+            tracing::info!("Updating world matrix for {id}");
             *ltw = Mat4::from_translation(pos.extend(0.0));
         });
 
@@ -1183,7 +1183,7 @@ in other situations where a mutable reference to the world is not available.</p>
 
     schedule
         .execute_par(&amp;mut world)
-        .context(&quot;Failed to run schedule&quot;)?;
+        .context("Failed to run schedule")?;
 
 <span class="boring">}</span></code></pre></pre>
 <p>The commandbuffer will be applied at the end of the schedule automatically.</p>
@@ -1205,16 +1205,16 @@ to the following systems.</p>
     }
 
     let parent = Entity::builder()
-        .set(name(), &quot;Parent&quot;.into())
+        .set(name(), "Parent".into())
         .spawn(&amp;mut world);
 
     let child1 = Entity::builder()
-        .set(name(), &quot;Child1&quot;.into())
+        .set(name(), "Child1".into())
         .set_default(child_of(parent))
         .spawn(&amp;mut world);
 
     let child2 = Entity::builder()
-        .set(name(), &quot;Child2&quot;.into())
+        .set(name(), "Child2".into())
         .set_default(child_of(parent))
         .spawn(&amp;mut world);
 <span class="boring">}</span></code></pre></pre>
@@ -1225,18 +1225,18 @@ to the following systems.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    let parent2 = Entity::builder()
-        .set(name(), &quot;Parent2&quot;.into())
+        .set(name(), "Parent2".into())
         .spawn(&amp;mut world);
 
     world.set(child1, child_of(parent2), ())?;
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
 
     // Give child1 yet one more parent
     world.set(child1, child_of(parent2), ())?;
 
     tracing::info!(
-        &quot;Connections from child1({child1}): {:?}&quot;,
+        "Connections from child1({child1}): {:?}",
         Query::new(relations_like(child_of))
             .borrow(&amp;world)
             .get(child1)?
@@ -1255,20 +1255,20 @@ used to exclude components.</p>
         .with(child_of(parent))
         .collect_vec(&amp;world);
 
-    tracing::info!(&quot;Children: {children_of_parent:?}&quot;);
+    tracing::info!("Children: {children_of_parent:?}");
 
     // Matches a relation with any parent
     let all_children: Vec&lt;Entity&gt; = Query::new(entity_ids())
         .filter(child_of.with_relation())
         .collect_vec(&amp;world);
 
-    tracing::info!(&quot;Children: {all_children:?}&quot;);
+    tracing::info!("Children: {all_children:?}");
 
     let roots = Query::new(entity_ids())
         .filter(child_of.without_relation())
         .collect_vec(&amp;world);
 
-    tracing::info!(&quot;Roots: {roots:?}&quot;);
+    tracing::info!("Roots: {roots:?}");
 <span class="boring">}</span></code></pre></pre>
 <h2 id="associated-values"><a class="header" href="#associated-values">Associated values</a></h2>
 <p>In addition to linking between entities, a relation can also store additional data just like a component. This can be used to create weighted graphs or storing other additional information such as physical joint parameters.</p>
@@ -1292,25 +1292,25 @@ used to exclude components.</p>
     }
 
     let id1 = Entity::builder()
-        .set(name(), &quot;a&quot;.into())
+        .set(name(), "a".into())
         .set(position(), vec2(1.0, 4.0))
         .spawn(&amp;mut world);
 
     // Connect id2 to id1 with a spring of strength 2.0
     let id2 = Entity::builder()
-        .set(name(), &quot;b&quot;.into())
+        .set(name(), "b".into())
         .set(spring_joint(id1), Spring::new(2.0, 1.0))
         .set(position(), vec2(2.0, 0.0))
         .spawn(&amp;mut world);
 
     let _id3 = Entity::builder()
-        .set(name(), &quot;c&quot;.into())
+        .set(name(), "c".into())
         .set(spring_joint(id1), Spring::new(2.0, 3.0))
         .set(position(), vec2(2.0, 3.0))
         .spawn(&amp;mut world);
 
     let _id4 = Entity::builder()
-        .set(name(), &quot;d&quot;.into())
+        .set(name(), "d".into())
         .set(spring_joint(id2), Spring::new(5.0, 0.5))
         .set(position(), vec2(1.0, 0.0))
         .spawn(&amp;mut world);
@@ -1324,16 +1324,16 @@ used to exclude components.</p>
             if let (Some(spring), Some((parent_name, parent_pos))) = (strength, parent) {
                 let distance = pos.distance(*parent_pos) - spring.length;
                 let force = distance * spring.strength;
-                tracing::info!(&quot;spring acting with {force:.1}N between {parent_name} and {name}&quot;);
+                tracing::info!("spring acting with {force:.1}N between {parent_name} and {name}");
             } else {
-                tracing::info!(%id, name, &quot;root&quot;);
+                tracing::info!(%id, name, "root");
             }
 
             Some((name, pos))
         });
 <span class="boring">}</span></code></pre></pre>
 <h1 id="exclusive-relations"><a class="header" href="#exclusive-relations">Exclusive relations</a></h1>
-<p>Relations can be declared as exclusive, which means that only one relation of that type can exist on an entity at a time. This is useful for cases where you want to have a single parent or outgoing connection. </p>
+<p>Relations can be declared as exclusive, which means that only one relation of that type can exist on an entity at a time. This is useful for cases where you want to have a single parent or outgoing connection.</p>
 <p><strong>Note</strong>: This does not prevent multiple entities from referencing the same entity, but rather an entity referencing multiple entities.</p>
 <p>When a new relation is added to an entity, any existing relation of the same type will be removed.</p>
 <p>This is the case for the included <a href="https://docs.rs/flax/latest/flax/components/fn.child_of.html"><code>child_of</code></a> relation.</p>
@@ -1353,7 +1353,7 @@ used to exclude components.</p>
     let entity = world.entity_mut(id3).unwrap();
 
     tracing::info!(
-        &quot;relations of {id3}: {:?}&quot;,
+        "relations of {id3}: {:?}",
         entity.relations(child_of).map(|v| v.0).collect_vec()
     );
 
@@ -1361,7 +1361,7 @@ used to exclude components.</p>
 
     let entity = world.entity_mut(id3).unwrap();
     tracing::info!(
-        &quot;relations of {id3}: {:?}&quot;,
+        "relations of {id3}: {:?}",
         entity.relations(child_of).map(|v| v.0).collect_vec()
     );
 <span class="boring">}</span></code></pre></pre>
@@ -1370,21 +1370,21 @@ used to exclude components.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>    tracing::info!(
-        &quot;has relation to: {parent2}: {}&quot;,
+        "has relation to: {parent2}: {}",
         world.has(child1, child_of(parent2))
     );
 
     world.despawn(parent2)?;
 
     tracing::info!(
-        &quot;has relation to: {parent2}: {}&quot;,
+        "has relation to: {parent2}: {}",
         world.has(child1, child_of(parent2))
     );
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
     world.despawn_recursive(parent, child_of)?;
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
 <span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="component-metadata"><a class="header" href="#component-metadata">Component metadata</a></h1>
 <p>The keen eyed of you may have noticed that <code>ComponentId</code> is the same as
@@ -1418,10 +1418,10 @@ When the component is first inserted into the world it can insert so called <em>
     world.set(id, health(), 100.0)?;
 
     let component_name = world.get(health().id(), name())?;
-    println!(&quot;The name of the component is {component_name:?}&quot;);
+    println!("The name of the component is {component_name:?}");
 
     // Print the state of the world
-    println!(&quot;World: {world:#?}&quot;);
+    println!("World: {world:#?}");
     // Prints:
     //
     // World: {
@@ -1436,8 +1436,8 @@ When the component is first inserted into the world it can insert so called <em>
     //     9v1: {},
     //     10v1: {},
     //     11v1: {
-    //         &quot;position&quot;: _,
-    //         &quot;health&quot;: 100.0,
+    //         "position": _,
+    //         "health": 100.0,
     //     },
     // }
 
@@ -1478,7 +1478,7 @@ enabled.</p>
 </span>        let mut query = Query::new(name());
 
         for name in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;Entity: {name:?}&quot;);
+            tracing::info!("Entity: {name:?}");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -1489,7 +1489,7 @@ enabled.</p>
 </span>        let mut query = Query::new((name(), position(), health()));
 
         for (name, pos, health) in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;Entity: {name:?} pos: {pos}, health: {health}&quot;);
+            tracing::info!("Entity: {name:?} pos: {pos}, health: {health}");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -1519,7 +1519,7 @@ enabled.</p>
 
         (&amp;mut query.borrow(&amp;world)).into_iter().for_each(
             |(name, pos, health): (&amp;String, &amp;Vec3, Option&lt;&amp;f32&gt;)| {
-                tracing::info!(&quot;Entity: {name:?} pos: {pos}, health: {health:?}&quot;);
+                tracing::info!("Entity: {name:?} pos: {pos}, health: {health:?}");
             },
         );
 
@@ -1538,9 +1538,9 @@ enabled.</p>
         let mut borrow = query.borrow(&amp;world);
 
         if let Some((name, health)) = borrow.iter().next() {
-            tracing::info!(&quot;The player {name} is alive and well at {health} health&quot;);
+            tracing::info!("The player {name} is alive and well at {health} health");
         } else {
-            tracing::info!(&quot;The player seems to have perished&quot;);
+            tracing::info!("The player seems to have perished");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -1551,7 +1551,7 @@ enabled.</p>
 </span>        let mut query = Query::new((name(), health())).filter(player().without());
 
         for (name, health) in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;Npc: {name} at {health} health&quot;);
+            tracing::info!("Npc: {name} at {health} health");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -1565,7 +1565,7 @@ enabled.</p>
 <span class="boring">fn main() {
 </span>        let mut query = Query::new(name()).filter(health().without() | health().ge(35.0));
         for name in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;{name} is still standing strong&quot;);
+            tracing::info!("{name} is still standing strong");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -1590,9 +1590,9 @@ for each entity.</p>
     let health_changes = System::builder()
         .with_query(query)
         .build(|mut query: QueryBorrow&lt;_&gt;| {
-            info_span!(&quot;health_changes&quot;);
+            info_span!("health_changes");
             for (name, health) in &amp;mut query {
-                tracing::info!(&quot;{name:?}: is now at {health} health&quot;);
+                tracing::info!("{name:?}: is now at {health} health");
             }
         });
 
@@ -1610,15 +1610,15 @@ mutable access.</p>
         .filter(health().le(0.0).modified());
 
     let cleanup = System::builder()
-        .with_name(&quot;cleanup&quot;)
+        .with_name("cleanup")
         .with_query(query)
         .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (name, id, is_player) in &amp;mut q {
                 if is_player {
-                    tracing::info!(&quot;Player died&quot;);
+                    tracing::info!("Player died");
                 }
-                tracing::info!(name, is_player, &quot;Despawning {id}&quot;);
+                tracing::info!(name, is_player, "Despawning {id}");
                 cmd.despawn(id);
             }
         });
@@ -1632,7 +1632,7 @@ needs to be something to modify the health of entities.</p>
 </span>
 <span class="boring">fn main() {
 </span>    let player_id = Entity::builder()
-        .set(name(), &quot;player&quot;.into())
+        .set(name(), "player".into())
         .set(health(), 100.0)
         .set_default(player())
         .spawn(&amp;mut world);
@@ -1640,7 +1640,7 @@ needs to be something to modify the health of entities.</p>
     let enemies = (0..10)
         .map(|i| {
             Entity::builder()
-                .set(name(), format!(&quot;enemy.{i}&quot;))
+                .set(name(), format!("enemy.{i}"))
                 .set(health(), 50.0)
                 .spawn(&amp;mut world)
         })
@@ -1671,7 +1671,7 @@ needs to be something to modify the health of entities.</p>
         .with_query(Query::new((name().opt(), health().as_mut(), poison())))
         .for_each(|(name, health, poison)| {
             *health -= poison;
-            tracing::info!(&quot;{name:?} suffered {poison} in poison damage&quot;);
+            tracing::info!("{name:?} suffered {poison} in poison damage");
         });
 
 <span class="boring">}</span></code></pre></pre>
@@ -1691,7 +1691,7 @@ is not a requirement for change detection.</p>
     while world.is_alive(player_id) {
         schedule
             .execute_par(&amp;mut world)
-            .expect(&quot;Failed to run schedule&quot;);
+            .expect("Failed to run schedule");
 
         sleep(Duration::from_millis(1000));
     }
@@ -1734,7 +1734,7 @@ a small physic calculation.</p>
 
     let mut borrow = query.borrow(&amp;world);
     let (width, height, vsync) = borrow.get().unwrap();
-    println!(&quot;width: {width} height: {height}, vsync: {vsync}&quot;);
+    println!("width: {width} height: {height}, vsync: {vsync}");
 
 <span class="boring">}</span></code></pre></pre>
 <p>In addition, an entity query can be used in a system</p>
@@ -1746,10 +1746,10 @@ a small physic calculation.</p>
         .build(|mut q: EntityBorrow&lt;_&gt;| {
             if let Ok((width, height, allow_vsync)) = q.get() {
                 println!(
-                    &quot;Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}&quot;
+                    "Config changed width: {width}, height: {height}, allow_vsync: {allow_vsync}"
                 );
             } else {
-                println!(&quot;No config change&quot;);
+                println!("No config change");
             }
         });
 
@@ -1768,21 +1768,21 @@ a small physic calculation.</p>
 </span>
 <span class="boring">fn main() {
 </span>    let root = Entity::builder()
-        .set(name(), &quot;root&quot;.into())
+        .set(name(), "root".into())
         .attach(
             child_of,
-            Entity::builder().set(name(), &quot;root.child.1&quot;.into()).attach(
+            Entity::builder().set(name(), "root.child.1".into()).attach(
                 child_of,
-                Entity::builder().set(name(), &quot;root.child.1.1&quot;.into()),
+                Entity::builder().set(name(), "root.child.1.1".into()),
             ),
         )
         .attach(
             child_of,
-            Entity::builder().set(name(), &quot;root.child.2&quot;.into()),
+            Entity::builder().set(name(), "root.child.2".into()),
         )
         .attach(
             child_of,
-            Entity::builder().set(name(), &quot;root.child.3&quot;.into()),
+            Entity::builder().set(name(), "root.child.3".into()),
         )
         .spawn(&amp;mut world);
 
@@ -1795,7 +1795,7 @@ a small physic calculation.</p>
 <span class="boring">fn main() {
 </span>        let mut query = Query::new((entity_ids(), name())).with_strategy(Dfs::new(child_of));
 
-        tracing::info!(&quot;Dfs:&quot;);
+        tracing::info!("Dfs:");
         for (id, name) in query.borrow(&amp;world).iter() {
             tracing::info!(?id, ?name);
         }
@@ -1830,15 +1830,15 @@ a small physic calculation.</p>
                 let indent = depth * 4;
                 writeln!(
                     buf,
-                    &quot;{:indent$}{name}: {pos} {world_pos}&quot;,
-                    &quot;&quot;,
+                    "{:indent$}{name}: {pos} {world_pos}",
+                    "",
                     indent = indent,
                 )
                 .unwrap();
                 depth + 1
             });
 
-            tracing::info!(&quot;{buf}&quot;);
+            tracing::info!("{buf}");
         });
 
     let mut schedule = Schedule::new()
@@ -1870,7 +1870,7 @@ the full tuple, I.e;</p>
 </span>    // Entities with mass
     (0..10).for_each(|i| {
         builder
-            .set(name(), format!(&quot;Entity.{i}&quot;))
+            .set(name(), format!("Entity.{i}"))
             .set(position(), rng.gen::&lt;Vec3&gt;() * 10.0)
             .set(velocity(), rng.gen())
             .set(mass(), rng.gen_range(10..30) as f32)
@@ -1880,7 +1880,7 @@ the full tuple, I.e;</p>
     // Entities without mass
     (0..100).for_each(|i| {
         builder
-            .set(name(), format!(&quot;Entity.{i}&quot;))
+            .set(name(), format!("Entity.{i}"))
             .set(position(), rng.gen::&lt;Vec3&gt;() * 0.5)
             .set(velocity(), rng.gen())
             .spawn(&amp;mut world);
@@ -1889,7 +1889,7 @@ the full tuple, I.e;</p>
     // Since this query accessed `position`, `velocity` **and** `mass` only the
     // first group of entities will be matched
     for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass())).borrow(&amp;world) {
-        tracing::debug!(&quot;pos: {pos}, vel: {vel}, mass: {mass}&quot;);
+        tracing::debug!("pos: {pos}, vel: {vel}, mass: {mass}");
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -1902,9 +1902,9 @@ the value yielded by the underlying fetch</p>
 </span>    // Use an optional fetch to yield an `Option&lt;T&gt;`, works for any query
     for (pos, vel, mass) in &amp;mut Query::new((position(), velocity(), mass().opt())).borrow(&amp;world) {
         if mass.is_some() {
-            tracing::debug!(&quot;Has mass&quot;);
+            tracing::debug!("Has mass");
         }
-        tracing::debug!(&quot;pos: {pos}, vel: {vel}, mass: {mass:?}&quot;);
+        tracing::debug!("pos: {pos}, vel: {vel}, mass: {mass:?}");
     }
 
 <span class="boring">}</span></code></pre></pre>
@@ -1932,7 +1932,7 @@ handle a 3d world.</p>
     }
 
     let create_world_matrix = System::builder()
-        .with_name(&quot;add_world_matrix&quot;)
+        .with_name("add_world_matrix")
         .with_query(
             Query::new(entity_ids())
                 .with(position())
@@ -1942,14 +1942,14 @@ handle a 3d world.</p>
         .build(
             |mut query: QueryBorrow&lt;EntityIds, _&gt;, cmd: &amp;mut CommandBuffer| {
                 for id in &amp;mut query {
-                    tracing::info!(&quot;Adding world matrix to {id}&quot;);
+                    tracing::info!("Adding world matrix to {id}");
                     cmd.set(id, world_matrix(), Mat4::IDENTITY);
                 }
             },
         );
 
     let update_world_matrix = System::builder()
-        .with_name(&quot;update_world_matrix&quot;)
+        .with_name("update_world_matrix")
         .with_query(
             Query::new((
                 entity_ids(),
@@ -1961,7 +1961,7 @@ handle a 3d world.</p>
             .filter(position().modified() | rotation().modified() | scale().modified()),
         )
         .for_each(|(id, world_matrix, pos, rot, scale)| {
-            tracing::info!(&quot;Updating world matrix for: {id} {pos} {rot} {scale}&quot;);
+            tracing::info!("Updating world matrix for: {id} {pos} {rot} {scale}");
             *world_matrix = Mat4::from_scale_rotation_translation(*scale, *rot, *pos);
         });
 
@@ -1973,15 +1973,15 @@ handle a 3d world.</p>
 
     let all_ids = Query::new(entity_ids()).borrow(&amp;world).iter().collect_vec();
 
-    tracing::info!(&quot;Schedule: {schedule:#?}&quot;);
+    tracing::info!("Schedule: {schedule:#?}");
 
     for _ in 0..10 {
         schedule
             .execute_par(&amp;mut world)
-            .expect(&quot;Failed to execute schedule&quot;);
+            .expect("Failed to execute schedule");
 
         for _ in 0..32 {
-            let id = *all_ids.choose(&amp;mut rng).expect(&quot;no ids&quot;);
+            let id = *all_ids.choose(&amp;mut rng).expect("no ids");
             let mut pos = world.get_mut(id, position())?;
             // Move a bit away from origin
             let dir = pos.normalize();
@@ -1995,7 +1995,7 @@ handle a 3d world.</p>
         sleep(Duration::from_secs(1))
     }
 
-    tracing::info!(&quot;World: {world:#?}&quot;);
+    tracing::info!("World: {world:#?}");
 
 <span class="boring">}</span></code></pre></pre>
 <h3 id="implementation-details-1"><a class="header" href="#implementation-details-1">Implementation details</a></h3>
@@ -2022,7 +2022,7 @@ spawned in the <code>STATIC</code> global namespace which is shared across all w
 
     let mut world = World::new();
 
-    let position: Component&lt;Vec2&gt; = world.spawn_component(&quot;position&quot;, |desc| {
+    let position: Component&lt;Vec2&gt; = world.spawn_component("position", |desc| {
         let mut buf = ComponentBuffer::new();
         &lt;Debug as MetaData&lt;Vec2&gt;&gt;::attach(desc, &amp;mut buf);
         buf
@@ -2032,13 +2032,13 @@ spawned in the <code>STATIC</code> global namespace which is shared across all w
         .set(position, vec2(1.0, 6.4))
         .spawn(&amp;mut world);
 
-    tracing::info!(&quot;world: {world:#?}&quot;);
+    tracing::info!("world: {world:#?}");
 
     // When `position` is despawned, it is removed from all entities.
     // This ensured that dead components never exist
     world.despawn(position.id())?;
 
-    tracing::info!(&quot;world: {world:#?}&quot;);
+    tracing::info!("world: {world:#?}");
 
     world.despawn(id)?;
 <span class="boring">}</span></code></pre></pre>
@@ -2069,7 +2069,7 @@ entity as the generation is not needed.</p>
         distance: f32,
     }
 
-    let child_of = world.spawn_relation::&lt;RelationData&gt;(&quot;child_of&quot;, |desc| {
+    let child_of = world.spawn_relation::&lt;RelationData&gt;("child_of", |desc| {
         let mut buf = ComponentBuffer::new();
         &lt;Debug as MetaData&lt;RelationData&gt;&gt;::attach(desc, &amp;mut buf);
         buf
@@ -2083,7 +2083,7 @@ entity as the generation is not needed.</p>
 
     let data = world.get(child, child_of(parent))?;
 
-    tracing::info!(&quot;Relation distance: {:?}&quot;, data.distance);
+    tracing::info!("Relation distance: {:?}", data.distance);
 
     drop(data);
 
@@ -2091,7 +2091,7 @@ entity as the generation is not needed.</p>
     assert!(world.get(child, child_of(parent)).is_err());
 
 <span class="boring">}</span></code></pre></pre>
-<p>When despawning either the relation component or target entity, the &quot;parent&quot;,
+<p>When despawning either the relation component or target entity, the "parent",
 the component is removed from all entities.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="serialization-and-deserialization"><a class="header" href="#serialization-and-deserialization">Serialization and deserialization</a></h1>
 <p>While the built in reflection system could be used for serialization, similar
@@ -2117,7 +2117,7 @@ components.</p>
     tracing_subscriber::fmt().init();
 
     use flax::serialize::{SerdeBuilder, SerializeFormat};
-    tracing::info!(&quot;It works&quot;);
+    tracing::info!("It works");
 
     let mut world = World::new();
 
@@ -2130,7 +2130,7 @@ components.</p>
         (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
     )?;
     batch.set(velocity(), (&amp;mut rng).sample_iter(Standard))?;
-    batch.set(name(), (0..).map(|v| format!(&quot;id.{v}&quot;)))?;
+    batch.set(name(), (0..).map(|v| format!("id.{v}")))?;
 
     batch.spawn(&amp;mut world);
 
@@ -2140,7 +2140,7 @@ components.</p>
         position(),
         (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
     )?;
-    batch.set(name(), (16..).map(|v| format!(&quot;id.{v}&quot;)))?;
+    batch.set(name(), (16..).map(|v| format!("id.{v}")))?;
     batch.spawn(&amp;mut world);
 
 <span class="boring">}</span></code></pre></pre>
@@ -2157,7 +2157,7 @@ it implements <code>Serialize</code>.</p>
     let json =
         serde_json::to_string_pretty(&amp;serializer.serialize(&amp;world, SerializeFormat::RowMajor))?;
 
-    // eprintln!(&quot;World: {json}&quot;);
+    // eprintln!("World: {json}");
 <span class="boring">}</span></code></pre></pre>
 <p>When deserializing a world it is often of interest in merging it or
 deserializing <em>into</em> another world.</p>
@@ -2177,7 +2177,7 @@ deserialization failed.</p>
         position(),
         (&amp;mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
     )?;
-    batch.set(name(), (0..).map(|v| format!(&quot;other_id.{v}&quot;)))?;
+    batch.set(name(), (0..).map(|v| format!("other_id.{v}")))?;
     batch.spawn(&amp;mut world);
 
     let mut result = deserializer.deserialize(&amp;mut serde_json::Deserializer::from_str(&amp;json))?;
@@ -2185,7 +2185,7 @@ deserialization failed.</p>
     // Merge `result` into `world`
     world.merge_with(&amp;mut result);
 
-    // eprintln!(&quot;World: {world:#?}&quot;);
+    // eprintln!("World: {world:#?}");
 
 <span class="boring">}</span></code></pre></pre>
 

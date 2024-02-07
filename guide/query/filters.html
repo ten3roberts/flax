@@ -187,9 +187,9 @@
         let mut borrow = query.borrow(&amp;world);
 
         if let Some((name, health)) = borrow.iter().next() {
-            tracing::info!(&quot;The player {name} is alive and well at {health} health&quot;);
+            tracing::info!("The player {name} is alive and well at {health} health");
         } else {
-            tracing::info!(&quot;The player seems to have perished&quot;);
+            tracing::info!("The player seems to have perished");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -200,7 +200,7 @@
 </span>        let mut query = Query::new((name(), health())).filter(player().without());
 
         for (name, health) in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;Npc: {name} at {health} health&quot;);
+            tracing::info!("Npc: {name} at {health} health");
         }
 
 <span class="boring">}</span></code></pre></pre>
@@ -214,7 +214,7 @@
 <span class="boring">fn main() {
 </span>        let mut query = Query::new(name()).filter(health().without() | health().ge(35.0));
         for name in &amp;mut query.borrow(&amp;world) {
-            tracing::info!(&quot;{name} is still standing strong&quot;);
+            tracing::info!("{name} is still standing strong");
         }
 
 <span class="boring">}</span></code></pre></pre>

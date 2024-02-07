@@ -181,21 +181,21 @@
 </span>
 <span class="boring">fn main() {
 </span>    let root = Entity::builder()
-        .set(name(), &quot;root&quot;.into())
+        .set(name(), "root".into())
         .attach(
             child_of,
-            Entity::builder().set(name(), &quot;root.child.1&quot;.into()).attach(
+            Entity::builder().set(name(), "root.child.1".into()).attach(
                 child_of,
-                Entity::builder().set(name(), &quot;root.child.1.1&quot;.into()),
+                Entity::builder().set(name(), "root.child.1.1".into()),
             ),
         )
         .attach(
             child_of,
-            Entity::builder().set(name(), &quot;root.child.2&quot;.into()),
+            Entity::builder().set(name(), "root.child.2".into()),
         )
         .attach(
             child_of,
-            Entity::builder().set(name(), &quot;root.child.3&quot;.into()),
+            Entity::builder().set(name(), "root.child.3".into()),
         )
         .spawn(&amp;mut world);
 
@@ -208,7 +208,7 @@
 <span class="boring">fn main() {
 </span>        let mut query = Query::new((entity_ids(), name())).with_strategy(Dfs::new(child_of));
 
-        tracing::info!(&quot;Dfs:&quot;);
+        tracing::info!("Dfs:");
         for (id, name) in query.borrow(&amp;world).iter() {
             tracing::info!(?id, ?name);
         }
@@ -243,15 +243,15 @@
                 let indent = depth * 4;
                 writeln!(
                     buf,
-                    &quot;{:indent$}{name}: {pos} {world_pos}&quot;,
-                    &quot;&quot;,
+                    "{:indent$}{name}: {pos} {world_pos}",
+                    "",
                     indent = indent,
                 )
                 .unwrap();
                 depth + 1
             });
 
-            tracing::info!(&quot;{buf}&quot;);
+            tracing::info!("{buf}");
         });
 
     let mut schedule = Schedule::new()

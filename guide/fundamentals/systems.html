@@ -182,12 +182,12 @@ queries, world access, and much more along with the logic to execute with it.</p
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>        let update_distance = System::builder()
-            .with_name(&quot;update_distance&quot;)
+            .with_name("update_distance")
             .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
             .build(
                 |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
                     for (id, pos, dist) in &amp;mut query {
-                        println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                        println!("Updating distance for {id} with position: {pos:?}");
                         *dist = pos.length();
                     }
                 },
@@ -198,12 +198,12 @@ queries, world access, and much more along with the logic to execute with it.</p
 </span><span class="boring">fn main() {
 </span>        fn update_distance_system() -&gt; BoxedSystem {
             System::builder()
-                .with_name(&quot;update_distance&quot;)
+                .with_name("update_distance")
                 .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
                 .build(
                     |mut query: QueryBorrow&lt;(_, Component&lt;Vec2&gt;, Mutable&lt;f32&gt;), _&gt;| {
                         for (id, pos, dist) in &amp;mut query {
-                            println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                            println!("Updating distance for {id} with position: {pos:?}");
                             *dist = pos.length();
                         }
                     },
@@ -242,10 +242,10 @@ queries, world access, and much more along with the logic to execute with it.</p
 </span><span class="boring">fn main() {
 </span>    fn update_distance_system() -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;update_distance&quot;)
+            .with_name("update_distance")
             .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
             .for_each(|(id, pos, dist)| {
-                println!(&quot;Updating distance for {id} with position: {pos:?}&quot;);
+                println!("Updating distance for {id} with position: {pos:?}");
                 *dist = pos.length();
             })
             .boxed()
@@ -259,12 +259,12 @@ queries, world access, and much more along with the logic to execute with it.</p
 </span>    /// Despawn all entities with a distance &gt; 50
     fn despawn_system() -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;delete_outside_world&quot;)
+            .with_name("delete_outside_world")
             .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
             .with_cmd_mut()
             .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
                 for (id, &amp;dist) in &amp;mut q {
-                    println!(&quot;Despawning {id} at: {dist}&quot;);
+                    println!("Despawning {id} at: {dist}");
                     cmd.despawn(id);
                 }
             })
@@ -273,10 +273,10 @@ queries, world access, and much more along with the logic to execute with it.</p
 
     fn inspect_system() -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;debug_world&quot;)
+            .with_name("debug_world")
             .with_world()
             .build(|_world: &amp;_| {
-                // println!(&quot;World: {_world:#?}&quot;);
+                // println!("World: {_world:#?}");
             })
             .boxed()
     }
@@ -288,7 +288,7 @@ queries, world access, and much more along with the logic to execute with it.</p
 
     fn move_system() -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;move_out&quot;)
+            .with_name("move_out")
             .with_query(Query::new(position().as_mut()).filter(is_static().without()))
             .for_each(|pos| {
                 let dir = pos.normalize_or_zero();
@@ -304,12 +304,12 @@ queries, world access, and much more along with the logic to execute with it.</p
     // Spawn new entities with a random position each frame
     fn spawn_system(mut rng: StdRng, count: usize) -&gt; BoxedSystem {
         System::builder()
-            .with_name(&quot;spawn&quot;)
+            .with_name("spawn")
             .with_cmd_mut()
             .build(move |cmd: &amp;mut CommandBuffer| {
                 for _ in 0..count {
                     let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-                    println!(&quot;Spawning new entity at: {pos:?}&quot;);
+                    println!("Spawning new entity at: {pos:?}");
                     Entity::builder()
                         .set(position(), pos)
                         .set_default(distance())
@@ -333,7 +333,7 @@ queries, world access, and much more along with the logic to execute with it.</p
         .build();
 
     for i in 0..20 {
-        println!(&quot;Frame: {i}&quot;);
+        println!("Frame: {i}");
         schedule.execute_par(&amp;mut world)?;
     }
 
@@ -349,21 +349,21 @@ as it may access anything.</p>
 </span><span class="boring">fn main() {
 </span>    // Despawn all entities with a distance &gt; 50
     let despawn = System::builder()
-        .with_name(&quot;delete_outside_world&quot;)
+        .with_name("delete_outside_world")
         .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
         .with_cmd_mut()
         .build(|mut q: QueryBorrow&lt;_, _&gt;, cmd: &amp;mut CommandBuffer| {
             for (id, &amp;dist) in &amp;mut q {
-                println!(&quot;Despawning {id} at: {dist}&quot;);
+                println!("Despawning {id} at: {dist}");
                 cmd.despawn(id);
             }
         });
 
     let debug_world = System::builder()
-        .with_name(&quot;debug_world&quot;)
+        .with_name("debug_world")
         .with_world()
         .build(|world: &amp;_| {
-            tracing::debug!(&quot;World: {world:?}&quot;);
+            tracing::debug!("World: {world:?}");
         });
 
 <span class="boring">}</span></code></pre></pre>
