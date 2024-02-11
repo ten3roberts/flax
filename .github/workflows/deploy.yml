@@ -13,9 +13,9 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v2
-      - uses: dtolnay/rust-toolchain@1.70.0
+      - uses: dtolnay/rust-toolchain@master
         with:
-          target: wasm32-unknown-unknown
+          targets: wasm32-unknown-unknown
       - run: cargo build --release --package asteroids --target wasm32-unknown-unknown --manifest-path=asteroids/Cargo.toml
       - run: mv ./target/wasm32-unknown-unknown/release/asteroids.wasm ./asteroids/public
       - name: Upload Artefact

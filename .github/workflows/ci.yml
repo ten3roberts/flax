@@ -14,112 +14,65 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          profile: minimal
-
+      - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@nextest
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run --all-features
+        run: cargo nextest run --all-features
 
   test_miri:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install nightly
-        uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
-          override: true
           components: miri
 
       - uses: taiki-e/install-action@nextest
 
       - name: Run cargo miri
-        uses: actions-rs/cargo@v1
-        with:
-          command: miri
-          args: nextest run -j16 --no-default-features --features std,serde,flume,derive
+        run: cargo miri nextest run -j16 --no-default-features --features std,serde,flume,derive
 
   test_nostd:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          profile: minimal
-
+      - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@nextest
 
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run --no-default-features
+        run: cargo nextest run --no-default-features
 
   lint_doc:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          profile: minimal
-
+      - uses: dtolnay/rust-toolchain@stable
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --all-features
+        run: cargo doc --all-features
 
   test_doc:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          profile: minimal
-
+      - uses: dtolnay/rust-toolchain@stable
       - name: Run cargo test (doc)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --doc --all-features
+        run: cargo test --doc --all-features
 
   coverage:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v2
-      - name: Install nightly
-        uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
-          override: true
-          profile: minimal
           components: miri
 
       - uses: taiki-e/install-action@cargo-tarpaulin
 
       - name: Run cargo tarpaulin
-        uses: actions-rs/cargo@v1
-        with:
-          command: tarpaulin
-          args: --all-features --out Xml --engine llvm
+        run: cargo tarpaulin --all-features --out Xml --engine llvm
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v2
