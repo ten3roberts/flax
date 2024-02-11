@@ -194,6 +194,13 @@ impl EntityBuilder {
     pub fn component_count(&self) -> usize {
         self.buffer.len()
     }
+
+    /// Returns true if the builder does not contain any components
+    #[must_use]
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
 }
 
 impl Default for EntityBuilder {
