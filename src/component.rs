@@ -286,11 +286,6 @@ impl<T: ComponentValue> Component<T> {
     pub fn name(&self) -> &'static str {
         self.vtable.name
     }
-
-    /// Returns all metadata components
-    pub fn get_meta(&self) -> ComponentBuffer {
-        self.vtable.meta.get(self.desc())
-    }
 }
 
 impl<T: ComponentValue> Metadata<T> for Component<T> {
@@ -451,7 +446,7 @@ impl ComponentDesc {
         self.key.target.is_some()
     }
 
-    pub(crate) fn get_meta(&self) -> ComponentBuffer {
+    pub(crate) fn create_meta(&self) -> ComponentBuffer {
         self.vtable.meta.get(*self)
     }
 
