@@ -109,27 +109,11 @@ macro_rules! component {
         $(#[$outer])*
         $vis fn $name($obj: $crate::Entity) -> $crate::Component<$ty> {
 
-            static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
-            fn meta(_desc: $crate::component::ComponentDesc) -> $crate::buffer::ComponentBuffer {
-                let mut _buffer = $crate::buffer::ComponentBuffer::new();
-
-                <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
-                <$crate::Component<$ty> as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
-
-                $(
-                    $(
-                        <$metadata as $crate::metadata::Metadata::<$ty>>::attach(_desc, &mut _buffer);
-                    )*
-                )*
-
-                _buffer
-            }
-
-            static META: $crate::vtable::LazyComponentBuffer = $crate::vtable::LazyComponentBuffer::new(meta);
-            static VTABLE: &$crate::vtable::ComponentVTable<$ty> =
-                &$crate::vtable::ComponentVTable::new(stringify!($name), &META);
             use $crate::entity::EntityKind;
             use $crate::relation::RelationExt;
+
+            static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
+            static VTABLE: &$crate::vtable::ComponentVTable<$ty> = $crate::component_vtable!($name: $ty $(=> [$($metadata),*])?);
             $crate::Component::static_init(&COMPONENT_ID, EntityKind::COMPONENT, VTABLE).of($obj)
         }
 
@@ -142,26 +126,10 @@ macro_rules! component {
 
         $(#[$outer])*
         $vis fn $name() -> $crate::Component<$ty> {
-        static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
-            fn meta(_desc: $crate::component::ComponentDesc) -> $crate::buffer::ComponentBuffer {
-                let mut _buffer = $crate::buffer::ComponentBuffer::new();
-
-                <$crate::metadata::Name as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
-                <$crate::Component<$ty> as $crate::metadata::Metadata<$ty>>::attach(_desc, &mut _buffer);
-
-                $(
-                    $(
-                        <$metadata as $crate::metadata::Metadata::<$ty>>::attach(_desc, &mut _buffer);
-                    )*
-                )*
-
-                _buffer
-            }
-
-            static META: $crate::vtable::LazyComponentBuffer = $crate::vtable::LazyComponentBuffer::new(meta);
-            static VTABLE: &$crate::vtable::ComponentVTable<$ty> =
-                &$crate::vtable::ComponentVTable::new(stringify!($name), &META);
             use $crate::entity::EntityKind;
+
+            static COMPONENT_ID: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new($crate::entity::EntityIndex::MAX);
+            static VTABLE: &$crate::vtable::ComponentVTable<$ty> = $crate::component_vtable!($name: $ty $(=> [$($metadata),*])?);
             $crate::Component::static_init(&COMPONENT_ID, EntityKind::COMPONENT, VTABLE)
         }
 
@@ -204,11 +172,10 @@ macro_rules! component_vtable {
 
             }
 
-            static META: $crate::vtable::LazyComponentBuffer = $crate::vtable::LazyComponentBuffer::new(meta);
-            static VTABLE: &$crate::vtable::ComponentVTable<$ty> =
-                &$crate::vtable::ComponentVTable::new(stringify!($name), &META);
+            static VTABLE: $crate::vtable::ComponentVTable<$ty> =
+                $crate::vtable::ComponentVTable::new(stringify!($name), $crate::vtable::LazyComponentBuffer::new(meta));
 
-            VTABLE
+            &VTABLE
         }
 
     };
