@@ -11,15 +11,16 @@ use glam::{vec2, Vec2};
 fn custom_component() {
     let mut world = World::new();
 
-    static META: LazyComponentBuffer = LazyComponentBuffer::new(|desc| {
-        let mut buf = ComponentBuffer::new();
-        <Debuggable as Metadata<Vec2>>::attach(desc, &mut buf);
-        buf
-    });
+    static VTABLE: ComponentVTable<Vec2> = ComponentVTable::new(
+        "position",
+        LazyComponentBuffer::new(|desc| {
+            let mut buf = ComponentBuffer::new();
+            <Debuggable as Metadata<Vec2>>::attach(desc, &mut buf);
+            buf
+        }),
+    );
 
-    static VTABLE: &ComponentVTable<Vec2> = &ComponentVTable::new("position", &META);
-
-    let position = world.spawn_component(VTABLE);
+    let position = world.spawn_component(&VTABLE);
 
     let id = Entity::builder()
         .set(position, vec2(1.0, 6.4))

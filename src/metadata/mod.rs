@@ -46,7 +46,7 @@ mod test {
             foo: String => [crate::Debuggable],
         }
 
-        let meta = foo().get_meta();
+        let meta = foo().desc().create_meta();
 
         assert!(meta.get(debuggable()).is_some());
         assert_eq!(meta.get(name()), Some(&"foo".into()));

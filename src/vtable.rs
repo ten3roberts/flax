@@ -43,7 +43,7 @@ pub struct UntypedVTable {
     pub(crate) dangling: fn() -> NonNull<u8>,
     /// A metadata is a component which is attached to the component, such as
     /// metadata or name
-    pub(crate) meta: &'static LazyComponentBuffer,
+    pub(crate) meta: LazyComponentBuffer,
 }
 
 impl UntypedVTable {
@@ -55,7 +55,7 @@ impl UntypedVTable {
     /// Creates a new vtable of type `T`
     pub(crate) const fn new<T: ComponentValue>(
         name: &'static str,
-        meta: &'static LazyComponentBuffer,
+        meta: LazyComponentBuffer,
     ) -> Self {
         unsafe fn drop_ptr<T>(x: *mut u8) {
             x.cast::<T>().drop_in_place()
@@ -99,7 +99,7 @@ impl<T> core::ops::Deref for ComponentVTable<T> {
 
 impl<T: ComponentValue> ComponentVTable<T> {
     /// Creates a new *typed* vtable of `T`
-    pub const fn new(name: &'static str, meta: &'static LazyComponentBuffer) -> Self {
+    pub const fn new(name: &'static str, meta: LazyComponentBuffer) -> Self {
         Self {
             inner: UntypedVTable::new::<T>(name, meta),
             marker: PhantomData,
