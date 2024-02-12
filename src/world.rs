@@ -342,7 +342,7 @@ impl World {
         }
 
         let id = desc.key().id;
-        let mut meta = desc.get_meta();
+        let mut meta = desc.create_meta();
         meta.set(component_info(), desc);
         meta.set(name(), desc.name().into());
 
@@ -917,7 +917,7 @@ impl World {
 
         let desc = component.desc();
 
-        let mut meta = desc.get_meta();
+        let mut meta = desc.create_meta();
         meta.set(component_info(), desc);
         meta.set(components::name(), desc.name().into());
 
