@@ -206,8 +206,8 @@ fn many_detach() {
     assert_eq!(
         Query::new((
             entity_ids(),
-            nth_relation(child_of, 0),
-            nth_relation(child_of, 2).opt()
+            child_of.first_relation(),
+            child_of.nth_relation(2).opt(),
         ))
         .borrow(&world)
         .iter()

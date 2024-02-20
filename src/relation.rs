@@ -11,6 +11,7 @@ use crate::{
     archetype::{Archetype, Cell, RefMut, Slot},
     component::{dummy, ComponentKey, ComponentValue},
     entity::EntityKind,
+    fetch::{nth_relation, NthRelation},
     filter::{WithRelation, WithoutRelation},
     vtable::{ComponentVTable, UntypedVTable},
     Component, Entity,
@@ -39,6 +40,27 @@ where
             vtable: self.vtable(),
             marker: PhantomData,
         }
+    }
+
+    /// Query the nth relation of the specified kind.
+    ///
+    /// This is useful for [`Exclusive`](crate::metadata::Exclusive) relations where there is only one parent
+    ///
+    /// **Note**: Fails to match if there is no nth relation, prefer using [`opt`](crate::FetchExt::opt) for
+    /// optional relations.
+    fn nth_relation(self, n: usize) -> NthRelation<T>
+    where
+        Self: Sized,
+    {
+        nth_relation(self, n)
+    }
+
+    /// Query the first relation of the specified kind.
+    fn first_relation(self) -> NthRelation<T>
+    where
+        Self: Sized,
+    {
+        nth_relation(self, 0)
     }
 }
 
