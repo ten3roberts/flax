@@ -1,6 +1,5 @@
 use flax::{
     components::{child_of, name},
-    fetch::nth_relation,
     filter::All,
     relation::RelationExt,
     *,
