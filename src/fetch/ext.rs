@@ -1,6 +1,6 @@
 use crate::{
     component::ComponentValue,
-    filter::{Cmp, Equal, Greater, GreaterEq, Less, LessEq},
+    filter::{Cmp, Equal, Filtered, Greater, GreaterEq, Less, LessEq},
     relation::RelationExt,
     Fetch, FetchItem,
 };
@@ -197,6 +197,14 @@ pub trait FetchExt: Sized {
         for<'x> F: Fn(<Self as FetchItem<'x>>::Item) -> T,
     {
         Map { query: self, func }
+    }
+
+    /// Filter a fetch with another fetch as predicate
+    fn filtered<F>(self, filter: F) -> Filtered<Self, F>
+    where
+        F: for<'x> Fetch<'x>,
+    {
+        Filtered::new(self, filter, true)
     }
 }
 
