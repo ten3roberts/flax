@@ -3,7 +3,7 @@ use core::{
     slice,
 };
 
-use alloc::vec::Vec;
+use alloc::{sync::Arc, vec::Vec};
 use smallvec::SmallVec;
 
 use crate::{
@@ -168,8 +168,11 @@ where
         Some(PreparedNthRelation { borrow })
     }
 
-    fn filter_arch(&self, _: FetchAccessData) -> bool {
-        true
+    fn filter_arch(&self, data: FetchAccessData) -> bool {
+        data.arch
+            .relations_like(self.relation.id)
+            .nth(self.n)
+            .is_some()
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
@@ -194,7 +197,7 @@ where
     }
 }
 
-impl<'q, T: ComponentValue> RandomFetch<'q> for PreparedNthRelation<'q, T> {
+impl<'w, 'q, T: ComponentValue> RandomFetch<'q> for PreparedNthRelation<'w, T> {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         let value = &self.borrow.1.get()[slot];
         (self.borrow.0, value)
