@@ -14,7 +14,7 @@ use crate::{
     Entity, Fetch, FetchItem,
 };
 
-use super::{FetchAccessData, FetchPrepareData, PreparedFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch};
 
 /// Returns a list of relations of a specified type
 #[derive(Debug, Clone)]
@@ -191,6 +191,19 @@ where
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "relations({})", self.relation)
+    }
+}
+
+impl<'q, T: ComponentValue> RandomFetch<'q> for PreparedNthRelation<'q, T> {
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
+        let value = &self.borrow.1.get()[slot];
+        (self.borrow.0, value)
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        let (id, borrow) = &*chunk.borrow;
+
+        (*id, &borrow.get()[slot])
     }
 }
 
