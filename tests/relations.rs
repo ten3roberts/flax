@@ -311,6 +311,24 @@ fn despawn_recursive() {
 }
 
 #[test]
+fn relation_target_search() {
+    component! {
+        target(id1): (),
+    }
+
+    let mut world = World::new();
+    let id1 = Entity::builder().spawn(&mut world);
+    let id2 = Entity::builder().set(target(id1), ()).spawn(&mut world);
+    let id3 = Entity::builder().set(child_of(id2), ()).spawn(&mut world);
+    let id4 = Entity::builder().set(child_of(id3), ()).spawn(&mut world);
+
+    let query = target.first_relation().traverse(child_of);
+    let entity = world.entity(id4).unwrap();
+    let mut query = entity.query(&query);
+    assert_eq!(query.get(), Some((id1, &())));
+}
+
+#[test]
 fn exclusive() {
     component! {
         child_of(parent): () => [ Exclusive ],
