@@ -30,6 +30,7 @@ pub use batch::*;
 pub use changes::*;
 pub use slice::*;
 pub(crate) use storage::*;
+pub use storage::Storage;
 
 pub use guard::*;
 
