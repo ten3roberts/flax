@@ -297,6 +297,12 @@ impl<'a> EntityRefMut<'a> {
     pub fn world(&self) -> &World {
         self.world
     }
+
+    /// Shorthand for retrieving the [`name`](crate::components::name) component
+    #[inline]
+    pub fn name(&self) -> Option<AtomicRef<String>> {
+        self.get(name()).ok()
+    }
 }
 
 /// Borrow all the components of an entity at once.
@@ -424,6 +430,12 @@ impl<'a> EntityRef<'a> {
     /// Returns the entity id
     pub fn id(&self) -> Entity {
         self.id
+    }
+
+    /// Shorthand for retrieving the [`name`](crate::components::name) component
+    #[inline]
+    pub fn name(&self) -> Option<AtomicRef<String>> {
+        self.get(name()).ok()
     }
 }
 
