@@ -180,3 +180,27 @@ macro_rules! component_vtable {
 
     };
 }
+
+#[cfg(feature = "puffin")]
+macro_rules! profile_function {
+    ($($tt: tt)*) => (
+        puffin::profile_function!($($tt)*);
+    )
+}
+
+#[cfg(not(feature = "puffin"))]
+macro_rules! profile_function {
+    ($($tt: tt)*) => {};
+}
+
+#[cfg(feature = "puffin")]
+macro_rules! profile_scope {
+    ($($tt: tt)*) => (
+        puffin::profile_scope!($($tt)*);
+    )
+}
+
+#[cfg(not(feature = "puffin"))]
+macro_rules! profile_scope {
+    ($($tt: tt)*) => {};
+}

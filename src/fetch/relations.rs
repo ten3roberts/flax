@@ -3,7 +3,7 @@ use core::{
     slice,
 };
 
-use alloc::{sync::Arc, vec::Vec};
+use alloc::vec::Vec;
 use smallvec::SmallVec;
 
 use crate::{
