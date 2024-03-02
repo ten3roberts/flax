@@ -17,6 +17,7 @@ fn flush_system() -> BoxedSystem {
         .with_world_mut()
         .with_cmd_mut()
         .build(|world: &mut World, cmd: &mut CommandBuffer| {
+            profile_scope!("flush");
             cmd.apply(world)
                 .context("Failed to flush commandbuffer in schedule\n")
         })
@@ -248,6 +249,7 @@ impl Schedule {
         world: &'a mut World,
         input: impl IntoInput<'a>,
     ) -> anyhow::Result<()> {
+        profile_function!();
         let input = input.into_input();
         let ctx = SystemContext::new(world, &mut self.cmd, &input);
 
@@ -270,6 +272,7 @@ impl Schedule {
         world: &'a mut World,
         input: impl IntoInput<'a>,
     ) -> anyhow::Result<()> {
+        profile_function!();
         use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
         #[cfg(feature = "tracing")]
@@ -321,6 +324,7 @@ impl Schedule {
     }
 
     fn build_dependencies(systems: Vec<Vec<BoxedSystem>>, world: &World) -> Vec<Vec<BoxedSystem>> {
+        profile_function!();
         let accesses = systems
             .iter()
             .flatten()
