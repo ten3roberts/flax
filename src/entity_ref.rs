@@ -3,6 +3,7 @@ use core::{
     mem::MaybeUninit,
 };
 
+use alloc::string::String;
 use atomic_refcell::{AtomicRef, BorrowError, BorrowMutError};
 use once_cell::unsync::OnceCell;
 
