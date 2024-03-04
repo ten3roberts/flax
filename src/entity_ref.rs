@@ -183,6 +183,18 @@ impl<'a> EntityRefMut<'a> {
         ));
     }
 
+    /// Convenience function for only setting the component if Some.
+    pub fn set_opt<T: ComponentValue>(
+        &mut self,
+        component: Component<T>,
+        value: Option<T>,
+    ) -> &mut Self {
+        if let Some(value) = value {
+            self.set(component, value);
+        }
+        self
+    }
+
     /// Set a component for the entity
     pub(crate) fn set_with_writer<W: EntityWriter>(&mut self, writer: W) -> W::Output {
         let (loc, res) = self.world.set_with_writer(self.id, writer).unwrap();

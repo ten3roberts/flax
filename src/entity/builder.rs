@@ -97,6 +97,7 @@ impl EntityBuilder {
         }
         self
     }
+
     /// Return a mutable reference to the stored component.
     pub fn get_mut<T: ComponentValue>(&mut self, component: Component<T>) -> Option<&mut T> {
         self.buffer.get_mut(component)

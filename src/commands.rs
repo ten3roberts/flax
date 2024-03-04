@@ -143,6 +143,19 @@ impl CommandBuffer {
         self
     }
 
+    /// Convenience function for only setting the component if Some.
+    pub fn set_opt<T: ComponentValue>(
+        &mut self,
+        id: Entity,
+        component: Component<T>,
+        value: Option<T>,
+    ) -> &mut Self {
+        if let Some(value) = value {
+            self.set(id, component, value);
+        }
+        self
+    }
+
     /// Set a component for `id`.
     ///
     /// Does not trigger a modification event if the value is the same
