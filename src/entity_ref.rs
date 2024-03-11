@@ -301,12 +301,12 @@ impl<'a> EntityRefMut<'a> {
         }
     }
 
-    /// Returns a mutable reference to the contained world
+    /// Access the world the entity is in
     pub fn world_mut(&mut self) -> &mut World {
         self.world
     }
 
-    /// Returns a reference to the contained world
+    /// Access the world the entity is in
     pub fn world(&self) -> &World {
         self.world
     }
@@ -443,6 +443,11 @@ impl<'a> EntityRef<'a> {
     /// Returns the entity id
     pub fn id(&self) -> Entity {
         self.id
+    }
+
+    /// Access the world the entity is in
+    pub fn world(&self) -> &'a World {
+        self.world
     }
 
     /// Shorthand for retrieving the [`name`](crate::components::name) component
