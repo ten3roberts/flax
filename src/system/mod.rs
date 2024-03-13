@@ -289,6 +289,8 @@ where
     Err: Into<anyhow::Error>,
 {
     fn execute(&mut self, ctx: &SystemContext<'_, '_, '_>) -> anyhow::Result<()> {
+        profile_function!(self.name());
+
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
@@ -327,6 +329,8 @@ where
     F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, ()>,
 {
     fn execute(&mut self, ctx: &SystemContext<'_, '_, '_>) -> anyhow::Result<()> {
+        profile_function!(self.name());
+
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
