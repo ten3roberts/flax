@@ -1,9 +1,4 @@
-use alloc::{
-    borrow::ToOwned,
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-    vec::Vec,
-};
+use alloc::{borrow::ToOwned, collections::BTreeMap, sync::Arc, vec::Vec};
 use core::{
     fmt,
     fmt::Formatter,
@@ -33,7 +28,7 @@ use crate::{
     writer::{
         self, EntityWriter, FnWriter, Replace, ReplaceDyn, SingleComponentWriter, WriteDedup,
     },
-    BatchSpawn, Component, ComponentVTable, Error, Fetch, Query, RefMut,
+    BatchSpawn, Component, ComponentVTable, Error, Fetch, FetchExt, Query, RefMut,
 };
 
 #[derive(Debug, Default)]
@@ -432,31 +427,23 @@ impl World {
     ) -> Result<()> {
         profile_function!();
         self.flush_reserved();
-        let mut stack = alloc::vec![id];
+        let query = Query::new(()).filter((id.traverse(relation), crate::filter::Not(id)));
+        let archetypes = {
+            profile_scope!("find_archetypes");
 
-        let mut archetypes = SmallVec::<[ArchetypeId; 16]>::new();
-
-        while let Some(id) = stack.pop() {
-            let relation_key = relation.of(id).key();
-            for (arch_id, arch) in self
-                .archetypes
-                .iter_mut()
-                .filter(|(_, arch)| !arch.cells().is_empty() && arch.has(relation_key))
-            {
-                // Remove all children of the children
-                for &id in arch.entities() {
-                    self.entities.init(id.kind()).despawn(id).unwrap();
-                    debug_assert!(!id.is_static());
-                }
-
-                stack.extend_from_slice(arch.entities());
-                archetypes.push(arch_id);
-                arch.destroy()
-            }
-        }
+            query.archetypes(self)
+        };
 
         for arch_id in archetypes {
-            self.archetypes.despawn(arch_id);
+            profile_scope!("clear_archetype");
+            let arch = self.archetypes.get_mut(arch_id);
+            // Remove all children of the children
+            for &id in arch.entities() {
+                self.entities.init(id.kind()).despawn(id).unwrap();
+                debug_assert!(!id.is_static());
+            }
+
+            self.archetypes.despawn(arch_id).clear();
         }
 
         Ok(())

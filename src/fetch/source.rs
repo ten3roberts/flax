@@ -88,28 +88,29 @@ fn traverse_resolve<'a, 'w, Q: Fetch<'w>>(
     relation: Entity,
     fetch: &Q,
     data: FetchAccessData<'a>,
-    slot: Option<Slot>,
 ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
-    if fetch.filter_arch(data) {
-        return (data.arch_id, data.arch, slot).into();
-    }
-
-    for (key, _) in data.arch.relations_like(relation) {
-        let target = key.target.unwrap();
-
-        let loc = data
-            .world
-            .location(target)
-            .expect("Relation contains invalid entity");
-
+    let mut stack = Vec::new();
+    stack.push((data.arch_id, None));
+    while let Some((arch_id, slot)) = stack.pop() {
         let data = FetchAccessData {
-            arch_id: loc.arch_id,
-            arch: data.world.archetypes.get(loc.arch_id),
+            arch_id,
+            arch: data.world.archetypes.get(arch_id),
             world: data.world,
         };
 
-        if let Some(v) = traverse_resolve(relation, fetch, data, Some(loc.slot)) {
-            return Some(v);
+        if fetch.filter_arch(data) {
+            return (arch_id, data.arch, slot).into();
+        }
+
+        for (key, _) in data.arch.relations_like(relation) {
+            let target = key.target.unwrap();
+
+            let loc = data
+                .world
+                .location(target)
+                .expect("Relation contains invalid entity");
+
+            stack.push((loc.arch_id, Some(loc.slot)))
         }
     }
 
@@ -122,7 +123,7 @@ impl FetchSource for Traverse {
         fetch: &Q,
         data: FetchAccessData<'a>,
     ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
-        return traverse_resolve(self.relation, fetch, data, None);
+        return traverse_resolve(self.relation, fetch, data);
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

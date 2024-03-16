@@ -76,6 +76,7 @@ where
         });
     }
 }
+
 #[derive(Default, Debug)]
 struct State {
     /// Maps each entity to a list of indices of query archetypes
