@@ -129,6 +129,7 @@ impl CellData {
         }
     }
 
+    #[inline]
     pub(crate) fn set_removed(&mut self, ids: &[Entity], slots: Slice) {
         let event = EventData {
             ids,
@@ -796,7 +797,7 @@ impl Archetype {
         self.entities.get(slot).copied()
     }
 
-    /// Drops all components and changes.
+    /// Drops all components and entities, including changes.
     pub(crate) fn clear(&mut self) {
         let slots = self.slots();
         for cell in self.cells.values_mut() {
@@ -807,6 +808,21 @@ impl Archetype {
 
             cell.clear()
         }
+
+        self.entities.clear();
+    }
+
+    /// Renders the archetype completely useless
+    pub(crate) fn destroy(&mut self) {
+        let slots = self.slots();
+        for cell in self.cells.values_mut() {
+            let data = cell.data.get_mut();
+            // Notify the subscribers that the component was removed
+            // data.on_event(&self.entities, slots, EventKind::Removed);
+            data.set_removed(&self.entities[slots.as_range()], slots);
+        }
+
+        self.cells.clear();
 
         self.entities.clear();
     }

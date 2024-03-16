@@ -149,6 +149,7 @@ impl EntityBuilder {
     /// Clears the builder and allows it to be used again, reusing the builder
     /// will reuse the inner storage, even for different components.
     pub fn spawn(&mut self, world: &mut World) -> Entity {
+        profile_function!();
         let id = world.spawn_with(&mut self.buffer);
 
         self.children.drain(..).for_each(|child| {
@@ -177,6 +178,7 @@ impl EntityBuilder {
     ///
     /// New components will overwrite existing components.
     pub fn append_to(&mut self, world: &mut World, id: Entity) -> Result<Entity> {
+        profile_function!();
         world.set_with(id, &mut self.buffer)?;
 
         self.children.drain(..).for_each(|child| {

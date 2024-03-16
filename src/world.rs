@@ -126,17 +126,20 @@ impl World {
 
     /// Create an iterator to spawn several entities
     pub fn spawn_many(&mut self) -> impl Iterator<Item = Entity> + '_ {
+        profile_function!();
         (0..).map(|_| self.spawn())
     }
 
     /// Spawn a new empty entity into the default namespace
     pub fn spawn(&mut self) -> Entity {
+        profile_function!();
         self.spawn_inner(self.archetypes.root, EntityKind::empty())
             .0
     }
 
     /// Spawn a new empty entity and acquire an entity reference.
     pub fn spawn_ref(&mut self) -> EntityRefMut {
+        profile_function!();
         let (id, loc, _) = self.spawn_inner(self.archetypes.root, EntityKind::empty());
         EntityRefMut {
             world: self,
@@ -147,6 +150,7 @@ impl World {
 
     /// Efficiently spawn many entities with the same components at once.
     pub fn spawn_batch(&mut self, chunk: &mut BatchSpawn) -> Vec<Entity> {
+        profile_function!();
         self.flush_reserved();
 
         for component in chunk.components() {
@@ -357,6 +361,7 @@ impl World {
     /// Despawn an entity.
     /// Any relations to other entities will be removed.
     pub fn despawn(&mut self, id: Entity) -> Result<()> {
+        profile_function!();
         self.flush_reserved();
         let EntityLocation {
             arch_id: arch,
@@ -395,6 +400,7 @@ impl World {
     where
         F: for<'x> Fetch<'x>,
     {
+        profile_function!();
         self.flush_reserved();
         let mut query = Query::new(entity_ids()).filter(filter);
         let ids = query.borrow(self).iter().collect_vec();
@@ -411,6 +417,7 @@ impl World {
         id: Entity,
         relation: impl RelationExt<T>,
     ) -> Result<()> {
+        profile_function!();
         self.despawn_children(id, relation)?;
         self.despawn(id)?;
 
@@ -423,17 +430,18 @@ impl World {
         id: Entity,
         relation: impl RelationExt<T>,
     ) -> Result<()> {
+        profile_function!();
         self.flush_reserved();
         let mut stack = alloc::vec![id];
 
-        let mut archetypes = BTreeSet::new();
+        let mut archetypes = SmallVec::<[ArchetypeId; 16]>::new();
 
         while let Some(id) = stack.pop() {
             let relation_key = relation.of(id).key();
             for (arch_id, arch) in self
                 .archetypes
                 .iter_mut()
-                .filter(|(_, arch)| arch.has(relation_key))
+                .filter(|(_, arch)| !arch.cells().is_empty() && arch.has(relation_key))
             {
                 // Remove all children of the children
                 for &id in arch.entities() {
@@ -442,8 +450,8 @@ impl World {
                 }
 
                 stack.extend_from_slice(arch.entities());
-                archetypes.insert(arch_id);
-                arch.clear()
+                archetypes.push(arch_id);
+                arch.destroy()
             }
         }
 
@@ -458,6 +466,7 @@ impl World {
     /// in the world. If used upon an entity with a child -> parent relation, this removes the relation
     /// on all the children.
     pub fn detach(&mut self, id: Entity) {
+        profile_function!();
         let archetypes = Query::new(())
             .filter(ArchetypeFilter(|arch: &Archetype| {
                 // Filter any subject or relation kind

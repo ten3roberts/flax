@@ -208,6 +208,7 @@ impl Archetypes {
     /// It is the callers responibility to cleanup child nodes if the node is internal
     /// Children are detached from the tree, but still accessible by id
     pub fn despawn(&mut self, id: Entity) -> Archetype {
+        profile_function!();
         let arch = self.inner.despawn(id).expect("Despawn invalid archetype");
 
         // Remove outgoing edges
