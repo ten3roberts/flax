@@ -59,22 +59,22 @@ jobs:
       - name: Run cargo test (doc)
         run: cargo test --doc --all-features
 
-  coverage:
-    runs-on: ubuntu-latest
+  # coverage:
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v2
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
-          components: miri
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: dtolnay/rust-toolchain@master
+  #       with:
+  #         toolchain: nightly
+  #         components: miri
 
-      - uses: taiki-e/install-action@cargo-tarpaulin
+  #     - uses: taiki-e/install-action@cargo-tarpaulin
 
-      - name: Run cargo tarpaulin
-        run: cargo tarpaulin --all-features --out Xml --engine llvm
+  #     - name: Run cargo tarpaulin
+  #       run: cargo tarpaulin --all-features --out Xml --engine llvm
 
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v2
-        with:
-          fail_ci_if_error: false
+  #     - name: Upload to codecov.io
+  #       uses: codecov/codecov-action@v2
+  #       with:
+  #         fail_ci_if_error: false
