@@ -812,21 +812,6 @@ impl Archetype {
         self.entities.clear();
     }
 
-    /// Renders the archetype completely useless
-    pub(crate) fn destroy(&mut self) {
-        let slots = self.slots();
-        for cell in self.cells.values_mut() {
-            let data = cell.data.get_mut();
-            // Notify the subscribers that the component was removed
-            // data.on_event(&self.entities, slots, EventKind::Removed);
-            data.set_removed(&self.entities[slots.as_range()], slots);
-        }
-
-        self.cells.clear();
-
-        self.entities.clear();
-    }
-
     #[must_use]
     /// Number of entities in the archetype
     pub fn len(&self) -> usize {

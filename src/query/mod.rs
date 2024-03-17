@@ -14,7 +14,7 @@ pub use walk::{Children, DfsIter, GraphBorrow, GraphQuery, Node};
 use core::fmt::Debug;
 
 use crate::{
-    archetype::Slot,
+    archetype::{ArchetypeId, Slot},
     component::ComponentValue,
     fetch::FmtQuery,
     filter::{All, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
@@ -190,6 +190,10 @@ where
     {
         let mut borrow = self.borrow(world);
         borrow.iter().collect()
+    }
+
+    pub(crate) fn archetypes<'w>(&'w self, world: &'w World) -> Vec<ArchetypeId> {
+        self.strategy.archetypes(world, &self.fetch)
     }
 }
 
