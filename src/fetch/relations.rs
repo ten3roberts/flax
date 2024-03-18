@@ -34,7 +34,9 @@ where
         let borrows: SmallVec<[_; 4]> = {
             data.arch
                 .relations_like(self.relation.id())
-                .map(|(desc, cell)| (desc.target.unwrap(), cell.borrow()))
+                .map(|(desc, &cell_index)| {
+                    (desc.target.unwrap(), data.arch.cells()[cell_index].borrow())
+                })
                 .collect()
         };
 
@@ -159,11 +161,13 @@ where
     type Prepared = PreparedNthRelation<'w, T>;
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let borrow = data
-            .arch
-            .relations_like(self.relation.id)
-            .nth(self.n)
-            .map(|(desc, cell)| (desc.target.unwrap(), cell.borrow()))?;
+        let borrow =
+            data.arch
+                .relations_like(self.relation.id)
+                .nth(self.n)
+                .map(|(desc, &cell_index)| {
+                    (desc.target.unwrap(), data.arch.cells()[cell_index].borrow())
+                })?;
 
         Some(PreparedNthRelation { borrow })
     }

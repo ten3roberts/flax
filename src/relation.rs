@@ -8,7 +8,7 @@ use alloc::collections::btree_map::Range;
 use atomic_refcell::AtomicRef;
 
 use crate::{
-    archetype::{Archetype, Cell, RefMut, Slot},
+    archetype::{Archetype, RefMut, Slot},
     component::{dummy, ComponentKey, ComponentValue},
     entity::EntityKind,
     fetch::{nth_relation, NthRelation},
@@ -200,7 +200,8 @@ impl<T: ComponentValue> RelationExt<T> for Relation<T> {
 
 /// Allows to iterate all relations of a specific type for an entity
 pub struct RelationIter<'a, T> {
-    cells: Range<'a, ComponentKey, Cell>,
+    cells: Range<'a, ComponentKey, usize>,
+    arch: &'a Archetype,
     slot: Slot,
     marker: PhantomData<T>,
 }
@@ -209,12 +210,13 @@ impl<'a, T: ComponentValue> RelationIter<'a, T> {
     pub(crate) fn new(relation: impl RelationExt<T>, arch: &'a Archetype, slot: Slot) -> Self {
         let relation = relation.id();
         Self {
-            cells: arch.cells().range(
+            cells: arch.components().range(
                 ComponentKey::new(relation, Some(Entity::MIN))
                     ..=ComponentKey::new(relation, Some(Entity::MAX)),
             ),
             slot,
             marker: PhantomData,
+            arch,
         }
     }
 }
@@ -226,10 +228,10 @@ where
     type Item = (Entity, AtomicRef<'a, T>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (&key, cell) = self.cells.next()?;
+        let (&key, &cell_index) = self.cells.next()?;
         // Safety: the type matches the relation ext
         Some((key.target.unwrap(), unsafe {
-            cell.get::<T>(self.slot).unwrap()
+            self.arch.cells()[cell_index].get::<T>(self.slot).unwrap()
         }))
     }
 }
@@ -237,7 +239,8 @@ where
 /// See: [RelationIter]
 pub struct RelationIterMut<'a, T> {
     entities: &'a [Entity],
-    cells: Range<'a, ComponentKey, Cell>,
+    cells: Range<'a, ComponentKey, usize>,
+    arch: &'a Archetype,
     slot: Slot,
     change_tick: u32,
     marker: PhantomData<T>,
@@ -252,7 +255,7 @@ impl<'a, T: ComponentValue> RelationIterMut<'a, T> {
     ) -> Self {
         let relation = relation.id();
         Self {
-            cells: arch.cells().range(
+            cells: arch.components().range(
                 ComponentKey::new(relation, Some(Entity::MIN))
                     ..=ComponentKey::new(relation, Some(Entity::MAX)),
             ),
@@ -260,6 +263,7 @@ impl<'a, T: ComponentValue> RelationIterMut<'a, T> {
             marker: PhantomData,
             change_tick,
             entities: arch.entities(),
+            arch,
         }
     }
 }
@@ -271,10 +275,11 @@ where
     type Item = (Entity, RefMut<'a, T>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (&key, cell) = self.cells.next()?;
+        let (&key, &cell_index) = self.cells.next()?;
         Some((
             key.target.unwrap(),
-            cell.get_mut::<T>(self.entities[self.slot], self.slot, self.change_tick)
+            self.arch.cells()[cell_index]
+                .get_mut::<T>(self.entities[self.slot], self.slot, self.change_tick)
                 .unwrap(),
         ))
     }
