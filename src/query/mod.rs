@@ -9,6 +9,7 @@ mod planar;
 mod searcher;
 mod topo;
 mod walk;
+use itertools::Itertools;
 pub use walk::{Children, DfsIter, GraphBorrow, GraphQuery, Node};
 
 use core::fmt::Debug;
@@ -190,6 +191,16 @@ where
     {
         let mut borrow = self.borrow(world);
         borrow.iter().collect()
+    }
+
+    /// Collect all elements in the query into a sorted vector
+    pub fn collect_sorted_vec<'w, T>(&'w mut self, world: &'w World) -> Vec<T>
+    where
+        T: 'static + Ord,
+        Q: for<'q> FetchItem<'q, Item = T>,
+    {
+        let mut borrow = self.borrow(world);
+        borrow.iter().sorted().collect()
     }
 
     pub(crate) fn archetypes<'w>(&'w self, world: &'w World) -> Vec<ArchetypeId> {
