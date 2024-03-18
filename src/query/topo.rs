@@ -1,7 +1,7 @@
 use core::iter::Flatten;
 
 use alloc::{
-    collections::{btree_map, BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet},
     vec::Vec,
 };
 use smallvec::SmallVec;
@@ -55,15 +55,11 @@ impl State {
                 return;
             }
 
-            match self.archetypes_index.entry(arch_id) {
-                btree_map::Entry::Vacant(slot) => {
-                    let idx = self.archetypes.len();
-                    self.archetypes.push(arch_id);
-                    slot.insert(idx);
-                }
-                btree_map::Entry::Occupied(_) => panic!("Duplicate archetype"),
-            };
+            let idx = self.archetypes.len();
+            self.archetypes.push(arch_id);
 
+            let existing = self.archetypes_index.insert(arch_id, idx);
+            debug_assert_eq!(existing, None, "duplicate archetype");
             // Find dependencies
             let arch_deps: Vec<_> = arch
                 .relations_like(relation)

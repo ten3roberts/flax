@@ -59,16 +59,6 @@ impl Planar {
             result.push(arch_id)
         });
     }
-
-    pub(crate) fn archetypes<'w, Q: Fetch<'w>, F: Fetch<'w>>(
-        &self,
-        world: &'w World,
-        fetch: &'w Filtered<Q, F>,
-    ) -> Vec<ArchetypeId> {
-        let mut result = Vec::new();
-        Self::update_state(world, fetch, &mut result);
-        result
-    }
 }
 
 impl<'w, Q, F> QueryStrategy<'w, Q, F> for Planar
@@ -306,10 +296,6 @@ where
         let item = chunk.next().unwrap();
 
         Ok(item)
-    }
-
-    pub(crate) fn archetypes(&self) -> &[ArchetypeId] {
-        self.archetypes
     }
 }
 

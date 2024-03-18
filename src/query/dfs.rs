@@ -7,7 +7,7 @@ use crate::{
     filter::{All, Filtered},
     relation::RelationExt,
     system::{Access, AccessKind},
-    FetchItem,
+    ArchetypeSearcher, FetchItem,
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 use smallvec::SmallVec;
@@ -96,18 +96,22 @@ impl State {
         self.archetypes_index.clear();
         self.roots.clear();
 
-        for (arch_id, arch) in world.archetypes.iter() {
+        let mut searcher = ArchetypeSearcher::default();
+        fetch.searcher(&mut searcher);
+
+        searcher.find_archetypes(&world.archetypes, |arch_id, arch| {
             if !fetch.filter_arch(FetchAccessData {
                 world,
                 arch,
                 arch_id,
             }) {
-                continue;
+                return;
             }
 
-            let index = self.archetypes.len();
+            let idx = self.archetypes.len();
             self.archetypes.push(arch_id);
-            assert!(self.archetypes_index.insert(arch_id, index).is_none());
+            let existing = self.archetypes_index.insert(arch_id, idx);
+            debug_assert_eq!(existing, None, "duplicate archetype");
 
             // Go backwards through the relations
             let mut root = true;
@@ -115,13 +119,93 @@ impl State {
                 root = false;
                 let target = key.target.unwrap();
 
-                self.edges.entry(target).or_default().push(index);
+                self.edges.entry(target).or_default().push(idx);
             }
 
             if root {
-                self.roots.push(index);
+                self.roots.push(idx);
             }
-        }
+        });
+
+        // for (arch_id, arch) in world.archetypes.iter() {
+        //     if !fetch.filter_arch(FetchAccessData {
+        //         world,
+        //         arch,
+        //         arch_id,
+        //     }) {
+        //         continue;
+        //     }
+
+        //     let index = self.archetypes.len();
+        //     self.archetypes.push(arch_id);
+        //     assert!(self.archetypes_index.insert(arch_id, index).is_none());
+
+        //     // Go backwards through the relations
+        //     let mut root = true;
+        //     for (key, _) in arch.relations_like(relation) {
+        //         root = false;
+        //         let target = key.target.unwrap();
+
+        //         self.edges.entry(target).or_default().push(index);
+        //     }
+
+        //     if root {
+        //         self.roots.push(index);
+        //     }
+        // }
+
+        // let candidates = index.find_relation(relation).into_iter().flatten();
+
+        // for (&arch_id, _) in candidates {
+        //     let arch = world.archetypes.get(arch_id);
+
+        //     if !fetch.filter_arch(FetchAccessData {
+        //         world,
+        //         arch,
+        //         arch_id,
+        //     }) {
+        //         continue;
+        //     }
+
+        //     let arch_index = self.archetypes.len();
+        //     self.archetypes.push(arch_id);
+
+        //     assert!(self.archetypes_index.insert(arch_id, arch_index).is_none());
+
+        //     // Go backwards through the relations
+        //     // This way we can discover the roots
+        //     for (key, _) in arch.relations_like(relation) {
+        //         let target = key.target.unwrap();
+
+        //         self.edges.entry(target).or_default().push(arch_index);
+
+        //         // Discover roots
+        //         let arch_id = world.location(target).unwrap().arch_id;
+        //         let arch = world.archetypes.get(arch_id);
+
+        //         if arch.relations_like(relation).next().is_none() {
+        //             // Push a root
+        //             if fetch.filter_arch(FetchAccessData {
+        //                 world,
+        //                 arch,
+        //                 arch_id,
+        //             }) {
+        //                 let arch_index = self.archetypes.len();
+        //                 match self.archetypes_index.entry(arch_id) {
+        //                     Entry::Vacant(slot) => {
+        //                         self.archetypes.push(arch_id);
+
+        //                         slot.insert(arch_index);
+        //                         self.roots.push(arch_index);
+        //                     }
+        //                     Entry::Occupied(_) => {
+        //                         // Already found
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
     }
 }
 
