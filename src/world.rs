@@ -1,4 +1,4 @@
-use alloc::{borrow::ToOwned, collections::BTreeMap, sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use core::{
     fmt,
     fmt::Formatter,
@@ -13,7 +13,7 @@ use itertools::Itertools;
 
 use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeInfo, Slot},
-    archetypes::{self, Archetypes},
+    archetypes::Archetypes,
     buffer::ComponentBuffer,
     component::{dummy, ComponentDesc, ComponentKey, ComponentValue},
     components::{self, component_info, is_static, name},
@@ -28,7 +28,7 @@ use crate::{
     writer::{
         self, EntityWriter, FnWriter, Replace, ReplaceDyn, SingleComponentWriter, WriteDedup,
     },
-    BatchSpawn, Component, ComponentVTable, Error, Fetch, FetchExt, Query, RefMut,
+    BatchSpawn, Component, ComponentVTable, Error, Fetch, Query, RefMut,
 };
 
 #[derive(Debug, Default)]
@@ -428,7 +428,7 @@ impl World {
         profile_function!();
         self.flush_reserved();
 
-        let mut stack = vec![id];
+        let mut stack = alloc::vec![id];
         let mut archetypes = Vec::new();
         while let Some(id) = stack.pop() {
             profile_scope!("traverse_archetypes");
