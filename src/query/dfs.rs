@@ -259,10 +259,11 @@ where
 
         let loc = self.query_state.world.location(root);
         if let Ok(loc) = loc {
-            let arch_index = *self.dfs.state.archetypes_index.get(&loc.arch_id).unwrap();
-            // Safety: is root archetype
-            unsafe {
-                iter.push_slice_to_stack(arch_index, Slice::single(loc.slot));
+            if let Some(&arch_index) = self.dfs.state.archetypes_index.get(&loc.arch_id) {
+                // Safety: is root archetype
+                unsafe {
+                    iter.push_slice_to_stack(arch_index, Slice::single(loc.slot));
+                }
             }
         }
 
