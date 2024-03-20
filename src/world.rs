@@ -1,4 +1,4 @@
-use alloc::{borrow::ToOwned, collections::BTreeMap, sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use core::{
     fmt,
     fmt::Formatter,
@@ -22,13 +22,13 @@ use crate::{
     entry::{Entry, OccupiedEntry, VacantEntry},
     error::{MissingComponent, Result},
     events::EventSubscriber,
-    filter::{ArchetypeFilter, StaticFilter},
+    filter::StaticFilter,
     format::{EntitiesFormatter, HierarchyFormatter, WorldFormatter},
     relation::{Relation, RelationExt},
     writer::{
         self, EntityWriter, FnWriter, Replace, ReplaceDyn, SingleComponentWriter, WriteDedup,
     },
-    BatchSpawn, Component, ComponentVTable, Error, Fetch, FetchExt, Query, RefMut,
+    BatchSpawn, Component, ComponentVTable, Error, Fetch, Query, RefMut,
 };
 
 #[derive(Debug, Default)]
@@ -302,7 +302,7 @@ impl World {
         let src = self.archetypes.get(loc.arch_id);
 
         let dst_components: SmallVec<[ComponentDesc; 8]> =
-            src.components().filter(|v| f(v.key())).collect();
+            src.components_desc().filter(|v| f(v.key())).collect();
 
         let (dst_id, _) = self.archetypes.find_create(dst_components);
 
@@ -427,23 +427,28 @@ impl World {
     ) -> Result<()> {
         profile_function!();
         self.flush_reserved();
-        let query = Query::new(()).filter((id.traverse(relation), crate::filter::Not(id)));
-        let archetypes = {
-            profile_scope!("find_archetypes");
 
-            query.archetypes(self)
-        };
+        let mut stack = alloc::vec![id];
+        let mut archetypes = Vec::new();
+        while let Some(id) = stack.pop() {
+            profile_scope!("traverse_archetypes");
+            archetypes.clear();
+            archetypes.extend(
+                self.archetypes
+                    .index
+                    .find(relation.of(id).key())
+                    .into_iter()
+                    .flat_map(|v| v.keys().copied()),
+            );
 
-        for arch_id in archetypes {
-            profile_scope!("clear_archetype");
-            let arch = self.archetypes.get_mut(arch_id);
-            // Remove all children of the children
-            for &id in arch.entities() {
-                self.entities.init(id.kind()).despawn(id).unwrap();
-                debug_assert!(!id.is_static());
+            for &arch_id in &archetypes {
+                let arch = self.archetypes.get(arch_id);
+                stack.extend(arch.entities());
+                for &id in arch.entities() {
+                    self.entities.init(id.kind()).despawn(id).unwrap();
+                }
+                self.archetypes.despawn(arch_id).clear();
             }
-
-            self.archetypes.despawn(arch_id).clear();
         }
 
         Ok(())
@@ -454,20 +459,19 @@ impl World {
     /// on all the children.
     pub fn detach(&mut self, id: Entity) {
         profile_function!();
-        let archetypes = Query::new(())
-            .filter(ArchetypeFilter(|arch: &Archetype| {
-                // Filter any subject or relation kind
-                arch.components()
-                    .any(|v| v.key().id == id || v.key().target == Some(id))
-            }))
-            .borrow(self)
-            .archetypes()
-            .to_owned();
+        let index = &self.archetypes.index;
+        let archetypes = index
+            .find_relation_targets(id)
+            .into_iter()
+            .chain(index.find_relation(id))
+            .chain(index.find(ComponentKey::new(id, None)))
+            .flat_map(|v| v.keys().copied())
+            .collect_vec();
 
         for src in archetypes.into_iter().rev() {
             let mut src = self.archetypes.despawn(src);
 
-            let components = src.components().filter(|v| {
+            let components = src.components_desc().filter(|v| {
                 let key = v.key();
                 !(key.id == id || key.target == Some(id))
             });
@@ -610,7 +614,7 @@ impl World {
             Some(dst) => dst,
             None => {
                 let components = src
-                    .components()
+                    .components_desc()
                     .filter(|v| v.key != desc.key())
                     .collect_vec();
 
@@ -1172,7 +1176,7 @@ impl World {
             if !arch.has(is_static().key()) {
                 let mut batch = BatchSpawn::new(arch.len());
                 let arch = arch.drain();
-                for mut cell in arch.cells.into_values() {
+                for mut cell in arch.cells.into_vec().into_iter() {
                     let mut storage = cell.drain();
                     let mut id = storage.desc().key;
 

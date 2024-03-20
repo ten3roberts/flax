@@ -126,8 +126,11 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
                 &[]
             };
 
-            let (components, superset) =
-                find_archetype_components(arch.components(), [self.desc], exclusive);
+            let (components, superset) = find_archetype_components(
+                arch.cells().iter().map(|v| v.desc()),
+                [self.desc],
+                exclusive,
+            );
 
             world.init_component(self.desc);
             let (dst_id, _) = world.archetypes.find_create(components.iter().copied());
@@ -438,7 +441,7 @@ unsafe impl<'b> EntityWriter for Buffered<'b> {
 
         // Add the existing components, making sure new exclusive relations are favored
         let (components, _) = find_archetype_components(
-            arch.components(),
+            arch.cells().iter().map(|v| v.desc()),
             self.buffer.components().copied(),
             &exclusive_relations,
         );

@@ -1,6 +1,8 @@
 use crate::{
-    archetype::ChangeKind, component::ComponentValue, filter::ChangeFilter, filter::Union,
-    Component,
+    archetype::ChangeKind,
+    component::ComponentValue,
+    filter::{ChangeFilter, Union},
+    Component, Mutable,
 };
 
 /// Allows transforming a fetch into another.
@@ -27,6 +29,20 @@ impl<T: ComponentValue> TransformFetch<Added> for Component<T> {
     type Output = ChangeFilter<T>;
     fn transform_fetch(self, _: Added) -> Self::Output {
         self.into_change_filter(ChangeKind::Added)
+    }
+}
+
+impl<T: ComponentValue> TransformFetch<Modified> for Mutable<T> {
+    type Output = Self;
+    fn transform_fetch(self, _: Modified) -> Self::Output {
+        self
+    }
+}
+
+impl<T: ComponentValue> TransformFetch<Added> for Mutable<T> {
+    type Output = Self;
+    fn transform_fetch(self, _: Added) -> Self::Output {
+        self
     }
 }
 

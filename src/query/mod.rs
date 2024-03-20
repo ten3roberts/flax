@@ -9,12 +9,13 @@ mod planar;
 mod searcher;
 mod topo;
 mod walk;
+use itertools::Itertools;
 pub use walk::{Children, DfsIter, GraphBorrow, GraphQuery, Node};
 
 use core::fmt::Debug;
 
 use crate::{
-    archetype::{ArchetypeId, Slot},
+    archetype::Slot,
     component::ComponentValue,
     fetch::FmtQuery,
     filter::{All, BatchSize, Filtered, With, WithRelation, Without, WithoutRelation},
@@ -192,8 +193,14 @@ where
         borrow.iter().collect()
     }
 
-    pub(crate) fn archetypes<'w>(&'w self, world: &'w World) -> Vec<ArchetypeId> {
-        self.strategy.archetypes(world, &self.fetch)
+    /// Collect all elements in the query into a sorted vector
+    pub fn collect_sorted_vec<'w, T>(&'w mut self, world: &'w World) -> Vec<T>
+    where
+        T: 'static + Ord,
+        Q: for<'q> FetchItem<'q, Item = T>,
+    {
+        let mut borrow = self.borrow(world);
+        borrow.iter().sorted().collect()
     }
 }
 

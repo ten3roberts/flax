@@ -138,6 +138,9 @@ impl<'a, T> Ptr<'a, T> {
 unsafe impl<T: Sync> Sync for Ptr<'_, T> {}
 unsafe impl<T: Send> Send for Ptr<'_, T> {}
 
+unsafe impl<T: Sync> Sync for PtrMut<'_, T> {}
+unsafe impl<T: Send> Send for PtrMut<'_, T> {}
+
 #[doc(hidden)]
 /// A lifetime annotated invariant mutable pointer
 pub struct PtrMut<'a, T> {
@@ -177,9 +180,6 @@ impl<'a, T> PtrMut<'a, T> {
         self.ptr
     }
 }
-
-unsafe impl<T: Sync> Sync for PtrMut<'_, T> {}
-unsafe impl<T: Send> Send for PtrMut<'_, T> {}
 
 #[derive(PartialEq, Eq, Clone)]
 pub(crate) struct Verbatim(pub alloc::string::String);

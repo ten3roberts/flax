@@ -350,8 +350,8 @@ impl<'w> Fetch<'w> for WithTarget {
 
 impl StaticFilter for WithTarget {
     fn filter_static(&self, arch: &Archetype) -> bool {
-        arch.components().any(|v| {
-            if let Some(v) = v.key().target {
+        arch.components().keys().any(|v| {
+            if let Some(v) = v.target {
                 if v == self.target {
                     return true;
                 }
