@@ -336,6 +336,8 @@ impl CommandBuffer {
             }
         }
 
+        self.inserts.clear();
+
         Ok(())
     }
 
