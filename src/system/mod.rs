@@ -334,9 +334,15 @@ where
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
-        let data = self.data.acquire(ctx);
+        let data = {
+            profile_scope!("acquire_data");
+            self.data.acquire(ctx)
+        };
 
-        self.func.execute(data);
+        {
+            profile_scope!("exec");
+            self.func.execute(data);
+        }
 
         Ok(())
     }

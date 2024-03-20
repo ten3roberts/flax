@@ -315,6 +315,7 @@ where
     where
         S: QueryStrategy<'w, Q, F>,
     {
+        profile_function!();
         let (old_tick, new_tick) = self.prepare_tick(world);
 
         let borrow_state = QueryBorrowState {
