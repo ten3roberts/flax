@@ -99,22 +99,14 @@ fn entity_hierarchy() {
 
     assert_eq!(rx.drain().len(), 3);
 
+    let mut query = Query::new(name().cloned());
     assert_eq!(
-        Query::new(name())
-            .borrow(&world)
-            .iter()
-            .cloned()
-            .sorted()
-            .collect_vec(),
-        [
-            "child_1".to_string(),
-            "child_2".into(),
-            "child_2_1".into(),
-            "root".into()
-        ]
+        query.collect_sorted_vec(&world),
+        ["child_1", "child_2", "child_2_1", "root"]
     );
 
     world.despawn_children(id, child_of).unwrap();
+    assert_eq!(query.collect_sorted_vec(&world), ["root"]);
 
     assert_eq!(rx.drain().len(), 3);
 

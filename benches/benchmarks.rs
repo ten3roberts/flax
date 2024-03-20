@@ -18,6 +18,11 @@ fn benchmarks(c: &mut Criterion) {
         b.iter(|| bench.run())
     });
 
+    c.bench_function("dfs_traverse", |b| {
+        let mut bench = dfs::Benchmark::new();
+        b.iter(|| bench.run())
+    });
+
     c.benchmark_group("frag_iter")
         .bench_function("for", |b| {
             let mut bench = frag_iter::Benchmark::new();

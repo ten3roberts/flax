@@ -59,7 +59,7 @@ where
     fetch.searcher(&mut searcher);
     SetDifference::new(
         searcher.required.into_iter(),
-        arch.components().map(|v| v.key()),
+        arch.components().keys().copied(),
     )
     .flat_map(|v| world.get(v.id, component_info()).ok().as_deref().cloned())
 }

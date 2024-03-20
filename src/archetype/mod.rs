@@ -1,4 +1,5 @@
 use alloc::{
+    boxed::Box,
     collections::{btree_map, BTreeMap},
     sync::Arc,
     vec::Vec,
@@ -278,6 +279,10 @@ impl Cell {
     ) -> Option<RefMut<T>> {
         RefMut::new(self.borrow_mut(), id, slot, tick)
     }
+
+    pub(crate) fn desc(&self) -> ComponentDesc {
+        self.desc
+    }
 }
 
 // #[derive(Debug)]
@@ -285,7 +290,8 @@ impl Cell {
 /// A collection of entities with the same components.
 /// Stored as columns of contiguous component data.
 pub struct Archetype {
-    cells: BTreeMap<ComponentKey, Cell>,
+    components: BTreeMap<ComponentKey, usize>,
+    cells: Box<[Cell]>,
     /// Slot to entity id
     pub(crate) entities: Vec<Entity>,
 
@@ -302,7 +308,8 @@ unsafe impl Sync for Cell {}
 impl Archetype {
     pub(crate) fn empty() -> Self {
         Self {
-            cells: BTreeMap::new(),
+            cells: Box::new([]),
+            components: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
             children: Default::default(),
@@ -316,17 +323,15 @@ impl Archetype {
     where
         I: IntoIterator<Item = ComponentDesc>,
     {
-        let cells = components
+        let (components, cells): (_, Vec<_>) = components
             .into_iter()
-            .map(|desc| {
-                let key = desc.key();
-
-                (key, Cell::new(desc))
-            })
-            .collect();
+            .enumerate()
+            .map(|(i, desc)| ((desc.key(), i), Cell::new(desc)))
+            .unzip();
 
         Self {
-            cells,
+            components,
+            cells: cells.into_boxed_slice(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
             children: Default::default(),
@@ -336,11 +341,11 @@ impl Archetype {
 
     /// Returns all the relation components in the archetype
     pub fn relations(&self) -> impl Iterator<Item = ComponentKey> + '_ {
-        self.cells.keys().filter(|v| v.is_relation()).copied()
+        self.components.keys().filter(|v| v.is_relation()).copied()
     }
 
-    pub(crate) fn relations_like(&self, relation: Entity) -> btree_map::Range<ComponentKey, Cell> {
-        self.cells.range(
+    pub(crate) fn relations_like(&self, relation: Entity) -> btree_map::Range<ComponentKey, usize> {
+        self.components.range(
             ComponentKey::new(relation, Some(Entity::MIN))
                 ..=ComponentKey::new(relation, Some(Entity::MAX)),
         )
@@ -353,7 +358,7 @@ impl Archetype {
 
     /// Returns true if the archtype has `component`
     pub fn has(&self, component: ComponentKey) -> bool {
-        self.cells.contains_key(&component)
+        self.components.contains_key(&component)
     }
 
     pub(crate) fn incoming(&self, component: ComponentKey) -> Option<ArchetypeId> {
@@ -423,7 +428,7 @@ impl Archetype {
     pub fn desc(&self) -> ArchetypeInfo {
         let (components, storage) = self
             .cells
-            .values()
+            .iter()
             .map(|v| {
                 let data = v.data.borrow();
                 (
@@ -474,11 +479,11 @@ impl Archetype {
     pub fn mutate_in_place<T>(
         &mut self,
         slot: Slot,
-        component: ComponentKey,
+        cell: usize,
         change_tick: u32,
         modify: impl FnOnce(*mut u8) -> T,
     ) -> Option<T> {
-        let cell = self.cells.get_mut(&component)?;
+        let cell = self.cells.get_mut(cell)?;
 
         let data = cell.data.get_mut();
 
@@ -503,7 +508,7 @@ impl Archetype {
         writer: U,
         tick: u32,
     ) -> Option<U::Updated> {
-        let cell = self.cells.get(&component.key())?;
+        let cell = self.cell(component.key())?;
 
         let mut data = cell.data.borrow_mut();
 
@@ -549,7 +554,8 @@ impl Archetype {
         let slot = self.allocate(id);
         for (desc, src) in buffer.drain() {
             unsafe {
-                let data = self.cells.get_mut(&desc.key).unwrap().data.get_mut();
+                let cell = &mut self.cells[self.components[&desc.key]];
+                let data = cell.data.get_mut();
 
                 data.storage.extend(src, 1);
             }
@@ -596,13 +602,13 @@ impl Archetype {
     }
 
     /// Push a type erased component into the new slot
-    /// `component` must match the type of data.
+    /// The component must match the type of data.
     /// # Safety
     /// Must be called only **ONCE**. Returns Err(src) if move was unsuccessful
     /// The component must be Send + Sync
     pub unsafe fn push(&mut self, component: ComponentKey, src: *mut u8, tick: u32) {
         let len = self.len();
-        let cell = self.cells.get_mut(&component).unwrap();
+        let cell = &mut self.cells[self.components[&component]];
         let data = cell.data.get_mut();
 
         let slot = data.storage.len();
@@ -631,7 +637,7 @@ impl Archetype {
         }
 
         let len = self.len();
-        let cell = self.cells.get_mut(&src.desc().key()).unwrap();
+        let cell = &mut self.cells[self.components[&src.desc().key()]];
         let data = cell.data.get_mut();
 
         let slots = Slice::new(data.storage.len(), data.storage.len() + src.len());
@@ -662,10 +668,12 @@ impl Archetype {
 
         let dst_slot = dst.allocate(id);
 
-        for (&key, cell) in &mut self.cells {
+        for cell in &mut *self.cells {
+            let key = cell.desc.key();
             let data = cell.data.get_mut();
 
-            let dst_cell = dst.cells.get_mut(&key);
+            let dst_cell = dst.cell_mut(key);
+
             if let Some(dst_cell) = dst_cell {
                 cell.move_to(slot, dst_cell, dst_slot);
             } else {
@@ -700,7 +708,7 @@ impl Archetype {
         //     subscriber.on_despawned(id, slot, self);
         // }
 
-        for cell in self.cells.values_mut() {
+        for cell in &mut *self.cells {
             let data = cell.data.get_mut();
             // data.on_event(&self.entities, Slice::single(slot), EventKind::Removed);
             data.set_removed(&[id], Slice::single(slot));
@@ -745,10 +753,11 @@ impl Archetype {
 
         let dst_slots = dst.allocate_n(&entities);
 
-        for (key, cell) in &mut self.cells {
+        for cell in &mut *self.cells {
+            let key = cell.desc.key();
             let data = cell.data.get_mut();
 
-            let dst_cell = dst.cells.get_mut(key);
+            let dst_cell = dst.cell_mut(key);
 
             if let Some(dst) = dst_cell {
                 assert_eq!(data.storage.len(), len);
@@ -786,7 +795,7 @@ impl Archetype {
     /// Does nothing if the remaining capacity < additional.
     /// len remains unchanged, as does the internal order
     pub fn reserve(&mut self, additional: usize) {
-        for cell in self.cells.values_mut() {
+        for cell in &mut *self.cells {
             let data = cell.data.get_mut();
             data.storage.reserve(additional);
         }
@@ -800,7 +809,7 @@ impl Archetype {
     /// Drops all components and entities, including changes.
     pub(crate) fn clear(&mut self) {
         let slots = self.slots();
-        for cell in self.cells.values_mut() {
+        for cell in &mut *self.cells {
             let data = cell.data.get_mut();
             // Notify the subscribers that the component was removed
             // data.on_event(&self.entities, slots, EventKind::Removed);
@@ -825,18 +834,18 @@ impl Archetype {
     }
 
     /// Get a reference to the archetype's components.
-    pub(crate) fn components(&self) -> impl Iterator<Item = ComponentDesc> + '_ {
-        self.cells.values().map(|v| v.desc)
+    pub(crate) fn components_desc(&self) -> impl Iterator<Item = ComponentDesc> + '_ {
+        self.cells.iter().map(|v| v.desc)
     }
 
     #[allow(dead_code)]
     pub(crate) fn component_names(&self) -> impl Iterator<Item = &str> {
-        self.cells.values().map(|v| v.desc.name())
+        self.cells.iter().map(|v| v.desc.name())
     }
 
     /// Returns a iterator which attempts to borrows each storage in the archetype
     pub(crate) fn try_borrow_all(&self) -> impl Iterator<Item = Option<AtomicRef<CellData>>> {
-        self.cells.values().map(|v| v.data.try_borrow().ok())
+        self.cells.iter().map(|v| v.data.try_borrow().ok())
     }
     /// Access the entities in the archetype for each slot. Entity is None if
     /// the slot is not occupied, only for the last slots.
@@ -845,13 +854,13 @@ impl Archetype {
         self.entities.as_ref()
     }
 
-    pub(crate) fn cells(&self) -> &BTreeMap<ComponentKey, Cell> {
+    pub(crate) fn cells(&self) -> &[Cell] {
         &self.cells
     }
 
     pub(crate) fn drain(&mut self) -> ArchetypeDrain {
         let slots = self.slots();
-        for cell in self.cells.values_mut() {
+        for cell in &mut *self.cells {
             let data = cell.data.get_mut();
             data.set_removed(&self.entities[slots.as_range()], slots)
         }
@@ -873,7 +882,7 @@ impl Archetype {
     /// Add a new subscriber. The subscriber must be interested in this archetype
     pub(crate) fn add_handler(&mut self, s: Arc<dyn EventSubscriber>) {
         // For component changes
-        for cell in self.cells.values_mut() {
+        for cell in &mut *self.cells {
             let data = cell.data.get_mut();
             if s.matches_component(cell.desc) {
                 data.subscribers.push(s.clone());
@@ -885,12 +894,12 @@ impl Archetype {
 
     #[inline(always)]
     pub(crate) fn cell(&self, key: ComponentKey) -> Option<&Cell> {
-        self.cells.get(&key)
+        Some(&self.cells[*self.components.get(&key)?])
     }
 
     #[inline(always)]
     pub(crate) fn cell_mut(&mut self, key: ComponentKey) -> Option<&mut Cell> {
-        self.cells.get_mut(&key)
+        Some(&mut self.cells[*self.components.get(&key)?])
     }
 
     fn last(&self) -> Option<Entity> {
@@ -909,6 +918,10 @@ impl Archetype {
     pub(crate) fn changes_mut(&mut self, component: ComponentKey) -> Option<&mut Changes> {
         Some(&mut self.cell_mut(component)?.data.get_mut().changes)
     }
+
+    pub fn components(&self) -> &BTreeMap<ComponentKey, usize> {
+        &self.components
+    }
 }
 
 impl Drop for Archetype {
@@ -919,7 +932,7 @@ impl Drop for Archetype {
 
 pub(crate) struct ArchetypeDrain {
     pub(crate) entities: Vec<Entity>,
-    pub(crate) cells: BTreeMap<ComponentKey, Cell>,
+    pub(crate) cells: Box<[Cell]>,
 }
 
 #[cfg(test)]
