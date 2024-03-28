@@ -71,7 +71,7 @@ impl Storage {
             return;
         }
 
-        let new_cap = (self.len + additional).next_power_of_two().max(4);
+        let new_cap = (self.len + additional).next_power_of_two();
         assert_ne!(new_cap, 0);
 
         // tracing::debug!(
