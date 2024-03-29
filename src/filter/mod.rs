@@ -22,6 +22,7 @@ use crate::{
 
 pub use change::ChangeFilter;
 pub use cmp::{Cmp, Equal, Greater, GreaterEq, Less, LessEq};
+pub(crate) use constant::NoEntities;
 pub use constant::{All, Nothing};
 pub use set::{And, Not, Or, Union};
 

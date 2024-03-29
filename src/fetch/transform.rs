@@ -1,11 +1,9 @@
 use crate::{
     archetype::ChangeKind,
     component::ComponentValue,
-    filter::{ChangeFilter, Filtered, Nothing, Union},
+    filter::{ChangeFilter, Filtered, NoEntities, Union},
     Component, EntityIds, FetchExt, Mutable,
 };
-
-use super::EntityRefs;
 
 /// Allows transforming a fetch into another.
 ///
@@ -35,30 +33,30 @@ impl<T: ComponentValue> TransformFetch<Added> for Component<T> {
 }
 
 impl<T: ComponentValue> TransformFetch<Modified> for Mutable<T> {
-    type Output = Filtered<Self, Nothing>;
+    type Output = Filtered<Self, NoEntities>;
     fn transform_fetch(self, _: Modified) -> Self::Output {
-        self.filtered(Nothing)
+        self.filtered(NoEntities)
     }
 }
 
 impl<T: ComponentValue> TransformFetch<Added> for Mutable<T> {
-    type Output = Filtered<Self, Nothing>;
+    type Output = Filtered<Self, NoEntities>;
     fn transform_fetch(self, _: Added) -> Self::Output {
-        self.filtered(Nothing)
+        self.filtered(NoEntities)
     }
 }
 
 impl TransformFetch<Modified> for EntityIds {
-    type Output = Filtered<Self, Nothing>;
+    type Output = Filtered<Self, NoEntities>;
     fn transform_fetch(self, _: Modified) -> Self::Output {
-        self.filtered(Nothing)
+        self.filtered(NoEntities)
     }
 }
 
 impl TransformFetch<Added> for EntityIds {
-    type Output = Filtered<Self, Nothing>;
+    type Output = Filtered<Self, NoEntities>;
     fn transform_fetch(self, _: Added) -> Self::Output {
-        self.filtered(Nothing)
+        self.filtered(NoEntities)
     }
 }
 
@@ -136,14 +134,14 @@ mod tests {
             .tag(other())
             .spawn(&mut world);
 
-        let mut query = Query::new((entity_ids(), (a(), b()).modified()));
+        let mut query = Query::new((entity_ids(), (a(), b(), other().as_mut().opt()).modified()));
 
         assert_eq!(
             query.borrow(&world).iter().collect_vec(),
             [
-                (id1, (&0, &"Hello".to_string())),
-                (id2, (&1, &"World".to_string())),
-                (id4, (&2, &"!".to_string()))
+                (id1, (&0, &"Hello".to_string(), None)),
+                (id2, (&1, &"World".to_string(), None)),
+                (id4, (&2, &"!".to_string(), Some(&mut ())))
             ]
         );
 
@@ -158,7 +156,7 @@ mod tests {
 
         assert_eq!(
             query.borrow(&world).iter().collect_vec(),
-            [(id2, (&5, &"World".to_string()))]
+            [(id2, (&5, &"World".to_string(), None))]
         );
 
         // Adding the required component to id3 will cause it to be picked up by the query
@@ -167,26 +165,27 @@ mod tests {
 
         assert_eq!(
             query.borrow(&world).iter().collect_vec(),
-            [(id3, (&-1, &"There".to_string()))]
+            [(id3, (&-1, &"There".to_string(), None))]
         );
 
         cmd.set(id3, b(), ":P".into()).apply(&mut world).unwrap();
 
         assert_eq!(
             query.borrow(&world).iter().collect_vec(),
-            [(id3, (&-1, &":P".to_string()))]
+            [(id3, (&-1, &":P".to_string(), None))]
         );
     }
 
     #[test]
     #[cfg(feature = "derive")]
     fn query_modified_struct() {
-        use crate::{fetch::Cloned, Component, Fetch};
+        use crate::{fetch::Cloned, Component, Fetch, Mutable, Opt};
 
         component! {
             a: i32,
             b: String,
             other: (),
+            c: f32,
         }
 
         #[derive(Fetch)]
@@ -194,6 +193,8 @@ mod tests {
         struct MyFetch {
             a: Component<i32>,
             b: Cloned<Component<String>>,
+            c: Mutable<f32>,
+            other: Opt<Mutable<()>>,
         }
 
         let mut world = World::new();
@@ -201,28 +202,34 @@ mod tests {
         let id1 = Entity::builder()
             .set(a(), 0)
             .set(b(), "Hello".into())
+            .set_default(c())
             .spawn(&mut world);
 
         let id2 = Entity::builder()
             .set(a(), 1)
             .set(b(), "World".into())
+            .set_default(c())
             .spawn(&mut world);
 
         let id3 = Entity::builder()
             // .set(a(), 0)
             .set(b(), "There".into())
+            .set_default(c())
             .spawn(&mut world);
 
         // Force to a different archetype
         let id4 = Entity::builder()
             .set(a(), 2)
             .set(b(), "!".into())
+            .set_default(c())
             .tag(other())
             .spawn(&mut world);
 
         let query = MyFetch {
             a: a(),
             b: b().cloned(),
+            c: c().as_mut(),
+            other: other().as_mut().opt(),
         }
         .modified()
         .map(|v| (*v.a, v.b));

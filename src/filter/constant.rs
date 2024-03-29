@@ -24,7 +24,7 @@ impl<'a> Fetch<'a> for Nothing {
 
     #[inline(always)]
     fn prepare(&self, _: FetchPrepareData) -> Option<Self::Prepared> {
-        Some(Nothing)
+        unreachable!()
     }
 
     #[inline(always)]
@@ -109,6 +109,58 @@ impl<'q> PreparedFetch<'q> for All {
     unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+/// A filter that yields archetypes but no entities
+pub struct NoEntities;
+
+impl<'q> FetchItem<'q> for NoEntities {
+    type Item = ();
+}
+
+impl<'a> Fetch<'a> for NoEntities {
+    const MUTABLE: bool = false;
+
+    type Prepared = NoEntities;
+
+    #[inline(always)]
+    fn prepare(&self, _: FetchPrepareData) -> Option<Self::Prepared> {
+        Some(NoEntities)
+    }
+
+    #[inline(always)]
+    fn filter_arch(&self, _: FetchAccessData) -> bool {
+        true
+    }
+
+    fn describe(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "false")
+    }
+
+    fn access(&self, _data: FetchAccessData, _dst: &mut Vec<Access>) {}
+}
+
+impl StaticFilter for NoEntities {
+    fn filter_static(&self, _: &crate::archetype::Archetype) -> bool {
+        false
+    }
+}
+
+impl<'q> PreparedFetch<'q> for NoEntities {
+    type Item = ();
+    type Chunk = ();
+
+    const HAS_FILTER: bool = true;
+    unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
+        Slice::new(slots.end, slots.end)
+    }
+
+    #[inline]
+    unsafe fn create_chunk(&'q mut self, _: Slice) -> Self::Chunk {}
+
+    #[inline]
+    unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
+}
 impl<'w> FetchItem<'w> for Entity {
     type Item = Entity;
 }
