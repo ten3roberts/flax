@@ -145,7 +145,7 @@ fn derive_fetch_struct(params: &Params) -> TokenStream {
         //     #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>::Prepared> as #crate_name::fetch::PreparedFetch<#q_lf>>::Chunk,)*
         // }
 
-        // #[automatically_derived]
+        #[automatically_derived]
         impl #item_impl #crate_name::fetch::FetchItem<'q> for #fetch_name #fetch_ty {
             type Item = #item_name #item_ty;
         }
@@ -239,6 +239,10 @@ fn derive_transform(params: &Params) -> Result<TokenStream> {
         ..
     } = params;
 
+    if attrs.transforms.is_empty() {
+        return Ok(quote! {});
+    }
+
     // Replace all the fields with generics to allow transforming into different types
     let ty_generics = ('A'..='Z')
         .zip(fields)
@@ -264,8 +268,6 @@ fn derive_transform(params: &Params) -> Result<TokenStream> {
                #vis #ident: #ty,
             }
         });
-
-        // eprintln!("types: {:?}", types);
 
         quote! {
             #vis struct #transformed_name<#(#ty_generics: for<'x> #crate_name::fetch::Fetch<'x>),*>{
