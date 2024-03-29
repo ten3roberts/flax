@@ -2,8 +2,10 @@ use crate::{
     archetype::ChangeKind,
     component::ComponentValue,
     filter::{ChangeFilter, Filtered, Nothing, Union},
-    Component, FetchExt, Mutable,
+    Component, EntityIds, FetchExt, Mutable,
 };
+
+use super::EntityRefs;
 
 /// Allows transforming a fetch into another.
 ///
@@ -40,6 +42,20 @@ impl<T: ComponentValue> TransformFetch<Modified> for Mutable<T> {
 }
 
 impl<T: ComponentValue> TransformFetch<Added> for Mutable<T> {
+    type Output = Filtered<Self, Nothing>;
+    fn transform_fetch(self, _: Added) -> Self::Output {
+        self.filtered(Nothing)
+    }
+}
+
+impl TransformFetch<Modified> for EntityIds {
+    type Output = Filtered<Self, Nothing>;
+    fn transform_fetch(self, _: Modified) -> Self::Output {
+        self.filtered(Nothing)
+    }
+}
+
+impl TransformFetch<Added> for EntityIds {
     type Output = Filtered<Self, Nothing>;
     fn transform_fetch(self, _: Added) -> Self::Output {
         self.filtered(Nothing)
