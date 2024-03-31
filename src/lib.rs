@@ -9,17 +9,17 @@
 //! ## Features
 //!
 //! - [Declarative component macro](https://docs.rs/flax/latest/flax/macro.component.html)
-//! - [Queries](https://docs.rs/flax/latest/flax/struct.Query.html)
-//! - [Change detection](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified)
+//! - [Expressive query system](https://docs.rs/flax/latest/flax/query/struct.Query.html)
+//! - [Change detection](https://docs.rs/flax/latest/flax/component/struct.Component.html#method.modified)
 //! - [Query filtering](https://docs.rs/flax/latest/flax/filter/index.html)
 //! - [System execution](https://docs.rs/flax/latest/flax/system/struct.System.html)
 //! - [Multithreaded system execution](https://docs.rs/flax/latest/flax/schedule/struct.Schedule.html)
 //! - [Many to many entity relation and graphs](https://docs.rs/flax/latest/flax/macro.component.html#relations)
 //! - [Reflection through component metadata](https://docs.rs/flax/latest/flax/macro.component.html)
-//! - [Ergonomic entity builder](https://docs.rs/flax/latest/flax/struct.EntityBuilder.html)
+//! - [Ergonomic entity builder](https://docs.rs/flax/latest/flax/entity/struct.EntityBuilder.html)
 //! - [Serialization and deserialization](https://docs.rs/flax/latest/flax/serialize/)
-//! - [(async) event subscription](https://docs.rs/flax/latest/flax/struct.World.html#method.subscribe)
-//! - [Runtime components](https://docs.rs/flax/latest/flax/struct.World.html#method.spawn_component)
+//! - [(async) event subscription](https://docs.rs/flax/latest/flax/world/struct.World.html#method.subscribe)
+//! - [Runtime components](https://docs.rs/flax/latest/flax/world/struct.World.html#method.spawn_component)
 //! - ...and more
 //!
 //! ## [Live Demo](https://ten3roberts.github.io/flax/asteroids)
@@ -195,6 +195,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::redundant_explicit_links)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 extern crate alloc;
 
@@ -280,5 +281,6 @@ pub use world::World;
 pub(crate) use query::ArchetypeSearcher;
 pub(crate) use vtable::ComponentVTable;
 
+#[doc(inline)]
 #[cfg(feature = "derive")]
 pub use flax_derive::*;
