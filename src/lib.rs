@@ -195,6 +195,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::redundant_explicit_links)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 extern crate alloc;
 
@@ -280,5 +281,6 @@ pub use world::World;
 pub(crate) use query::ArchetypeSearcher;
 pub(crate) use vtable::ComponentVTable;
 
+#[doc(inline)]
 #[cfg(feature = "derive")]
 pub use flax_derive::*;

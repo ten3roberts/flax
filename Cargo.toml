@@ -131,3 +131,7 @@ required-features = ["std"]
 name = "benchmarks"
 harness = false
 required-features = ["std"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
