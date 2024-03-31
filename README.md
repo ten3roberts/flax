@@ -19,7 +19,7 @@ Consider reading the [User Guide](https://ten3roberts.github.io/flax/guide)
 ## Features
 
 - [Declarative component macro](https://docs.rs/flax/latest/flax/macro.component.html)
-- [Queries](https://docs.rs/flax/latest/flax/struct.Query.html)
+- [Expressive query system](https://docs.rs/flax/latest/flax/struct.Query.html)
 - [Change detection](https://docs.rs/flax/latest/flax/struct.Component.html#method.modified)
 - [Query filtering](https://docs.rs/flax/latest/flax/filter/index.html)
 - [System execution](https://docs.rs/flax/latest/flax/system/struct.System.html)
