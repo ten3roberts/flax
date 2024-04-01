@@ -2,6 +2,77 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2024-04-01
+
+### Features
+
+- RelationExt::nth_relation
+- FetchExt::filtered
+- Implement RandomFetch for NthRelation
+- Add name shorthand for entity ref
+- Puffin integration
+- Add set_opt to `EntityRefMut` and `CommandBuffer`
+- Allow accessing world in EntityRef
+
+### Bug Fixes
+
+- Nth relation filtering
+- Export Storage
+- Nostd build
+- Despawn_children performance
+- Make mutable easier to use in modification queries
+- Performance of tree despawns for high number of archetypes
+- Improve dfs performance
+- Panic for DfsBorrow::iter_from when there are no relations
+- Infinite memory growth in command buffer
+- Incorrect changed tranform for mutable
+- Filtering for mutable and optional queries
+- Don't generate transformed types if there are no transform attrs
+
+### Documentation
+- Fix broken links missing a path component (#19)
+- Document all features and add feature availability for items (#19)
+
+### Miscellaneous Tasks
+
+- Profile system execution
+- Profile more heavy methods
+- Remove coverage due to upstream tarpaulin failure
+- Benchmark dfs
+- Add transforms to EntityIds
+- Update dependencies
+
+## [0.6.2] - 2024-02-15
+
+### Features
+
+- EntityBuilder::is_empty
+
+### Bug Fixes
+
+- Lazy component buffer in static memory
+- Deploy toolchain spec
+
+### Miscellaneous Tasks
+
+- Update ci toolchain
+- Release
+
+## [0.6.1] - 2024-02-07
+
+### Bug Fixes
+
+- Update canvas border color
+- Conditional and unconditional yield of optional filtered queries
+- Preserve field visibility for query items
+- Expose `NthRelation`
+- Apply commandbuffer in manually run boxed systems
+- Stale relations in detached archetypes
+
+### Miscellaneous Tasks
+
+- Release
+
 ## [0.6.0] - 2023-10-29
 
 ### Features
@@ -14,10 +85,10 @@ All notable changes to this project will be documented in this file.
 - Make entity ids a filter
 - QueryOne
 - Allow constructing query modifiers in const contexts
-- Document exclusive relations
-- Nth_relation
 - Improve change list removal
 - Allow access to storage in event subscription
+- Document exclusive relations
+- Nth_relation
 
 ### Bug Fixes
 
@@ -29,14 +100,14 @@ All notable changes to this project will be documented in this file.
 - Implement RandomFetch for entity ids
 - Source for slot filtering
 - Broken link
+- Always merge changes on set
+- Correctness of `Changes::set` for existing overlaps
+- Overlapping slots in change list
 - Invalid archetype for a transitive archetype connection
 - Clarify associated values for relations
 - Clarify value uniqueness
 - [**breaking**] Clear up naming with relation target
 - Nth_relation access granularity
-- Always merge changes on set
-- Correctness of `Changes::set` for existing overlaps
-- Overlapping slots in change list
 - Clarify target terms
 - Remove erronous cfg guard
 - Unused variable
@@ -67,12 +138,12 @@ All notable changes to this project will be documented in this file.
 - Clippy
 - Fix doctests
 - Document `name` special handling
-- Wording
 - Remove debug scaffolding
 - Fix no-std tests
 - Give asteroids a face lift
-- Update dependencies
 - [**breaking**] Remove `removed` filter
+- Wording
+- Update dependencies
 
 ## [0.5.0] - 2023-08-11
 
@@ -249,6 +320,7 @@ All notable changes to this project will be documented in this file.
 - Update syn and cleanup derive macro
 - Make codecov informational
 - Add asteroids src to README.md
+- Force CI run
 - Split filters into more modules
 - Move union to filter modules
 - Attempt to use GAT
@@ -262,7 +334,6 @@ All notable changes to this project will be documented in this file.
 - Cleanup
 - Sync readme
 - ComponentInfo => ComponentDesc
-- Force CI run
 - Cleanup
 - Batch => chunk
 - Improve miri speed
@@ -445,8 +516,8 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-- PreparedQuery re-entrancy
 - Wip issues
+- PreparedQuery re-entrancy
 - Spawn_at
 - Empty entities in root archetype
 - Guide workflow
