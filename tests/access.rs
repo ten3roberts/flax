@@ -65,7 +65,10 @@ fn access() {
     let regen_system = System::builder()
         .with_name("regen_system")
         .with_query(Query::new(health().as_mut()))
-        .for_each(|v| *v = (*v + 10.0).min(100.0))
+        .try_for_each(|v| {
+            *v = (*v + 10.0).min(100.0);
+            anyhow::Ok(())
+        })
         .boxed();
 
     let blue_system = System::builder()

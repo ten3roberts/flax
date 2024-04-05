@@ -72,6 +72,27 @@ where
     }
 }
 
+#[doc(hidden)]
+pub struct TryForEach<Func, E> {
+    func: Func,
+    _marker: PhantomData<E>,
+}
+
+impl<'a, Func, Q, F, E> SystemFn<'a, (QueryData<'a, Q, F>,), Result<(), E>> for TryForEach<Func, E>
+where
+    for<'x> Q: Fetch<'x>,
+    for<'x> F: Fetch<'x>,
+    for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item) -> Result<(), E>,
+    E: Send + Sync,
+{
+    fn execute(&mut self, mut data: (QueryData<Q, F>,)) -> Result<(), E> {
+        for item in &mut data.0.borrow() {
+            (self.func)(item)?;
+        }
+
+        Ok(())
+    }
+}
 /// Execute a function for each item in the query in parallel batches
 #[cfg(feature = "rayon")]
 pub struct ParForEach<F> {
@@ -96,6 +117,8 @@ where
     }
 }
 
+pub(crate) type TrySystem<F, Args, Err> = System<F, Args, Result<(), Err>>;
+
 impl<Q, F> SystemBuilder<(Query<Q, F>,)>
 where
     for<'x> Q: Fetch<'x> + 'static,
@@ -109,6 +132,25 @@ where
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             ForEach { func },
+            self.args,
+        )
+    }
+
+    /// Execute a function for each item in the query
+    pub fn try_for_each<Func, E>(
+        self,
+        func: Func,
+    ) -> TrySystem<TryForEach<Func, E>, (Query<Q, F>,), E>
+    where
+        E: Into<anyhow::Error>,
+        for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item) -> Result<(), E>,
+    {
+        System::new(
+            self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
+            TryForEach {
+                func,
+                _marker: PhantomData,
+            },
             self.args,
         )
     }
