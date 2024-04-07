@@ -82,6 +82,9 @@ impl Display for Error {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for MissingComponent {}
+
 impl Display for MissingComponent {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
