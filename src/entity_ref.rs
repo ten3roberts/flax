@@ -396,7 +396,10 @@ impl<'a> EntityRef<'a> {
     }
 
     /// Perform a query on the entity
-    pub fn query<'q, Q: Fetch<'q>>(&'q self, query: &'q Q) -> QueryOne<'q, Q> {
+    pub fn query<'q, Q: Fetch<'q>>(&self, query: &'q Q) -> QueryOne<'q, Q>
+    where
+        'a: 'q,
+    {
         QueryOne::new(query, self.world, self.arch, self.loc)
     }
 
