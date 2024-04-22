@@ -111,6 +111,17 @@ pub trait EventSubscriber: ComponentValue {
             subscriber: self,
         }
     }
+
+    /// Filter a subscriber to only receive events of a specific kind
+    fn filter_event_kind(self, event_kind: EventKind) -> FilterEventKind<Self>
+    where
+        Self: Sized,
+    {
+        FilterEventKind {
+            event_kind,
+            subscriber: self,
+        }
+    }
 }
 
 impl<S> EventSubscriber for S
@@ -340,5 +351,60 @@ where
     #[inline]
     fn is_connected(&self) -> bool {
         self.subscriber.is_connected()
+    }
+}
+
+/// Filter a subscriber to only receive events of a specific kind
+pub struct FilterEventKind<S> {
+    event_kind: EventKind,
+    subscriber: S,
+}
+
+impl<S> EventSubscriber for FilterEventKind<S>
+where
+    S: EventSubscriber,
+{
+    fn on_added(&self, storage: &Storage, event: &EventData) {
+        if self.event_kind == EventKind::Added {
+            self.subscriber.on_added(storage, event)
+        }
+    }
+
+    fn on_modified(&self, event: &EventData) {
+        if self.event_kind == EventKind::Modified {
+            self.subscriber.on_modified(event)
+        }
+    }
+
+    fn on_removed(&self, storage: &Storage, event: &EventData) {
+        if self.event_kind == EventKind::Removed {
+            self.subscriber.on_removed(storage, event)
+        }
+    }
+
+    fn is_connected(&self) -> bool {
+        self.subscriber.is_connected()
+    }
+}
+
+/// Maps an event to the associated entity id.
+pub struct WithIds<S> {
+    sink: S,
+}
+
+impl<S> WithIds<S> {
+    /// Create a new entity id sink
+    pub fn new(sink: S) -> Self {
+        Self { sink }
+    }
+}
+
+impl<S: Sink<Entity>> Sink<Event> for WithIds<S> {
+    fn send(&self, event: Event) {
+        self.sink.send(event.id);
+    }
+
+    fn is_connected(&self) -> bool {
+        self.sink.is_connected()
     }
 }
