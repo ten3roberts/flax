@@ -1,5 +1,7 @@
 use flax::{
     components::{child_of, name},
+    events::{Event, EventSubscriber},
+    fetch::relations_like_mut,
     filter::All,
     relation::RelationExt,
     *,
@@ -351,4 +353,76 @@ fn exclusive() {
 
     let entity = world.entity_mut(id3).unwrap();
     assert_eq!(entity.relations(child_of).map(|v| v.0).collect_vec(), [id2])
+}
+
+#[test]
+#[cfg(feature = "flume")]
+fn relations_mut() {
+    component! {
+        relationship(id): f32,
+    }
+
+    let mut world = World::new();
+
+    let (changed_tx, changed_rx) = flume::unbounded();
+
+    world.subscribe(changed_tx.filter(|_kind, data| data.key.id() == relationship.id()));
+
+    let id1 = Entity::builder()
+        .set(name(), "id1".into())
+        .spawn(&mut world);
+
+    let id2 = Entity::builder()
+        .set(name(), "id2".into())
+        .set(relationship(id1), 1.0)
+        .spawn(&mut world);
+
+    let id3 = Entity::builder()
+        .set(name(), "id3".into())
+        .set(relationship(id1), 2.0)
+        .spawn(&mut world);
+
+    let id4 = Entity::builder()
+        .set(name(), "id4".into())
+        .set(relationship(id2), 3.0)
+        .set(relationship(id1), 4.0)
+        .spawn(&mut world);
+
+    assert_eq!(
+        changed_rx.drain().collect_vec(),
+        [
+            Event::added(id2, relationship(id1).key()),
+            Event::added(id3, relationship(id1).key()),
+            Event::added(id4, relationship(id1).key()),
+            Event::added(id4, relationship(id2).key()),
+        ]
+    );
+
+    Query::new(relations_like_mut(relationship))
+        .borrow(&world)
+        .for_each(|v| v.for_each(|v| *v.1 *= -1.0));
+
+    assert_eq!(
+        Query::new((entity_ids(), relations_like(relationship)))
+            .borrow(&world)
+            .iter()
+            .flat_map(|(id, v)| v.map(move |(target, value)| (id, target, *value)))
+            .collect_vec(),
+        [
+            (id2, id1, -1.0),
+            (id3, id1, -2.0),
+            (id4, id1, -4.0),
+            (id4, id2, -3.0),
+        ]
+    );
+
+    assert_eq!(
+        changed_rx.drain().collect_vec(),
+        [
+            Event::modified(id2, relationship(id1).key()),
+            Event::modified(id3, relationship(id1).key()),
+            Event::modified(id4, relationship(id1).key()),
+            Event::modified(id4, relationship(id2).key()),
+        ]
+    );
 }
