@@ -20,6 +20,23 @@ pub struct Event {
     pub kind: EventKind,
 }
 
+impl Event {
+    /// Construct a new event
+    pub fn new(id: Entity, key: ComponentKey, kind: EventKind) -> Self {
+        Self { id, key, kind }
+    }
+
+    /// Construct a modified event
+    pub fn modified(id: Entity, key: ComponentKey) -> Self {
+        Self::new(id, key, EventKind::Modified)
+    }
+
+    /// Construct an added event
+    pub fn added(id: Entity, key: ComponentKey) -> Self {
+        Self::new(id, key, EventKind::Added)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// The type of ECS event
 pub enum EventKind {

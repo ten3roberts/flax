@@ -4,7 +4,6 @@ use core::{
 };
 
 use alloc::vec::Vec;
-use smallvec::SmallVec;
 
 use crate::{
     archetype::{CellGuard, Slot},
@@ -16,7 +15,7 @@ use crate::{
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch};
 
-/// Returns a list of relations of a specified type
+/// Returns an iterator of all relations of the specified type
 #[derive(Debug, Clone)]
 pub struct Relations<T: ComponentValue> {
     relation: Relation<T>,
@@ -31,7 +30,7 @@ where
     type Prepared = PreparedRelations<'w, T>;
 
     fn prepare(&self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let borrows: SmallVec<[_; 4]> = {
+        let borrows = {
             data.arch
                 .relations_like(self.relation.id())
                 .map(|(desc, &cell_index)| {
@@ -71,7 +70,7 @@ impl<'q, T: ComponentValue> FetchItem<'q> for Relations<T> {
 
 #[doc(hidden)]
 pub struct PreparedRelations<'a, T> {
-    borrows: SmallVec<[(Entity, CellGuard<'a, [T]>); 4]>,
+    borrows: Vec<(Entity, CellGuard<'a, [T]>)>,
 }
 
 pub struct Batch<'a, T> {
@@ -123,16 +122,16 @@ impl<'a, T> Iterator for RelationsIter<'a, T> {
     }
 }
 
-/// Query all relations of the specified kind.
+/// Access all relations of the specified type on the entity.
 ///
-/// **Note**: This still matches if there are `0` relations.
+/// **Note**: This still matches if there are no relations on the entity
 pub fn relations_like<T: ComponentValue>(relation: impl RelationExt<T>) -> Relations<T> {
     Relations {
         relation: relation.as_relation(),
     }
 }
 
-/// Query the nth relation of the specified kind.
+/// Access the nth relation of the specified kind.
 ///
 /// This is useful for [`Exclusive`](crate::metadata::Exclusive) relations where there is only one parent
 ///
