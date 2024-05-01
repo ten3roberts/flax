@@ -78,7 +78,7 @@ pub struct WriteComponent<'a, T> {
 impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T> {
     type Item = &'q mut T;
     type Chunk = PtrMut<'q, T>;
-    
+
     const HAS_FILTER: bool = false;
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
