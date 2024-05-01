@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2024-05-02
+
+### Features
+
+- Try_for_each system
+- Entity id sink adapter
+- `relations_like_mut`
+
+### Bug Fixes
+
+- Implement Error for MissingComponent
+- EntityRef::query no longer requires self lifetime
+
 ## [0.7.0] - 2024-04-01
 
 ### Features
@@ -29,10 +42,6 @@ All notable changes to this project will be documented in this file.
 - Filtering for mutable and optional queries
 - Don't generate transformed types if there are no transform attrs
 
-### Documentation
-- Fix broken links missing a path component (#19)
-- Document all features and add feature availability for items (#19)
-
 ### Miscellaneous Tasks
 
 - Profile system execution
@@ -41,6 +50,7 @@ All notable changes to this project will be documented in this file.
 - Benchmark dfs
 - Add transforms to EntityIds
 - Update dependencies
+- Release
 
 ## [0.6.2] - 2024-02-15
 
