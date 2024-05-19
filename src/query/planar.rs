@@ -207,6 +207,30 @@ where
         }
     }
 
+    /// See: [`QueryBorrow::for_each`]
+    pub fn try_for_each<E>(
+        &mut self,
+        mut func: impl FnMut(<Q as FetchItem<'_>>::Item) -> std::result::Result<(), E> + Send + Sync,
+    ) -> std::result::Result<(), E> {
+        self.clear_borrows();
+        for &arch_id in self.archetypes {
+            let arch = self.state.world.archetypes.get(arch_id);
+            if arch.is_empty() {
+                continue;
+            }
+
+            if let Some(mut p) = self.state.prepare_fetch(arch_id, arch) {
+                let chunk = p.chunks();
+
+                for item in chunk.flatten() {
+                    func(item)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Shorthand for:
     /// ```rust,ignore
     /// self.iter_batched()
