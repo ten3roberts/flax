@@ -74,6 +74,7 @@ impl EntityBuilder {
     }
 
     /// Shorthand for setting a unit type component
+    #[deprecated(note = "use `set_default` instead")]
     pub fn tag<T: From<()> + ComponentValue>(&mut self, component: Component<T>) -> &mut Self {
         self.set(component, ().into())
     }
@@ -96,6 +97,10 @@ impl EntityBuilder {
             self.buffer.set(component, value);
         }
         self
+    }
+
+    pub fn with_name(&mut self, name: impl Into<String>) -> &mut Self {
+        self.set(crate::components::name(), name.into())
     }
 
     /// Return a mutable reference to the stored component.
