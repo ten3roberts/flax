@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use itertools::{Either, Itertools};
 
 use crate::{
-    archetype::{ArchetypeId, CellData, Slice, Slot},
+    archetype::{CellData, Slice, Slot},
     buffer::ComponentBuffer,
     component::{ComponentDesc, ComponentValue},
     entity::EntityLocation,
@@ -172,18 +172,6 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
 
         (dst_loc, Either::Right(pushed))
     }
-}
-
-/// # Safety
-/// *All* components of the new slot must be initialized
-pub(crate) unsafe trait MigrateEntity {
-    fn migrate(
-        self,
-        world: &mut World,
-        src_id: ArchetypeId,
-        src_slot: Slot,
-        tick: u32,
-    ) -> (EntityLocation, Option<(Entity, Slot)>);
 }
 
 pub(crate) struct Replace<T: ComponentValue> {

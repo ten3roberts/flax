@@ -124,17 +124,6 @@ pub(crate) struct RowValueFormatter<'a> {
     pub slot: Slot,
 }
 
-struct ComponentName {
-    base_name: &'static str,
-    id: ComponentKey,
-}
-
-impl Debug for ComponentName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.base_name, self.id)
-    }
-}
-
 impl<'a> Debug for RowValueFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
