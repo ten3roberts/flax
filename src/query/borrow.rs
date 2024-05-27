@@ -2,7 +2,7 @@ use crate::{
     archetype::{Archetype, ArchetypeId, Slice},
     fetch::{FetchPrepareData, PreparedFetch},
     filter::Filtered,
-    Entity, Fetch, World,
+    Fetch, World,
 };
 
 use super::{ArchetypeChunks, Chunk};
@@ -76,31 +76,5 @@ where
             arch,
             fetch: self.fetch.prepare(data)?,
         })
-    }
-}
-
-struct BatchesWithId<'q, Q: PreparedFetch<'q>, F> {
-    chunks: ArchetypeChunks<'q, Q, F>,
-    // The current batch
-    current: Option<Chunk<'q, Q>>,
-}
-
-impl<'q, Q, F> Iterator for BatchesWithId<'q, Q, F>
-where
-    Q: 'q + PreparedFetch<'q>,
-    F: 'q + PreparedFetch<'q>,
-{
-    type Item = (Entity, Q::Item);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(current) = self.current.as_mut() {
-                if let item @ Some(_) = current.next_with_id() {
-                    return item;
-                }
-            }
-
-            self.current = Some(self.chunks.next()?);
-        }
     }
 }

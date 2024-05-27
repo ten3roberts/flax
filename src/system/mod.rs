@@ -302,19 +302,6 @@ pub struct System<F, Args, Ret> {
     _marker: PhantomData<Ret>,
 }
 
-struct FormatWith<F> {
-    func: F,
-}
-
-impl<F> fmt::Debug for FormatWith<F>
-where
-    F: Fn(&mut Formatter<'_>) -> fmt::Result,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        (self.func)(f)
-    }
-}
-
 /// Abstraction over a system with any kind of arguments and fallibility
 #[doc(hidden)]
 pub trait DynSystem {

@@ -210,8 +210,8 @@ where
     /// See: [`QueryBorrow::for_each`]
     pub fn try_for_each<E>(
         &mut self,
-        mut func: impl FnMut(<Q as FetchItem<'_>>::Item) -> std::result::Result<(), E> + Send + Sync,
-    ) -> std::result::Result<(), E> {
+        mut func: impl FnMut(<Q as FetchItem<'_>>::Item) -> core::result::Result<(), E> + Send + Sync,
+    ) -> core::result::Result<(), E> {
         self.clear_borrows();
         for &arch_id in self.archetypes {
             let arch = self.state.world.archetypes.get(arch_id);
