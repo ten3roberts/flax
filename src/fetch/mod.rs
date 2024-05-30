@@ -40,7 +40,7 @@ pub use read_only::*;
 pub use relations::{nth_relation, relations_like, NthRelation, Relations, RelationsIter};
 pub use relations_mut::{relations_like_mut, RelationsIterMut, RelationsMut};
 pub use satisfied::Satisfied;
-pub use source::Source;
+pub use source::{FromRelation, Source, Traverse};
 pub use transform::{Added, Modified, TransformFetch};
 
 #[doc(hidden)]
