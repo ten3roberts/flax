@@ -30,6 +30,7 @@ pub use as_deref::*;
 pub use cloned::*;
 pub use component::*;
 pub use component_mut::*;
+pub use copied::*;
 pub use entity_ref::*;
 pub use ext::FetchExt;
 pub use map::Map;
