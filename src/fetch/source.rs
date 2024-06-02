@@ -8,7 +8,7 @@ use crate::{
     Entity, Fetch, FetchItem,
 };
 
-use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch};
+use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch, TransformFetch};
 
 pub trait FetchSource {
     fn resolve<'a, 'w, Q: Fetch<'w>>(
@@ -264,6 +264,21 @@ pub struct PreparedSource<'w, Q> {
     slot: Option<Slot>,
     fetch: Q,
     _marker: PhantomData<&'w mut ()>,
+}
+
+impl<Q, K, S> TransformFetch<K> for Source<Q, S>
+where
+    Q: TransformFetch<K>,
+    S: FetchSource,
+{
+    type Output = Source<Q::Output, S>;
+
+    fn transform_fetch(self, method: K) -> Self::Output {
+        Source {
+            fetch: self.fetch.transform_fetch(method),
+            source: self.source,
+        }
+    }
 }
 
 #[cfg(test)]
