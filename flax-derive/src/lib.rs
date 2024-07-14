@@ -378,7 +378,7 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
     let prep_ty = params.w_ty();
     let item_ty = params.q_ty();
 
-    let field_idx = (0..field_names.len()).map(Index::from);
+    let field_idx = (0..field_names.len()).map(Index::from).collect_vec();
     let filter_fields = fields.iter().filter(|v| !v.attrs.ignore).map(|v| v.ident);
 
     quote! {
@@ -413,6 +413,27 @@ fn derive_prepared_struct(params: &Params) -> TokenStream {
                 (
                     #(#crate_name::fetch::PreparedFetch::create_chunk(&mut self.#field_names, slots),)*
                 )
+            }
+        }
+
+        #[automatically_derived]
+        impl #prep_impl #crate_name::fetch::RandomFetch<'q> for #prepared_name #prep_ty
+            where #(#field_types: 'static,)*
+            #(<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared: #crate_name::fetch::PreparedFetch<'q, Item = <#field_types as #crate_name::fetch::FetchItem<'q>>::Item>,)*
+            #(<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared: #crate_name::fetch::RandomFetch<'q>,)*
+        {
+            #[inline]
+            unsafe fn fetch_shared(&'q self, slot: usize) -> Self::Item {
+                Self::Item {
+                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::RandomFetch<'q>>::fetch_shared(&self.#field_names, slot),)*
+                }
+            }
+
+            #[inline]
+            unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: usize) -> Self::Item {
+                Self::Item {
+                    #(#field_names: <<#field_types as #crate_name::fetch::Fetch<'w>>::Prepared as #crate_name::fetch::RandomFetch<'q>>::fetch_shared_chunk(&chunk.#field_idx, slot),)*
+                }
             }
         }
     }

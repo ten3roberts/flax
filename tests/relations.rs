@@ -1,3 +1,4 @@
+use fetch::Copied;
 use flax::{
     components::{child_of, name},
     events::{Event, EventSubscriber},
@@ -6,6 +7,7 @@ use flax::{
     relation::RelationExt,
     *,
 };
+use futures::sink::drain;
 use itertools::Itertools;
 
 #[test]
@@ -328,6 +330,40 @@ fn relation_target_search() {
     let entity = world.entity(id4).unwrap();
     let mut query = entity.query(&query);
     assert_eq!(query.get(), Some((id1, &())));
+}
+
+#[test]
+#[cfg(feature = "derive")]
+fn struct_traverse() {
+    component! {
+        a: i32,
+        b: i32,
+    }
+
+    #[derive(Fetch)]
+    #[fetch(item_derives = [Debug, PartialEq, Eq], transforms = [Modified])]
+    struct MyQuery {
+        a: Copied<Component<i32>>,
+        b: Copied<Component<i32>>,
+    }
+
+    let mut world = World::new();
+
+    let id1 = Entity::builder().set(a(), 1).set(b(), 2).spawn(&mut world);
+    let id2 = Entity::builder().set(child_of(id1), ()).spawn(&mut world);
+
+    let mut query = Query::new(
+        MyQuery {
+            a: a().copied(),
+            b: b().copied(),
+        }
+        .traverse(child_of),
+    );
+
+    assert_eq!(
+        query.borrow(&world).get(id2),
+        Ok(MyQueryItem { a: 1, b: 2 })
+    );
 }
 
 #[test]
