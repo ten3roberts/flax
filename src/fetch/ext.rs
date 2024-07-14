@@ -12,7 +12,7 @@ use super::{
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation, Traverse},
     transform::Added,
-    Map, Modified, Satisfied, Source, TransformFetch,
+    Map, Modified, RandomFetch, Satisfied, Source, TransformFetch,
 };
 
 /// Extension trait for [crate::Fetch]
@@ -150,6 +150,8 @@ pub trait FetchExt: Sized {
     fn traverse<T, R>(self, relation: R) -> Source<Self, Traverse>
     where
         R: RelationExt<T>,
+        for<'w> Self: Fetch<'w>,
+        for<'w, 'q> <Self as Fetch<'w>>::Prepared: RandomFetch<'q>,
         T: ComponentValue,
     {
         Source::new(
