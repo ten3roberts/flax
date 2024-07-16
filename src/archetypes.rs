@@ -287,8 +287,8 @@ impl ArchetypeIndex {
                 relation_count: 0,
             });
 
-        assert_eq!(records.cell_index + records.relation_count, cell_index);
         records.relation_count += 1;
+        assert_eq!(records.cell_index + records.relation_count, cell_index + 1);
     }
 
     fn unregister_relation(&mut self, arch_id: ArchetypeId, key: ComponentKey) {
