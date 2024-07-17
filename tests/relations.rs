@@ -333,6 +333,26 @@ fn relation_target_search() {
 }
 
 #[test]
+fn multi_relation() {
+    component! {
+        target(id): (),
+        target2(id): (),
+    }
+
+    let mut world = World::new();
+    let id1 = Entity::builder().spawn(&mut world);
+    let id2 = Entity::builder().spawn(&mut world);
+    let id3 = Entity::builder()
+        .set(target(id2), ())
+        .set(target(id1), ())
+        .set(target2(id1), ())
+        .spawn(&mut world);
+
+    assert_eq!(world.get(id3, target(id1)).as_deref(), Ok(&()));
+    assert_eq!(world.get(id3, target(id2)).as_deref(), Ok(&()));
+}
+
+#[test]
 #[cfg(feature = "derive")]
 fn struct_traverse() {
     component! {

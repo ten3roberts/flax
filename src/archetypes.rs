@@ -306,7 +306,16 @@ impl ArchetypeIndex {
         for (&key, &cell_index) in arch.components() {
             if key.is_relation() {
                 assert!(key.target.is_some());
-                self.register_relation(arch_id, ComponentKey::new(dummy(), key.target), cell_index);
+                self.components
+                    .entry(ComponentKey::new(dummy(), key.target))
+                    .or_default()
+                    .insert(
+                        arch_id,
+                        ArchetypeRecord {
+                            cell_index,
+                            relation_count: 0,
+                        },
+                    );
                 self.register_relation(
                     arch_id,
                     ComponentKey::new(key.id(), Some(dummy())),
@@ -329,7 +338,9 @@ impl ArchetypeIndex {
         for key in arch.components().keys() {
             if key.is_relation() {
                 assert!(key.target.is_some());
-                self.unregister_relation(arch_id, ComponentKey::new(dummy(), key.target));
+                self.components
+                    .remove(&ComponentKey::new(dummy(), key.target));
+
                 self.unregister_relation(arch_id, ComponentKey::new(key.id(), Some(dummy())));
             }
 
