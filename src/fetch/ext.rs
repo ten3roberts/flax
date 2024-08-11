@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
     component::ComponentValue,
     filter::{Cmp, Equal, Filtered, Greater, GreaterEq, Less, LessEq},
@@ -9,6 +11,7 @@ use super::{
     as_deref::AsDeref,
     cloned::Cloned,
     copied::Copied,
+    expect::Expect,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation, Traverse},
     transform::Added,
@@ -207,6 +210,11 @@ pub trait FetchExt: Sized {
         F: for<'x> Fetch<'x>,
     {
         Filtered::new(self, filter, true)
+    }
+
+    /// Expect the query to match, panic otherwise
+    fn expect(self, msg: impl Into<Cow<'static, str>>) -> Expect<Self> {
+        Expect::new(self, msg.into())
     }
 }
 
