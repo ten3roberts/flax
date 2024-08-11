@@ -4,6 +4,7 @@ mod component;
 mod component_mut;
 mod copied;
 mod entity_ref;
+pub mod expect;
 mod ext;
 mod map;
 mod maybe_mut;
