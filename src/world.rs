@@ -16,7 +16,7 @@ use crate::{
     archetypes::Archetypes,
     buffer::ComponentBuffer,
     component::{dummy, ComponentDesc, ComponentKey, ComponentValue},
-    components::{self, component_info, is_static, name},
+    components::{self, component_info, is_static_entity, name},
     entity::{entity_ids, Entity, EntityIndex, EntityKind, EntityLocation, EntityStore},
     entity_ref::{EntityRef, EntityRefMut},
     entry::{Entry, OccupiedEntry, VacantEntry},
@@ -346,7 +346,7 @@ impl World {
         meta.set(name(), desc.name().into());
 
         if id.is_static() {
-            meta.set(is_static(), ());
+            meta.set(is_static_entity(), ());
         }
         self.spawn_at(id).unwrap();
 
@@ -1138,7 +1138,7 @@ impl World {
         let mut buffer = Entity::builder();
 
         for (arch_id, arch) in archetypes.iter_mut() {
-            if !arch.has(is_static().key()) {
+            if !arch.has(is_static_entity().key()) {
                 for id in arch.entities_mut() {
                     let old_id = *id;
                     let loc = entities
@@ -1173,7 +1173,7 @@ impl World {
 
         for (_, arch) in archetypes.iter_mut() {
             // Don't migrate static components
-            if !arch.has(is_static().key()) {
+            if !arch.has(is_static_entity().key()) {
                 let mut batch = BatchSpawn::new(arch.len());
                 let arch = arch.drain();
                 for mut cell in arch.cells.into_vec().into_iter() {
@@ -1208,7 +1208,7 @@ impl World {
         // This happens after non-static components have been initialized
         for (_, arch) in archetypes.iter_mut() {
             // Take each entity one by one and append them to the world
-            if arch.has(is_static().key()) {
+            if arch.has(is_static_entity().key()) {
                 while let Some(id) = unsafe {
                     arch.pop_last(|mut desc, ptr| {
                         let key = &mut desc.key;
@@ -1262,7 +1262,7 @@ impl World {
     fn ensure_static(&mut self, id: Entity) -> Result<EntityLocation> {
         assert!(id.is_static());
         let mut buffer = ComponentBuffer::new();
-        buffer.set(is_static(), ());
+        buffer.set(is_static_entity(), ());
         let (_, loc) = self.spawn_at_with(id, &mut buffer)?;
         Ok(loc)
     }
