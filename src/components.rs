@@ -28,5 +28,5 @@ component! {
     pub component_info: ComponentDesc => [ Debuggable ],
 
     /// Added automatically to all STATIC entities
-    pub is_static: () => [ Debuggable ],
+    pub is_static_entity: () => [ Debuggable ],
 }

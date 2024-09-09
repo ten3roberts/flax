@@ -515,7 +515,7 @@ mod test {
 
     use crate::{
         component,
-        components::{is_static, name},
+        components::{is_static_entity, name},
         EntityBuilder, FetchExt, Query,
     };
 
@@ -541,13 +541,13 @@ mod test {
         );
 
         let entity = entity.downgrade();
-        let res = entity.get(is_static());
+        let res = entity.get(is_static_entity());
 
         assert_eq!(
             res.as_deref(),
             Err(&MissingComponent {
                 id,
-                desc: is_static().desc()
+                desc: is_static_entity().desc()
             })
         )
     }
