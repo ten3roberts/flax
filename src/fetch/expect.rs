@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use alloc::borrow::Cow;
 
 use super::{Fetch, FetchItem};
 
@@ -35,7 +35,11 @@ impl<'w, Q: Fetch<'w>> Fetch<'w> for Expect<Q> {
         true
     }
 
-    fn access(&self, data: super::FetchAccessData, dst: &mut Vec<crate::system::Access>) {
+    fn access(
+        &self,
+        data: super::FetchAccessData,
+        dst: &mut alloc::vec::Vec<crate::system::Access>,
+    ) {
         self.fetch.access(data, dst)
     }
 
