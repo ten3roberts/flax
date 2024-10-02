@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use crate::{
     archetype::{Archetype, ArchetypeId, Slice, Slot},
     system::Access,
-    Entity, Fetch, FetchItem,
+    ArchetypeSearcher, Entity, Fetch, FetchItem,
 };
 
 use super::{FetchAccessData, FetchPrepareData, PreparedFetch, RandomFetch, TransformFetch};
@@ -18,6 +18,40 @@ pub trait FetchSource {
     ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)>;
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result;
+}
+
+impl FetchSource for () {
+    fn resolve<'a, 'w, Q: Fetch<'w>>(
+        &self,
+        fetch: &Q,
+        data: FetchAccessData<'a>,
+    ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
+        let mut searcher = ArchetypeSearcher::default();
+        fetch.searcher(&mut searcher);
+
+        let mut result = None;
+        searcher.find_archetypes(&data.world.archetypes, |arch_id, arch| {
+            if arch.is_empty()
+                || !fetch.filter_arch(FetchAccessData {
+                    world: data.world,
+                    arch,
+                    arch_id,
+                })
+            {
+                return false;
+            }
+
+            debug_assert!(result.is_none());
+            result = Some((arch_id, arch, Some(0)));
+            true
+        });
+
+        result
+    }
+
+    fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("any")
+    }
 }
 
 /// Selects the fetch value from the first target of the specified relation

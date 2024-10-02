@@ -72,7 +72,7 @@ where
                 arch,
                 arch_id,
             }) {
-                return;
+                return false;
             }
 
             let data = FetchAccessData {
@@ -81,7 +81,8 @@ where
                 arch_id,
             };
 
-            fetch.access(data, dst)
+            fetch.access(data, dst);
+            false
         });
 
         dst.push(Access {

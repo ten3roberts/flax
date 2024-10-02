@@ -105,7 +105,7 @@ impl State {
                 arch,
                 arch_id,
             }) {
-                return;
+                return false;
             }
 
             let idx = self.archetypes.len();
@@ -125,6 +125,8 @@ impl State {
             if root {
                 self.roots.push(idx);
             }
+
+            false
         });
 
         // for (arch_id, arch) in world.archetypes.iter() {

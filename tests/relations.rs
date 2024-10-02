@@ -7,7 +7,6 @@ use flax::{
     relation::RelationExt,
     *,
 };
-use futures::sink::drain;
 use itertools::Itertools;
 
 #[test]
