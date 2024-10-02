@@ -23,7 +23,7 @@ impl ArchetypeSearcher {
     pub(crate) fn find_archetypes<'a>(
         &mut self,
         archetypes: &'a Archetypes,
-        mut result: impl FnMut(ArchetypeId, &'a Archetype),
+        mut result: impl FnMut(ArchetypeId, &'a Archetype) -> bool,
     ) {
         self.required.sort();
         self.required.dedup();
@@ -37,14 +37,16 @@ pub(crate) fn traverse_archetypes<'a>(
     archetypes: &'a Archetypes,
     cur: ArchetypeId,
     required: &[ComponentKey],
-    result: &mut impl FnMut(ArchetypeId, &'a Archetype),
+    result: &mut impl FnMut(ArchetypeId, &'a Archetype) -> bool,
 ) {
     let arch = archetypes.get(cur);
     match required {
         // All components are found, every archetype from now on is matched
         [] => {
             // This matches
-            result(cur, arch);
+            if result(cur, arch) {
+                return;
+            }
 
             for &arch_id in arch.children.values() {
                 traverse_archetypes(archetypes, arch_id, required, result);

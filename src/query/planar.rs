@@ -53,10 +53,11 @@ impl Planar {
                 arch,
                 arch_id,
             }) {
-                return;
+                return false;
             }
 
-            result.push(arch_id)
+            result.push(arch_id);
+            false
         });
     }
 }

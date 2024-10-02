@@ -64,7 +64,7 @@ where
     }
 
     /// Prepares the query upon the world.
-    pub fn borrow<'w>(&'w mut self, world: &'w World) -> GraphBorrow<Q, F> {
+    pub fn borrow<'w>(&'w mut self, world: &'w World) -> GraphBorrow<'w, Q, F> {
         // The tick of the last iteration
         let mut old_tick = self.change_tick;
 

@@ -52,7 +52,7 @@ impl State {
                 arch,
                 arch_id,
             }) {
-                return;
+                return false;
             }
 
             let idx = self.archetypes.len();
@@ -74,6 +74,8 @@ impl State {
             if !arch_deps.is_empty() {
                 deps.insert(arch_id, arch_deps);
             }
+
+            false
         });
 
         fn sort(
