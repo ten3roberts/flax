@@ -104,6 +104,28 @@ impl Entity {
     pub fn kind(&self) -> EntityKind {
         self.kind
     }
+
+    /// Returns a bit representation of the entity
+    pub fn as_bits(&self) -> u64 {
+        let index = self.index as u64;
+        let gen = self.gen.get() as u64;
+        let kind = self.kind.bits() as u64;
+
+        (index << 32) | (gen << 16) | kind
+    }
+
+    /// Reconstruct an entity from its bit representation
+    pub fn try_from_bits(mut bits: u64) -> Option<Self> {
+        let kind = EntityKind::from_bits(bits as u16).unwrap();
+        bits >>= 16;
+
+        let gen = EntityGen::new(bits as u16).unwrap();
+        bits >>= 16;
+
+        let index = bits as u32;
+
+        Some(Entity { index, gen, kind })
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -299,5 +321,15 @@ mod tests {
         assert_eq!(size_of::<Entity>(), 8);
         assert_eq!(align_of::<Entity>(), 4);
         assert_eq!(size_of::<Option<Entity>>(), 8);
+    }
+
+    #[test]
+    fn test_bitcasts() {
+        let mut store = EntityStore::new(EntityKind::COMPONENT);
+
+        let a = store.spawn("a");
+
+        let a2 = Entity::try_from_bits(a.as_bits()).unwrap();
+        assert_eq!(a, a2);
     }
 }

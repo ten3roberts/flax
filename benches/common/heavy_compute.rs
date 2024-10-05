@@ -10,15 +10,6 @@ component! {
     velocity: Vec3,
 }
 
-#[derive(Copy, Clone)]
-struct Position(Vec3);
-
-#[derive(Copy, Clone)]
-struct Rotation(Vec3);
-
-#[derive(Copy, Clone)]
-struct Velocity(Vec3);
-
 pub struct Benchmark(World);
 
 impl Benchmark {

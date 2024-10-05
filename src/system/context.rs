@@ -11,11 +11,8 @@ use crate::{
 use super::{input::ExtractDyn, SystemAccess, SystemData};
 
 /// A resource that can be shared between systems
-/// The difference between this and an `Arc<Mutex<_>>` is that this will be
-/// taken into consideration when multithreading in the schedule, and will as
-/// such not require locks.
 ///
-/// The implementation is an `Arc<AtomicRefCell>` and is thus cheap to clone
+/// Used for safe multithreaded scheduling
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SharedResource<T>(Arc<AtomicRefCell<T>>);
 
