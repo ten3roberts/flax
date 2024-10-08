@@ -344,7 +344,7 @@ impl Archetype {
         self.components.keys().filter(|v| v.is_relation()).copied()
     }
 
-    pub(crate) fn relations_like(&self, relation: Entity) -> btree_map::Range<ComponentKey, usize> {
+    pub fn relations_like(&self, relation: Entity) -> btree_map::Range<ComponentKey, usize> {
         self.components.range(
             ComponentKey::new(relation, Some(Entity::MIN))
                 ..=ComponentKey::new(relation, Some(Entity::MAX)),
