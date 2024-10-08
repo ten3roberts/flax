@@ -251,7 +251,7 @@ impl Storage {
     }
 
     #[inline]
-    pub(crate) fn desc(&self) -> ComponentDesc {
+    pub fn desc(&self) -> ComponentDesc {
         self.desc
     }
 }
