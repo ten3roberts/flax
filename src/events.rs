@@ -5,6 +5,7 @@ use crate::{
     archetype::{Archetype, Slice, Storage},
     component::{ComponentDesc, ComponentKey, ComponentValue},
     filter::StaticFilter,
+    relation::Relation,
     sink::Sink,
     Component, Entity,
 };
@@ -129,6 +130,16 @@ pub trait EventSubscriber: ComponentValue {
         }
     }
 
+    /// Filter a subscriber to only receive events for a specific set of components
+    fn filter_relations<I: IntoIterator<Item = Entity>>(self, relations: I) -> FilterRelations<Self>
+    where
+        Self: Sized,
+    {
+        FilterRelations {
+            relations: relations.into_iter().collect(),
+            subscriber: self,
+        }
+    }
     /// Filter a subscriber to only receive events of a specific kind
     fn filter_event_kind(self, event_kind: EventKind) -> FilterEventKind<Self>
     where
@@ -363,6 +374,49 @@ where
     #[inline]
     fn matches_component(&self, desc: ComponentDesc) -> bool {
         self.components.contains(&desc.key()) && self.subscriber.matches_component(desc)
+    }
+
+    #[inline]
+    fn is_connected(&self) -> bool {
+        self.subscriber.is_connected()
+    }
+}
+
+/// Filter a subscriber to only receive events for a specific set of relations
+pub struct FilterRelations<S> {
+    relations: Vec<Entity>,
+    subscriber: S,
+}
+
+impl<S> EventSubscriber for FilterRelations<S>
+where
+    S: EventSubscriber,
+{
+    fn on_added(&self, storage: &Storage, event: &EventData) {
+        self.subscriber.on_added(storage, event)
+    }
+
+    fn on_modified(&self, event: &EventData) {
+        self.subscriber.on_modified(event)
+    }
+
+    fn on_removed(&self, storage: &Storage, event: &EventData) {
+        self.subscriber.on_removed(storage, event)
+    }
+
+    #[inline]
+    fn matches_arch(&self, arch: &Archetype) -> bool {
+        self.relations
+            .iter()
+            .any(|&key| arch.relations_like(key).any(|_| true))
+            && self.subscriber.matches_arch(arch)
+    }
+
+    #[inline]
+    fn matches_component(&self, desc: ComponentDesc) -> bool {
+        desc.key.is_relation()
+            && self.relations.contains(&desc.key.id())
+            && self.subscriber.matches_component(desc)
     }
 
     #[inline]
