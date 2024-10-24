@@ -38,38 +38,49 @@ pub(crate) fn traverse_archetypes<'a>(
     cur: ArchetypeId,
     required: &[ComponentKey],
     result: &mut impl FnMut(ArchetypeId, &'a Archetype) -> bool,
-) {
+) -> bool {
     let arch = archetypes.get(cur);
     match required {
         // All components are found, every archetype from now on is matched
         [] => {
             // This matches
             if result(cur, arch) {
-                return;
+                return true;
             }
 
             for &arch_id in arch.children.values() {
-                traverse_archetypes(archetypes, arch_id, required, result);
+                if traverse_archetypes(archetypes, arch_id, required, result) {
+                    return true;
+                }
             }
+
+            false
         }
         [head, tail @ ..] => {
             // Since the components in the trie are in order, a value greater than head means the
             // current component will never occur
             for (&component, &arch_id) in &arch.children {
-                match component.cmp(head) {
+                let found = match component.cmp(head) {
                     cmp::Ordering::Less => {
                         // Not quite, keep looking
-                        traverse_archetypes(archetypes, arch_id, required, result);
+                        traverse_archetypes(archetypes, arch_id, required, result)
                     }
                     cmp::Ordering::Equal => {
                         // One more component has been found, continue to search for the remaining ones
-                        traverse_archetypes(archetypes, arch_id, tail, result);
+                        traverse_archetypes(archetypes, arch_id, tail, result)
                     }
                     cmp::Ordering::Greater => {
                         // We won't find anything of interest further down the tree
+                        false
                     }
+                };
+
+                if found {
+                    return true;
                 }
             }
+
+            false
         }
     }
 }
