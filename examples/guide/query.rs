@@ -50,7 +50,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let mut query = Query::new((entity_ids(), position(), distance().as_mut()))
-        .filter(position().modified() & health().gt(0.0));
+        .with_filter(position().modified() & health().gt(0.0));
 
     println!("Updating distances");
     for (id, pos, dist) in &mut query.borrow(&world) {
@@ -86,7 +86,7 @@ fn main() -> anyhow::Result<()> {
         // ANCHOR: shorthand
         // Instead of this:
         let query = Query::new((position(), health(), distance()))
-            .filter(position().modified() & health().modified());
+            .with_filter(position().modified() & health().modified());
 
         // Do this:
         let query = Query::new((position().modified(), health().modified(), distance()));
@@ -115,7 +115,7 @@ fn main() -> anyhow::Result<()> {
         .with_name("update_distance")
         .with_query(
             Query::new((entity_ids(), position(), distance().as_mut()))
-                .filter(position().modified()),
+                .with_filter(position().modified()),
         )
         .for_each(|(id, pos, dist)| {
             tracing::debug!("Updating distance for {id} with position: {pos:?}");
@@ -133,7 +133,7 @@ fn main() -> anyhow::Result<()> {
     // ANCHOR: schedule_basic
     let despawn = System::builder()
         .with_name("delete_outside_world")
-        .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
+        .with_query(Query::new((entity_ids(), distance())).with_filter(distance().gt(50.0)))
         .with_cmd_mut()
         .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
             for (id, &dist) in &mut q {
@@ -171,7 +171,7 @@ fn main() -> anyhow::Result<()> {
     // eventually be despawned
     let move_out = System::builder()
         .with_name("move_out")
-        .with_query(Query::new(position().as_mut()).filter(is_static().without()))
+        .with_query(Query::new(position().as_mut()).with_filter(is_static().without()))
         .for_each(|pos| {
             let dir = pos.normalize_or_zero();
 

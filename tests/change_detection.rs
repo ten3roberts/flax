@@ -11,7 +11,7 @@ fn no_changes() {
         b: i32,
     }
 
-    let mut query = Query::new(entity_ids()).filter(a().modified() | b().modified());
+    let mut query = Query::new(entity_ids()).with_filter(a().modified() | b().modified());
 
     let id = Entity::builder().set(a(), 5).spawn(&mut world);
 
@@ -221,7 +221,7 @@ fn query_changes() {
 
     Query::new(a().as_mut())
         .with(b())
-        .filter(!c().with() | c().gt(40.0))
+        .with_filter(!c().with() | c().gt(40.0))
         .borrow(&world)
         .for_each(|v| *v *= 2);
 

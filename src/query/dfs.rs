@@ -729,7 +729,7 @@ mod test {
         assert_eq!(items, []);
 
         Query::new((name(), a().as_mut()))
-            .filter(child_of(ids[0]).with() | name().eq("a".to_string()))
+            .with_filter(child_of(ids[0]).with() | name().eq("a".to_string()))
             .borrow(&world)
             .for_each(|(_, a)| {
                 *a *= -10;

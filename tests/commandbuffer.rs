@@ -40,7 +40,7 @@ fn commandbuffer() {
     assert_eq!(world.get(ids[8], health()).as_deref(), Ok(&28.5));
 
     // Add a name to each component which doesn't have a name
-    let mut query = Query::new(entity_ids()).filter(name().without());
+    let mut query = Query::new(entity_ids()).with_filter(name().without());
 
     // Deferred world modification while iterating
     query.borrow(&world).iter().enumerate().for_each(|(i, id)| {
@@ -75,7 +75,7 @@ fn commandbuffer() {
     );
 
     Query::new((entity_ids(), name()))
-        .filter(name().cmp(|name: &String| name.contains("Unnamed")))
+        .with_filter(name().cmp(|name: &String| name.contains("Unnamed")))
         .borrow(&world)
         .iter()
         .for_each(|(id, n)| {
@@ -114,7 +114,7 @@ fn commandbuffer() {
     cmd.apply(&mut world).unwrap();
 
     let soldiers = Query::new(health())
-        .filter(soldier().with())
+        .with_filter(soldier().with())
         .borrow(&world)
         .iter()
         .copied()
@@ -126,7 +126,7 @@ fn commandbuffer() {
 
     // Oh no, one got shot
     if let Some(health) = Query::new(health().as_mut())
-        .filter(soldier().with())
+        .with_filter(soldier().with())
         .borrow(&world)
         .iter()
         .nth(42)
@@ -137,7 +137,7 @@ fn commandbuffer() {
     // Well, there are only 99 unwounded soldiers left
     // Lets count them
     let soldiers = Query::new(name())
-        .filter(soldier().with() & health().ge(100.0))
+        .with_filter(soldier().with() & health().ge(100.0))
         .borrow(&world)
         .iter()
         .cloned()

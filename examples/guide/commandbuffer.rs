@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     cmd.apply(&mut world)?;
 
     let id = Query::new(entity_ids())
-        .filter(name().eq("a"))
+        .with_filter(name().eq("a"))
         .borrow(&world)
         .iter()
         .next()
@@ -100,7 +100,7 @@ fn main() -> anyhow::Result<()> {
         .with_name("update_world_matrix")
         .with_query(
             Query::new((entity_ids(), position(), world_matrix().as_mut()))
-                .filter(position().modified()),
+                .with_filter(position().modified()),
         )
         .for_each(|(id, pos, ltw)| {
             tracing::info!("Updating world matrix for {id}");

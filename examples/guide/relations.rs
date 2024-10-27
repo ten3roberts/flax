@@ -66,13 +66,13 @@ fn basic() -> anyhow::Result<()> {
 
     // Matches a relation with any parent
     let all_children: Vec<Entity> = Query::new(entity_ids())
-        .filter(child_of.with_relation())
+        .with_filter(child_of.with_relation())
         .collect_vec(&world);
 
     tracing::info!("Children: {all_children:?}");
 
     let roots = Query::new(entity_ids())
-        .filter(child_of.without_relation())
+        .with_filter(child_of.without_relation())
         .collect_vec(&world);
 
     tracing::info!("Roots: {roots:?}");

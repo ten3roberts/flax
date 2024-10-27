@@ -103,7 +103,7 @@ fn main() -> anyhow::Result<()> {
     fn despawn_system() -> BoxedSystem {
         System::builder()
             .with_name("delete_outside_world")
-            .with_query(Query::new((entity_ids(), distance())).filter(distance().gt(50.0)))
+            .with_query(Query::new((entity_ids(), distance())).with_filter(distance().gt(50.0)))
             .with_cmd_mut()
             .build(|mut q: QueryBorrow<_, _>, cmd: &mut CommandBuffer| {
                 for (id, &dist) in &mut q {
@@ -132,7 +132,7 @@ fn main() -> anyhow::Result<()> {
     fn move_system() -> BoxedSystem {
         System::builder()
             .with_name("move_out")
-            .with_query(Query::new(position().as_mut()).filter(is_static().without()))
+            .with_query(Query::new(position().as_mut()).with_filter(is_static().without()))
             .for_each(|pos| {
                 let dir = pos.normalize_or_zero();
 

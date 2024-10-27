@@ -122,7 +122,7 @@ mod test {
         let mut world = World::new();
         batch.spawn(&mut world);
 
-        let mut query = Query::new(super::EntityRefs).filter(a().ge(0));
+        let mut query = Query::new(super::EntityRefs).with_filter(a().ge(0));
         let res = query
             .borrow(&world)
             .iter()
@@ -155,7 +155,7 @@ mod test {
         let _ = Entity::builder().set(name(), "d".into()).spawn(&mut world);
 
         let mut health_changed =
-            Query::new((EntityIds, health().copied())).filter(health().modified());
+            Query::new((EntityIds, health().copied())).with_filter(health().modified());
 
         assert_eq!(
             health_changed.borrow(&world).iter().collect_vec(),

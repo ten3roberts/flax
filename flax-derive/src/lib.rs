@@ -1,3 +1,5 @@
+mod system;
+
 use std::collections::BTreeSet;
 
 use itertools::Itertools;
@@ -6,9 +8,66 @@ use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
 use syn::{
     bracketed, parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, DataStruct,
-    DeriveInput, Error, Field, GenericParam, Generics, Ident, ImplGenerics, Index, Lifetime,
-    LifetimeParam, Result, Token, Type, TypeGenerics, TypeParam, Visibility,
+    DeriveInput, Error, Field, GenericParam, Generics, Ident, ImplGenerics, Index, ItemFn,
+    Lifetime, LifetimeParam, Result, Token, Type, TypeGenerics, TypeParam, Visibility,
 };
+use system::{system_impl, SystemAttrs};
+
+/// Derive a system from a receive function
+///
+/// Components are generated from the argument name unless otherwise specified with
+/// `args(ident=expr)`
+///
+/// # Attributes
+/// - `args`: Specify expressions for the components
+/// - `filter`: Additional filter expression for the query
+/// - `par`: use inner parallel iteration
+/// - `with_world`: `&World`, Access the world
+/// - `with_cmd`: `&CommandBuffer`, Access the schedule's commandbuffer
+/// - `with_cmd_mut`: `&mut CommandBuffer`, Access the schedule's commandbuffer
+/// - `with_query`: `&mut QueryBorrow<Q, F>`, Access another query during iteration
+///
+/// # Implicit type support
+/// If not specified using `args`, the component query expression is inferred from the argument
+/// name and type
+/// - `name: &T`: `name()`
+/// - `name: &mut T`: `name().as_mut()`
+/// - `name: T`: `name().copied()`
+/// - `name: Option<&T>`: `name().opt()`
+/// - `name: Option<&mut T>`: `name().as_mut().opt()`
+/// - `name: Option<T>`: `name().copied().opt()`
+///
+/// Works on both free functions and associated methods
+///
+/// # Examples
+/// ```
+/// component! {
+///     foo: String,
+///     my_type: MyType,
+/// }
+///
+/// pub struct MyType;
+///
+/// impl MyType {
+///     #[system(filter(d().with()))]
+///     pub fn method(self: &mut MyType, foo: &String) -> anyhow::Result<()> { }
+///
+///     #[system(with_cmd_mut)]
+///     pub fn method_with_cmd(self: &mut MyType, foo: Option<&String>, cmd: &mut CommandBuffer) { }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn system(
+    args: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let args = syn::parse_macro_input!(args as SystemAttrs);
+    let input = syn::parse_macro_input!(item as ItemFn);
+
+    system_impl(args, input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
 
 /// ```rust,ignore
 /// #[derive(Fetch)]

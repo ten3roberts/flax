@@ -18,7 +18,8 @@ proc-macro2 = "1.0.69"
 proc-macro-crate = "2.0.0"
 syn = "2.0.38"
 quote = "1.0.33"
-itertools = "0.11.0"
+itertools = "0.13.0"
+heck = "0.5"
 
 [dev-dependencies]
 glam = "0.24.2"

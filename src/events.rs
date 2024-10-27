@@ -5,7 +5,6 @@ use crate::{
     archetype::{Archetype, Slice, Storage},
     component::{ComponentDesc, ComponentKey, ComponentValue},
     filter::StaticFilter,
-    relation::Relation,
     sink::Sink,
     Component, Entity,
 };
