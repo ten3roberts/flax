@@ -23,7 +23,7 @@ where
 
         let mut query = Query::new(())
             .with_components()
-            .filter(self.filter.by_ref());
+            .with_filter(self.filter.by_ref());
 
         let mut query = query.borrow(self.world);
 

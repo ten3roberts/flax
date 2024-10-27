@@ -73,7 +73,7 @@ fn access() {
 
     let blue_system = System::builder()
         .with_name("blue_system")
-        .with_query(Query::new(weapon().as_mut()).filter(blue_team().with() & health().gt(0.0)))
+        .with_query(Query::new(weapon().as_mut()).with_filter(blue_team().with() & health().gt(0.0)))
         .for_each(|_v| {
             sleep(Duration::from_millis(100));
             // here be logic
@@ -82,7 +82,7 @@ fn access() {
 
     let red_system = System::builder()
         .with_name("red_system")
-        .with_query(Query::new(weapon().as_mut()).filter(red_team().with() & health().gt(0.0)))
+        .with_query(Query::new(weapon().as_mut()).with_filter(red_team().with() & health().gt(0.0)))
         .for_each(|_v| {
             sleep(Duration::from_millis(100));
             // here be logic
@@ -91,7 +91,7 @@ fn access() {
 
     let stats_system = System::builder()
         .with_name("stats")
-        .with_query(Query::new((weapon(), health())).filter(health().gt(0.0)))
+        .with_query(Query::new((weapon(), health())).with_filter(health().gt(0.0)))
         .for_each(|(weapon, health)| eprintln!("player using {weapon} is alive {health}"))
         .boxed();
 

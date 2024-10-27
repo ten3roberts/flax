@@ -171,7 +171,7 @@ fn merge_hierarchy() -> anyhow::Result<()> {
     assert_eq!(children, ["child.1", "child.2"]);
 
     let child_1_1 = Query::new(position())
-        .filter(name().eq("child.1.1".to_string()))
+        .with_filter(name().eq("child.1.1".to_string()))
         .borrow(&world)
         .iter()
         .copied()

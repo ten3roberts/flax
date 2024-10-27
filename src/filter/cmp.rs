@@ -258,7 +258,7 @@ mod test {
         let mut world = World::new();
         let ids = batch.spawn(&mut world);
 
-        let mut changed = Query::new(entity_ids()).filter(a().modified());
+        let mut changed = Query::new(entity_ids()).with_filter(a().modified());
 
         assert_eq!(changed.collect_vec(&world), ids);
 
@@ -296,7 +296,7 @@ mod test {
         let mut world = World::new();
         let ids = batch.spawn(&mut world);
 
-        let mut changed = Query::new(entity_ids()).filter(a().modified());
+        let mut changed = Query::new(entity_ids()).with_filter(a().modified());
 
         assert_eq!(changed.collect_vec(&world), ids);
 

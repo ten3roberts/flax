@@ -397,7 +397,7 @@ impl World {
     {
         profile_function!();
         self.flush_reserved();
-        let mut query = Query::new(entity_ids()).filter(filter);
+        let mut query = Query::new(entity_ids()).with_filter(filter);
         let ids = query.borrow(self).iter().collect_vec();
 
         for id in ids {

@@ -293,7 +293,7 @@ mod test {
             .unwrap();
 
         let mut query = Query::new((window_width(), window_height(), allow_vsync()))
-            .filter(Or((
+            .with_filter(Or((
                 window_width().modified(),
                 window_height().modified(),
                 allow_vsync().modified(),

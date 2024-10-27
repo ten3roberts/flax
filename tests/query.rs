@@ -42,8 +42,8 @@ fn query_change() {
         .spawn(&mut world);
 
     // Only those strong enough shall move
-    let mut move_alive = Query::new((name(), pos().as_mut())).filter(health().gt(40.0));
-    let mut consumer = Query::new((name(), pos(), distance().as_mut())).filter(pos().modified());
+    let mut move_alive = Query::new((name(), pos().as_mut())).with_filter(health().gt(40.0));
+    let mut consumer = Query::new((name(), pos(), distance().as_mut())).with_filter(pos().modified());
 
     // Ignore spawn changes to only capture `move_alive`
     consumer.borrow(&world).iter().for_each(|_| {});

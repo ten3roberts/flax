@@ -30,7 +30,7 @@ fn filters() {
         .map(|i| builder.set(a(), i as f32).spawn(&mut world))
         .collect_vec();
 
-    let mut query = Query::new(a().cloned()).filter(a().modified());
+    let mut query = Query::new(a().cloned()).with_filter(a().modified());
 
     let items = query.borrow(&world).iter().collect_vec();
 
@@ -120,7 +120,7 @@ fn combinations() {
         })
         .collect_vec();
 
-    let mut query = Query::new(entity_ids()).filter(a().modified() | b().modified());
+    let mut query = Query::new(entity_ids()).with_filter(a().modified() | b().modified());
 
     // eprintln!("Items: {:?}", query.iter(&world).sorted().collect_vec());
     assert_eq!(query.borrow(&world).iter().sorted().collect_vec(), ids);
@@ -169,7 +169,7 @@ fn bitops() {
 
     assert_eq!(
         Query::new(entity_ids())
-            .filter(a().gt(1.1) & a().lt(5.0))
+            .with_filter(a().gt(1.1) & a().lt(5.0))
             .borrow(&world)
             .iter()
             .sorted()
@@ -179,7 +179,7 @@ fn bitops() {
 
     assert_eq!(
         Query::new(entity_ids())
-            .filter((a().gt(1.1) & a().lt(5.0)) | (d().without() & b().without()))
+            .with_filter((a().gt(1.1) & a().lt(5.0)) | (d().without() & b().without()))
             .borrow(&world)
             .iter()
             .sorted()
@@ -189,7 +189,7 @@ fn bitops() {
 
     assert_eq!(
         Query::new(entity_ids())
-            .filter((a().cmp(|&v: &f32| v > 5.1 && v < 9.0)) | (d().without() & b().without()))
+            .with_filter((a().cmp(|&v: &f32| v > 5.1 && v < 9.0)) | (d().without() & b().without()))
             .borrow(&world)
             .iter()
             .sorted()
@@ -211,7 +211,7 @@ fn sparse_or() {
         })
         .collect_vec();
 
-    let mut query = Query::new(entity_ids()).filter(a().modified() | b().modified());
+    let mut query = Query::new(entity_ids()).with_filter(a().modified() | b().modified());
 
     assert_eq!(query.borrow(&world).iter().collect_vec(), ids);
 
@@ -274,7 +274,7 @@ fn sparse_and() {
         })
         .collect_vec();
 
-    let mut query = Query::new(entity_ids()).filter(a().modified() & b().modified());
+    let mut query = Query::new(entity_ids()).with_filter(a().modified() & b().modified());
 
     assert_eq!(query.borrow(&world).iter().collect_vec(), ids);
 
@@ -346,7 +346,7 @@ fn entity_filter() {
         .map(|i| Entity::builder().set(index(), i).spawn(&mut world))
         .collect_vec();
 
-    let mut query = Query::new(index().copied()).filter(Or((ids[5], ids2[7])));
+    let mut query = Query::new(index().copied()).with_filter(Or((ids[5], ids2[7])));
 
     assert_eq!(query.borrow(&world).iter().sorted().collect_vec(), &[5, 17]);
     let mut query = Query::new((entity_ids(), Or((ids[5], ids2[7])).satisfied()));

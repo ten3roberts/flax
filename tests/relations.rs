@@ -1,8 +1,5 @@
-use fetch::Copied;
 use flax::{
     components::{child_of, name},
-    events::{Event, EventSubscriber},
-    fetch::relations_like_mut,
     filter::All,
     relation::RelationExt,
     *,
@@ -46,7 +43,7 @@ fn relations() {
     tracing::info!("Children: {children:?}");
 
     let parents = Query::new(entity_ids())
-        .filter(child_of.without_relation())
+        .with_filter(child_of.without_relation())
         .borrow(&world)
         .iter()
         .collect_vec();
@@ -89,7 +86,7 @@ fn relations() {
     assert_eq!(Query::new(child_of(root)).borrow(&world).count(), 2);
     assert_eq!(
         Query::new(())
-            .filter(child_of.with_relation())
+            .with_filter(child_of.with_relation())
             .batch_size(1)
             .borrow(&world)
             .count(),
@@ -244,7 +241,7 @@ fn many_detach() {
 
     // Matches a relation with any parent
     let all_children: Vec<Entity> = Query::new(entity_ids())
-        .filter(child_of.with_relation())
+        .with_filter(child_of.with_relation())
         .borrow(&world)
         .iter()
         .sorted()
@@ -253,7 +250,7 @@ fn many_detach() {
     assert_eq!(all_children, [child1, child2]);
 
     let roots = Query::new(entity_ids())
-        .filter(child_of.without_relation())
+        .with_filter(child_of.without_relation())
         .borrow(&world)
         .iter()
         .sorted()
@@ -296,7 +293,7 @@ fn despawn_recursive() {
         .set(child_of(child1), "first")
         .spawn(&mut world);
 
-    let mut query = Query::new(name()).filter(parent.traverse(child_of));
+    let mut query = Query::new(name()).with_filter(parent.traverse(child_of));
 
     assert_eq!(
         query.borrow(&world).iter().sorted().collect_vec(),
@@ -354,6 +351,8 @@ fn multi_relation() {
 #[test]
 #[cfg(feature = "derive")]
 fn struct_traverse() {
+    use fetch::Copied;
+
     component! {
         a: i32,
         b: i32,
@@ -413,6 +412,9 @@ fn exclusive() {
 #[test]
 #[cfg(feature = "flume")]
 fn relations_mut() {
+    use events::{Event, EventSubscriber};
+    use fetch::relations_like_mut;
+
     component! {
         relationship(id): f32,
     }

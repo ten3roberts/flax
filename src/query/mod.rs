@@ -211,7 +211,7 @@ where
 {
     /// Adds a new filter to the query.
     /// This filter is and:ed with the existing filters.
-    pub fn filter<G>(self, filter: G) -> Query<Q, F::PushRight, S>
+    pub fn with_filter<G>(self, filter: G) -> Query<Q, F::PushRight, S>
     where
         F: TuplePush<G>,
     {
@@ -232,7 +232,7 @@ where
     where
         F: TuplePush<BatchSize>,
     {
-        self.filter(BatchSize(size))
+        self.with_filter(BatchSize(size))
     }
 
     /// Shortcut for filter(with_relation)
@@ -243,7 +243,7 @@ where
     where
         F: TuplePush<WithRelation>,
     {
-        self.filter(rel.with_relation())
+        self.with_filter(rel.with_relation())
     }
 
     /// Shortcut for filter(without_relation)
@@ -254,7 +254,7 @@ where
     where
         F: TuplePush<WithoutRelation>,
     {
-        self.filter(rel.without_relation())
+        self.with_filter(rel.without_relation())
     }
 
     /// Shortcut for filter(without)
@@ -262,7 +262,7 @@ where
     where
         F: TuplePush<Without>,
     {
-        self.filter(component.without())
+        self.with_filter(component.without())
     }
 
     /// Shortcut for filter(with)
@@ -270,7 +270,7 @@ where
     where
         F: TuplePush<With>,
     {
-        self.filter(component.with())
+        self.with_filter(component.with())
     }
 
     /// Prepare the next change tick and return the old one for the last time
@@ -364,7 +364,7 @@ mod test {
             .append_to(&mut world, resources())
             .unwrap();
 
-        let mut query = Query::new((window_width(), window_height(), allow_vsync())).filter(Or((
+        let mut query = Query::new((window_width(), window_height(), allow_vsync())).with_filter(Or((
             window_width().modified(),
             window_height().modified(),
             allow_vsync().modified(),

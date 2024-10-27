@@ -119,7 +119,7 @@ fn main() {
         let _span = info_span!("query_with").entered();
         // ANCHOR: query_with
 
-        let mut query = Query::new((name(), health())).filter(player().with());
+        let mut query = Query::new((name(), health())).with_filter(player().with());
 
         let mut borrow = query.borrow(&world);
 
@@ -136,7 +136,7 @@ fn main() {
         let _span = info_span!("query_without").entered();
         // ANCHOR: query_without
 
-        let mut query = Query::new((name(), health())).filter(player().without());
+        let mut query = Query::new((name(), health())).with_filter(player().without());
 
         for (name, health) in &mut query.borrow(&world) {
             tracing::info!("Npc: {name} at {health} health");
@@ -150,7 +150,7 @@ fn main() {
         // ANCHOR: query_combinators
 
         let mut query =
-            Query::new((name(), health().opt())).filter(player().with() | health().without());
+            Query::new((name(), health().opt())).with_filter(player().with() | health().without());
 
         for (name, health) in &mut query.borrow(&world) {
             if let Some(health) = health {
@@ -167,7 +167,7 @@ fn main() {
         let _span = info_span!("query_cmp").entered();
         // ANCHOR: query_cmp
 
-        let mut query = Query::new(name()).filter(health().without() | health().ge(35.0));
+        let mut query = Query::new(name()).with_filter(health().without() | health().ge(35.0));
         for name in &mut query.borrow(&world) {
             tracing::info!("{name} is still standing strong");
         }

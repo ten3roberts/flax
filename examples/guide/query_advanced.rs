@@ -96,7 +96,7 @@ fn main() -> anyhow::Result<()> {
                 rotation().opt_or_default(),
                 scale().opt_or(Vec3::ONE),
             ))
-            .filter(position().modified() | rotation().modified() | scale().modified()),
+            .with_filter(position().modified() | rotation().modified() | scale().modified()),
         )
         .for_each(|(id, world_matrix, pos, rot, scale)| {
             tracing::info!("Updating world matrix for: {id} {pos} {rot} {scale}");

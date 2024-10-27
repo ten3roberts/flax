@@ -612,7 +612,7 @@ fn despawn_dead() -> BoxedSystem {
         .with_query(Query::new(self::rng().as_mut()).entity(resources()))
         .with_query(
             Query::new((entity_ids(), position(), velocity(), material().opt()))
-                .filter(health().modified() & health().le(0.0)),
+                .with_filter(health().modified() & health().le(0.0)),
         )
         .with_cmd_mut()
         .build(

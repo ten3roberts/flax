@@ -92,7 +92,7 @@ fn main() {
     // ANCHOR: cleanup_system
 
     let query = Query::new((name().opt(), entity_ids(), player().satisfied()))
-        .filter(health().le(0.0).modified());
+        .with_filter(health().le(0.0).modified());
 
     let cleanup = System::builder()
         .with_name("cleanup")

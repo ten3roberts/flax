@@ -83,7 +83,6 @@ where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
     for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item) -> Result<(), E>,
-    E: Send + Sync,
 {
     fn execute(&mut self, mut data: (QueryData<Q, F>,)) -> Result<(), E> {
         for item in &mut data.0.borrow() {
@@ -93,6 +92,7 @@ where
         Ok(())
     }
 }
+
 /// Execute a function for each item in the query in parallel batches
 #[cfg(feature = "rayon")]
 pub struct ParForEach<F> {
@@ -114,6 +114,34 @@ where
             .iter_batched()
             .par_bridge()
             .for_each(|v| v.for_each(&self.func));
+    }
+}
+
+/// Execute a function for each item in the query in parallel batches
+#[cfg(feature = "rayon")]
+pub struct TryParForEach<F> {
+    func: F,
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, Func, Q, F, Err> SystemFn<'a, (QueryData<'a, Q, F>,), Result<(), Err>>
+    for TryParForEach<Func>
+where
+    for<'x> Q: Fetch<'x>,
+    for<'x> F: Fetch<'x>,
+    for<'x> <crate::filter::Filtered<Q, F> as Fetch<'x>>::Prepared: Send,
+    for<'x, 'y> <<Q as Fetch<'x>>::Prepared as crate::fetch::PreparedFetch<'y>>::Chunk: Send,
+    for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) -> Result<(), Err> + Send + Sync,
+    Err: Send + Sync,
+{
+    fn execute(&mut self, mut data: (QueryData<Q, F>,)) -> Result<(), Err> {
+        let mut borrow = data.0.borrow();
+        borrow
+            .iter_batched()
+            .par_bridge()
+            .try_for_each(|mut v| v.try_for_each(&self.func))?;
+
+        Ok(())
     }
 }
 
@@ -162,7 +190,6 @@ where
     for<'x> Q: 'static + Fetch<'x> + Send,
     for<'x> F: 'static + Fetch<'x> + Send,
     for<'x> <<Q as Fetch<'x>>::Prepared as crate::fetch::PreparedFetch<'x>>::Chunk: Send,
-    // for<'x, 'y> crate::query::Batch<'y, <Q as Fetch<'x>>::Prepared>: Send,
 {
     /// Execute a function for each item in the query in parallel batches
     pub fn par_for_each<Func>(self, func: Func) -> System<ParForEach<Func>, (Query<Q, F>,), ()>
@@ -172,6 +199,23 @@ where
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
             ParForEach { func },
+            self.args,
+        )
+    }
+
+    /// Execute a function for each item in the query in parallel batches
+    #[allow(clippy::type_complexity)]
+    pub fn try_par_for_each<Func, Err>(
+        self,
+        func: Func,
+    ) -> System<TryParForEach<Func>, (Query<Q, F>,), Result<(), Err>>
+    where
+        for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) -> Result<(), Err> + Send + Sync,
+        Err: Into<anyhow::Error>,
+    {
+        System::new(
+            self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
+            TryParForEach { func },
             self.args,
         )
     }
@@ -281,8 +325,9 @@ impl<Args> SystemBuilder<Args> {
         )
     }
 
-    /// Add a new generic argument to the system
-    fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight>
+    /// Add a new generic argument to the system.
+    /// See: [Self::with_query], [Self::with_world] etc for non-generic shorthands
+    pub fn with<S>(self, other: S) -> SystemBuilder<Args::PushRight>
     where
         S: for<'x> SystemData<'x>,
         Args: TuplePush<S>,
