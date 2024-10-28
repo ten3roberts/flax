@@ -163,6 +163,18 @@ impl<T> PartialEq for Component<T> {
     }
 }
 
+impl<T> Ord for Component<T> {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.key.cmp(&other.key)
+    }
+}
+
+impl<T> PartialOrd for Component<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl<T> Copy for Component<T> {}
 
 impl<T> Clone for Component<T> {
