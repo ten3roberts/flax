@@ -209,6 +209,22 @@ impl Schedule {
         self
     }
 
+    /// Add a new system to the schedule.
+    /// Respects order.
+    pub fn add_system(&mut self, system: impl Into<BoxedSystem>) -> &mut Self {
+        self.archetype_gen = 0;
+        let v = match self.systems.first_mut() {
+            Some(v) => v,
+            None => {
+                self.systems.push(Default::default());
+                &mut self.systems[0]
+            }
+        };
+
+        v.push(system.into());
+        self
+    }
+
     /// Applies the commands inside of the commandbuffer
     pub fn flush(self) -> Self {
         self.with_system(flush_system())
