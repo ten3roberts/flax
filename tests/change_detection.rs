@@ -275,3 +275,42 @@ fn added_opt_and() {
     assert_eq!(query.borrow(&world).iter().collect_vec(), [(&5, &2)]);
     assert_eq!(query.borrow(&world).iter().collect_vec(), []);
 }
+
+#[test]
+fn move_older_changes() {
+    component! {
+        a: (),
+        b: (),
+    }
+
+    let mut world = World::new();
+
+    let id1 = Entity::builder()
+        .set_default(a())
+        .set_default(b())
+        .spawn(&mut world);
+
+    let id2 = Entity::builder().set_default(a()).spawn(&mut world);
+    let mut b_query = Query::new(b().modified());
+    b_query.borrow(&world);
+
+    let mut mark_read = Query::new(a());
+    let mut query = Query::new((entity_ids()).filtered(a().modified()));
+
+    assert_eq!(query.collect_vec(&world), [id2, id1]);
+
+    *world.get_mut(id1, a()).unwrap() = ();
+    mark_read.borrow(&world);
+
+    *world.get_mut(id1, b()).unwrap() = ();
+    mark_read.borrow(&world);
+
+    world.get(id1, a()).unwrap();
+    mark_read.borrow(&world);
+    *world.get_mut(id2, a()).unwrap() = ();
+    world.get(id1, a()).unwrap();
+
+    world.detach(b().id());
+
+    assert_eq!(query.collect_vec(&world), [id2, id1]);
+}
