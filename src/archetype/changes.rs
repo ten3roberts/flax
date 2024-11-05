@@ -64,7 +64,7 @@ impl ChangeList {
         }
     }
 
-    pub(crate) fn set(&mut self, value: Change) -> &mut Self {
+    pub(crate) fn set(&mut self, mut new_change: Change) -> &mut Self {
         // let orig = self.inner.clone();
         let mut insert_point = 0;
         let mut i = 0;
@@ -76,19 +76,19 @@ impl ChangeList {
 
         while i < changes.len() {
             let change = &mut changes[i];
-            let slice = change.slice;
+            let slice = &mut change.slice;
 
-            if slice.start < value.slice.start {
+            if slice.start < new_change.slice.start {
                 // TODO: break
                 insert_point = i + 1;
             }
 
             // Merge
-            match change.tick.cmp(&value.tick) {
+            match change.tick.cmp(&new_change.tick) {
                 // Remove the incoming changes range from the existing ones
                 core::cmp::Ordering::Less => {
                     // Remove overlaps with existing intervals of previous ticks
-                    match slice.subtract(&value.slice) {
+                    match slice.subtract(&new_change.slice) {
                         Remainder::NoOverlap => {
                             i += 1;
                         }
@@ -117,7 +117,7 @@ impl ChangeList {
                 }
                 core::cmp::Ordering::Equal => {
                     // Attempt to merge
-                    if let Some(union) = slice.union(&value.slice) {
+                    if let Some(union) = slice.union(&new_change.slice) {
                         change.slice = union;
                         // eprintln!("Merge: {slice:?} {value:?} => {change:?}");
 
@@ -134,11 +134,35 @@ impl ChangeList {
 
                     i += 1;
                 }
-                core::cmp::Ordering::Greater => unreachable!(),
+                // Existing changes are later, don't overwrite
+                core::cmp::Ordering::Greater => match new_change.slice.subtract(&change.slice) {
+                    Remainder::NoOverlap => {
+                        i += 1;
+                    }
+                    Remainder::FullOverlap => {
+                        // nothing to be done
+                        return self;
+                    }
+                    Remainder::Left(left) => {
+                        new_change.slice = left;
+                        i += 1;
+                    }
+                    Remainder::Right(right) => {
+                        new_change.slice = right;
+                        i += 1;
+                    }
+                    Remainder::Split(left, right) => {
+                        new_change.slice = left;
+
+                        let tick = new_change.tick;
+                        changes.insert(i + 1, Change::new(right, tick));
+                        i += 2;
+                    }
+                },
             }
         }
 
-        self.inner.insert(insert_point, value);
+        self.inner.insert(insert_point, new_change);
 
         // #[cfg(debug_assertions)]
         // self.assert_normal(&alloc::format!(
