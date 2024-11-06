@@ -5,9 +5,9 @@ use anyhow::Context;
 
 use crate::{
     buffer::MultiComponentBuffer,
-    component::{ComponentDesc, ComponentValue},
+    component::{dummy, ComponentDesc, ComponentValue},
     writer::{MissingDyn, SingleComponentWriter, WriteDedupDyn},
-    BatchSpawn, Component, Entity, EntityBuilder, World,
+    BatchSpawn, Component, Entity, EntityBuilder, RelationExt, World,
 };
 
 type DeferFn = Box<dyn Fn(&mut World) -> anyhow::Result<()> + Send + Sync>;
@@ -40,6 +40,7 @@ enum Command {
     },
     /// Despawn an entity
     Despawn(Entity),
+    DespawnRecursive(ComponentDesc, Entity),
     /// Remove a component from an entity
     Remove {
         id: Entity,
@@ -86,6 +87,12 @@ impl fmt::Debug for Command {
                 .field("offset", offset)
                 .finish(),
             Self::Despawn(arg0) => f.debug_tuple("Despawn").field(arg0).finish(),
+            Self::DespawnRecursive(relation, arg0) => f
+                .debug_tuple("DespawnRecursive")
+                .field(relation)
+                .field(arg0)
+                .finish(),
+            // Self::DespawnRecursive(arg0) => f.debug_tuple("Despawn").field(arg0).finish(),
             Self::Remove {
                 id,
                 desc: component,
@@ -253,6 +260,17 @@ impl CommandBuffer {
         self
     }
 
+    /// Despawn an entity by id recursively
+    pub fn despawn_recursive<T: ComponentValue>(
+        &mut self,
+        relation: impl RelationExt<T>,
+        id: Entity,
+    ) -> &mut Self {
+        self.commands
+            .push(Command::DespawnRecursive(relation.of(dummy()).desc(), id));
+        self
+    }
+
     /// Defer a function to execute upon the world.
     ///
     /// Errors will be propagated.
@@ -324,6 +342,10 @@ impl CommandBuffer {
                 },
                 Command::Despawn(id) => world
                     .despawn(id)
+                    .map_err(|v| v.into_anyhow())
+                    .context("Failed to despawn entity")?,
+                Command::DespawnRecursive(relation, id) => world
+                    .despawn_recursive_untyped(id, relation.key().id())
                     .map_err(|v| v.into_anyhow())
                     .context("Failed to despawn entity")?,
                 Command::Remove { id, desc } => world

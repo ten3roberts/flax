@@ -419,12 +419,27 @@ impl World {
         Ok(())
     }
 
+    /// Despawns an entity and all connected entities through the supplied
+    /// relation
+    pub fn despawn_recursive_untyped(&mut self, id: Entity, relation: Entity) -> Result<()> {
+        profile_function!();
+        self.despawn_children_untyped(id, relation)?;
+        self.despawn(id)?;
+
+        Ok(())
+    }
+
     /// Despawns all children of an entity recursively
     pub fn despawn_children<T: ComponentValue>(
         &mut self,
         id: Entity,
         relation: impl RelationExt<T>,
     ) -> Result<()> {
+        self.despawn_children_untyped(id, relation.id())
+    }
+
+    /// Despawns all children of an entity recursively
+    pub fn despawn_children_untyped(&mut self, id: Entity, relation: Entity) -> Result<()> {
         profile_function!();
         self.flush_reserved();
 
@@ -436,7 +451,7 @@ impl World {
             archetypes.extend(
                 self.archetypes
                     .index
-                    .find(relation.of(id).key())
+                    .find(ComponentKey::new(relation, Some(id)))
                     .into_iter()
                     .flat_map(|v| v.keys().copied()),
             );
