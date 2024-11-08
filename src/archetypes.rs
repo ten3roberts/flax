@@ -1,3 +1,5 @@
+use core::fmt::{Debug, Formatter};
+
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 
 use crate::{
@@ -255,6 +257,7 @@ impl Archetypes {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct ArchetypeRecord {
     // arch_id: ArchetypeId,
     cell_index: usize,
@@ -267,6 +270,14 @@ pub(crate) struct ArchetypeRecord {
 pub(crate) type ArchetypeRecords = BTreeMap<ArchetypeId, ArchetypeRecord>;
 pub(crate) struct ArchetypeIndex {
     components: BTreeMap<ComponentKey, ArchetypeRecords>,
+}
+
+impl Debug for ArchetypeIndex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ArchetypeIndex")
+            .field("components", &self.components)
+            .finish()
+    }
 }
 
 impl ArchetypeIndex {
@@ -339,7 +350,10 @@ impl ArchetypeIndex {
             if key.is_relation() {
                 assert!(key.target.is_some());
                 self.components
-                    .remove(&ComponentKey::new(dummy(), key.target));
+                    .entry(ComponentKey::new(dummy(), key.target))
+                    .and_modify(|v| {
+                        v.remove(&arch_id);
+                    });
 
                 self.unregister_relation(arch_id, ComponentKey::new(key.id(), Some(dummy())));
             }
