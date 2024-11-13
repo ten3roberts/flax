@@ -48,12 +48,12 @@ pub enum SerializeFormat {
 
 /// Allows constructing a serialize and deserialize context with the same
 /// supported types allowing for easier roundtrips.
-pub struct SerdeBuilder<F = All> {
+pub struct SerializationContextBuilder<F = All> {
     ser: SerializeBuilder<F>,
     de: DeserializeBuilder,
 }
 
-impl SerdeBuilder {
+impl SerializationContextBuilder {
     /// Creates a new builder which simultaneously constructs a serialialization
     /// and deserialization context
     pub fn new() -> Self {
@@ -64,13 +64,13 @@ impl SerdeBuilder {
     }
 }
 
-impl Default for SerdeBuilder {
+impl Default for SerializationContextBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F> SerdeBuilder<F>
+impl<F> SerializationContextBuilder<F>
 where
     F: StaticFilter + 'static + Clone,
 {
@@ -96,8 +96,8 @@ where
     }
 
     /// Add a new filter to specify which entities will be serialized.
-    pub fn with_filter<G>(self, filter: G) -> SerdeBuilder<And<F, G>> {
-        SerdeBuilder {
+    pub fn with_filter<G>(self, filter: G) -> SerializationContextBuilder<And<F, G>> {
+        SerializationContextBuilder {
             ser: self.ser.with_filter(filter),
             de: self.de,
         }
@@ -200,7 +200,7 @@ mod test {
             }
         };
 
-        let (serializer, deserializer) = SerdeBuilder::new()
+        let (serializer, deserializer) = SerializationContextBuilder::new()
             .with(name())
             .with(health())
             .with(pos())
