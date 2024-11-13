@@ -137,6 +137,25 @@ impl DeserializeContext {
         deserializer.deserialize_enum("World", &["row", "col"], WorldVisitor { context: self })
     }
 
+    /// Deserializes an entity into the provided builder
+    pub fn deserialize_entity<'de, D>(
+        &self,
+        deserializer: D,
+        builder: &mut EntityBuilder,
+    ) -> core::result::Result<Entity, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_tuple_struct(
+            "Entity",
+            2,
+            EntityVisitor {
+                context: self,
+                builder,
+            },
+        )
+    }
+
     fn get(&self, key: &str) -> Result<&Slot, String> {
         self.slots
             .get(key)
@@ -206,7 +225,7 @@ impl<'de, 'a> Visitor<'de> for DeserializeEntities<'a> {
         A: SeqAccess<'de>,
     {
         let mut builder = EntityBuilder::new();
-        while let Some(id) = seq.next_element_seed(DeserializeEntity {
+        while let Some(id) = seq.next_element_seed(EntityVisitor {
             context: self.context,
             builder: &mut builder,
         })? {
@@ -221,12 +240,12 @@ impl<'de, 'a> Visitor<'de> for DeserializeEntities<'a> {
 }
 
 /// (id, components)
-struct DeserializeEntity<'a> {
+struct EntityVisitor<'a> {
     context: &'a DeserializeContext,
     builder: &'a mut EntityBuilder,
 }
 
-impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntity<'a> {
+impl<'de, 'a> DeserializeSeed<'de> for EntityVisitor<'a> {
     type Value = Entity;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -237,7 +256,7 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntity<'a> {
     }
 }
 
-impl<'de, 'a> Visitor<'de> for DeserializeEntity<'a> {
+impl<'de, 'a> Visitor<'de> for EntityVisitor<'a> {
     type Value = Entity;
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -262,6 +281,7 @@ impl<'de, 'a> Visitor<'de> for DeserializeEntity<'a> {
     }
 }
 
+/// Deserialize the entity data into the provided entity builder
 struct DeserializeEntityData<'a> {
     context: &'a DeserializeContext,
     builder: &'a mut EntityBuilder,
