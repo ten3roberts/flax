@@ -23,7 +23,7 @@ use crate::{
     metadata::Metadata,
     relation::RelationExt,
     vtable::{ComponentVTable, UntypedVTable},
-    Entity, Mutable,
+    Entity, ComponentMut,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
@@ -260,8 +260,8 @@ impl<T: ComponentValue> Component<T> {
     }
 
     /// Transform this into a mutable fetch
-    pub const fn as_mut(self) -> Mutable<T> {
-        Mutable(self)
+    pub const fn as_mut(self) -> ComponentMut<T> {
+        ComponentMut(self)
     }
 
     /// Transform this into a (maybe) mutable fetch
