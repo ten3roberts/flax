@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 
     tracing_subscriber::fmt().init();
 
-    use flax::serialize::{SerdeBuilder, SerializeFormat};
+    use flax::serialize::{SerializationContextBuilder, SerializeFormat};
     tracing::info!("It works");
 
     let mut world = World::new();
@@ -45,7 +45,7 @@ fn main() -> anyhow::Result<()> {
     // ANCHOR_END: setup
 
     // ANCHOR: serialize
-    let (serializer, deserializer) = SerdeBuilder::new()
+    let (serializer, deserializer) = SerializationContextBuilder::new()
         .with(name())
         .with(position())
         .with(velocity())

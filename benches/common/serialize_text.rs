@@ -2,7 +2,7 @@ use std::iter::repeat;
 
 use flax::{
     component,
-    serialize::{SerdeBuilder, SerializeFormat},
+    serialize::{SerializationContextBuilder, SerializeFormat},
     BatchSpawn, World,
 };
 
@@ -58,7 +58,7 @@ impl Benchmark {
     pub fn run_col(&mut self) {
         let Self(world) = self;
 
-        let (serializer, deserializer) = SerdeBuilder::new()
+        let (serializer, deserializer) = SerializationContextBuilder::new()
             .with(transform())
             .with(position())
             .with(rotation())

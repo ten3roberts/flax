@@ -3,7 +3,7 @@ use crate::{
     component::{ComponentKey, ComponentValue},
     components::component_info,
     filter::{All, And, StaticFilter},
-    Component, Entity, World,
+    Component, Entity, EntityRef, World,
 };
 
 use alloc::{boxed::Box, collections::BTreeMap, string::String};
@@ -127,6 +127,16 @@ impl SerializeContext {
         }
     }
 
+    /// Serialize a single entity
+    pub fn serialize_entity<'a>(&'a self, entity: &'a EntityRef) -> EntitySerializer {
+        EntitySerializer {
+            slot: entity.loc.slot,
+            arch: entity.arch,
+            id: entity.id,
+            context: self,
+        }
+    }
+
     fn archetypes<'a>(
         &'a self,
         world: &'a World,
@@ -202,7 +212,7 @@ impl<'a> Serialize for SerializeEntities<'a> {
 
         for (_, arch) in self.context.archetypes(self.world) {
             for slot in arch.slots() {
-                seq.serialize_element(&SerializeEntity {
+                seq.serialize_element(&EntitySerializer {
                     slot,
                     arch,
                     id: arch.entity(slot).expect("Invalid slot"),
@@ -215,14 +225,15 @@ impl<'a> Serialize for SerializeEntities<'a> {
     }
 }
 
-struct SerializeEntity<'a> {
+/// Serializes an entity
+pub struct EntitySerializer<'a> {
     slot: usize,
     arch: &'a Archetype,
     id: Entity,
     context: &'a SerializeContext,
 }
 
-impl<'a> Serialize for SerializeEntity<'a> {
+impl<'a> Serialize for EntitySerializer<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

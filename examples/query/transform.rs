@@ -64,7 +64,7 @@ fn main() {
             Query::new((world_position().as_mut(), position())).with_strategy(Dfs::new(child_of)),
         )
         .build(
-            |mut query: DfsBorrow<(Mutable<Vec3>, Component<Vec3>), All, ()>| {
+            |mut query: DfsBorrow<(ComponentMut<Vec3>, Component<Vec3>), All, ()>| {
                 query.traverse(&Vec3::ZERO, |(world_pos, &pos), _, &parent_pos| {
                     *world_pos = pos + parent_pos;
                     *world_pos
