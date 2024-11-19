@@ -333,7 +333,9 @@ fn schedule_input_tuple() {
 fn schedule_par() {
     use glam::{vec2, Vec2};
 
-    use flax::{components::name, entity_ids, CommandBuffer, Component, EntityIds, Fetch, Mutable};
+    use flax::{
+        components::name, entity_ids, CommandBuffer, Component, ComponentMut, EntityIds, Fetch,
+    };
 
     #[derive(Debug, Clone)]
     enum Weapon {
@@ -390,7 +392,7 @@ fn schedule_par() {
     let heal = System::builder()
         .with_query(Query::new(health().as_mut()))
         .with_name("heal")
-        .build(|mut q: QueryBorrow<Mutable<f32>>| {
+        .build(|mut q: QueryBorrow<ComponentMut<f32>>| {
             q.iter().for_each(|h| {
                 if *h > 0.0 {
                     *h += 1.0
@@ -421,7 +423,7 @@ fn schedule_par() {
     struct BattleTarget {
         id: EntityIds,
         pos: Component<Vec2>,
-        health: Mutable<f32>,
+        health: ComponentMut<f32>,
     }
 
     let battle = System::builder()

@@ -84,7 +84,7 @@ fn merge_empty() -> anyhow::Result<()> {
             v.set(name(), format!("world.{i}")).spawn(&mut world);
         });
 
-    let (serializer, deserializer) = SerdeBuilder::new()
+    let (serializer, deserializer) = SerializationContextBuilder::new()
         .with_name("position", position())
         .with_name("rotation", rotation())
         .with_name("scale", scale())

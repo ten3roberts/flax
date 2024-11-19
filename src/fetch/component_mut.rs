@@ -15,9 +15,9 @@ use super::{FetchAccessData, FetchPrepareData, PreparedFetch};
 #[derive(Debug, Clone)]
 /// Mutable component fetch
 /// See [crate::Component::as_mut]
-pub struct Mutable<T>(pub(crate) Component<T>);
+pub struct ComponentMut<T>(pub(crate) Component<T>);
 
-impl<'w, T> Fetch<'w> for Mutable<T>
+impl<'w, T> Fetch<'w> for ComponentMut<T>
 where
     T: ComponentValue,
 {
@@ -64,7 +64,7 @@ where
     }
 }
 
-impl<'q, T: ComponentValue> FetchItem<'q> for Mutable<T> {
+impl<'q, T: ComponentValue> FetchItem<'q> for ComponentMut<T> {
     type Item = &'q mut T;
 }
 
