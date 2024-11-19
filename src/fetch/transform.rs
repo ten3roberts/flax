@@ -2,7 +2,7 @@ use crate::{
     archetype::ChangeKind,
     component::ComponentValue,
     filter::{ChangeFilter, Filtered, NoEntities, Union},
-    Component, EntityIds, FetchExt, Mutable,
+    Component, EntityIds, FetchExt, ComponentMut,
 };
 
 /// Allows transforming a fetch into another.
@@ -32,14 +32,14 @@ impl<T: ComponentValue> TransformFetch<Added> for Component<T> {
     }
 }
 
-impl<T: ComponentValue> TransformFetch<Modified> for Mutable<T> {
+impl<T: ComponentValue> TransformFetch<Modified> for ComponentMut<T> {
     type Output = Filtered<Self, NoEntities>;
     fn transform_fetch(self, _: Modified) -> Self::Output {
         self.filtered(NoEntities)
     }
 }
 
-impl<T: ComponentValue> TransformFetch<Added> for Mutable<T> {
+impl<T: ComponentValue> TransformFetch<Added> for ComponentMut<T> {
     type Output = Filtered<Self, NoEntities>;
     fn transform_fetch(self, _: Added) -> Self::Output {
         self.filtered(NoEntities)
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     #[cfg(feature = "derive")]
     fn query_modified_struct() {
-        use crate::{fetch::Cloned, Component, Fetch, Mutable, Opt};
+        use crate::{fetch::Cloned, Component, Fetch, ComponentMut, Opt};
 
         component! {
             a: i32,
@@ -193,8 +193,8 @@ mod tests {
         struct MyFetch {
             a: Component<i32>,
             b: Cloned<Component<String>>,
-            c: Mutable<f32>,
-            other: Opt<Mutable<()>>,
+            c: ComponentMut<f32>,
+            other: Opt<ComponentMut<()>>,
         }
 
         let mut world = World::new();
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     #[cfg(feature = "derive")]
     fn query_inserted_struct() {
-        use crate::{fetch::Cloned, Component, EntityIds, Fetch, Mutable};
+        use crate::{fetch::Cloned, Component, EntityIds, Fetch, ComponentMut};
 
         #[derive(Debug)]
         struct Custom;
@@ -294,7 +294,7 @@ mod tests {
             a: Component<i32>,
             b: Cloned<Component<String>>,
             #[fetch(ignore)]
-            c: Mutable<Custom>,
+            c: ComponentMut<Custom>,
         }
 
         let mut world = World::new();

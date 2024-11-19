@@ -3,7 +3,7 @@ use std::iter::repeat;
 use bincode::Options;
 use flax::{
     component,
-    serialize::{SerdeBuilder, SerializeFormat},
+    serialize::{SerializationContextBuilder, SerializeFormat},
     BatchSpawn, World,
 };
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,7 @@ impl Benchmark {
     pub fn run_col(&mut self) {
         let Self(world) = self;
 
-        let (serializer, deserializer) = SerdeBuilder::new()
+        let (serializer, deserializer) = SerializationContextBuilder::new()
             .with(transform())
             .with(position())
             .with(rotation())
@@ -80,7 +80,7 @@ impl Benchmark {
     pub fn run_row(&mut self) {
         let Self(world) = self;
 
-        let (serializer, deserializer) = SerdeBuilder::new()
+        let (serializer, deserializer) = SerializationContextBuilder::new()
             .with(transform())
             .with(position())
             .with(rotation())

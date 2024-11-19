@@ -1,5 +1,5 @@
 #[test]
-#[cfg(feature = "derive")]
+#[cfg(all(feature = "derive", feature = "rayon"))]
 fn system_macro() {
     use flax::{
         component, system, CommandBuffer, Component, Entity, FetchExt, Query, QueryBorrow,

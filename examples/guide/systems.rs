@@ -1,6 +1,6 @@
 use flax::{
-    component, entity_ids, BoxedSystem, CommandBuffer, Component, Debuggable, Entity, FetchExt,
-    Mutable, Query, QueryBorrow, Schedule, System, World,
+    component, entity_ids, BoxedSystem, CommandBuffer, Component, ComponentMut, Debuggable, Entity,
+    FetchExt, Query, QueryBorrow, Schedule, System, World,
 };
 use glam::{vec2, Vec2};
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
             .with_name("update_distance")
             .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
             .build(
-                |mut query: QueryBorrow<(_, Component<Vec2>, Mutable<f32>), _>| {
+                |mut query: QueryBorrow<(_, Component<Vec2>, ComponentMut<f32>), _>| {
                     for (id, pos, dist) in &mut query {
                         println!("Updating distance for {id} with position: {pos:?}");
                         *dist = pos.length();
@@ -48,7 +48,7 @@ fn main() -> anyhow::Result<()> {
                 .with_name("update_distance")
                 .with_query(Query::new((entity_ids(), position(), distance().as_mut())))
                 .build(
-                    |mut query: QueryBorrow<(_, Component<Vec2>, Mutable<f32>), _>| {
+                    |mut query: QueryBorrow<(_, Component<Vec2>, ComponentMut<f32>), _>| {
                         for (id, pos, dist) in &mut query {
                             println!("Updating distance for {id} with position: {pos:?}");
                             *dist = pos.length();

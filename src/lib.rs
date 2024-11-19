@@ -84,7 +84,7 @@
 //!     .boxed();
 //!
 //! let despawn_system = System::builder()
-//!     .with_query(Query::new(entity_ids()).filter(health().le(0.0)))
+//!     .with_query(Query::new(entity_ids()).with_filter(health().le(0.0)))
 //!     .with_cmd_mut()
 //!     .build(|mut q: QueryBorrow<EntityIds, _>, cmd: &mut CommandBuffer| {
 //!         for id in &mut q {
@@ -264,7 +264,7 @@ pub use entity_ref::{EntityRef, EntityRefMut};
 pub use entry::{Entry, OccupiedEntry, VacantEntry};
 pub use error::Error;
 pub use fetch::{
-    relations_like, EntityIds, Fetch, FetchExt, FetchItem, Mutable, Opt, OptOr, Relations,
+    relations_like, ComponentMut, EntityIds, Fetch, FetchExt, FetchItem, Opt, OptOr, Relations,
 };
 
 pub use metadata::{Debuggable, Exclusive};

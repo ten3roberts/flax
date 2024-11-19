@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use bitflags::bitflags;
 use itertools::Itertools;
 
 use crate::{
@@ -34,6 +35,18 @@ impl Event {
     /// Construct an added event
     pub fn added(id: Entity, key: ComponentKey) -> Self {
         Self::new(id, key, EventKind::Added)
+    }
+}
+
+bitflags! {
+    /// The type of ECS event
+    pub struct EventKindFilter: u8 {
+        /// Component was added
+        const ADDED = 1;
+        /// Component was removed
+        const REMOVED = 2;
+        /// Component was modified
+        const MODIFIED = 4;
     }
 }
 
@@ -139,8 +152,9 @@ pub trait EventSubscriber: ComponentValue {
             subscriber: self,
         }
     }
+
     /// Filter a subscriber to only receive events of a specific kind
-    fn filter_event_kind(self, event_kind: EventKind) -> FilterEventKind<Self>
+    fn filter_event_kind(self, event_kind: EventKindFilter) -> FilterEventKind<Self>
     where
         Self: Sized,
     {
@@ -426,7 +440,7 @@ where
 
 /// Filter a subscriber to only receive events of a specific kind
 pub struct FilterEventKind<S> {
-    event_kind: EventKind,
+    event_kind: EventKindFilter,
     subscriber: S,
 }
 
@@ -435,21 +449,26 @@ where
     S: EventSubscriber,
 {
     fn on_added(&self, storage: &Storage, event: &EventData) {
-        if self.event_kind == EventKind::Added {
+        if self.event_kind.contains(EventKindFilter::ADDED) {
             self.subscriber.on_added(storage, event)
         }
     }
 
     fn on_modified(&self, event: &EventData) {
-        if self.event_kind == EventKind::Modified {
+        if self.event_kind.contains(EventKindFilter::MODIFIED) {
             self.subscriber.on_modified(event)
         }
     }
 
     fn on_removed(&self, storage: &Storage, event: &EventData) {
-        if self.event_kind == EventKind::Removed {
+        if self.event_kind.contains(EventKindFilter::REMOVED) {
             self.subscriber.on_removed(storage, event)
         }
+    }
+
+    #[inline]
+    fn matches_component(&self, desc: ComponentDesc) -> bool {
+        self.subscriber.matches_component(desc)
     }
 
     fn is_connected(&self) -> bool {
