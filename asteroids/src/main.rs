@@ -271,9 +271,9 @@ fn particle_system() -> BoxedSystem {
 
 #[derive(Fetch)]
 struct CameraQuery {
-    pos: Mutable<Vec2>,
-    vel: Mutable<Vec2>,
-    view: Mutable<Mat3>,
+    pos: ComponentMut<Vec2>,
+    vel: ComponentMut<Vec2>,
+    view: ComponentMut<Mat3>,
 }
 
 /// System which makes the camera track the player smoothly.
@@ -387,7 +387,7 @@ fn lifetime_system(dt: f32) -> BoxedSystem {
         .with_query(Query::new((entity_ids(), lifetime().as_mut())))
         .with_cmd_mut()
         .build(
-            move |mut q: QueryBorrow<(EntityIds, Mutable<f32>)>, cmd: &mut CommandBuffer| {
+            move |mut q: QueryBorrow<(EntityIds, ComponentMut<f32>)>, cmd: &mut CommandBuffer| {
                 for (id, lf) in &mut q {
                     if *lf <= 0.0 {
                         cmd.set(id, health(), 0.0);
@@ -495,10 +495,10 @@ struct PlayerQuery {
     id: EntityIds,
     player: Component<()>,
     pos: Component<Vec2>,
-    rot: Mutable<f32>,
-    vel: Mutable<Vec2>,
-    difficulty: Mutable<f32>,
-    invincibility: Mutable<f32>,
+    rot: ComponentMut<f32>,
+    vel: ComponentMut<Vec2>,
+    difficulty: ComponentMut<f32>,
+    invincibility: ComponentMut<f32>,
     material: Component<f32>,
 }
 
@@ -592,7 +592,7 @@ fn despawn_out_of_bounds() -> BoxedSystem {
         .with_query(Query::new((position().modified(), health().as_mut())).without(player()))
         .build(
             |mut player: QueryBorrow<Component<Vec2>, _>,
-             mut asteroids: QueryBorrow<(ChangeFilter<Vec2>, Mutable<f32>), _>| {
+             mut asteroids: QueryBorrow<(ChangeFilter<Vec2>, ComponentMut<f32>), _>| {
                 if let Some(player_pos) = player.first() {
                     for (asteroid, health) in &mut asteroids {
                         if player_pos.distance(*asteroid) > 2500.0 {
@@ -616,7 +616,7 @@ fn despawn_dead() -> BoxedSystem {
         )
         .with_cmd_mut()
         .build(
-            |mut resources: EntityBorrow<Mutable<StdRng>>,
+            |mut resources: EntityBorrow<ComponentMut<StdRng>>,
              mut q: QueryBorrow<(EntityIds, Component<Vec2>, Component<_>, Opt<_>), _>,
              cmd: &mut CommandBuffer| {
                 let rng = resources.get().unwrap();
@@ -652,7 +652,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
         .with_query(Query::new(asteroid()))
         .with_cmd_mut()
         .build(
-            move |mut resources: EntityBorrow<Mutable<StdRng>>,
+            move |mut resources: EntityBorrow<ComponentMut<StdRng>>,
                   mut players: QueryBorrow<(Component<Vec2>, Component<f32>), _>,
                   mut existing: QueryBorrow<Component<()>>,
                   cmd: &mut CommandBuffer| {

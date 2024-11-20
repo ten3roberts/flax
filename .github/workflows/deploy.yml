@@ -38,7 +38,7 @@ jobs:
       - run: mdbook build guide
 
       - name: Upload Artefact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: guide
           path: guide/book
@@ -49,13 +49,13 @@ jobs:
     if: github.event_name == 'push' && ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Download guide
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: guide
           path: dist/guide
 
       - name: Download asteroids
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: asteroids
           path: dist/asteroids
