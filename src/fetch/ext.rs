@@ -2,7 +2,7 @@ use alloc::borrow::Cow;
 
 use crate::{
     component::ComponentValue,
-    filter::{Cmp, Equal, Filtered, Greater, GreaterEq, Less, LessEq},
+    filter::{Cmp, Equal, Filtered, Greater, GreaterEq, Less, LessEq, NotEqual},
     relation::RelationExt,
     Fetch, FetchItem,
 };
@@ -118,6 +118,14 @@ pub trait FetchExt: Sized {
         for<'x> Cmp<Self, Equal<T>>: Fetch<'x>,
     {
         Cmp::new(self, Equal(other))
+    }
+
+    /// Filter any component equal to `other`.
+    fn neq<T>(self, other: T) -> Cmp<Self, NotEqual<T>>
+    where
+        for<'x> Cmp<Self, NotEqual<T>>: Fetch<'x>,
+    {
+        Cmp::new(self, NotEqual(other))
     }
 
     /// Set the source entity for the fetch.

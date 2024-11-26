@@ -30,15 +30,23 @@ trait CmpMethod<L> {
 #[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct Less<R>(pub R);
+
 #[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct Greater<R>(pub R);
+
 #[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct Equal<R>(pub R);
+
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct NotEqual<R>(pub R);
+
 #[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct LessEq<R>(pub R);
+
 #[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct GreaterEq<R>(pub R);
@@ -91,6 +99,15 @@ where
 {
     fn compare(&self, lhs: L) -> bool {
         lhs.eq(&&self.0)
+    }
+}
+
+impl<L, R> CmpMethod<L> for NotEqual<R>
+where
+    L: for<'x> PartialEq<&'x R>,
+{
+    fn compare(&self, lhs: L) -> bool {
+        !lhs.eq(&&self.0)
     }
 }
 
