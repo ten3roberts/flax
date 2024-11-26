@@ -206,30 +206,43 @@ fn component_ctor_from_type(
             path: Path { segments, .. },
             ..
         }) => {
-            if segments.len() == 1 && segments[0].ident == "Option" {
-                let inner = match &segments[0].arguments {
-                    syn::PathArguments::AngleBracketed(args) => {
-                        let GenericArgument::Type(ty) = &args.args[0] else {
+            match segments.last().map(|v| v.ident.to_string()).as_deref() {
+                Some("Option") => {
+                    let inner = match &segments[0].arguments {
+                        syn::PathArguments::AngleBracketed(args) => {
+                            let GenericArgument::Type(ty) = &args.args[0] else {
+                                return Err(syn::Error::new(
+                                    ident.span(),
+                                    "Malformed option generic argument list",
+                                ));
+                            };
+
+                            component_ctor_from_type(crate_name, ident, ty)?
+                        }
+                        _ => {
                             return Err(syn::Error::new(
                                 ident.span(),
-                                "Malformed option generic argument list",
-                            ));
-                        };
+                                "Expected a single angle bracketed type",
+                            ))
+                        }
+                    };
 
-                        component_ctor_from_type(crate_name, ident, ty)?
-                    }
-                    _ => {
-                        return Err(syn::Error::new(
-                            ident.span(),
-                            "Expected a single angle bracketed type",
-                        ))
-                    }
-                };
-
-                quote!(#crate_name::fetch::FetchExt::opt(#inner))
-            } else {
-                quote!(#crate_name::fetch::FetchExt::copied(#ident()))
+                    quote!(#crate_name::fetch::FetchExt::opt(#inner))
+                }
+                Some("Entity") => {
+                    quote!(#crate_name::entity_ids())
+                }
+                Some("EntityRef") => {
+                    quote!(#crate_name::fetch::entity_refs())
+                }
+                _ => {
+                    quote!(#crate_name::fetch::FetchExt::copied(#ident()))
+                }
             }
+
+            // if segments.len() == 1 && segments[0].ident == "Option" {
+            // } else {
+            // }
         }
         _ => return Err(syn::Error::new(ident.span(), "Unsupported type")),
     };

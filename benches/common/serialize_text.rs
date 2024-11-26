@@ -75,7 +75,7 @@ impl Benchmark {
     pub fn run_row(&mut self) {
         let Self(world) = self;
 
-        let (serializer, deserializer) = SerdeBuilder::new()
+        let (serializer, deserializer) = SerializationContextBuilder::new()
             .with(transform())
             .with(position())
             .with(rotation())
