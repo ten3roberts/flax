@@ -47,9 +47,12 @@ fn system_macro() {
         eprintln!("{a} {b} {c_renamed} {d:?}");
     }
 
-    #[system(par)]
-    fn fallible(a: &mut i32) -> anyhow::Result<()> {
+    #[system(filter(a().with()), with_cmd_mut)]
+    fn fallible(a: &mut i32, _cmd: &mut CommandBuffer) -> anyhow::Result<()> {
+        (anyhow::Ok(()))?;
+
         let _ = a;
+
         Ok(())
     }
 

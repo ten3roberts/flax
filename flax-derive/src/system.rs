@@ -150,17 +150,27 @@ pub(crate) fn system_impl(
                 .map(|i| format_ident!("__extra_arg_{i}"))
                 .collect_vec();
 
-            let call = if *ret == ReturnType::Default {
-                quote! { #call_sig(#(#query_idents),* #(,#with_adapters #item_names)* ) }
+            let (call_expr, ret_sig, ret) = if *ret == ReturnType::Default {
+                (
+                    quote! { #call_sig(#(#query_idents),* #(,#with_adapters #item_names)* ) },
+                    quote! { () },
+                    quote! {},
+                )
             } else {
-                quote! { #call_sig(#(#query_idents),* #(,#with_adapters #item_names)* )?; }
+                (
+                    quote! { #call_sig(#(#query_idents),* #(,#with_adapters #item_names)* )?; },
+                    quote! { #crate_name::__internal::anyhow::Result<()> },
+                    quote! { Ok(()) },
+                )
             };
 
             quote! {
-                build(|#(mut #item_names: #items_types,)* mut main_query: #crate_name::QueryBorrow<'_, _, _>| {
+                build(|#(mut #item_names: #items_types,)* mut main_query: #crate_name::QueryBorrow<'_, _, _>| -> #ret_sig {
                     for (#(#query_idents,)*) in &mut main_query {
-                        #call
+                        #call_expr
                     }
+
+                    #ret
                 })
             }
         }
