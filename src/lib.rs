@@ -284,3 +284,8 @@ pub(crate) use vtable::ComponentVTable;
 #[doc(inline)]
 #[cfg(feature = "derive")]
 pub use flax_derive::*;
+
+#[doc(hidden)]
+pub mod __internal {
+    pub use anyhow;
+}
