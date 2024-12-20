@@ -108,7 +108,7 @@ pub struct SerializeContext {
 }
 
 impl SerializeContext {
-    /// Construct a a new serializer context
+    /// Construct a new serializer context
     pub fn builder() -> SerializeBuilder {
         SerializeBuilder::new()
     }
@@ -128,7 +128,7 @@ impl SerializeContext {
     }
 
     /// Serialize a single entity
-    pub fn serialize_entity<'a>(&'a self, entity: &'a EntityRef) -> EntitySerializer {
+    pub fn serialize_entity<'a>(&'a self, entity: &'a EntityRef) -> EntitySerializer<'a> {
         EntitySerializer {
             slot: entity.loc.slot,
             arch: entity.arch,
