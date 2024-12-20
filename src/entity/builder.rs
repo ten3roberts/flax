@@ -8,18 +8,34 @@ use crate::{
 use alloc::{boxed::Box, vec::Vec};
 
 type ModifyFunc = Box<dyn FnOnce(Entity, &mut EntityBuilder) + Send + Sync>;
-struct Child {
+
+/// Attached child builder with relation
+pub struct ChildEntityBuilder {
     builder: EntityBuilder,
     modify: ModifyFunc,
 }
 
-impl core::fmt::Debug for Child {
+impl core::ops::DerefMut for ChildEntityBuilder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.builder
+    }
+}
+
+impl core::ops::Deref for ChildEntityBuilder {
+    type Target = EntityBuilder;
+
+    fn deref(&self) -> &Self::Target {
+        &self.builder
+    }
+}
+
+impl core::fmt::Debug for ChildEntityBuilder {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.builder.fmt(f)
     }
 }
 
-impl Child {
+impl ChildEntityBuilder {
     fn spawn(mut self, world: &mut World, parent: Entity) -> Entity {
         (self.modify)(parent, &mut self.builder);
         self.builder.spawn(world)
@@ -48,7 +64,7 @@ impl Child {
 /// ```
 pub struct EntityBuilder {
     buffer: ComponentBuffer,
-    children: Vec<Child>,
+    children: Vec<ChildEntityBuilder>,
 }
 
 impl EntityBuilder {
@@ -126,7 +142,7 @@ impl EntityBuilder {
         value: T,
         other: impl Into<Self>,
     ) -> &mut Self {
-        self.children.push(Child {
+        self.children.push(ChildEntityBuilder {
             builder: other.into(),
             modify: Box::new(move |parent, builder| {
                 builder.set(relation.of(parent), value);
@@ -203,6 +219,16 @@ impl EntityBuilder {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
+    }
+
+    /// Returns the attached child builders
+    pub fn children(&self) -> &[ChildEntityBuilder] {
+        &self.children
+    }
+
+    /// Returns the attached child builders
+    pub fn children_mut(&mut self) -> &mut Vec<ChildEntityBuilder> {
+        &mut self.children
     }
 }
 
