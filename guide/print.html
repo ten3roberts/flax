@@ -2127,16 +2127,15 @@ components.</p>
 it implements <code>Serialize</code>.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>    let (serializer, deserializer) = SerializationContextBuilder::new()
+</span>    let context = SerializationContextBuilder::new()
         .with(name())
         .with(position())
         .with(velocity())
         .build();
 
     let json =
-        serde_json::to_string_pretty(&amp;serializer.serialize(&amp;world, SerializeFormat::RowMajor))?;
+        serde_json::to_string_pretty(&amp;context.serialize_world(&amp;world, SerializeFormat::RowMajor))?;
 
-    // eprintln!("World: {json}");
 <span class="boring">}</span></code></pre></pre>
 <p>When deserializing a world it is often of interest in merging it or
 deserializing <em>into</em> another world.</p>
@@ -2159,12 +2158,11 @@ deserialization failed.</p>
     batch.set(name(), (0..).map(|v| format!("other_id.{v}")))?;
     batch.spawn(&amp;mut world);
 
-    let mut result = deserializer.deserialize(&amp;mut serde_json::Deserializer::from_str(&amp;json))?;
+    let mut deserializer = serde_json::Deserializer::from_str(&amp;json);
+    let mut result = context.deserialize_world().deserialize(&amp;mut deserializer)?;
 
     // Merge `result` into `world`
     world.merge_with(&amp;mut result);
-
-    // eprintln!("World: {world:#?}");
 
 <span class="boring">}</span></code></pre></pre>
 
