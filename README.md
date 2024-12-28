@@ -1,10 +1,10 @@
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ten3roberts/flax/ci.yml?style=flat)](https://github.com/ten3roberts/flax/actions)
-[![Crates](https://img.shields.io/crates/v/flax?style=flat)](https://crates.io/crates/flax)
-[![Docs](https://img.shields.io/docsrs/flax?style=flat)](https://docs.rs/flax)
-[![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=flat)](https://app.codecov.io/gh/ten3roberts/flax)
-[![Guide](https://img.shields.io/badge/guide-Read%20the%20guide-blue?style=flat)](https://ten3roberts.github.io/flax/guide)
-
 # Flax
+
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ten3roberts/flax/ci.yml?style=for-the-badge)](https://github.com/ten3roberts/flax/actions)
+[![Crates](https://img.shields.io/crates/v/flax?style=for-the-badge)](https://crates.io/crates/flax)
+[![Docs](https://img.shields.io/docsrs/flax?style=for-the-badge)](https://docs.rs/flax)
+[![Codecov](https://img.shields.io/codecov/c/github/ten3roberts/flax?style=for-the-badge)](https://app.codecov.io/gh/ten3roberts/flax)
+[![Guide](https://img.shields.io/badge/guide-Read%20the%20guide-blue?style=for-the-badge)](https://ten3roberts.github.io/flax/guide)
 
 <!-- cargo-sync-readme start -->
 
