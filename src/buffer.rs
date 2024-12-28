@@ -361,7 +361,7 @@ pub(crate) struct ComponentBufferIter<'a> {
     storage: &'a mut BufferStorage,
 }
 
-impl<'a> Iterator for ComponentBufferIter<'a> {
+impl Iterator for ComponentBufferIter<'_> {
     type Item = (ComponentDesc, *mut u8);
 
     fn next(&mut self) -> Option<Self::Item> {

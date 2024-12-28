@@ -245,6 +245,7 @@ pub mod schedule;
 #[cfg(feature = "serde")]
 /// Allows for efficient serialization and deserialization of the world and the
 /// entities therein
+#[macro_use]
 pub mod serialize;
 
 /// Provides a sink trait for sending events

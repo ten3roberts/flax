@@ -6,7 +6,7 @@ use flax::{
     serialize::{SerializationContextBuilder, SerializeFormat},
     BatchSpawn, World,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeSeed, Deserialize, Serialize};
 
 #[derive(Default, Copy, Clone, Serialize, Deserialize)]
 struct Transform([f32; 16]);
@@ -58,7 +58,7 @@ impl Benchmark {
     pub fn run_col(&mut self) {
         let Self(world) = self;
 
-        let (serializer, deserializer) = SerializationContextBuilder::new()
+        let context = SerializationContextBuilder::new()
             .with(transform())
             .with(position())
             .with(rotation())
@@ -66,10 +66,11 @@ impl Benchmark {
             .build();
 
         let encoded = bincode::options()
-            .serialize(&serializer.serialize(world, SerializeFormat::ColumnMajor))
+            .serialize(&context.serialize_world(world, SerializeFormat::ColumnMajor))
             .unwrap();
 
-        deserializer
+        context
+            .deserialize_world()
             .deserialize(&mut bincode::Deserializer::from_slice(
                 &encoded,
                 bincode::options(),
@@ -80,7 +81,7 @@ impl Benchmark {
     pub fn run_row(&mut self) {
         let Self(world) = self;
 
-        let (serializer, deserializer) = SerializationContextBuilder::new()
+        let context = SerializationContextBuilder::new()
             .with(transform())
             .with(position())
             .with(rotation())
@@ -88,10 +89,11 @@ impl Benchmark {
             .build();
 
         let encoded = bincode::options()
-            .serialize(&serializer.serialize(world, SerializeFormat::RowMajor))
+            .serialize(&context.serialize_world(world, SerializeFormat::RowMajor))
             .unwrap();
 
-        deserializer
+        context
+            .deserialize_world()
             .deserialize(&mut bincode::Deserializer::from_slice(
                 &encoded,
                 bincode::options(),

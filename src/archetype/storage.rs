@@ -10,7 +10,7 @@ use super::Slot;
 
 /// Type erased but managed component store.
 #[doc(hidden)]
-pub struct Storage {
+pub struct ArchetypeStorage {
     data: NonNull<u8>,
     /// The number of items
     len: usize,
@@ -18,7 +18,7 @@ pub struct Storage {
     desc: ComponentDesc,
 }
 
-impl core::fmt::Debug for Storage {
+impl core::fmt::Debug for ArchetypeStorage {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Storage")
             .field("len", &self.len)
@@ -27,7 +27,7 @@ impl core::fmt::Debug for Storage {
     }
 }
 
-impl Storage {
+impl ArchetypeStorage {
     /// Allocates space for storage of `len` components.
     pub fn new(desc: ComponentDesc) -> Self {
         Self::with_capacity(desc, 0)
@@ -256,7 +256,7 @@ impl Storage {
     }
 }
 
-impl Drop for Storage {
+impl Drop for ArchetypeStorage {
     fn drop(&mut self) {
         self.clear();
 
@@ -294,7 +294,7 @@ mod test {
 
     #[test]
     fn push() {
-        let mut storage = Storage::new(a().desc());
+        let mut storage = ArchetypeStorage::new(a().desc());
         unsafe {
             storage.push(5);
             storage.push(7);
@@ -304,7 +304,7 @@ mod test {
 
             assert_eq!(storage.downcast_ref::<i32>(), [7]);
 
-            let mut other = Storage::new(a().desc());
+            let mut other = ArchetypeStorage::new(a().desc());
             other.push(8);
             other.push(9);
             other.push(10);
@@ -317,7 +317,7 @@ mod test {
     #[test]
     fn drop() {
         let v = Arc::new("This is shared".to_string());
-        let mut storage = Storage::new(b().desc());
+        let mut storage = ArchetypeStorage::new(b().desc());
         unsafe {
             storage.push(v.clone());
             storage.push(v.clone());

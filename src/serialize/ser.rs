@@ -1,5 +1,5 @@
 use crate::{
-    archetype::{Archetype, ArchetypeId, Storage},
+    archetype::{Archetype, ArchetypeId, ArchetypeStorage},
     component::{ComponentKey, ComponentValue},
     components::component_info,
     filter::{All, And, StaticFilter},
@@ -12,12 +12,12 @@ use serde::{
     Serialize, Serializer,
 };
 
-use super::SerializeFormat;
+use super::{registry::REGISTRY, SerializeFormat};
 
 #[derive(Clone)]
 struct Slot {
     /// Takes a whole column and returns a serializer for it
-    ser: for<'x> fn(storage: &'x Storage, slot: usize) -> &'x dyn erased_serde::Serialize,
+    ser: for<'x> fn(storage: &'x ArchetypeStorage, slot: usize) -> &'x dyn erased_serde::Serialize,
     key: String,
 }
 
@@ -48,6 +48,22 @@ impl<F> SerializeBuilder<F>
 where
     F: StaticFilter + 'static + Clone,
 {
+    /// Creates a component deserializer from the global registry
+    pub fn from_registry(&mut self) -> &mut Self {
+        self.slots.extend(REGISTRY.serializers().iter().map(|v| {
+            let desc = (v.desc)();
+            (
+                desc.key(),
+                Slot {
+                    ser: v.serialize_fn,
+                    key: desc.name().to_string(),
+                },
+            )
+        }));
+
+        self
+    }
+
     /// Register a component using the component name.
     ///
     /// See u`Self::with_name`u
@@ -66,7 +82,7 @@ where
         T: ComponentValue + serde::Serialize,
     {
         fn ser_col<T: serde::Serialize + ComponentValue + Sized>(
-            storage: &Storage,
+            storage: &ArchetypeStorage,
             slot: usize,
         ) -> &dyn erased_serde::Serialize {
             &storage.downcast_ref::<T>()[slot]
@@ -115,7 +131,7 @@ impl SerializeContext {
 
     /// Serialize the world in a column major format.
     /// This is more efficient but less human readable.
-    pub fn serialize<'a>(
+    pub fn serialize_world<'a>(
         &'a self,
         world: &'a World,
         format: SerializeFormat,
@@ -128,11 +144,10 @@ impl SerializeContext {
     }
 
     /// Serialize a single entity
-    pub fn serialize_entity<'a>(&'a self, entity: &'a EntityRef) -> EntitySerializer<'a> {
-        EntitySerializer {
+    pub fn serialize_entity<'a>(&'a self, entity: &EntityRef<'a>) -> EntityDataSerializer<'a> {
+        EntityDataSerializer {
             slot: entity.loc.slot,
             arch: entity.arch,
-            id: entity.id,
             context: self,
         }
     }
@@ -160,7 +175,7 @@ pub struct WorldSerializer<'a> {
     world: &'a World,
 }
 
-impl<'a> Serialize for WorldSerializer<'a> {
+impl Serialize for WorldSerializer<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -197,7 +212,7 @@ struct SerializeEntities<'a> {
     context: &'a SerializeContext,
 }
 
-impl<'a> Serialize for SerializeEntities<'a> {
+impl Serialize for SerializeEntities<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -212,7 +227,7 @@ impl<'a> Serialize for SerializeEntities<'a> {
 
         for (_, arch) in self.context.archetypes(self.world) {
             for slot in arch.slots() {
-                seq.serialize_element(&EntitySerializer {
+                seq.serialize_element(&EntityIdSerializer {
                     slot,
                     arch,
                     id: arch.entity(slot).expect("Invalid slot"),
@@ -226,21 +241,21 @@ impl<'a> Serialize for SerializeEntities<'a> {
 }
 
 /// Serializes an entity
-pub struct EntitySerializer<'a> {
+struct EntityIdSerializer<'a> {
     slot: usize,
     arch: &'a Archetype,
     id: Entity,
     context: &'a SerializeContext,
 }
 
-impl<'a> Serialize for EntitySerializer<'a> {
+impl Serialize for EntityIdSerializer<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let mut state = serializer.serialize_tuple_struct("Entity", 2)?;
         state.serialize_field(&self.id)?;
-        state.serialize_field(&SerializeEntityData {
+        state.serialize_field(&EntityDataSerializer {
             slot: self.slot,
             arch: self.arch,
             context: self.context,
@@ -250,13 +265,14 @@ impl<'a> Serialize for EntitySerializer<'a> {
     }
 }
 
-struct SerializeEntityData<'a> {
+/// Serializes the components of an entity
+pub struct EntityDataSerializer<'a> {
     slot: usize,
     arch: &'a Archetype,
     context: &'a SerializeContext,
 }
 
-impl<'a> Serialize for SerializeEntityData<'a> {
+impl Serialize for EntityDataSerializer<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -285,7 +301,7 @@ struct SerializeArchetypes<'a> {
     context: &'a SerializeContext,
 }
 
-impl<'a> serde::Serialize for SerializeArchetypes<'a> {
+impl serde::Serialize for SerializeArchetypes<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -315,11 +331,11 @@ struct SerializeStorages<'a> {
 }
 
 struct SerializeStorage<'a> {
-    storage: &'a Storage,
+    storage: &'a ArchetypeStorage,
     slot: &'a Slot,
 }
 
-impl<'a> serde::Serialize for SerializeStorage<'a> {
+impl serde::Serialize for SerializeStorage<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -333,7 +349,8 @@ impl<'a> serde::Serialize for SerializeStorage<'a> {
         seq.end()
     }
 }
-impl<'a> serde::Serialize for SerializeStorages<'a> {
+
+impl serde::Serialize for SerializeStorages<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -366,7 +383,7 @@ impl<'a> serde::Serialize for SerializeStorages<'a> {
     }
 }
 
-impl<'a> serde::Serialize for SerializeArchetype<'a> {
+impl serde::Serialize for SerializeArchetype<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,

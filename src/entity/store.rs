@@ -70,6 +70,18 @@ pub struct EntityLocation {
     pub(crate) arch_id: ArchetypeId,
 }
 
+impl EntityLocation {
+    /// Returns the slot in the archetype storage
+    pub fn slot(&self) -> usize {
+        self.slot
+    }
+
+    /// Archetype id
+    pub fn arch_id(&self) -> Entity {
+        self.arch_id
+    }
+}
+
 pub(crate) struct EntityStore<V = EntityLocation> {
     slots: Vec<Slot<V>>,
     free: Vec<EntityIndex>,

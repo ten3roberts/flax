@@ -458,9 +458,19 @@ impl<'a> EntityRef<'a> {
     pub fn name(&self) -> Option<AtomicRef<String>> {
         self.get(name()).ok()
     }
+
+    /// Returns the entity location within the world
+    pub fn loc(&self) -> EntityLocation {
+        self.loc
+    }
+
+    /// Returns the entity archetype
+    pub fn arch(&self) -> &'a Archetype {
+        self.arch
+    }
 }
 
-impl<'a> Debug for EntityRef<'a> {
+impl Debug for EntityRef<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         EntityFormatter {
             world: self.world,
@@ -472,7 +482,7 @@ impl<'a> Debug for EntityRef<'a> {
     }
 }
 
-impl<'a> Debug for EntityRefMut<'a> {
+impl Debug for EntityRefMut<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let loc = self.loc();
 

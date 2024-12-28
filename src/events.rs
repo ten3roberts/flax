@@ -3,7 +3,7 @@ use bitflags::bitflags;
 use itertools::Itertools;
 
 use crate::{
-    archetype::{Archetype, Slice, Storage},
+    archetype::{Archetype, Slice, ArchetypeStorage},
     component::{ComponentDesc, ComponentKey, ComponentValue},
     filter::StaticFilter,
     sink::Sink,
@@ -78,7 +78,7 @@ pub struct EventData<'a> {
 /// each entity affected by the event.
 pub trait EventSubscriber: ComponentValue {
     /// Handle an incoming event
-    fn on_added(&self, storage: &Storage, event: &EventData);
+    fn on_added(&self, storage: &ArchetypeStorage, event: &EventData);
     /// Handle an incoming event
     ///
     /// **Note**: Component storage is inaccessible during this call as it may be called *during*
@@ -88,7 +88,7 @@ pub trait EventSubscriber: ComponentValue {
     /// events.
     fn on_modified(&self, event: &EventData);
     /// Handle an incoming event
-    fn on_removed(&self, storage: &Storage, event: &EventData);
+    fn on_removed(&self, storage: &ArchetypeStorage, event: &EventData);
 
     /// Returns true if the subscriber is still connected
     fn is_connected(&self) -> bool;
@@ -169,7 +169,7 @@ impl<S> EventSubscriber for S
 where
     S: 'static + Send + Sync + Sink<Event>,
 {
-    fn on_added(&self, _: &Storage, event: &EventData) {
+    fn on_added(&self, _: &ArchetypeStorage, event: &EventData) {
         for &id in event.ids {
             self.send(Event {
                 id,
@@ -189,7 +189,7 @@ where
         }
     }
 
-    fn on_removed(&self, _: &Storage, event: &EventData) {
+    fn on_removed(&self, _: &ArchetypeStorage, event: &EventData) {
         for &id in event.ids {
             self.send(Event {
                 id,
@@ -226,7 +226,7 @@ impl<T, S> WithValue<T, S> {
 impl<T: ComponentValue + Clone, S: 'static + Send + Sync + Sink<(Event, T)>> EventSubscriber
     for WithValue<T, S>
 {
-    fn on_added(&self, storage: &Storage, event: &EventData) {
+    fn on_added(&self, storage: &ArchetypeStorage, event: &EventData) {
         let values = storage.downcast_ref::<T>();
         for (&id, slot) in event.ids.iter().zip_eq(event.slots.as_range()) {
             let value = values[slot].clone();
@@ -244,7 +244,7 @@ impl<T: ComponentValue + Clone, S: 'static + Send + Sync + Sink<(Event, T)>> Eve
 
     fn on_modified(&self, _: &EventData) {}
 
-    fn on_removed(&self, storage: &Storage, event: &EventData) {
+    fn on_removed(&self, storage: &ArchetypeStorage, event: &EventData) {
         let values = storage.downcast_ref::<T>();
         for (&id, slot) in event.ids.iter().zip_eq(event.slots.as_range()) {
             let value = values[slot].clone();
@@ -284,7 +284,7 @@ where
     S: EventSubscriber,
     F: ComponentValue + StaticFilter,
 {
-    fn on_added(&self, storage: &Storage, event: &EventData) {
+    fn on_added(&self, storage: &ArchetypeStorage, event: &EventData) {
         self.subscriber.on_added(storage, event)
     }
 
@@ -292,7 +292,7 @@ where
         self.subscriber.on_modified(event);
     }
 
-    fn on_removed(&self, storage: &Storage, event: &EventData) {
+    fn on_removed(&self, storage: &ArchetypeStorage, event: &EventData) {
         self.subscriber.on_removed(storage, event)
     }
 
@@ -323,7 +323,7 @@ where
     S: EventSubscriber,
     F: ComponentValue + Fn(EventKind, &EventData) -> bool,
 {
-    fn on_added(&self, storage: &Storage, event: &EventData) {
+    fn on_added(&self, storage: &ArchetypeStorage, event: &EventData) {
         if (self.filter)(EventKind::Added, event) {
             self.subscriber.on_added(storage, event)
         }
@@ -335,7 +335,7 @@ where
         }
     }
 
-    fn on_removed(&self, storage: &Storage, event: &EventData) {
+    fn on_removed(&self, storage: &ArchetypeStorage, event: &EventData) {
         if (self.filter)(EventKind::Removed, event) {
             self.subscriber.on_removed(storage, event)
         }
@@ -367,7 +367,7 @@ impl<S> EventSubscriber for FilterComponents<S>
 where
     S: EventSubscriber,
 {
-    fn on_added(&self, storage: &Storage, event: &EventData) {
+    fn on_added(&self, storage: &ArchetypeStorage, event: &EventData) {
         self.subscriber.on_added(storage, event)
     }
 
@@ -375,7 +375,7 @@ where
         self.subscriber.on_modified(event)
     }
 
-    fn on_removed(&self, storage: &Storage, event: &EventData) {
+    fn on_removed(&self, storage: &ArchetypeStorage, event: &EventData) {
         self.subscriber.on_removed(storage, event)
     }
 
@@ -405,7 +405,7 @@ impl<S> EventSubscriber for FilterRelations<S>
 where
     S: EventSubscriber,
 {
-    fn on_added(&self, storage: &Storage, event: &EventData) {
+    fn on_added(&self, storage: &ArchetypeStorage, event: &EventData) {
         self.subscriber.on_added(storage, event)
     }
 
@@ -413,7 +413,7 @@ where
         self.subscriber.on_modified(event)
     }
 
-    fn on_removed(&self, storage: &Storage, event: &EventData) {
+    fn on_removed(&self, storage: &ArchetypeStorage, event: &EventData) {
         self.subscriber.on_removed(storage, event)
     }
 
@@ -448,7 +448,7 @@ impl<S> EventSubscriber for FilterEventKind<S>
 where
     S: EventSubscriber,
 {
-    fn on_added(&self, storage: &Storage, event: &EventData) {
+    fn on_added(&self, storage: &ArchetypeStorage, event: &EventData) {
         if self.event_kind.contains(EventKindFilter::ADDED) {
             self.subscriber.on_added(storage, event)
         }
@@ -460,7 +460,7 @@ where
         }
     }
 
-    fn on_removed(&self, storage: &Storage, event: &EventData) {
+    fn on_removed(&self, storage: &ArchetypeStorage, event: &EventData) {
         if self.event_kind.contains(EventKindFilter::REMOVED) {
             self.subscriber.on_removed(storage, event)
         }

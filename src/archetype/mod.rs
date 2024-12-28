@@ -30,7 +30,7 @@ mod storage;
 pub use batch::*;
 pub use changes::*;
 pub use slice::*;
-pub use storage::Storage;
+pub use storage::ArchetypeStorage;
 
 pub use guard::*;
 
@@ -88,8 +88,9 @@ impl ArchetypeInfo {
     }
 }
 
-pub(crate) struct CellData {
-    pub(crate) storage: Storage,
+#[doc(hidden)]
+pub struct CellData {
+    pub(crate) storage: ArchetypeStorage,
     pub(crate) changes: Changes,
     subscribers: Vec<Arc<dyn EventSubscriber>>,
     pub(crate) key: ComponentKey,
@@ -142,10 +143,20 @@ impl CellData {
             handler.on_removed(&self.storage, &event);
         }
     }
+
+    /// Returns the component key
+    pub fn key(&self) -> ComponentKey {
+        self.key
+    }
+
+    /// Returns the raw archetype storage
+    pub fn storage(&self) -> &ArchetypeStorage {
+        &self.storage
+    }
 }
 
 /// Stores a list of component values, changes, and subscribers
-pub(crate) struct Cell {
+pub struct Cell {
     pub(crate) data: AtomicRefCell<CellData>,
     desc: ComponentDesc,
 }
@@ -154,7 +165,7 @@ impl Cell {
     pub(crate) fn new(desc: ComponentDesc) -> Self {
         Self {
             data: AtomicRefCell::new(CellData {
-                storage: Storage::new(desc),
+                storage: ArchetypeStorage::new(desc),
                 changes: Changes::new(),
                 subscribers: Vec::new(),
                 key: desc.key,
@@ -221,9 +232,9 @@ impl Cell {
     }
 
     /// Drain the values in the cell.
-    pub(crate) fn drain(&mut self) -> Storage {
+    pub(crate) fn drain(&mut self) -> ArchetypeStorage {
         let data = self.data.get_mut();
-        let storage = mem::replace(&mut data.storage, Storage::new(self.desc));
+        let storage = mem::replace(&mut data.storage, ArchetypeStorage::new(self.desc));
         data.changes.clear();
 
         storage
@@ -251,12 +262,12 @@ impl Cell {
     }
 
     #[inline]
-    pub fn borrow<T: ComponentValue>(&self) -> CellGuard<[T]> {
+    pub(crate) fn borrow<T: ComponentValue>(&self) -> CellGuard<[T]> {
         CellGuard::new(self.data.borrow())
     }
 
     #[inline]
-    pub fn borrow_mut<T: ComponentValue>(&self) -> CellMutGuard<[T]> {
+    pub(crate) fn borrow_mut<T: ComponentValue>(&self) -> CellMutGuard<[T]> {
         CellMutGuard::new(self.data.borrow_mut())
     }
 
@@ -271,7 +282,7 @@ impl Cell {
     // }
 
     #[inline]
-    pub fn get_mut<T: ComponentValue>(
+    pub(crate) fn get_mut<T: ComponentValue>(
         &self,
         id: Entity,
         slot: Slot,
@@ -282,6 +293,11 @@ impl Cell {
 
     pub(crate) fn desc(&self) -> ComponentDesc {
         self.desc
+    }
+
+    #[doc(hidden)]
+    pub fn data(&self) -> &AtomicRefCell<CellData> {
+        &self.data
     }
 }
 
@@ -631,7 +647,7 @@ impl Archetype {
     /// # Safety
     /// The length of the passed data must be equal to the slice and the slice
     /// must point to a currently uninitialized region in the archetype.
-    pub(crate) unsafe fn extend(&mut self, src: &mut Storage, tick: u32) {
+    pub(crate) unsafe fn extend(&mut self, src: &mut ArchetypeStorage, tick: u32) {
         if src.is_empty() {
             return;
         }
@@ -854,7 +870,8 @@ impl Archetype {
         self.entities.as_ref()
     }
 
-    pub(crate) fn cells(&self) -> &[Cell] {
+    #[doc(hidden)]
+    pub fn cells(&self) -> &[Cell] {
         &self.cells
     }
 

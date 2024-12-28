@@ -14,7 +14,7 @@ pub struct WorldFormatter<'a, F> {
     pub(crate) filter: F,
 }
 
-impl<'a, F> fmt::Debug for WorldFormatter<'a, F>
+impl<F> fmt::Debug for WorldFormatter<'_, F>
 where
     F: for<'x> Fetch<'x>,
 {
@@ -58,7 +58,7 @@ pub struct EntitiesFormatter<'a> {
     pub(crate) ids: &'a [Entity],
 }
 
-impl<'a> Debug for EntitiesFormatter<'a> {
+impl Debug for EntitiesFormatter<'_> {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut list = f.debug_map();
@@ -92,7 +92,7 @@ pub struct EntityFormatter<'a> {
     pub(crate) id: Entity,
 }
 
-impl<'a> Debug for EntityFormatter<'a> {
+impl Debug for EntityFormatter<'_> {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut list = f.debug_map();
@@ -124,7 +124,7 @@ pub(crate) struct RowValueFormatter<'a> {
     pub slot: Slot,
 }
 
-impl<'a> Debug for RowValueFormatter<'a> {
+impl Debug for RowValueFormatter<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut map = f.debug_map();
         for data in self.arch.try_borrow_all().flatten() {
@@ -152,7 +152,7 @@ pub struct HierarchyFormatter<'a> {
     pub(crate) relation: Entity,
 }
 
-impl<'a> Debug for HierarchyFormatter<'a> {
+impl Debug for HierarchyFormatter<'_> {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut s = f.debug_map();
@@ -181,7 +181,7 @@ struct ChildrenFormatter<'a> {
     relation: ComponentKey,
 }
 
-impl<'a> Debug for ChildrenFormatter<'a> {
+impl Debug for ChildrenFormatter<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut list = f.debug_map();
 

@@ -1,7 +1,7 @@
 use core::{any::Any, fmt::Debug};
 
 use crate::{
-    archetype::{Slot, Storage},
+    archetype::{Slot, ArchetypeStorage},
     buffer::ComponentBuffer,
     component::{ComponentDesc, ComponentValue},
 };
@@ -18,7 +18,7 @@ component! {
 pub struct Debuggable {
     pub(crate) debug_any: fn(&dyn Any) -> &dyn Debug,
     pub(crate) debug_ptr: fn(&*const u8) -> &dyn Debug,
-    pub(crate) debug_storage: fn(&Storage, slot: Slot) -> &dyn Debug,
+    pub(crate) debug_storage: fn(&ArchetypeStorage, slot: Slot) -> &dyn Debug,
 }
 
 impl Debuggable {
