@@ -1,3 +1,6 @@
+#[macro_use]
+mod registry;
+
 mod de;
 mod ser;
 
@@ -7,11 +10,25 @@ pub use ser::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    component::{ComponentKey, ComponentValue},
-    filter::And,
-    filter::{All, StaticFilter},
-    Component,
+    archetype::ArchetypeStorage,
+    component::{ComponentDesc, ComponentKey, ComponentValue},
+    filter::All,
+    Component, EntityBuilder, EntityRef, World,
 };
+
+type DeserializeRowFn = fn(
+    &mut dyn erased_serde::Deserializer,
+    ComponentDesc,
+    &mut EntityBuilder,
+) -> erased_serde::Result<()>;
+
+type DeserializeColFn = fn(
+    &mut dyn erased_serde::Deserializer,
+    ComponentDesc,
+    usize,
+) -> erased_serde::Result<ArchetypeStorage>;
+
+type SerializeFn = for<'x> fn(&'x ArchetypeStorage, slot: usize) -> &'x dyn erased_serde::Serialize;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct ComponentSerKey {
@@ -70,10 +87,14 @@ impl Default for SerializationContextBuilder {
     }
 }
 
-impl<F> SerializationContextBuilder<F>
-where
-    F: StaticFilter + 'static + Clone,
-{
+impl SerializationContextBuilder {
+    /// Create the context from the global registry
+    pub fn from_registry(&mut self) -> &mut Self {
+        self.ser.from_registry();
+        self.de.from_registry();
+        self
+    }
+
     /// Register a component using the component name.
     ///
     /// See [`Self::with_name`]
@@ -95,17 +116,60 @@ where
         self
     }
 
-    /// Add a new filter to specify which entities will be serialized.
-    pub fn with_filter<G>(self, filter: G) -> SerializationContextBuilder<And<F, G>> {
-        SerializationContextBuilder {
-            ser: self.ser.with_filter(filter),
-            de: self.de,
+    /// Finish constructing the serialize and deserialize context.
+    pub fn build(&mut self) -> SerializationContext {
+        SerializationContext {
+            serializer: self.ser.build(),
+            deserializer: self.de.build(),
         }
     }
+}
 
-    /// Finish constructing the serialize and deserialize context.
-    pub fn build(&mut self) -> (SerializeContext, DeserializeContext) {
-        (self.ser.build(), self.de.build())
+/// Joint context for serialization and deserialization
+pub struct SerializationContext {
+    serializer: SerializeContext,
+    deserializer: DeserializeContext,
+}
+
+impl SerializationContext {
+    /// Creates a new [`SerializationContextBuilder`]
+    pub fn builder() -> SerializationContextBuilder {
+        SerializationContextBuilder::new()
+    }
+
+    /// Serialize a world
+    pub fn serialize_world<'a>(
+        &'a self,
+        world: &'a World,
+        format: SerializeFormat,
+    ) -> WorldSerializer<'a> {
+        self.serializer.serialize_world(world, format)
+    }
+
+    /// Serialize a single entity's data
+    pub fn serialize_entity<'a>(&'a self, entity: &EntityRef<'a>) -> EntityDataSerializer<'a> {
+        self.serializer.serialize_entity(entity)
+    }
+
+    /// Automatically uses the row or column major format depending on the
+    /// underlying data.
+    pub fn deserialize_world(&self) -> WorldDeserializer {
+        self.deserializer.deserialize_world()
+    }
+
+    /// Deserialize a single entity's data
+    pub fn deserialize_entity(&self) -> EntityDataDeserializer {
+        self.deserializer.deserialize_entity()
+    }
+
+    /// Returns the serialization context
+    pub fn serializer(&self) -> &SerializeContext {
+        &self.serializer
+    }
+
+    /// Returns the deserialization context
+    pub fn deserializer(&self) -> &DeserializeContext {
+        &self.deserializer
     }
 }
 
@@ -119,6 +183,7 @@ mod test {
         rngs::StdRng,
         Rng, SeedableRng,
     };
+    use serde::de::DeserializeSeed;
 
     use crate::{archetype::BatchSpawn, component, components::name, Entity, World};
 
@@ -200,7 +265,7 @@ mod test {
             }
         };
 
-        let (serializer, deserializer) = SerializationContextBuilder::new()
+        let context = SerializationContextBuilder::new()
             .with(name())
             .with(health())
             .with(pos())
@@ -209,38 +274,44 @@ mod test {
             .build();
 
         let json =
-            serde_json::to_string(&serializer.serialize(&world, SerializeFormat::ColumnMajor))
+            serde_json::to_string(&context.serialize_world(&world, SerializeFormat::ColumnMajor))
                 .unwrap();
 
-        let new_world: World = deserializer
+        let new_world: World = context
+            .deserialize_world()
             .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
             .expect("Failed to deserialize world");
 
         test_eq(&world, &new_world);
 
-        let json =
-            serde_json::to_string_pretty(&serializer.serialize(&world, SerializeFormat::RowMajor))
-                .unwrap();
+        let json = serde_json::to_string_pretty(
+            &context.serialize_world(&world, SerializeFormat::RowMajor),
+        )
+        .unwrap();
 
         let world = new_world;
-        let new_world = deserializer
+        let new_world = context
+            .deserialize_world()
             .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
             .expect("Failed to deserialize world");
 
         test_eq(&world, &new_world);
 
         let encoded =
-            ron::to_string(&serializer.serialize(&world, SerializeFormat::RowMajor)).unwrap();
-        let new_world = deserializer
+            ron::to_string(&context.serialize_world(&world, SerializeFormat::RowMajor)).unwrap();
+
+        let new_world = context
+            .deserialize_world()
             .deserialize(&mut ron::Deserializer::from_str(&encoded).unwrap())
             .unwrap();
 
         test_eq(&world, &new_world);
 
         let encoded =
-            ron::to_string(&serializer.serialize(&world, SerializeFormat::ColumnMajor)).unwrap();
+            ron::to_string(&context.serialize_world(&world, SerializeFormat::ColumnMajor)).unwrap();
 
-        let new_world = deserializer
+        let new_world = context
+            .deserialize_world()
             .deserialize(&mut ron::Deserializer::from_str(&encoded).unwrap())
             .unwrap();
 

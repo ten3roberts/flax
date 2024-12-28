@@ -8,13 +8,13 @@ use crate::{
     Component, Entity, Error,
 };
 
-use super::Storage;
+use super::ArchetypeStorage;
 
 /// Allows batch spawning many entities with the same components
 #[derive(Debug)]
 pub struct BatchSpawn {
     len: usize,
-    storage: BTreeMap<ComponentKey, Storage>,
+    storage: BTreeMap<ComponentKey, ArchetypeStorage>,
 }
 
 impl BatchSpawn {
@@ -50,7 +50,7 @@ impl BatchSpawn {
         iter: impl IntoIterator<Item = T>,
     ) -> Result<&mut Self> {
         let desc = component.desc();
-        let mut storage = Storage::with_capacity(desc, self.len);
+        let mut storage = ArchetypeStorage::with_capacity(desc, self.len);
 
         for item in iter.into_iter().take(self.len) {
             // Type gurangeed by the component
@@ -64,7 +64,7 @@ impl BatchSpawn {
     }
 
     /// Inserts a storage directly
-    pub(crate) fn append(&mut self, storage: Storage) -> Result<()> {
+    pub(crate) fn append(&mut self, storage: ArchetypeStorage) -> Result<()> {
         let desc = storage.desc();
         if storage.len() != self.len {
             Err(Error::IncompleteBatch)
@@ -74,7 +74,7 @@ impl BatchSpawn {
         }
     }
 
-    pub(crate) fn take_all(&mut self) -> impl Iterator<Item = (ComponentKey, Storage)> {
+    pub(crate) fn take_all(&mut self) -> impl Iterator<Item = (ComponentKey, ArchetypeStorage)> {
         mem::take(&mut self.storage).into_iter()
     }
 

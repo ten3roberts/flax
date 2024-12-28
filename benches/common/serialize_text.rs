@@ -6,7 +6,7 @@ use flax::{
     BatchSpawn, World,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeSeed, Deserialize, Serialize};
 
 #[derive(Default, Copy, Clone, Serialize, Deserialize)]
 struct Transform([f32; 16]);
@@ -58,16 +58,18 @@ impl Benchmark {
     pub fn run_col(&mut self) {
         let Self(world) = self;
 
-        let (serializer, deserializer) = SerializationContextBuilder::new()
+        let context = SerializationContextBuilder::new()
             .with(transform())
             .with(position())
             .with(rotation())
             .with(velocity())
             .build();
-        let encoded =
-            ron::to_string(&serializer.serialize(world, SerializeFormat::ColumnMajor)).unwrap();
 
-        deserializer
+        let encoded =
+            ron::to_string(&context.serialize_world(world, SerializeFormat::ColumnMajor)).unwrap();
+
+        context
+            .deserialize_world()
             .deserialize(&mut ron::Deserializer::from_str(&encoded).unwrap())
             .unwrap();
     }
@@ -75,16 +77,18 @@ impl Benchmark {
     pub fn run_row(&mut self) {
         let Self(world) = self;
 
-        let (serializer, deserializer) = SerializationContextBuilder::new()
+        let context = SerializationContextBuilder::new()
             .with(transform())
             .with(position())
             .with(rotation())
             .with(velocity())
             .build();
-        let encoded =
-            ron::to_string(&serializer.serialize(world, SerializeFormat::RowMajor)).unwrap();
 
-        deserializer
+        let encoded =
+            ron::to_string(&context.serialize_world(world, SerializeFormat::RowMajor)).unwrap();
+
+        context
+            .deserialize_world()
             .deserialize(&mut ron::Deserializer::from_str(&encoded).unwrap())
             .unwrap();
     }

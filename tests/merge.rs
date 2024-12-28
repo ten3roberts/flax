@@ -73,6 +73,7 @@ fn merge() {
 fn merge_empty() -> anyhow::Result<()> {
     use bincode::Options;
     use flax::{filter::All, serialize::*};
+    use serde::de::DeserializeSeed;
 
     let mut world = World::new();
 
@@ -84,24 +85,27 @@ fn merge_empty() -> anyhow::Result<()> {
             v.set(name(), format!("world.{i}")).spawn(&mut world);
         });
 
-    let (serializer, deserializer) = SerializationContextBuilder::new()
+    let context = SerializationContextBuilder::new()
         .with_name("position", position())
         .with_name("rotation", rotation())
         .with_name("scale", scale())
         .with_name("name", name())
         .build();
 
-    let bytes = bincode::serialize(&serializer.serialize(&world, SerializeFormat::ColumnMajor))?;
+    let bytes = bincode::serialize(&context.serialize_world(&world, SerializeFormat::ColumnMajor))?;
 
     // Clear the world
     world.despawn_many(All);
 
-    let mut new_world = deserializer.deserialize(&mut bincode::de::Deserializer::from_slice(
-        &bytes,
-        bincode::DefaultOptions::new()
-            .with_fixint_encoding()
-            .allow_trailing_bytes(),
-    ))?;
+    let mut new_world =
+        context
+            .deserialize_world()
+            .deserialize(&mut bincode::de::Deserializer::from_slice(
+                &bytes,
+                bincode::DefaultOptions::new()
+                    .with_fixint_encoding()
+                    .allow_trailing_bytes(),
+            ))?;
 
     assert_eq!(Query::new(()).borrow(&new_world).count(), 128);
     assert_eq!(Query::new(()).borrow(&world).count(), 0);

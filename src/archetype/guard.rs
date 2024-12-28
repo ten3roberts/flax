@@ -63,7 +63,7 @@ impl<'a, T: ?Sized> CellMutGuard<'a, T> {
     }
 }
 
-impl<'a, T: Debug + ?Sized> Debug for CellMutGuard<'a, T> {
+impl<T: Debug + ?Sized> Debug for CellMutGuard<'_, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         (*self.get()).fmt(f)
     }
@@ -106,7 +106,7 @@ impl<'a, T: ?Sized> CellGuard<'a, T> {
     }
 }
 
-impl<'a, T: Debug + ?Sized> Debug for CellGuard<'a, T> {
+impl<T: Debug + ?Sized> Debug for CellGuard<'_, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         (*self.get()).fmt(f)
     }
@@ -141,13 +141,13 @@ impl<'a, T: ComponentValue> RefMut<'a, T> {
     }
 }
 
-impl<'a, T: Debug> Debug for RefMut<'a, T> {
+impl<T: Debug> Debug for RefMut<'_, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.guard.fmt(f)
     }
 }
 
-impl<'a, T> Deref for RefMut<'a, T> {
+impl<T> Deref for RefMut<'_, T> {
     type Target = T;
 
     #[inline]
@@ -156,7 +156,7 @@ impl<'a, T> Deref for RefMut<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for RefMut<'a, T> {
+impl<T> DerefMut for RefMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.guard

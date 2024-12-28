@@ -7,26 +7,21 @@ use serde::{
 };
 
 use crate::{
-    archetype::{BatchSpawn, Storage},
+    archetype::{ArchetypeStorage, BatchSpawn},
     component::{ComponentDesc, ComponentValue},
     Component, Entity, EntityBuilder, World,
 };
 
-use super::{RowFields, SerializeFormat, WorldFields};
+use super::{
+    registry::{deser_col, deser_one, REGISTRY},
+    DeserializeColFn, DeserializeRowFn, RowFields, SerializeFormat, WorldFields,
+};
 
 #[derive(Clone)]
 struct Slot {
     /// Takes a whole column and returns a serializer for it
-    deser_col: fn(
-        deserializer: &mut dyn erased_serde::Deserializer,
-        len: usize,
-        component: ComponentDesc,
-    ) -> erased_serde::Result<Storage>,
-    deser_one: fn(
-        deserializer: &mut dyn erased_serde::Deserializer,
-        component: ComponentDesc,
-        builder: &mut EntityBuilder,
-    ) -> erased_serde::Result<()>,
+    deser_col: DeserializeColFn,
+    deser_one: DeserializeRowFn,
     desc: ComponentDesc,
 }
 
@@ -36,15 +31,15 @@ struct DeserializeStorage<'a> {
     len: usize,
 }
 
-impl<'a, 'de> DeserializeSeed<'de> for DeserializeStorage<'a> {
-    type Value = Storage;
+impl<'de> DeserializeSeed<'de> for DeserializeStorage<'_> {
+    type Value = ArchetypeStorage;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {
         let mut deserializer = <dyn erased_serde::Deserializer>::erase(deserializer);
-        let storage = (self.slot.deser_col)(&mut deserializer, self.len, self.slot.desc)
+        let storage = (self.slot.deser_col)(&mut deserializer, self.slot.desc, self.len)
             .map_err(de::Error::custom)?;
 
         Ok(storage)
@@ -58,9 +53,26 @@ pub struct DeserializeBuilder {
 }
 
 impl DeserializeBuilder {
-    /// Creates a new DeserializeBuilder
+    /// Creates a new [`DeserializeBuilder`]
     pub fn new() -> Self {
         Default::default()
+    }
+
+    /// Creates a component deserializer from the global registry
+    pub fn from_registry(&mut self) -> &mut Self {
+        self.slots.extend(REGISTRY.deserializers().iter().map(|v| {
+            let desc = (v.desc)();
+            (
+                desc.name().to_string(),
+                Slot {
+                    deser_col: v.deserialize_col_fn,
+                    deser_one: v.deserialize_row_fn,
+                    desc,
+                },
+            )
+        }));
+
+        self
     }
 
     /// Register a component using the component's name
@@ -78,28 +90,6 @@ impl DeserializeBuilder {
     where
         T: ComponentValue + for<'x> Deserialize<'x>,
     {
-        fn deser_col<T: ComponentValue + for<'x> Deserialize<'x>>(
-            deserializer: &mut dyn erased_serde::Deserializer,
-            len: usize,
-            desc: ComponentDesc,
-        ) -> erased_serde::Result<Storage> {
-            deserializer.deserialize_seq(StorageVisitor::<T> {
-                desc,
-                cap: len,
-                _marker: PhantomData,
-            })
-        }
-
-        fn deser_one<T: ComponentValue + for<'x> Deserialize<'x>>(
-            deserializer: &mut dyn erased_serde::Deserializer,
-            desc: ComponentDesc,
-            builder: &mut EntityBuilder,
-        ) -> erased_serde::Result<()> {
-            let value = T::deserialize(deserializer)?;
-            builder.set(desc.downcast(), value);
-            Ok(())
-        }
-
         let key = key.into();
 
         self.slots.insert(
@@ -130,30 +120,13 @@ impl DeserializeContext {
     /// Deserializes the world from the supplied deserializer.
     /// Automatically uses the row or column major format depending on the
     /// underlying data.
-    pub fn deserialize<'de, D>(&self, deserializer: D) -> core::result::Result<World, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_enum("World", &["row", "col"], WorldVisitor { context: self })
+    pub fn deserialize_world(&self) -> WorldDeserializer {
+        WorldDeserializer { context: self }
     }
 
     /// Deserializes an entity into the provided builder
-    pub fn deserialize_entity<'de, D>(
-        &self,
-        deserializer: D,
-        builder: &mut EntityBuilder,
-    ) -> core::result::Result<Entity, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_tuple_struct(
-            "Entity",
-            2,
-            EntityVisitor {
-                context: self,
-                builder,
-            },
-        )
+    pub fn deserialize_entity(&self) -> EntityDataDeserializer {
+        EntityDataDeserializer { context: self }
     }
 
     fn get(&self, key: &str) -> Result<&Slot, String> {
@@ -163,11 +136,73 @@ impl DeserializeContext {
     }
 }
 
-struct WorldVisitor<'a> {
+/// Deserializes an entire world in either column or row format
+pub struct WorldDeserializer<'a> {
     context: &'a DeserializeContext,
 }
 
-impl<'a, 'de> Visitor<'de> for WorldVisitor<'a> {
+impl<'de> DeserializeSeed<'de> for WorldDeserializer<'_> {
+    type Value = World;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_enum(
+            "World",
+            &["row", "col"],
+            WorldFormatVisitor {
+                context: self.context,
+            },
+        )
+    }
+}
+
+/// Deserializes a single entity (map-like format)
+pub struct EntityDataDeserializer<'a> {
+    context: &'a DeserializeContext,
+}
+
+impl<'de> DeserializeSeed<'de> for EntityDataDeserializer<'_> {
+    type Value = EntityBuilder;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_map(self)
+    }
+}
+
+impl<'de> Visitor<'de> for EntityDataDeserializer<'_> {
+    type Value = EntityBuilder;
+
+    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(formatter, "a map of component values")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        let mut builder = EntityBuilder::new();
+        while let Some(key) = map.next_key::<&str>()? {
+            let slot = self.context.get(key).map_err(de::Error::custom)?;
+            map.next_value_seed(DeserializeComponent {
+                slot,
+                builder: &mut builder,
+            })?;
+        }
+
+        Ok(builder)
+    }
+}
+
+struct WorldFormatVisitor<'a> {
+    context: &'a DeserializeContext,
+}
+
+impl<'de> Visitor<'de> for WorldFormatVisitor<'_> {
     type Value = World;
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -202,7 +237,7 @@ struct DeserializeEntities<'a> {
     world: &'a mut World,
 }
 
-impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntities<'a> {
+impl<'de> DeserializeSeed<'de> for DeserializeEntities<'_> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -213,7 +248,7 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntities<'a> {
     }
 }
 
-impl<'de, 'a> Visitor<'de> for DeserializeEntities<'a> {
+impl<'de> Visitor<'de> for DeserializeEntities<'_> {
     type Value = ();
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -245,7 +280,7 @@ struct EntityVisitor<'a> {
     builder: &'a mut EntityBuilder,
 }
 
-impl<'de, 'a> DeserializeSeed<'de> for EntityVisitor<'a> {
+impl<'de> DeserializeSeed<'de> for EntityVisitor<'_> {
     type Value = Entity;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -256,7 +291,7 @@ impl<'de, 'a> DeserializeSeed<'de> for EntityVisitor<'a> {
     }
 }
 
-impl<'de, 'a> Visitor<'de> for EntityVisitor<'a> {
+impl<'de> Visitor<'de> for EntityVisitor<'_> {
     type Value = Entity;
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -287,7 +322,7 @@ struct DeserializeEntityData<'a> {
     builder: &'a mut EntityBuilder,
 }
 
-impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntityData<'a> {
+impl<'de> DeserializeSeed<'de> for DeserializeEntityData<'_> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -299,7 +334,7 @@ impl<'de, 'a> DeserializeSeed<'de> for DeserializeEntityData<'a> {
 }
 
 /// { component: value }
-impl<'de, 'a> Visitor<'de> for DeserializeEntityData<'a> {
+impl<'de> Visitor<'de> for DeserializeEntityData<'_> {
     type Value = ();
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -328,7 +363,7 @@ struct DeserializeComponent<'a> {
     builder: &'a mut EntityBuilder,
 }
 
-impl<'de, 'a> DeserializeSeed<'de> for DeserializeComponent<'a> {
+impl<'de> DeserializeSeed<'de> for DeserializeComponent<'_> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -348,7 +383,7 @@ struct WorldRowVisitor<'a> {
     context: &'a DeserializeContext,
 }
 
-impl<'de, 'a> Visitor<'de> for WorldRowVisitor<'a> {
+impl<'de> Visitor<'de> for WorldRowVisitor<'_> {
     type Value = World;
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -394,7 +429,7 @@ struct WorldColumnVisitor<'a> {
     context: &'a DeserializeContext,
 }
 
-impl<'de, 'a> Visitor<'de> for WorldColumnVisitor<'a> {
+impl<'de> Visitor<'de> for WorldColumnVisitor<'_> {
     type Value = World;
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -450,7 +485,7 @@ struct DeserializeArchetypes<'a> {
     world: &'a mut World,
 }
 
-impl<'a, 'de> DeserializeSeed<'de> for DeserializeArchetypes<'a> {
+impl<'de> DeserializeSeed<'de> for DeserializeArchetypes<'_> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -469,7 +504,7 @@ struct ArchetypesVisitor<'a> {
     world: &'a mut World,
 }
 
-impl<'a, 'de> Visitor<'de> for ArchetypesVisitor<'a> {
+impl<'de> Visitor<'de> for ArchetypesVisitor<'_> {
     type Value = ();
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -497,7 +532,7 @@ struct DeserializeArchetype<'a> {
     context: &'a DeserializeContext,
 }
 
-impl<'de, 'a> DeserializeSeed<'de> for DeserializeArchetype<'a> {
+impl<'de> DeserializeSeed<'de> for DeserializeArchetype<'_> {
     type Value = (Vec<Entity>, BatchSpawn);
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -518,7 +553,7 @@ struct ArchetypeVisitor<'a> {
     context: &'a DeserializeContext,
 }
 
-impl<'a, 'de> Visitor<'de> for ArchetypeVisitor<'a> {
+impl<'de> Visitor<'de> for ArchetypeVisitor<'_> {
     type Value = (Vec<Entity>, BatchSpawn);
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -549,7 +584,7 @@ struct DeserializeStorages<'a> {
     context: &'a DeserializeContext,
 }
 
-impl<'de, 'a> DeserializeSeed<'de> for DeserializeStorages<'a> {
+impl<'de> DeserializeSeed<'de> for DeserializeStorages<'_> {
     type Value = BatchSpawn;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -568,7 +603,7 @@ struct StoragesVisitor<'a> {
     context: &'a DeserializeContext,
 }
 
-impl<'de, 'a> Visitor<'de> for StoragesVisitor<'a> {
+impl<'de> Visitor<'de> for StoragesVisitor<'_> {
     type Value = BatchSpawn;
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -596,14 +631,14 @@ impl<'de, 'a> Visitor<'de> for StoragesVisitor<'a> {
 }
 
 /// Visit a single column of component values
-struct StorageVisitor<T: ComponentValue> {
-    desc: ComponentDesc,
-    cap: usize,
-    _marker: PhantomData<T>,
+pub(super) struct StorageVisitor<T: ComponentValue> {
+    pub(super) desc: ComponentDesc,
+    pub(super) cap: usize,
+    pub(super) _marker: PhantomData<T>,
 }
 
 impl<'de, T: ComponentValue + de::Deserialize<'de>> Visitor<'de> for StorageVisitor<T> {
-    type Value = Storage;
+    type Value = ArchetypeStorage;
 
     fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "A sequence of component values of the same type")
@@ -613,7 +648,7 @@ impl<'de, T: ComponentValue + de::Deserialize<'de>> Visitor<'de> for StorageVisi
     where
         A: SeqAccess<'de>,
     {
-        let mut storage = Storage::with_capacity(self.desc, self.cap);
+        let mut storage = ArchetypeStorage::with_capacity(self.desc, self.cap);
 
         while let Some(item) = seq.next_element::<T>()? {
             unsafe { storage.push(item) }

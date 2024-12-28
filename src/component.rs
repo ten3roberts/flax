@@ -23,7 +23,7 @@ use crate::{
     metadata::Metadata,
     relation::RelationExt,
     vtable::{ComponentVTable, UntypedVTable},
-    Entity, ComponentMut,
+    ComponentMut, Entity,
 };
 
 /// Trait alias for a 'static + Send + Sync type which can be used as a
