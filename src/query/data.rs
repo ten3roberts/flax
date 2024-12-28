@@ -55,7 +55,7 @@ where
     }
 }
 
-impl<'a, Q, F, S> QueryData<'a, Q, F, S>
+impl<Q, F, S> QueryData<'_, Q, F, S>
 where
     Q: for<'x> Fetch<'x>,
     F: for<'x> Fetch<'x>,
@@ -73,7 +73,7 @@ where
     }
 }
 
-impl<'a, 'w, Q, F, S> AsBorrowed<'a> for QueryData<'w, Q, F, S>
+impl<'a, Q, F, S> AsBorrowed<'a> for QueryData<'_, Q, F, S>
 where
     Q: for<'x> Fetch<'x> + 'static,
     F: for<'x> Fetch<'x> + 'static,

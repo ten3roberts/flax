@@ -90,7 +90,7 @@ pub struct Batch<'a, T> {
     slot: Slot,
 }
 
-impl<'w, 'q, T> PreparedFetch<'q> for PreparedRelationsMut<'w, T>
+impl<'q, T> PreparedFetch<'q> for PreparedRelationsMut<'_, T>
 where
     T: 'q + ComponentValue,
 {

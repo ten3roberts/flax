@@ -13,11 +13,11 @@ use super::StaticFilter;
 /// A filter that yields, well, nothing
 pub struct Nothing;
 
-impl<'q> FetchItem<'q> for Nothing {
+impl FetchItem<'_> for Nothing {
     type Item = ();
 }
 
-impl<'a> Fetch<'a> for Nothing {
+impl Fetch<'_> for Nothing {
     const MUTABLE: bool = false;
 
     type Prepared = Nothing;
@@ -65,7 +65,7 @@ impl<'q> PreparedFetch<'q> for Nothing {
 #[derive(Debug, Clone)]
 pub struct All;
 
-impl<'q> FetchItem<'q> for All {
+impl FetchItem<'_> for All {
     type Item = ();
 }
 
@@ -114,11 +114,11 @@ impl<'q> PreparedFetch<'q> for All {
 /// A filter that yields archetypes but no entities
 pub struct NoEntities;
 
-impl<'q> FetchItem<'q> for NoEntities {
+impl FetchItem<'_> for NoEntities {
     type Item = ();
 }
 
-impl<'a> Fetch<'a> for NoEntities {
+impl Fetch<'_> for NoEntities {
     const MUTABLE: bool = false;
 
     type Prepared = NoEntities;
@@ -161,7 +161,7 @@ impl<'q> PreparedFetch<'q> for NoEntities {
     #[inline]
     unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
-impl<'w> FetchItem<'w> for Entity {
+impl FetchItem<'_> for Entity {
     type Item = Entity;
 }
 
@@ -239,7 +239,7 @@ impl<'w> PreparedFetch<'w> for PreparedEntity {
     }
 }
 
-impl<'q> FetchItem<'q> for Slice {
+impl FetchItem<'_> for Slice {
     type Item = ();
 }
 
@@ -282,7 +282,7 @@ impl<'q> PreparedFetch<'q> for Slice {
     unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
-impl<'q> FetchItem<'q> for bool {
+impl FetchItem<'_> for bool {
     type Item = bool;
 }
 

@@ -1106,16 +1106,16 @@ impl World {
         let loc = self.init_location(id)?;
         let arch = self.archetypes.get(loc.arch_id);
         if arch.has(component.key()) {
-            return Ok(Entry::Occupied(OccupiedEntry {
+            Ok(Entry::Occupied(OccupiedEntry {
                 borrow: self.get_mut(id, component).unwrap(),
-            }));
+            }))
         } else {
-            return Ok(Entry::Vacant(VacantEntry {
+            Ok(Entry::Vacant(VacantEntry {
                 world: self,
                 id,
                 component,
-            }));
-        };
+            }))
+        }
     }
 
     /// Subscribe to events in the world using the provided event handler.
@@ -1342,13 +1342,13 @@ impl fmt::Debug for World {
 /// See: [`World::reserve`]
 pub struct ReservedEntityIter<'a>(crate::entity::ReservedIter<'a>);
 
-impl<'a> ExactSizeIterator for ReservedEntityIter<'a> {
+impl ExactSizeIterator for ReservedEntityIter<'_> {
     fn len(&self) -> usize {
         self.0.len()
     }
 }
 
-impl<'a> Iterator for ReservedEntityIter<'a> {
+impl Iterator for ReservedEntityIter<'_> {
     type Item = Entity;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -71,7 +71,7 @@ pub struct Batch<'a> {
     slot: Slot,
 }
 
-impl<'w, 'q> PreparedFetch<'q> for PreparedEntityRef<'w> {
+impl<'q> PreparedFetch<'q> for PreparedEntityRef<'_> {
     type Item = EntityRef<'q>;
     type Chunk = Batch<'q>;
     const HAS_FILTER: bool = false;

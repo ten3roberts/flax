@@ -21,7 +21,7 @@ pub trait AsBorrowed<'a> {
     fn as_borrowed(&'a mut self) -> Self::Borrowed;
 }
 
-impl<'a, 'b, T: 'a> AsBorrowed<'a> for AtomicRef<'b, T> {
+impl<'a, T: 'a> AsBorrowed<'a> for AtomicRef<'_, T> {
     type Borrowed = &'a T;
 
     fn as_borrowed(&'a mut self) -> Self::Borrowed {
@@ -29,7 +29,7 @@ impl<'a, 'b, T: 'a> AsBorrowed<'a> for AtomicRef<'b, T> {
     }
 }
 
-impl<'a, 'b, T: 'a> AsBorrowed<'a> for AtomicRefMut<'b, T> {
+impl<'a, T: 'a> AsBorrowed<'a> for AtomicRefMut<'_, T> {
     type Borrowed = &'a mut T;
 
     fn as_borrowed(&'a mut self) -> Self::Borrowed {
@@ -38,7 +38,7 @@ impl<'a, 'b, T: 'a> AsBorrowed<'a> for AtomicRefMut<'b, T> {
 }
 
 struct FmtSystemData<'a, S>(&'a S);
-impl<'a, 'w, S> core::fmt::Debug for FmtSystemData<'a, S>
+impl<'w, S> core::fmt::Debug for FmtSystemData<'_, S>
 where
     S: SystemData<'w>,
 {

@@ -157,7 +157,7 @@ impl FetchSource for Traverse {
         fetch: &Q,
         data: FetchAccessData<'a>,
     ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
-        return traverse_resolve(self.relation, fetch, data);
+        traverse_resolve(self.relation, fetch, data)
     }
 
     fn describe(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

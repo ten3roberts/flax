@@ -241,11 +241,11 @@ pub struct With {
     pub(crate) name: &'static str,
 }
 
-impl<'q> FetchItem<'q> for With {
+impl FetchItem<'_> for With {
     type Item = ();
 }
 
-impl<'a> Fetch<'a> for With {
+impl Fetch<'_> for With {
     const MUTABLE: bool = false;
 
     type Prepared = All;
@@ -283,11 +283,11 @@ pub struct Without {
     pub(crate) name: &'static str,
 }
 
-impl<'q> FetchItem<'q> for Without {
+impl FetchItem<'_> for Without {
     type Item = ();
 }
 
-impl<'w> Fetch<'w> for Without {
+impl Fetch<'_> for Without {
     const MUTABLE: bool = false;
 
     type Prepared = All;
@@ -324,11 +324,11 @@ pub(crate) struct WithTarget {
     pub(crate) target: Entity,
 }
 
-impl<'q> FetchItem<'q> for WithTarget {
+impl FetchItem<'_> for WithTarget {
     type Item = ();
 }
 
-impl<'w> Fetch<'w> for WithTarget {
+impl Fetch<'_> for WithTarget {
     const MUTABLE: bool = false;
 
     type Prepared = All;
@@ -373,7 +373,7 @@ impl<F> core::fmt::Debug for ArchetypeFilter<F> {
     }
 }
 
-impl<'q, F> FetchItem<'q> for ArchetypeFilter<F> {
+impl<F> FetchItem<'_> for ArchetypeFilter<F> {
     type Item = ();
 }
 
@@ -404,11 +404,11 @@ pub struct WithRelation {
     pub(crate) name: &'static str,
 }
 
-impl<'q> FetchItem<'q> for WithRelation {
+impl FetchItem<'_> for WithRelation {
     type Item = ();
 }
 
-impl<'w> Fetch<'w> for WithRelation {
+impl Fetch<'_> for WithRelation {
     const MUTABLE: bool = false;
     type Prepared = All;
 
@@ -441,11 +441,11 @@ pub struct WithoutRelation {
     pub(crate) name: &'static str,
 }
 
-impl<'q> FetchItem<'q> for WithoutRelation {
+impl FetchItem<'_> for WithoutRelation {
     type Item = ();
 }
 
-impl<'a> Fetch<'a> for WithoutRelation {
+impl Fetch<'_> for WithoutRelation {
     const MUTABLE: bool = false;
 
     type Prepared = All;
@@ -475,22 +475,22 @@ impl StaticFilter for WithoutRelation {
 /// Allows a fetch to be used by reference.
 pub struct RefFetch<'a, F>(pub(crate) &'a F);
 
-impl<'a, F> Copy for RefFetch<'a, F> {}
+impl<F> Copy for RefFetch<'_, F> {}
 
-impl<'a, F> Clone for RefFetch<'a, F> {
+impl<F> Clone for RefFetch<'_, F> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, 'q, F> FetchItem<'q> for RefFetch<'a, F>
+impl<'q, F> FetchItem<'q> for RefFetch<'_, F>
 where
     F: FetchItem<'q>,
 {
     type Item = F::Item;
 }
 
-impl<'a, 'w, F> Fetch<'w> for RefFetch<'a, F>
+impl<'w, F> Fetch<'w> for RefFetch<'_, F>
 where
     F: Fetch<'w>,
 {
@@ -524,7 +524,7 @@ where
     }
 }
 
-impl<'a, 'q, F> FetchItem<'q> for &'a F
+impl<'q, F> FetchItem<'q> for &F
 where
     F: FetchItem<'q>,
 {
@@ -586,7 +586,7 @@ impl<'q> PreparedFetch<'q> for BatchSize {
     unsafe fn fetch_next(_: &mut Self::Chunk) -> Self::Item {}
 }
 
-impl<'q> FetchItem<'q> for BatchSize {
+impl FetchItem<'_> for BatchSize {
     type Item = ();
 }
 

@@ -209,7 +209,7 @@ pub struct Node<'w, Q, F> {
     _marker: PhantomData<(Q, F)>,
 }
 
-impl<'w, Q, F> Clone for Node<'w, Q, F> {
+impl<Q, F> Clone for Node<'_, Q, F> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
@@ -223,7 +223,7 @@ impl<'w, Q, F> Clone for Node<'w, Q, F> {
     }
 }
 
-impl<'w, Q, F> Debug for Node<'w, Q, F> {
+impl<Q, F> Debug for Node<'_, Q, F> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Node").field("id", &self.id).finish()
     }

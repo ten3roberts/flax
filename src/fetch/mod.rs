@@ -48,7 +48,7 @@ pub use transform::{Added, Modified, TransformFetch};
 #[doc(hidden)]
 pub struct FmtQuery<'r, Q>(pub &'r Q);
 
-impl<'r, 'w, Q> Debug for FmtQuery<'r, Q>
+impl<'w, Q> Debug for FmtQuery<'_, Q>
 where
     Q: Fetch<'w>,
 {
@@ -218,7 +218,7 @@ where
     }
 }
 
-impl<'q> FetchItem<'q> for () {
+impl FetchItem<'_> for () {
     type Item = ();
 }
 
@@ -305,7 +305,7 @@ pub struct ReadEntities<'a> {
     entities: &'a [Entity],
 }
 
-impl<'q> FetchItem<'q> for EntityIds {
+impl FetchItem<'_> for EntityIds {
     type Item = Entity;
 }
 
@@ -332,7 +332,7 @@ impl<'w> Fetch<'w> for EntityIds {
     fn access(&self, _: FetchAccessData, _: &mut Vec<Access>) {}
 }
 
-impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
+impl<'q> PreparedFetch<'q> for ReadEntities<'_> {
     type Item = Entity;
     type Chunk = Ptr<'q, Entity>;
 
@@ -349,7 +349,7 @@ impl<'w, 'q> PreparedFetch<'q> for ReadEntities<'w> {
     }
 }
 
-impl<'w, 'q> RandomFetch<'q> for ReadEntities<'w> {
+impl RandomFetch<'_> for ReadEntities<'_> {
     #[inline]
     unsafe fn fetch_shared(&self, slot: usize) -> Self::Item {
         self.entities[slot]

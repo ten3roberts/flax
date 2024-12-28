@@ -24,7 +24,7 @@ pub trait IntoInput<'a> {
     fn into_input(self) -> Self::Output;
 }
 
-unsafe impl<'a, 'b> ExtractDyn<'a, 'b> for () {
+unsafe impl<'a> ExtractDyn<'a, '_> for () {
     unsafe fn extract_dyn(&'a self, _: TypeId) -> Option<&'a AtomicRefCell<NonNull<()>>> {
         None
     }
@@ -62,8 +62,8 @@ impl<'a, T: ?Sized> ErasedCell<'a, T> {
     }
 }
 
-unsafe impl<'a, T: ?Sized> Send for ErasedCell<'a, T> where T: Send {}
-unsafe impl<'a, T: ?Sized> Sync for ErasedCell<'a, T> where T: Sync {}
+unsafe impl<T: ?Sized> Send for ErasedCell<'_, T> where T: Send {}
+unsafe impl<T: ?Sized> Sync for ErasedCell<'_, T> where T: Sync {}
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {

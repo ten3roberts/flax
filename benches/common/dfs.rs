@@ -7,10 +7,9 @@ component! {
     b: f32,
 }
 
-pub struct Benchmark(
-    World,
-    Query<(EntityIds, Opt<Component<f32>>, Opt<Component<f32>>), All, Dfs<()>>,
-);
+type BenchmarkQuery = (EntityIds, Opt<Component<f32>>, Opt<Component<f32>>);
+
+pub struct Benchmark(World, Query<BenchmarkQuery, All, Dfs<()>>);
 
 fn spawn_children(world: &mut World, parent: Entity) {
     let a = repeat((Some(a()), None)).take(100);
