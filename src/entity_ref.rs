@@ -365,6 +365,14 @@ impl<'a> EntityRef<'a> {
         self.get(component).map(|v| *v)
     }
 
+    /// Shorthand to clone and not use a borrowing references
+    pub fn get_clone<T: ComponentValue + Clone>(
+        &self,
+        component: Component<T>,
+    ) -> Result<T, MissingComponent> {
+        self.get(component).map(|v| v.clone())
+    }
+
     /// Check if the entity currently has the specified component without
     /// borrowing.
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {

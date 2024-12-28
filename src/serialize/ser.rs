@@ -2,11 +2,11 @@ use crate::{
     archetype::{Archetype, ArchetypeId, ArchetypeStorage},
     component::{ComponentKey, ComponentValue},
     components::component_info,
-    filter::{All, And, StaticFilter},
+    filter::StaticFilter,
     Component, Entity, EntityRef, World,
 };
 
-use alloc::{boxed::Box, collections::BTreeMap, string::String};
+use alloc::{collections::BTreeMap, string::String};
 use serde::{
     ser::{SerializeMap, SerializeSeq, SerializeStructVariant, SerializeTupleStruct},
     Serialize, Serializer,
@@ -23,17 +23,15 @@ struct Slot {
 
 #[derive(Clone)]
 /// Builder for a serialialization context
-pub struct SerializeBuilder<F = All> {
+pub struct SerializeBuilder {
     slots: BTreeMap<ComponentKey, Slot>,
-    filter: F,
 }
 
-impl SerializeBuilder<All> {
+impl SerializeBuilder {
     /// Creates a new SerializeBuilder
     pub fn new() -> Self {
         Self {
             slots: Default::default(),
-            filter: All,
         }
     }
 }
@@ -44,10 +42,7 @@ impl Default for SerializeBuilder {
     }
 }
 
-impl<F> SerializeBuilder<F>
-where
-    F: StaticFilter + 'static + Clone,
-{
+impl SerializeBuilder {
     /// Creates a component deserializer from the global registry
     pub fn from_registry(&mut self) -> &mut Self {
         self.slots.extend(REGISTRY.serializers().iter().map(|v| {
@@ -99,19 +94,10 @@ where
         self
     }
 
-    /// Add a new filter to specify which entities will be serialized.
-    pub fn with_filter<G>(self, filter: G) -> SerializeBuilder<And<F, G>> {
-        SerializeBuilder {
-            slots: self.slots,
-            filter: And(self.filter, filter),
-        }
-    }
-
     /// Finish constructing the serialization context
     pub fn build(&mut self) -> SerializeContext {
         SerializeContext {
             slots: self.slots.clone(),
-            filter: Box::new(self.filter.clone()),
         }
     }
 }
@@ -120,7 +106,6 @@ where
 /// and an optional filter. Empty entities will be skipped.
 pub struct SerializeContext {
     slots: BTreeMap<ComponentKey, Slot>,
-    filter: Box<dyn StaticFilter>,
 }
 
 impl SerializeContext {
@@ -131,15 +116,17 @@ impl SerializeContext {
 
     /// Serialize the world in a column major format.
     /// This is more efficient but less human readable.
-    pub fn serialize_world<'a>(
+    pub fn serialize_world<'a, F: StaticFilter>(
         &'a self,
         world: &'a World,
         format: SerializeFormat,
-    ) -> WorldSerializer<'a> {
+        filter: F,
+    ) -> WorldSerializer<'a, F> {
         WorldSerializer {
             format,
             world,
             context: self,
+            filter,
         }
     }
 
@@ -155,27 +142,29 @@ impl SerializeContext {
     fn archetypes<'a>(
         &'a self,
         world: &'a World,
-    ) -> impl Iterator<Item = (ArchetypeId, &'a Archetype)> {
-        world.archetypes.iter().filter(|(_, arch)| {
+        filter: &'a impl StaticFilter,
+    ) -> impl Iterator<Item = (ArchetypeId, &'a Archetype)> + 'a {
+        world.archetypes.iter().filter(move |(_, arch)| {
             !arch.is_empty()
                 && arch
                     .components()
                     .keys()
                     .any(|id| self.slots.contains_key(id))
                 && !arch.has(component_info().key())
-                && self.filter.filter_static(arch)
+                && filter.filter_static(arch)
         })
     }
 }
 
 /// Serializes the world
-pub struct WorldSerializer<'a> {
+pub struct WorldSerializer<'a, F> {
     format: SerializeFormat,
     context: &'a SerializeContext,
     world: &'a World,
+    filter: F,
 }
 
-impl Serialize for WorldSerializer<'_> {
+impl<F: StaticFilter> Serialize for WorldSerializer<'_, F> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -188,6 +177,7 @@ impl Serialize for WorldSerializer<'_> {
                     &SerializeEntities {
                         world: self.world,
                         context: self.context,
+                        filter: &self.filter,
                     },
                 )?;
                 state.end()
@@ -199,6 +189,7 @@ impl Serialize for WorldSerializer<'_> {
                     &SerializeArchetypes {
                         world: self.world,
                         context: self.context,
+                        filter: &self.filter,
                     },
                 )?;
                 state.end()
@@ -207,25 +198,26 @@ impl Serialize for WorldSerializer<'_> {
     }
 }
 
-struct SerializeEntities<'a> {
+struct SerializeEntities<'a, F> {
     world: &'a World,
     context: &'a SerializeContext,
+    filter: &'a F,
 }
 
-impl Serialize for SerializeEntities<'_> {
+impl<F: StaticFilter> Serialize for SerializeEntities<'_, F> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let len = self
             .context
-            .archetypes(self.world)
+            .archetypes(self.world, self.filter)
             .map(|(_, v)| v.len())
             .sum();
 
         let mut seq = serializer.serialize_seq(Some(len))?;
 
-        for (_, arch) in self.context.archetypes(self.world) {
+        for (_, arch) in self.context.archetypes(self.world, self.filter) {
             for slot in arch.slots() {
                 seq.serialize_element(&EntityIdSerializer {
                     slot,
@@ -296,20 +288,22 @@ impl Serialize for EntityDataSerializer<'_> {
     }
 }
 
-struct SerializeArchetypes<'a> {
+struct SerializeArchetypes<'a, F> {
     world: &'a World,
     context: &'a SerializeContext,
+    filter: &'a F,
 }
 
-impl serde::Serialize for SerializeArchetypes<'_> {
+impl<F: StaticFilter> serde::Serialize for SerializeArchetypes<'_, F> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let mut state =
-            serializer.serialize_seq(Some(self.context.archetypes(self.world).count()))?;
+        let mut state = serializer.serialize_seq(Some(
+            self.context.archetypes(self.world, self.filter).count(),
+        ))?;
 
-        for (_, arch) in self.context.archetypes(self.world) {
+        for (_, arch) in self.context.archetypes(self.world, self.filter) {
             state.serialize_element(&SerializeArchetype {
                 context: self.context,
                 arch,

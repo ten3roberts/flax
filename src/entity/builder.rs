@@ -160,6 +160,14 @@ impl EntityBuilder {
         self.attach_with(relation, Default::default(), other)
     }
 
+    /// Moves all components from `other` into `self`, leaving `other` empty.
+    ///
+    /// Duplicate components will be overwritten
+    pub fn append(&mut self, other: &mut Self) -> &mut Self {
+        self.buffer.append(&mut other.buffer);
+        self
+    }
+
     /// Spawns the built entity into the world.
     ///
     /// Clears the builder and allows it to be used again, reusing the builder

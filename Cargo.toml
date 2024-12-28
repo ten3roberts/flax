@@ -24,7 +24,7 @@ anyhow = { version = "1.0.75", default-features = false }
 atomic_refcell = { version = "0.1.13", default-features = false }
 bitflags = { version = "2.4.1", default-features = false }
 erased-serde = { version = "0.3.31", features = [], optional = true }
-inventory = { version = "0.3", default-features = true }
+inventory = { version = "0.3", default-features = true , optional = true }
 itertools = "0.12.1"
 once_cell = "1.18.0"
 puffin = { version = "0.19", optional = true }
@@ -54,7 +54,7 @@ pretty_assertions = "1.4.0"
 debug = true
 
 [features]
-std = ["itertools/use_std", "itertools/use_alloc", "anyhow/std"]
+std = ["itertools/use_std", "itertools/use_alloc", "anyhow/std", "inventory"]
 default = ["std", "rayon", "flume"]
 serde = ["dep:serde", "erased-serde"]
 derive = ["flax-derive"]

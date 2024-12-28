@@ -284,6 +284,36 @@ impl ComponentBuffer {
         }
     }
 
+    /// Drain and append another component buffer
+    pub fn append(&mut self, other: &mut Self) {
+        for (key, (desc, other_offset)) in mem::take(&mut other.entries) {
+            unsafe {
+                let other_value = other.storage.at_mut(other_offset);
+                if let Some(&(new_desc, existing_offset)) = self.entries.get(&key) {
+                    assert_eq!(desc, new_desc);
+
+                    desc.drop(self.storage.at_mut(existing_offset));
+
+                    ptr::copy_nonoverlapping(
+                        other_value,
+                        self.storage.at_mut(existing_offset),
+                        desc.size(),
+                    )
+                } else {
+                    if desc.key().is_relation() && desc.meta_ref().has(metadata::exclusive()) {
+                        self.drain_relations_like(desc.key.id());
+                    }
+
+                    let new_offset = self.storage.allocate(desc.layout());
+
+                    self.storage.write_dyn(new_offset, desc, other_value);
+
+                    self.entries.insert(desc.key(), (desc, new_offset));
+                }
+            }
+        }
+    }
+
     pub(crate) fn drain_relations_like(&mut self, relation: Entity) {
         let start = ComponentKey::new(relation, Some(Entity::MIN));
         let end = ComponentKey::new(relation, Some(Entity::MAX));

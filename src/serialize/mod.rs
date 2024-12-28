@@ -1,5 +1,6 @@
 #[macro_use]
-mod registry;
+/// Global component serialization registry
+pub mod registry;
 
 mod de;
 mod ser;
@@ -12,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     archetype::ArchetypeStorage,
     component::{ComponentDesc, ComponentKey, ComponentValue},
-    filter::All,
+    filter::{All, StaticFilter},
     Component, EntityBuilder, EntityRef, World,
 };
 
@@ -65,8 +66,8 @@ pub enum SerializeFormat {
 
 /// Allows constructing a serialize and deserialize context with the same
 /// supported types allowing for easier roundtrips.
-pub struct SerializationContextBuilder<F = All> {
-    ser: SerializeBuilder<F>,
+pub struct SerializationContextBuilder {
+    ser: SerializeBuilder,
     de: DeserializeBuilder,
 }
 
@@ -142,8 +143,18 @@ impl SerializationContext {
         &'a self,
         world: &'a World,
         format: SerializeFormat,
-    ) -> WorldSerializer<'a> {
-        self.serializer.serialize_world(world, format)
+    ) -> WorldSerializer<'a, All> {
+        self.serializer.serialize_world(world, format, All)
+    }
+
+    /// Serialize a world with a custom filter
+    pub fn serialize_world_with_filter<'a, F: StaticFilter>(
+        &'a self,
+        world: &'a World,
+        format: SerializeFormat,
+        filter: F,
+    ) -> WorldSerializer<'a, F> {
+        self.serializer.serialize_world(world, format, filter)
     }
 
     /// Serialize a single entity's data
