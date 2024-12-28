@@ -9,7 +9,7 @@ pub struct ReadComponent<'a, T> {
     borrow: AtomicRef<'a, [T]>,
 }
 
-impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
+impl<'q, T: 'q> PreparedFetch<'q> for ReadComponent<'_, T> {
     type Item = &'q T;
 
     type Chunk = Ptr<'q, T>;
@@ -30,7 +30,7 @@ impl<'w, 'q, T: 'q> PreparedFetch<'q> for ReadComponent<'w, T> {
     }
 }
 
-impl<'w, 'q, T: ComponentValue> RandomFetch<'q> for ReadComponent<'w, T> {
+impl<'q, T: ComponentValue> RandomFetch<'q> for ReadComponent<'_, T> {
     #[inline]
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         self.borrow.get_unchecked(slot)

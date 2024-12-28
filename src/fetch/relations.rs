@@ -78,7 +78,7 @@ pub struct Batch<'a, T> {
     slot: Slot,
 }
 
-impl<'w, 'q, T> PreparedFetch<'q> for PreparedRelations<'w, T>
+impl<'q, T> PreparedFetch<'q> for PreparedRelations<'_, T>
 where
     T: ComponentValue,
 {
@@ -200,7 +200,7 @@ where
     }
 }
 
-impl<'w, 'q, T: ComponentValue> RandomFetch<'q> for PreparedNthRelation<'w, T> {
+impl<'q, T: ComponentValue> RandomFetch<'q> for PreparedNthRelation<'_, T> {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         let value = &self.borrow.1.get()[slot];
         (self.borrow.0, value)
@@ -227,7 +227,7 @@ pub struct NthBatch<'a, T> {
     slot: Slot,
 }
 
-impl<'w, 'q, T> PreparedFetch<'q> for PreparedNthRelation<'w, T>
+impl<'q, T> PreparedFetch<'q> for PreparedNthRelation<'_, T>
 where
     T: ComponentValue,
 {

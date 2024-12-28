@@ -100,7 +100,7 @@ pub struct Or<T>(pub T);
 /// Negate a filter
 pub struct Not<T>(pub T);
 
-impl<'q, T> FetchItem<'q> for Not<T> {
+impl<T> FetchItem<'_> for Not<T> {
     type Item = ();
 }
 

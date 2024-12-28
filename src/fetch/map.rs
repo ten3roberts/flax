@@ -61,7 +61,7 @@ where
     }
 }
 
-impl<'w, 'q, Q, F, T> PreparedFetch<'q> for Map<Q, &'w F>
+impl<'q, Q, F, T> PreparedFetch<'q> for Map<Q, &F>
 where
     Q: PreparedFetch<'q>,
     F: Fn(Q::Item) -> T,

@@ -146,7 +146,7 @@ impl<'q, F: FetchItem<'q, Item = &'q V>, V: 'static> FetchItem<'q> for OptOr<F, 
     type Item = &'q V;
 }
 
-impl<'w, 'q, F, V> PreparedFetch<'q> for OptOr<Option<F>, &'w V>
+impl<'q, F, V> PreparedFetch<'q> for OptOr<Option<F>, &V>
 where
     F: PreparedFetch<'q, Item = &'q V>,
     V: 'q,

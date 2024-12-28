@@ -75,7 +75,7 @@ pub struct WriteComponent<'a, T> {
     tick: u32,
 }
 
-impl<'w, 'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'w, T> {
+impl<'q, T: 'q + ComponentValue> PreparedFetch<'q> for WriteComponent<'_, T> {
     type Item = &'q mut T;
     type Chunk = PtrMut<'q, T>;
 

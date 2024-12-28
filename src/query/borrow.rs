@@ -13,7 +13,7 @@ pub(crate) struct PreparedArchetype<'w, Q, F> {
     pub(crate) fetch: Filtered<Q, F>,
 }
 
-impl<'w, Q, F> PreparedArchetype<'w, Q, F> {
+impl<Q, F> PreparedArchetype<'_, Q, F> {
     #[inline]
     pub unsafe fn create_chunk<'q>(&'q mut self, slots: Slice) -> Option<Chunk<'q, Q>>
     where

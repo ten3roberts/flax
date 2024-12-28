@@ -86,7 +86,7 @@ pub struct Batch<'a> {
     slot: Slot,
 }
 
-impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
+impl<'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'_, T> {
     type Item = MutGuard<'q, T>;
     type Chunk = Batch<'q>;
 
@@ -115,7 +115,7 @@ impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedMaybeMut<'w, T> {
     }
 }
 
-impl<'w, 'q, T: ComponentValue> RandomFetch<'q> for PreparedMaybeMut<'w, T> {
+impl<'q, T: ComponentValue> RandomFetch<'q> for PreparedMaybeMut<'_, T> {
     #[inline]
     unsafe fn fetch_shared(&'q self, slot: usize) -> Self::Item {
         MutGuard {
@@ -149,7 +149,7 @@ pub struct MutGuard<'w, T> {
     _marker: PhantomData<T>,
 }
 
-impl<'w, T: ComponentValue> MutGuard<'w, T> {
+impl<T: ComponentValue> MutGuard<'_, T> {
     /// Acquire a shared reference to the current value without triggering a change
     pub fn read(&self) -> AtomicRef<T> {
         // Type is guaranteed by fetch constructor

@@ -517,13 +517,13 @@ pub(crate) struct ReservedIter<'a, V = EntityLocation> {
     kind: EntityKind,
 }
 
-impl<'a, V> ExactSizeIterator for ReservedIter<'a, V> {
+impl<V> ExactSizeIterator for ReservedIter<'_, V> {
     fn len(&self) -> usize {
         self.free.len() + self.new.len()
     }
 }
 
-impl<'a, V> Iterator for ReservedIter<'a, V> {
+impl<V> Iterator for ReservedIter<'_, V> {
     type Item = Entity;
 
     fn next(&mut self) -> Option<Self::Item> {

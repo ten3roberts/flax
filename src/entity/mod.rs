@@ -158,7 +158,7 @@ mod serde_impl {
 
     struct EntityKindVisitor;
 
-    impl<'de> Visitor<'de> for EntityKindVisitor {
+    impl Visitor<'_> for EntityKindVisitor {
         type Value = EntityKind;
 
         fn expecting(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {

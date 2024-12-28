@@ -42,7 +42,7 @@ where
     type Item = &'q T;
 }
 
-impl<'w, 'q, T: ComponentValue> RandomFetch<'q> for PreparedChangeFilter<'w, T> {
+impl<'q, T: ComponentValue> RandomFetch<'q> for PreparedChangeFilter<'_, T> {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
         unsafe { self.data.get().get_unchecked(slot) }
     }
@@ -148,14 +148,14 @@ pub struct PreparedChangeFilter<'w, T> {
     cursor: ChangeCursor,
 }
 
-impl<'w, T> core::fmt::Debug for PreparedChangeFilter<'w, T> {
+impl<T> core::fmt::Debug for PreparedChangeFilter<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PreparedChangeFilter")
             .finish_non_exhaustive()
     }
 }
 
-impl<'w, 'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'w, T> {
+impl<'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'_, T> {
     type Item = &'q T;
     type Chunk = Ptr<'q, T>;
 
@@ -205,7 +205,7 @@ impl<'w> ChangeFetch<'w> {
 }
 
 #[cfg(test)]
-impl<'q, 'w> RandomFetch<'q> for ChangeFetch<'w> {
+impl<'q> RandomFetch<'q> for ChangeFetch<'_> {
     #[inline]
     unsafe fn fetch_shared(&'q self, _: Slot) -> Self::Item {}
 
@@ -214,7 +214,7 @@ impl<'q, 'w> RandomFetch<'q> for ChangeFetch<'w> {
 }
 
 #[cfg(test)]
-impl<'w, 'q> PreparedFetch<'q> for ChangeFetch<'w> {
+impl<'q> PreparedFetch<'q> for ChangeFetch<'_> {
     type Item = ();
     type Chunk = ();
     const HAS_FILTER: bool = true;

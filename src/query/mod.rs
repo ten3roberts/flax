@@ -96,7 +96,7 @@ where
 
 impl<Q> Query<Q, All, Planar> {
     /// Construct a new query which will fetch all items in the given query.
-
+    ///
     /// The query can be either a singular component, a tuple of components, or
     /// any other type which implements [crate::Fetch].
     ///
@@ -106,7 +106,7 @@ impl<Q> Query<Q, All, Planar> {
     ///
     /// A fetch may also contain filters
     /// Construct a new query which will fetch all items in the given query.
-
+    ///
     /// The query can be either a singular component, a tuple of components, or
     /// any other type which implements [crate::Fetch].
     ///
@@ -116,7 +116,7 @@ impl<Q> Query<Q, All, Planar> {
     ///
     /// A fetch may also contain filters
     /// Construct a new query which will fetch all items in the given query.
-
+    ///
     /// The query can be either a singular component, a tuple of components, or
     /// any other type which implements [crate::Fetch].
     ///
@@ -364,11 +364,12 @@ mod test {
             .append_to(&mut world, resources())
             .unwrap();
 
-        let mut query = Query::new((window_width(), window_height(), allow_vsync())).with_filter(Or((
-            window_width().modified(),
-            window_height().modified(),
-            allow_vsync().modified(),
-        )));
+        let mut query =
+            Query::new((window_width(), window_height(), allow_vsync())).with_filter(Or((
+                window_width().modified(),
+                window_height().modified(),
+                allow_vsync().modified(),
+            )));
 
         assert_eq!(
             query.borrow(&world).get(resources()),

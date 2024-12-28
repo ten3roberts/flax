@@ -413,7 +413,7 @@ where
     pub(crate) adj: &'q AdjMap,
 }
 
-impl<'w, 'q, Q, F> DfsIter<'w, 'q, Q, F>
+impl<'w, Q, F> DfsIter<'w, '_, Q, F>
 where
     Q: Fetch<'w>,
     F: Fetch<'w>,

@@ -59,31 +59,6 @@ impl Archetypes {
     }
 
     /// Prunes a leaf and its ancestors from empty archetypes
-    // pub(crate) fn prune_arch(&mut self, arch_id: ArchetypeId) -> usize {
-    //     let arch = self.get(arch_id);
-    //     if arch_id == self.root
-    //         || arch_id == self.reserved
-    //         || !arch.is_empty()
-    //         || !arch.outgoing.is_empty()
-    //     {
-    //         return 0;
-    //     }
-
-    //     let arch = self.inner.despawn(arch_id).unwrap();
-    //     let mut count = 1;
-    //     for (&key, &dst_id) in &arch.incoming {
-    //         let dst = self.get_mut(dst_id);
-    //         dst.remove_link(key);
-
-    //         count += self.prune_arch(dst_id);
-    //     }
-
-    //     self.gen = self.gen.wrapping_add(1);
-
-    //     count
-    // }
-
-    /// Prunes a leaf and its ancestors from empty archetypes
     pub(crate) fn prune_all(&mut self) -> usize {
         fn prune(
             archetypes: &EntityStore<Archetype>,

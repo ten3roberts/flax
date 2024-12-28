@@ -123,8 +123,8 @@ impl EntityBuilder {
     pub fn get<T: ComponentValue>(&self, component: Component<T>) -> Option<&T> {
         self.buffer.get(component)
     }
-    /// Returns true if the entity builder contains the given component
 
+    /// Returns true if the entity builder contains the given component
     pub fn has<T: ComponentValue>(&self, component: Component<T>) -> bool {
         self.buffer.has(component)
     }

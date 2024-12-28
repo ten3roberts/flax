@@ -379,7 +379,7 @@ impl<'b> Buffered<'b> {
     }
 }
 
-unsafe impl<'b> EntityWriter for Buffered<'b> {
+unsafe impl EntityWriter for Buffered<'_> {
     type Output = ();
 
     fn write(
