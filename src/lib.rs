@@ -289,4 +289,6 @@ pub use flax_derive::*;
 #[doc(hidden)]
 pub mod __internal {
     pub use anyhow;
+    #[cfg(feature = "serde")]
+    pub use inventory;
 }

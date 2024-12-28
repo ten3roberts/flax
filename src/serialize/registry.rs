@@ -44,7 +44,8 @@ pub(super) fn ser<T: ComponentValue + Serialize>(
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct ComponentSerializerPlugin {
+#[doc(hidden)]
+pub struct ComponentSerializerPlugin {
     pub(crate) desc: fn() -> ComponentDesc,
     pub(crate) serialize_fn: SerializeFn,
 }
@@ -62,7 +63,8 @@ impl ComponentSerializerPlugin {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct ComponentDeserializerPlugin {
+#[doc(hidden)]
+pub struct ComponentDeserializerPlugin {
     pub(crate) desc: fn() -> ComponentDesc,
     pub(crate) deserialize_col_fn: DeserializeColFn,
     pub(crate) deserialize_row_fn: DeserializeRowFn,
@@ -124,10 +126,10 @@ inventory::collect!(ComponentDeserializerPlugin);
 macro_rules! register_serializable {
     ($($component: ident),*) => {
         $(
-            inventory::submit! {
+            $crate::__internal::inventory::submit! {
                 $crate::serialize::registry::ComponentSerializerPlugin::new($component, || $component().desc())
             }
-            inventory::submit! {
+            $crate::__internal::inventory::submit! {
                 $crate::serialize::registry::ComponentDeserializerPlugin::new($component, || $component().desc())
             }
         )*
@@ -139,7 +141,7 @@ macro_rules! register_serializable {
 macro_rules! register_serializable_only {
     ($($component: ident),*) => {
         $(
-            inventory::submit! {
+            $crate::__internal::inventory::submit! {
                 $crate::serialize::registry::ComponentSerializerPlugin::new($component, || $component().desc())
             }
         )*
@@ -151,7 +153,7 @@ macro_rules! register_serializable_only {
 macro_rules! register_deserializable_only {
     ($($component: ident),*) => {
         $(
-            inventory::submit! {
+            $crate::__internal::inventory::submit! {
                 $crate::serialize::registry::ComponentDeserializerPlugin::new($component, || $component().desc())
             }
         )*

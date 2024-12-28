@@ -1,4 +1,5 @@
 use core::marker::PhantomData;
+use std::borrow::Cow;
 
 use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 use serde::{
@@ -186,8 +187,8 @@ impl<'de> Visitor<'de> for EntityDataDeserializer<'_> {
         A: de::MapAccess<'de>,
     {
         let mut builder = EntityBuilder::new();
-        while let Some(key) = map.next_key::<&str>()? {
-            let slot = self.context.get(key).map_err(de::Error::custom)?;
+        while let Some(key) = map.next_key::<Cow<'de, str>>().unwrap() {
+            let slot = self.context.get(&key).map_err(de::Error::custom)?;
             map.next_value_seed(DeserializeComponent {
                 slot,
                 builder: &mut builder,
@@ -345,8 +346,8 @@ impl<'de> Visitor<'de> for DeserializeEntityData<'_> {
     where
         A: de::MapAccess<'de>,
     {
-        while let Some(key) = map.next_key::<&str>()? {
-            let slot = self.context.get(key).map_err(de::Error::custom)?;
+        while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+            let slot = self.context.get(&key).map_err(de::Error::custom)?;
             map.next_value_seed(DeserializeComponent {
                 slot,
                 builder: self.builder,
@@ -615,8 +616,8 @@ impl<'de> Visitor<'de> for StoragesVisitor<'_> {
         A: de::MapAccess<'de>,
     {
         let mut batch = BatchSpawn::new(self.len);
-        while let Some(key) = map.next_key::<&'de str>()? {
-            let slot = self.context.get(key).map_err(de::Error::custom)?;
+        while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+            let slot = self.context.get(&key).map_err(de::Error::custom)?;
 
             let storage = map.next_value_seed(DeserializeStorage {
                 slot,
