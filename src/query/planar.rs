@@ -190,7 +190,7 @@ where
     ///
     /// This is more efficient than `.iter().for_each(|v| {})` as the archetypes can be temporarily
     /// borrowed.
-    pub fn for_each(&mut self, mut func: impl FnMut(<Q as FetchItem<'_>>::Item) + Send + Sync) {
+    pub fn for_each(&mut self, mut func: impl FnMut(<Q as FetchItem<'_>>::Item)) {
         self.clear_borrows();
         for &arch_id in self.archetypes {
             let arch = self.state.world.archetypes.get(arch_id);
