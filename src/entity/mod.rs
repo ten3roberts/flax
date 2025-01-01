@@ -15,7 +15,25 @@ pub(crate) const DEFAULT_GEN: EntityGen = unsafe { EntityGen::new_unchecked(1) }
 /// Represents an entity identifier.
 /// An entity can either declare an identifier spawned into the world,
 /// a static entity, or a component.
+///
+/// # Guarantees:
+/// 64-bit value that can be safely cast to `&[u8]` byte slices. No padding or unitialized bytes.
+///
+/// C-repr
+///
+/// Structure:
+///     - index: 32 bits
+///     - gen: 16 bits
+///     - kind: 16 bits (allows distinguishing between static, component, and dynamic entities)
+///
+/// If used in GPU storage buffers, you can safely represent this as a `(u32, u16, u16)` record type. For the most past, generation and kind can be ignored.
+///
+/// **NOTE**: While this structure is safely representable *as* bytes, it is not always safe to be
+/// cast *from* bytes, due to bitflag and generation non-zero guarantees. Use [`Self::as_bits`] and
+/// [`Self::try_from_bits`] in that case.
 #[derive(PartialOrd, Clone, Copy, PartialEq, Eq, Ord, Hash)]
+#[repr(C)]
+#[cfg_attr(feature = "bytemuck", derive(bytemuck::NoUninit))]
 pub struct Entity {
     pub(crate) index: EntityIndex,
     pub(crate) gen: EntityGen,
@@ -237,6 +255,8 @@ static STATIC_IDS: AtomicU32 = AtomicU32::new(1);
 bitflags::bitflags! {
     /// Declares the roles an entity id serves
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[repr(C)]
+    #[cfg_attr(feature = "bytemuck", derive(bytemuck::NoUninit))]
     pub struct EntityKind: u16 {
         /// The entity is a component
         const COMPONENT = 1;

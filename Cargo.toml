@@ -34,6 +34,7 @@ smallvec = { version = "1.11.1", default-features = false }
 tokio = { version = "1.33.0", default-features = false, features = [ "sync", ], optional = true }
 tracing = { version = "0.1.40", optional = true }
 tynm = "0.1.9"
+bytemuck = { version ="1.21", features = ["derive"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.33.0", features = ["test-util", "macros"] }
@@ -58,6 +59,7 @@ std = ["itertools/use_std", "itertools/use_alloc", "anyhow/std", "inventory"]
 default = ["std", "rayon", "flume"]
 serde = ["dep:serde", "erased-serde"]
 derive = ["flax-derive"]
+bytemuck = ["dep:bytemuck", "bitflags/bytemuck"]
 
 [[example]]
 name = "guide"
