@@ -19,10 +19,11 @@ type State<'w, Q, F> = (
     PreparedArchetype<'w, <Q as Fetch<'w>>::Prepared, <F as Fetch<'w>>::Prepared>,
 );
 
-fn state<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
+fn find_archetypes<'w, 'a, Q: Fetch<'w>, F: Fetch<'w>>(
     id: Entity,
     state: &'a QueryBorrowState<'w, Q, F>,
 ) -> Result<State<'w, Q, F>> {
+    profile_function!();
     let loc = match state.world.location(id) {
         Ok(v) => v,
         Err(_) => return Err(Error::NoSuchEntity(id)),
@@ -58,7 +59,7 @@ where
 
     fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, _dirty: bool) -> Self::Borrow {
         EntityBorrow {
-            prepared: state(*self, &query_state),
+            prepared: find_archetypes(*self, &query_state),
         }
     }
 

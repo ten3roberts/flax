@@ -1,6 +1,6 @@
 use crate::{
     archetype::{Archetype, Slice},
-    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, UnionFilter},
+    fetch::{FetchAccessData, FetchPrepareData, FmtQuery, PreparedFetch, RandomFetch, UnionFilter},
     filter::StaticFilter,
     system::Access,
     Fetch, FetchItem,
@@ -261,6 +261,19 @@ where
     #[inline]
     unsafe fn fetch_next(chunk: &mut Self::Chunk) -> Self::Item {
         T::fetch_next(chunk)
+    }
+}
+
+impl<'q, T> RandomFetch<'q> for Union<T>
+where
+    T: RandomFetch<'q> + UnionFilter,
+{
+    unsafe fn fetch_shared(&'q self, slot: crate::archetype::Slot) -> Self::Item {
+        self.0.fetch_shared(slot)
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: crate::archetype::Slot) -> Self::Item {
+        T::fetch_shared_chunk(chunk, slot)
     }
 }
 

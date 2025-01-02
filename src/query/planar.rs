@@ -44,6 +44,7 @@ impl Planar {
         fetch: &Filtered<Q, F>,
         result: &mut Vec<ArchetypeId>,
     ) {
+        profile_function!();
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
 
