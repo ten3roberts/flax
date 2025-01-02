@@ -39,7 +39,8 @@ struct State {
 }
 
 impl State {
-    fn update<'w, Q: Fetch<'w>>(&mut self, relation: Entity, world: &World, fetch: &'w Q) {
+    fn find_archetypes<'w, Q: Fetch<'w>>(&mut self, relation: Entity, world: &World, fetch: &'w Q) {
+        profile_function!();
         self.clear();
         let mut searcher = ArchetypeSearcher::default();
         fetch.searcher(&mut searcher);
@@ -142,7 +143,7 @@ where
     ) -> Self::Borrow {
         if dirty {
             self.state
-                .update(self.relation, query_state.world, query_state.fetch);
+                .find_archetypes(self.relation, query_state.world, query_state.fetch);
         }
 
         TopoBorrow {
@@ -154,7 +155,7 @@ where
 
     fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>, dst: &mut Vec<Access>) {
         let mut state = State::default();
-        state.update(self.relation, world, fetch);
+        state.find_archetypes(self.relation, world, fetch);
 
         state.archetypes.iter().for_each(|&arch_id| {
             let arch = world.archetypes.get(arch_id);
@@ -318,7 +319,7 @@ mod test {
 
         let fetch = name().with() & !component_info().with();
 
-        state.update(connected_to.id(), &world, &fetch);
+        state.find_archetypes(connected_to.id(), &world, &fetch);
 
         let visited = state
             .order

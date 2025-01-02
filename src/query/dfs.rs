@@ -49,7 +49,7 @@ where
     fn borrow(&'w mut self, query_state: QueryBorrowState<'w, Q, F>, dirty: bool) -> Self::Borrow {
         if dirty {
             self.state
-                .update(query_state.world, self.relation, query_state.fetch)
+                .find_archetypes(query_state.world, self.relation, query_state.fetch)
         }
 
         DfsBorrow::new(query_state, self)
@@ -57,7 +57,7 @@ where
 
     fn access(&self, world: &'w World, fetch: &'w Filtered<Q, F>, dst: &mut Vec<Access>) {
         let mut state = State::default();
-        state.update(world, self.relation, fetch);
+        state.find_archetypes(world, self.relation, fetch);
 
         state.archetypes.iter().for_each(|&arch_id| {
             let arch = world.archetypes.get(arch_id);
@@ -87,10 +87,11 @@ struct State {
 }
 
 impl State {
-    pub(crate) fn update<'w, Q>(&mut self, world: &'w World, relation: Entity, fetch: &Q)
+    pub(crate) fn find_archetypes<'w, Q>(&mut self, world: &'w World, relation: Entity, fetch: &Q)
     where
         Q: Fetch<'w>,
     {
+        profile_function!();
         self.edges.clear();
         self.archetypes.clear();
         self.archetypes_index.clear();
