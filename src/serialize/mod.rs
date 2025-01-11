@@ -386,8 +386,9 @@ mod test {
             .spawn(&mut world);
 
         let context = SerializationContextBuilder::new()
-            .from_registry()
             .with_relation(custom_relation)
+            .with_relation(child_of)
+            .with(name())
             .build();
 
         let json = serde_json::to_string_pretty(&context.serialize_world(&world, format)).unwrap();
