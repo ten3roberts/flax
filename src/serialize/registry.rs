@@ -154,8 +154,8 @@ inventory::collect!(ComponentDeserializerPlugin);
 /// Register a serializable and deserializable component to the global registry
 macro_rules! register_serializable {
     ($tt: tt, $($rest: tt)*) => {
-        register_serializable!($tt);
-        register_serializable!($($rest)*);
+        $crate::register_serializable!($tt);
+        $crate::register_serializable!($($rest)*);
     };
     ($relation: ident(_)) => {
         $crate::__internal::inventory::submit! {
@@ -179,8 +179,8 @@ macro_rules! register_serializable {
 /// Register a serializable component to the global registry
 macro_rules! register_serializable_only {
     ($tt: tt, $($rest: tt)*) => {
-        register_serializable_only!($tt);
-        register_serializable_only!($($rest)*);
+        $crate::register_serializable_only!($tt);
+        $crate::register_serializable_only!($($rest)*);
     };
     ($relation: ident(_)) => {
         $crate::__internal::inventory::submit! {
@@ -198,8 +198,8 @@ macro_rules! register_serializable_only {
 /// Register a deserializable component to the global registry
 macro_rules! register_deserializable_only {
     ($tt: tt, $($rest: tt)*) => {
-        register_deserializable_only!($tt);
-        register_deserializable_only!($($rest)*);
+        $crate::register_deserializable_only!($tt);
+        $crate::register_deserializable_only!($($rest)*);
     };
     ($relation: ident(_)) => {
         $crate::__internal::inventory::submit! {
