@@ -14,7 +14,7 @@ use crate::{
     archetype::ArchetypeStorage,
     component::{ComponentDesc, ComponentKey, ComponentValue},
     filter::{All, StaticFilter},
-    Component, EntityBuilder, EntityRef, World,
+    Component, EntityBuilder, EntityRef, RelationExt, World,
 };
 
 type DeserializeRowFn = fn(
@@ -106,6 +106,16 @@ impl SerializationContextBuilder {
         self.with_name(component.name(), component)
     }
 
+    /// Register a component relation using the component name.
+    ///
+    /// See [`Self::with_name`]
+    pub fn with_relation<T>(&mut self, relation: impl Clone + RelationExt<T>) -> &mut Self
+    where
+        T: ComponentValue + Serialize + for<'de> Deserialize<'de>,
+    {
+        self.with_relation_name(relation.vtable().name, relation)
+    }
+
     /// Register a component for both serialization and deserialiaztion
     pub fn with_name<T>(&mut self, key: impl Into<String>, component: Component<T>) -> &mut Self
     where
@@ -114,6 +124,21 @@ impl SerializationContextBuilder {
         let key = key.into();
         self.ser.with_name(key.clone(), component);
         self.de.with_name(key, component);
+        self
+    }
+
+    /// Register a component relation for both serialization and deserialiaztion
+    pub fn with_relation_name<T>(
+        &mut self,
+        key: impl Into<String>,
+        component: impl Clone + RelationExt<T>,
+    ) -> &mut Self
+    where
+        T: ComponentValue + Serialize + for<'de> Deserialize<'de>,
+    {
+        let key = key.into();
+        self.ser.with_relation_name(key.clone(), component.clone());
+        self.de.with_relation_name(key, component);
         self
     }
 
@@ -196,6 +221,7 @@ mod test {
     };
     use serde::de::DeserializeSeed;
 
+    use crate::components::child_of;
     use crate::{archetype::BatchSpawn, component, components::name, Entity, World};
 
     use super::*;
@@ -284,9 +310,12 @@ mod test {
             .with(status_effects())
             .build();
 
-        let json =
-            serde_json::to_string(&context.serialize_world(&world, SerializeFormat::ColumnMajor))
-                .unwrap();
+        let json = serde_json::to_string_pretty(
+            &context.serialize_world(&world, SerializeFormat::ColumnMajor),
+        )
+        .unwrap();
+
+        eprintln!("{json}");
 
         let new_world: World = context
             .deserialize_world()
@@ -327,5 +356,52 @@ mod test {
             .unwrap();
 
         test_eq(&world, &new_world);
+    }
+
+    #[test]
+    fn serialize_relations_col() {
+        serialize_relations_with_format(SerializeFormat::ColumnMajor);
+    }
+
+    #[test]
+    fn serialize_relations_row() {
+        serialize_relations_with_format(SerializeFormat::RowMajor);
+    }
+
+    fn serialize_relations_with_format(format: SerializeFormat) {
+        component! {
+            custom_relation(id): usize,
+        }
+
+        let mut world = World::new();
+
+        let id1 = Entity::builder()
+            .set(name(), "id1".into())
+            .spawn(&mut world);
+
+        let id2 = Entity::builder()
+            .set(name(), "id2".into())
+            .set(custom_relation(id1), 2)
+            .set(child_of(id1), ())
+            .spawn(&mut world);
+
+        let context = SerializationContextBuilder::new()
+            .from_registry()
+            .with_relation(custom_relation)
+            .build();
+
+        let json = serde_json::to_string_pretty(&context.serialize_world(&world, format)).unwrap();
+
+        eprintln!("{json}");
+
+        let world: World = context
+            .deserialize_world()
+            .deserialize(&mut serde_json::Deserializer::from_str(&json[..]))
+            .expect("Failed to deserialize world");
+
+        assert!(world.is_alive(id1));
+        assert_eq!(world.get_copy(id2, custom_relation(id1)).ok(), Some(2));
+        assert_eq!(world.get_copy(id2, child_of(id1)).ok(), Some(()));
+        assert_eq!(world.get_clone(id2, name()).ok().as_deref(), Some("id2"));
     }
 }

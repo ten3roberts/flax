@@ -140,7 +140,8 @@ pub type ComponentFn<T> = fn() -> Component<T>;
 pub type RelationFn<T> = fn(target: Entity) -> Component<T>;
 
 crate::component! {
-    pub(crate) dummy,
+    #[doc(hidden)]
+    pub dummy,
 }
 
 /// Defines a strongly typed component.
@@ -210,6 +211,7 @@ impl<T: ComponentValue> Component<T> {
             vtable: vtable.erase(),
         }
     }
+
     /// Creates a new component from the given untyped vtable
     ///
     /// # Panics
@@ -401,6 +403,13 @@ impl ComponentDesc {
         Self {
             key: component.key(),
             vtable: component.vtable,
+        }
+    }
+
+    pub(crate) fn with_relation(self, target: Option<Entity>) -> Self {
+        Self {
+            key: ComponentKey::new(self.key.id, target),
+            vtable: self.vtable,
         }
     }
 

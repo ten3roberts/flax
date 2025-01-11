@@ -221,8 +221,13 @@ pub trait FetchExt: Sized {
     }
 
     /// Expect the query to match, panic otherwise
-    fn expect(self, msg: impl Into<Cow<'static, str>>) -> Expect<Self> {
-        Expect::new(self, msg.into())
+    fn expect_msg(self, msg: impl Into<Cow<'static, str>>) -> Expect<Self> {
+        Expect::new(self, Some(msg.into()))
+    }
+
+    /// Expect the query to match, panic otherwise
+    fn expect(self) -> Expect<Self> {
+        Expect::new(self, None)
     }
 }
 

@@ -704,6 +704,42 @@ impl World {
         })
     }
 
+    /// Randomly access an entity's component.
+    pub fn get_copy<T: ComponentValue + Copy>(
+        &self,
+        id: Entity,
+        component: Component<T>,
+    ) -> Result<T> {
+        let loc = self.location(id)?;
+
+        self.get_at(loc, component)
+            .ok_or_else(|| {
+                Error::MissingComponent(MissingComponent {
+                    id,
+                    desc: component.desc(),
+                })
+            })
+            .map(|v| *v)
+    }
+
+    /// Randomly access an entity's component.
+    pub fn get_clone<T: ComponentValue + Clone>(
+        &self,
+        id: Entity,
+        component: Component<T>,
+    ) -> Result<T> {
+        let loc = self.location(id)?;
+
+        self.get_at(loc, component)
+            .ok_or_else(|| {
+                Error::MissingComponent(MissingComponent {
+                    id,
+                    desc: component.desc(),
+                })
+            })
+            .map(|v| v.clone())
+    }
+
     #[inline]
     pub(crate) fn get_at<T: ComponentValue>(
         &self,

@@ -291,4 +291,6 @@ pub mod __internal {
     pub use anyhow;
     #[cfg(feature = "serde")]
     pub use inventory;
+
+    pub use crate::component::dummy;
 }
