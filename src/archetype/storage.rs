@@ -34,13 +34,13 @@ impl ArchetypeStorage {
     }
 
     pub fn with_capacity(desc: ComponentDesc, cap: usize) -> Self {
-        if cap == 0 {
+        if cap * desc.size() == 0 {
             let data = (desc.vtable.dangling)();
 
             assert_eq!(data.as_ptr() as usize % desc.layout().align(), 0);
             return Self {
                 data,
-                cap: 0,
+                cap,
                 len: 0,
                 desc,
             };
