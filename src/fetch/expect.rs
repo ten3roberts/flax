@@ -1,20 +1,17 @@
 use alloc::borrow::Cow;
 
-use super::{Fetch, FetchItem};
+use super::{Fetch, FetchItem, FmtQuery};
 
 /// Expect the query to match, panic otherwise
 pub struct Expect<Q> {
-    msg: Cow<'static, str>,
+    msg: Option<Cow<'static, str>>,
     fetch: Q,
 }
 
 impl<Q> Expect<Q> {
     /// Expect the query to match, panic otherwise
-    pub fn new(fetch: Q, msg: impl Into<Cow<'static, str>>) -> Self {
-        Self {
-            fetch,
-            msg: msg.into(),
-        }
+    pub fn new(fetch: Q, msg: Option<Cow<'static, str>>) -> Self {
+        Self { fetch, msg }
     }
 }
 
@@ -28,7 +25,16 @@ impl<'w, Q: Fetch<'w>> Fetch<'w> for Expect<Q> {
     type Prepared = Q::Prepared;
 
     fn prepare(&'w self, data: super::FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        Some(self.fetch.prepare(data).expect(&self.msg))
+        match self.fetch.prepare(data) {
+            Some(v) => Some(v),
+            None => match &self.msg {
+                Some(msg) => panic!("{msg}"),
+                None => panic!(
+                    "Expected {:?} to be present on entity",
+                    FmtQuery(&self.fetch)
+                ),
+            },
+        }
     }
 
     fn filter_arch(&self, _: super::FetchAccessData) -> bool {

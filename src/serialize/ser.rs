@@ -3,12 +3,12 @@ use crate::{
     component::{ComponentKey, ComponentValue},
     components::component_info,
     filter::StaticFilter,
-    Component, Entity, EntityRef, World,
+    Component, Entity, EntityRef, RelationExt, World,
 };
 
 use alloc::{collections::BTreeMap, string::String};
 use serde::{
-    ser::{SerializeMap, SerializeSeq, SerializeStructVariant, SerializeTupleStruct},
+    ser::{SerializeSeq, SerializeStructVariant, SerializeTupleStruct},
     Serialize, Serializer,
 };
 
@@ -24,7 +24,7 @@ struct Slot {
 #[derive(Clone)]
 /// Builder for a serialialization context
 pub struct SerializeBuilder {
-    slots: BTreeMap<ComponentKey, Slot>,
+    slots: BTreeMap<Entity, Slot>,
 }
 
 impl SerializeBuilder {
@@ -48,7 +48,7 @@ impl SerializeBuilder {
         self.slots.extend(REGISTRY.serializers().iter().map(|v| {
             let desc = (v.desc)();
             (
-                desc.key(),
+                desc.key().id(),
                 Slot {
                     ser: v.serialize_fn,
                     key: desc.name().to_string(),
@@ -61,12 +61,22 @@ impl SerializeBuilder {
 
     /// Register a component using the component name.
     ///
-    /// See u`Self::with_name`u
+    /// See [`Self::with_name`]
     pub fn with<T>(&mut self, component: Component<T>) -> &mut Self
     where
         T: ComponentValue + Serialize,
     {
         self.with_name(component.name(), component)
+    }
+
+    /// Register a component relation using the component's name
+    ///
+    /// See [`Self::with_name`]
+    pub fn with_relation<T>(&mut self, relation: impl RelationExt<T>) -> &mut Self
+    where
+        T: ComponentValue + Serialize,
+    {
+        self.with_relation_name(relation.vtable().name, relation)
     }
 
     /// Register a new component to be serialized if encountered.
@@ -84,7 +94,36 @@ impl SerializeBuilder {
         }
 
         self.slots.insert(
-            component.key(),
+            component.id(),
+            Slot {
+                key: key.into(),
+                ser: ser_col::<T>,
+            },
+        );
+
+        self
+    }
+
+    /// Register a new component to be serialized if encountered.
+    /// And entity will still be serialized if it only contains a non-empty
+    /// subset of the registered components.
+    pub fn with_relation_name<T>(
+        &mut self,
+        key: impl Into<String>,
+        relation: impl RelationExt<T>,
+    ) -> &mut Self
+    where
+        T: ComponentValue + serde::Serialize,
+    {
+        fn ser_col<T: serde::Serialize + ComponentValue + Sized>(
+            storage: &ArchetypeStorage,
+            slot: usize,
+        ) -> &dyn erased_serde::Serialize {
+            &storage.downcast_ref::<T>()[slot]
+        }
+
+        self.slots.insert(
+            relation.id(),
             Slot {
                 key: key.into(),
                 ser: ser_col::<T>,
@@ -105,7 +144,7 @@ impl SerializeBuilder {
 /// Describes how to serialize a world given a group of components to serialize
 /// and an optional filter. Empty entities will be skipped.
 pub struct SerializeContext {
-    slots: BTreeMap<ComponentKey, Slot>,
+    slots: BTreeMap<Entity, Slot>,
 }
 
 impl SerializeContext {
@@ -149,7 +188,7 @@ impl SerializeContext {
                 && arch
                     .components()
                     .keys()
-                    .any(|id| self.slots.contains_key(id))
+                    .any(|id| self.slots.contains_key(&id.id))
                 && !arch.has(component_info().key())
                 && filter.filter_static(arch)
         })
@@ -269,18 +308,23 @@ impl Serialize for EntityDataSerializer<'_> {
     where
         S: Serializer,
     {
-        let len = self
+        let component_count = self
             .arch
             .components()
             .keys()
-            .filter(|key| self.context.slots.contains_key(key))
+            .filter(|key| self.context.slots.contains_key(&key.id()))
             .count();
 
-        let mut state = serializer.serialize_map(Some(len))?;
+        let mut state = serializer.serialize_seq(Some(component_count))?;
         for cell in self.arch.cells() {
             let data = cell.data.borrow();
-            if let Some(slot) = self.context.slots.get(&data.key) {
-                state.serialize_entry(&slot.key, (slot.ser)(&data.storage, self.slot))?;
+            if let Some(slot) = self.context.slots.get(&data.key.id()) {
+                state.serialize_element(&ComponentKeyValueSerializer {
+                    key: data.key(),
+                    slot,
+                    storage: &data.storage,
+                    index: self.slot,
+                })?;
             }
         }
 
@@ -319,11 +363,6 @@ struct SerializeArchetype<'a> {
     context: &'a SerializeContext,
 }
 
-struct SerializeStorages<'a> {
-    arch: &'a Archetype,
-    context: &'a SerializeContext,
-}
-
 struct SerializeStorage<'a> {
     storage: &'a ArchetypeStorage,
     slot: &'a Slot,
@@ -344,6 +383,11 @@ impl serde::Serialize for SerializeStorage<'_> {
     }
 }
 
+struct SerializeStorages<'a> {
+    arch: &'a Archetype,
+    context: &'a SerializeContext,
+}
+
 impl serde::Serialize for SerializeStorages<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -353,27 +397,79 @@ impl serde::Serialize for SerializeStorages<'_> {
             .arch
             .components()
             .keys()
-            .filter(|key| self.context.slots.contains_key(key))
+            .filter(|key| self.context.slots.contains_key(&key.id()))
             .count();
 
-        let mut state = serializer.serialize_map(Some(len))?;
+        let mut state = serializer.serialize_seq(Some(len))?;
 
         for cell in self.arch.cells() {
             let data = cell.data.borrow();
 
-            let id = data.key;
-            if let Some(slot) = self.context.slots.get(&id) {
-                state.serialize_entry(
-                    &slot.key,
-                    &SerializeStorage {
-                        storage: &data.storage,
-                        slot,
-                    },
-                )?;
+            let data_key = data.key;
+            if let Some(slot) = self.context.slots.get(&data_key.id()) {
+                state.serialize_element(&ComponentKeyStorageSerializer {
+                    key: data.key,
+                    slot,
+                    storage: &data.storage,
+                })?;
             }
         }
 
         state.end()
+    }
+}
+
+struct ComponentKeyStorageSerializer<'a> {
+    key: ComponentKey,
+    slot: &'a Slot,
+    storage: &'a ArchetypeStorage,
+}
+
+impl Serialize for ComponentKeyStorageSerializer<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut s =
+            serializer.serialize_seq(Some(2 + self.key.target().is_some() as i32 as usize))?;
+
+        s.serialize_element(&self.slot.key)?;
+
+        if let Some(target) = self.key.target() {
+            s.serialize_element(&target)?;
+        }
+
+        s.serialize_element(&SerializeStorage {
+            storage: self.storage,
+            slot: self.slot,
+        })?;
+
+        s.end()
+    }
+}
+
+struct ComponentKeyValueSerializer<'a> {
+    key: ComponentKey,
+    slot: &'a Slot,
+    storage: &'a ArchetypeStorage,
+    index: usize,
+}
+
+impl Serialize for ComponentKeyValueSerializer<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut s =
+            serializer.serialize_seq(Some(2 + self.key.target().is_some() as i32 as usize))?;
+        s.serialize_element(&self.slot.key)?;
+        if let Some(target) = self.key.target() {
+            s.serialize_element(&target)?;
+        }
+
+        s.serialize_element((self.slot.ser)(self.storage, self.index))?;
+
+        s.end()
     }
 }
 

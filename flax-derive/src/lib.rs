@@ -1,15 +1,17 @@
+mod maybe_fn;
 mod system;
 
 use std::collections::BTreeSet;
 
 use itertools::Itertools;
+use maybe_fn::MaybeItemFn;
 use proc_macro2::{Span, TokenStream};
 use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
 use syn::{
     bracketed, parse::Parse, punctuated::Punctuated, spanned::Spanned, Attribute, DataStruct,
-    DeriveInput, Error, Field, GenericParam, Generics, Ident, ImplGenerics, Index, ItemFn,
-    Lifetime, LifetimeParam, Result, Token, Type, TypeGenerics, TypeParam, Visibility,
+    DeriveInput, Error, Field, GenericParam, Generics, Ident, ImplGenerics, Index, Lifetime,
+    LifetimeParam, Result, Token, Type, TypeGenerics, TypeParam, Visibility,
 };
 use system::{system_impl, SystemAttrs};
 
@@ -62,7 +64,7 @@ pub fn system(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let args = syn::parse_macro_input!(args as SystemAttrs);
-    let input = syn::parse_macro_input!(item as ItemFn);
+    let input = syn::parse_macro_input!(item as MaybeItemFn);
 
     system_impl(args, input)
         .unwrap_or_else(|err| err.to_compile_error())

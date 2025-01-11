@@ -51,7 +51,6 @@ where
     }
 
     fn describe(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str("clone ")?;
         self.0.describe(f)
     }
 

@@ -8,13 +8,14 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Expr, GenericArgument, Ident, ItemFn, Pat, Path, ReturnType, Token, Type, TypePath,
-    TypeReference,
+    Expr, GenericArgument, Ident, Pat, Path, ReturnType, Token, Type, TypePath, TypeReference,
 };
+
+use crate::maybe_fn::MaybeItemFn;
 
 pub(crate) fn system_impl(
     args: SystemAttrs,
-    item: ItemFn,
+    item: MaybeItemFn,
 ) -> syn::Result<proc_macro2::TokenStream> {
     let crate_name = match proc_macro_crate::crate_name("flax").expect("Failed to get crate name") {
         FoundCrate::Itself => Ident::new("crate", Span::call_site()),

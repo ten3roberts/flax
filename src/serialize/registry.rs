@@ -7,9 +7,9 @@ use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use crate::{
     archetype::ArchetypeStorage,
     component::{ComponentDesc, ComponentValue},
-    components::name,
+    components::{child_of, name},
     serialize::StorageVisitor,
-    Component, EntityBuilder,
+    Component, Entity, EntityBuilder,
 };
 
 use super::{DeserializeColFn, DeserializeRowFn, SerializeFn};
@@ -60,11 +60,22 @@ impl ComponentSerializerPlugin {
             serialize_fn: ser::<T>,
         }
     }
+
+    pub const fn new_relation<T: ComponentValue + Serialize>(
+        _: fn(Entity) -> Component<T>,
+        desc: fn() -> ComponentDesc,
+    ) -> Self {
+        Self {
+            desc,
+            serialize_fn: ser::<T>,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
 #[doc(hidden)]
 pub struct ComponentDeserializerPlugin {
+    pub(crate) is_relation: bool,
     pub(crate) desc: fn() -> ComponentDesc,
     pub(crate) deserialize_col_fn: DeserializeColFn,
     pub(crate) deserialize_row_fn: DeserializeRowFn,
@@ -84,6 +95,24 @@ impl ComponentDeserializerPlugin {
                 Ok(())
             },
             deserialize_col_fn: deser_col::<T>,
+            is_relation: false,
+        }
+    }
+
+    pub const fn new_relation<T: ComponentValue + DeserializeOwned>(
+        _: fn(Entity) -> Component<T>,
+        desc: fn() -> ComponentDesc,
+    ) -> Self {
+        Self {
+            desc,
+            deserialize_row_fn: |de, desc, builder| {
+                let value = erased_serde::deserialize::<T>(de)?;
+                builder.set(desc.downcast::<T>(), value);
+
+                Ok(())
+            },
+            deserialize_col_fn: deser_col::<T>,
+            is_relation: true,
         }
     }
 }
@@ -124,40 +153,64 @@ inventory::collect!(ComponentDeserializerPlugin);
 #[macro_export]
 /// Register a serializable and deserializable component to the global registry
 macro_rules! register_serializable {
-    ($($component: ident),*) => {
-        $(
-            $crate::__internal::inventory::submit! {
-                $crate::serialize::registry::ComponentSerializerPlugin::new($component, || $component().desc())
-            }
-            $crate::__internal::inventory::submit! {
-                $crate::serialize::registry::ComponentDeserializerPlugin::new($component, || $component().desc())
-            }
-        )*
+    ($tt: tt, $($rest: tt)*) => {
+        register_serializable!($tt);
+        register_serializable!($($rest)*);
+    };
+    ($relation: ident(_)) => {
+        $crate::__internal::inventory::submit! {
+            $crate::serialize::registry::ComponentSerializerPlugin::new_relation($relation, || $relation($crate::__internal::dummy()).desc())
+        }
+        $crate::__internal::inventory::submit! {
+            $crate::serialize::registry::ComponentDeserializerPlugin::new_relation($relation, || $relation($crate::__internal::dummy()).desc())
+        }
+    };
+    ($component: ident) => {
+        $crate::__internal::inventory::submit! {
+            $crate::serialize::registry::ComponentSerializerPlugin::new($component, || $component().desc())
+        }
+        $crate::__internal::inventory::submit! {
+            $crate::serialize::registry::ComponentDeserializerPlugin::new($component, || $component().desc())
+        }
     };
 }
 
 #[macro_export]
 /// Register a serializable component to the global registry
 macro_rules! register_serializable_only {
-    ($($component: ident),*) => {
-        $(
-            $crate::__internal::inventory::submit! {
-                $crate::serialize::registry::ComponentSerializerPlugin::new($component, || $component().desc())
-            }
-        )*
+    ($tt: tt, $($rest: tt)*) => {
+        register_serializable_only!($tt);
+        register_serializable_only!($($rest)*);
+    };
+    ($relation: ident(_)) => {
+        $crate::__internal::inventory::submit! {
+            $crate::serialize::registry::ComponentSerializerPlugin::new_relation($relation, || $relation($crate::__internal::dummy()).desc())
+        }
+    };
+    ($component: ident) => {
+        $crate::__internal::inventory::submit! {
+            $crate::serialize::registry::ComponentSerializerPlugin::new($component, || $component().desc())
+        }
     };
 }
 
 #[macro_export]
 /// Register a deserializable component to the global registry
 macro_rules! register_deserializable_only {
-    ($($component: ident),*) => {
-        $(
-            $crate::__internal::inventory::submit! {
-                $crate::serialize::registry::ComponentDeserializerPlugin::new($component, || $component().desc())
-            }
-        )*
+    ($tt: tt, $($rest: tt)*) => {
+        register_deserializable_only!($tt);
+        register_deserializable_only!($($rest)*);
+    };
+    ($relation: ident(_)) => {
+        $crate::__internal::inventory::submit! {
+            $crate::serialize::registry::ComponentDeserializerPlugin::new_relation($relation, || $relation($crate::__internal::dummy()).desc())
+        }
+    };
+    ($component: ident) => {
+        $crate::__internal::inventory::submit! {
+            $crate::serialize::registry::ComponentDeserializerPlugin::new($component, || $component().desc())
+        }
     };
 }
 
-register_serializable!(name);
+register_serializable!(name, child_of(_));
