@@ -8,7 +8,8 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Expr, GenericArgument, Ident, Pat, Path, ReturnType, Token, Type, TypePath, TypeReference,
+    Expr, FnArg, GenericArgument, Ident, Pat, Path, ReturnType, Token, Type, TypePath,
+    TypeReference,
 };
 
 use crate::maybe_fn::MaybeItemFn;
@@ -33,7 +34,7 @@ pub(crate) fn system_impl(
 
     for v in arguments.iter().take(arguments.len() - with_items.len()) {
         match v {
-            syn::FnArg::Receiver(receiver) => {
+            FnArg::Receiver(receiver) => {
                 let recv_ty = match &*receiver.ty {
                     Type::Reference(TypeReference { elem, .. }) => {
                         let Type::Path(TypePath { path, .. }) = &**elem else {
@@ -58,9 +59,14 @@ pub(crate) fn system_impl(
                 let recv_name = format_ident!("{}", recv_ty.to_string().to_snake_case());
 
                 let ctor = if let Some(ctor) = args.query_arg(&format_ident!("self")) {
-                    ctor.expr.to_token_stream()
+                    let recv_ty = &*receiver.ty;
+                    QueryArgument {
+                        ctor: ctor.expr.to_token_stream(),
+                        adapter: quote! {#recv_name},
+                        ty: quote! {#recv_ty},
+                    }
                 } else if recv_ty != "Self" {
-                    component_ctor_from_type(&crate_name, &recv_name, &receiver.ty)?
+                    component_ctor_from_type(&crate_name, &recv_name, &receiver.ty, quote! {})?
                 } else {
                     return Err(syn::Error::new(
                         receiver.span(),
@@ -71,7 +77,7 @@ pub(crate) fn system_impl(
                 query_arguments.push(ctor);
                 query_idents.push(recv_name);
             }
-            syn::FnArg::Typed(pat_type) => {
+            FnArg::Typed(pat_type) => {
                 let Pat::Ident(arg_ident) = &*pat_type.pat else {
                     return Err(syn::Error::new_spanned(
                         v,
@@ -83,10 +89,29 @@ pub(crate) fn system_impl(
 
                 let ty = &pat_type.ty;
 
+                let required = args.require_all
+                    || args
+                        .require
+                        .as_ref()
+                        .is_some_and(|v| v.iter().contains(arg_ident));
+
                 let ctor = if let Some(ctor) = args.query_arg(arg_ident) {
-                    ctor.expr.to_token_stream()
+                    QueryArgument {
+                        ctor: ctor.expr.to_token_stream(),
+                        adapter: quote! {#arg_ident},
+                        ty: quote! { _ },
+                    }
                 } else {
-                    component_ctor_from_type(&crate_name, arg_ident, ty)?
+                    component_ctor_from_type(
+                        &crate_name,
+                        arg_ident,
+                        ty,
+                        if required {
+                            quote! {.expect()}
+                        } else {
+                            quote! {}
+                        },
+                    )?
                 };
 
                 query_arguments.push(ctor);
@@ -116,6 +141,8 @@ pub(crate) fn system_impl(
     let with_exprs = with_items.iter().map(|v| &v.expr).collect_vec();
     let with_adapters = with_items.iter().map(|v| &v.adapter);
 
+    let query_adapters = query_arguments.iter().map(|v| &v.adapter);
+
     let iter_fn = match (&*with_types, &item.sig.output, args.par) {
         ([], ReturnType::Default, false) => {
             quote! {
@@ -127,7 +154,7 @@ pub(crate) fn system_impl(
         ([], ReturnType::Type(_, _), false) => {
             quote! {
                 try_for_each(|(#(#query_idents,)*)| {
-                    #call_sig(#(#query_idents),*)
+                    #call_sig(#(#query_adapters),*)
                 })
             }
         }
@@ -135,14 +162,14 @@ pub(crate) fn system_impl(
         ([], ReturnType::Default, true) => {
             quote! {
                 par_for_each(|(#(#query_idents,)*)| {
-                    #call_sig(#(#query_idents),*)
+                    #call_sig(#(#query_adapters),*)
                 })
             }
         }
         ([], ReturnType::Type(_, _), true) => {
             quote! {
                 try_par_for_each(|(#(#query_idents,)*)| {
-                    #call_sig(#(#query_idents),*)
+                    #call_sig(#(#query_adapters),*)
                 })
             }
         }
@@ -153,21 +180,24 @@ pub(crate) fn system_impl(
 
             let (call_expr, ret_sig, ret) = if *ret == ReturnType::Default {
                 (
-                    quote! { #call_sig(#(#query_idents),* #(,#with_adapters #item_names)* ) },
+                    quote! { #call_sig(#(#query_adapters),* #(,#with_adapters #item_names)* ) },
                     quote! { () },
                     quote! {},
                 )
             } else {
                 (
-                    quote! { #call_sig(#(#query_idents),* #(,#with_adapters #item_names)* )?; },
+                    quote! { #call_sig(#(#query_adapters),* #(,#with_adapters #item_names)* )?; },
                     quote! { #crate_name::__internal::anyhow::Result<()> },
                     quote! { Ok(()) },
                 )
             };
 
+            let query_types = query_arguments.iter().map(|v| &v.ty);
+
             quote! {
                 build(|#(mut #item_names: #items_types,)* mut main_query: #crate_name::QueryBorrow<'_, _, _>| -> #ret_sig {
-                    for (#(#query_idents,)*) in &mut main_query {
+                    for v in &mut main_query {
+                        let (#(#query_idents,)*): (#(#query_types,)*) = v;
                         #call_expr
                     }
 
@@ -178,8 +208,9 @@ pub(crate) fn system_impl(
     };
 
     let filters = args.filter.iter().flat_map(|v| v.iter()).collect_vec();
+    let query_ctors = query_arguments.iter().map(|v| &v.ctor);
     let query =
-        quote! { #crate_name::Query::new( (#(#query_arguments,)*)).with_filter((#(#filters,)*)) };
+        quote! { #crate_name::Query::new( (#(#query_ctors,)*)).with_filter((#(#filters,)*)) };
 
     let system_impl = quote! {
         #vis fn #system_name() -> #crate_name::system::BoxedSystem {
@@ -203,62 +234,117 @@ fn extract_path_ident(path: &Path) -> &Ident {
     &path.segments.last().unwrap().ident
 }
 
+fn matches_path(ty: &Type, ident: &str) -> bool {
+    if let Type::Path(ty) = ty {
+        if let Some(last) = ty.path.segments.last() {
+            return last.ident == ident;
+        }
+    }
+
+    false
+}
+
+struct QueryArgument {
+    ctor: TokenStream,
+    ty: TokenStream,
+    adapter: TokenStream,
+}
+
 fn component_ctor_from_type(
     crate_name: &Ident,
     ident: &Ident,
     ty: &Type,
-) -> syn::Result<TokenStream> {
+    required: TokenStream,
+) -> syn::Result<QueryArgument> {
+    let mut adapter = None;
+    let mut new_ty = None;
+
     let tt = match ty {
-        Type::Reference(ty_ref) if ty_ref.mutability.is_none() => quote!(#ident()),
-        Type::Reference(ty_ref) if ty_ref.mutability.is_some() => {
-            quote!(#crate_name::Component::as_mut(#ident()))
+        // Handle `String` components and `&str` arguments
+        Type::Reference(ty_ref) if matches_path(&ty_ref.elem, "str") => {
+            if ty_ref.mutability.is_some() {
+                adapter = Some(quote! {(&mut **(#ident))});
+                new_ty = Some(quote! { &mut String });
+                quote!(#crate_name::Component::as_mut(#ident())#required)
+            } else {
+                adapter = Some(quote! {(&**(#ident))});
+                new_ty = Some(quote! { &String });
+                quote!(#ident()#required)
+            }
         }
+        Type::Reference(ty_ref) => match &*ty_ref.elem {
+            Type::Slice(slice_ty) => {
+                let inner = &*slice_ty.elem;
+
+                if ty_ref.mutability.is_some() {
+                    adapter = Some(quote! {(&mut **(#ident))});
+                    new_ty = Some(quote! { &mut Vec<#inner> });
+                    quote!(#crate_name::Component::as_mut(#ident())#required)
+                } else {
+                    adapter = Some(quote! {(&**(#ident))});
+                    new_ty = Some(quote! { &Vec<#inner> });
+                    quote!(#ident()#required)
+                }
+            }
+            _ if ty_ref.mutability.is_some() => {
+                quote!(#crate_name::Component::as_mut(#ident())#required)
+            }
+            _ => {
+                quote!(#ident()#required)
+            }
+        },
+        // Direct type
         Type::Path(TypePath {
             path: Path { segments, .. },
             ..
-        }) => {
-            match segments.last().map(|v| v.ident.to_string()).as_deref() {
-                Some("Option") => {
-                    let inner = match &segments[0].arguments {
-                        syn::PathArguments::AngleBracketed(args) => {
-                            let GenericArgument::Type(ty) = &args.args[0] else {
-                                return Err(syn::Error::new(
-                                    ident.span(),
-                                    "Malformed option generic argument list",
-                                ));
-                            };
-
-                            component_ctor_from_type(crate_name, ident, ty)?
-                        }
-                        _ => {
+        }) => match segments.last().map(|v| v.ident.to_string()).as_deref() {
+            // Option<T>
+            Some("Option") => {
+                let QueryArgument {
+                    ctor,
+                    adapter: _,
+                    ty: inner_ty,
+                } = match &segments[0].arguments {
+                    syn::PathArguments::AngleBracketed(args) => {
+                        let GenericArgument::Type(ty) = &args.args[0] else {
                             return Err(syn::Error::new(
                                 ident.span(),
-                                "Expected a single angle bracketed type",
-                            ))
-                        }
-                    };
+                                "Malformed option generic argument list",
+                            ));
+                        };
 
-                    quote!(#crate_name::fetch::FetchExt::opt(#inner))
-                }
-                Some("Entity") => {
-                    quote!(#crate_name::entity_ids())
-                }
-                Some("EntityRef") => {
-                    quote!(#crate_name::fetch::entity_refs())
-                }
-                _ => {
-                    quote!(#crate_name::fetch::FetchExt::copied(#ident()))
-                }
+                        component_ctor_from_type(crate_name, ident, ty, quote! {})?
+                    }
+                    _ => {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "Expected a single angle bracketed type",
+                        ))
+                    }
+                };
+
+                new_ty = Some(quote! { Option<#inner_ty> });
+
+                quote!(#crate_name::fetch::FetchExt::opt(#ctor))
             }
-
-            // if segments.len() == 1 && segments[0].ident == "Option" {
-            // } else {
-            // }
-        }
+            Some("Entity") => {
+                quote!(#crate_name::entity_ids())
+            }
+            Some("EntityRef") => {
+                quote!(#crate_name::fetch::entity_refs())
+            }
+            _ => {
+                quote!(#crate_name::fetch::FetchExt::copied(#ident())#required)
+            }
+        },
         _ => return Err(syn::Error::new(ident.span(), "Unsupported type")),
     };
 
-    Ok(tt)
+    Ok(QueryArgument {
+        ctor: tt,
+        adapter: adapter.unwrap_or_else(|| quote! {#ident}),
+        ty: new_ty.unwrap_or_else(|| quote! { #ty }),
+    })
 }
 
 struct WithExpr {
@@ -276,6 +362,8 @@ impl WithExpr {
 #[derive(Default)]
 pub(crate) struct SystemAttrs {
     query_args: Option<Fields>,
+    require: Option<Punctuated<Ident, Token![,]>>,
+    require_all: bool,
     filter: Option<Punctuated<Expr, Token![,]>>,
     par: bool,
     with: Vec<WithExpr>,
@@ -307,7 +395,25 @@ impl Parse for SystemAttrs {
                     return Err(input.error("expected only a single `args` argument"));
                 }
                 args.query_args = Some(input.parse()?);
-            } else if lookahead.peek(kw::filter) {
+            }
+            //
+            else if lookahead.peek(kw::require) {
+                if args.require.is_some() {
+                    return Err(input.error("expected only a single `require` argument"));
+                }
+
+                let _ = input.parse::<kw::require>()?;
+                let content;
+                let _ = syn::parenthesized!(content in input);
+                args.require = Some(content.parse_terminated(Ident::parse, Token![,])?);
+            }
+            //
+            else if lookahead.peek(kw::require_all) {
+                let _ = input.parse::<kw::require_all>()?;
+                args.require_all = true;
+            }
+            //
+            else if lookahead.peek(kw::filter) {
                 if args.filter.is_some() {
                     return Err(input.error("expected only a single `filter` argument"));
                 }
@@ -316,7 +422,9 @@ impl Parse for SystemAttrs {
                 let content;
                 let _ = syn::parenthesized!(content in input);
                 args.filter = Some(content.parse_terminated(Expr::parse, Token![,])?);
-            } else if lookahead.peek(kw::par) {
+            }
+            //
+            else if lookahead.peek(kw::par) {
                 let _ = input.parse::<kw::par>()?;
                 args.par = true;
             }
@@ -397,6 +505,8 @@ impl Parse for Field {
 
 mod kw {
     syn::custom_keyword!(args);
+    syn::custom_keyword!(require);
+    syn::custom_keyword!(require_all);
     syn::custom_keyword!(filter);
     syn::custom_keyword!(par);
     syn::custom_keyword!(with_world);

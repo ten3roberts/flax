@@ -22,6 +22,8 @@ use system::{system_impl, SystemAttrs};
 ///
 /// # Attributes
 /// - `args`: Specify expressions for the components
+/// - `require`: Require listed arguments to be present, panic otherwise
+/// - `require_all`: Require all non-self arguments to be present
 /// - `filter`: Additional filter expression for the query
 /// - `par`: use inner parallel iteration
 /// - `with_world`: `&World`, Access the world

@@ -17,21 +17,21 @@ fn system_macro() {
     pub struct MyType;
 
     impl MyType {
-        #[system(filter(d().with()))]
+        #[system(filter(d().with()), require_all)]
         pub fn method(self: &mut MyType, b: &String) {
             eprintln!("method: {b:?}")
         }
 
-        #[system(with_cmd_mut)]
-        pub fn method_with_cmd(self: &mut MyType, b: &String, cmd: &mut CommandBuffer) {
+        #[system(with_cmd_mut, require_all)]
+        pub fn method_with_cmd(self: &mut MyType, b: &str, cmd: &mut CommandBuffer) {
             let _ = b;
             let _ = cmd;
         }
 
-        #[system(with_world, with_cmd_mut, with_query(Query::new(a())))]
+        #[system(with_world, with_cmd_mut, with_query(Query::new(a())), require_all)]
         pub fn method_with_all_sides(
             self: &mut MyType,
-            b: &String,
+            b: &str,
             world: &World,
             _cmd: &mut CommandBuffer,
             _query: &mut QueryBorrow<Component<i32>>,
@@ -39,6 +39,12 @@ fn system_macro() {
             let _ = b;
             eprintln!("world: {world:#?}")
         }
+    }
+
+    #[system(args(c_renamed = c().cloned()), par)]
+    fn string_downcasting(a: &i32, b: &mut str) {
+        let _ = b;
+        let _ = a;
     }
 
     #[system(args(c_renamed = c().cloned()), par)]
@@ -76,6 +82,7 @@ fn system_macro() {
         .with_system(update_system())
         .with_system(fallible_system())
         .with_system(MyType::method_system())
+        .with_system(string_downcasting_system())
         .with_system(MyType::method_with_all_sides_system())
         .build();
 
