@@ -207,6 +207,7 @@ impl CommandBuffer {
 
         self
     }
+
     /// Deferred removal of a component for `id`.
     /// Unlike, [`World::remove`] it does not return the old value as that is
     /// not known at call time.
@@ -214,6 +215,16 @@ impl CommandBuffer {
         self.commands.push(Command::Remove {
             id,
             desc: component.desc(),
+        });
+
+        self
+    }
+
+    /// Deferred removal of a component for `id`.
+    pub fn remove_dyn(&mut self, id: Entity, component: ComponentDesc) -> &mut Self {
+        self.commands.push(Command::Remove {
+            id,
+            desc: component,
         });
 
         self
