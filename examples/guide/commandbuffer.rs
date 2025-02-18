@@ -76,7 +76,7 @@ fn main() -> anyhow::Result<()> {
                 cmd.spawn(
                     Entity::builder()
                         .set(name(), "entity".to_string())
-                        .set(position(), rng.gen()),
+                        .set(position(), rng.random()),
                 );
             }
         });

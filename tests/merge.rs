@@ -19,14 +19,14 @@ component! {
 fn random_entities(rng: &mut impl Rng) -> impl Iterator<Item = EntityBuilder> + '_ {
     (0..).map(|_| {
         let mut builder = Entity::builder();
-        if rng.gen() {
-            builder.set(position(), rng.gen());
+        if rng.random() {
+            builder.set(position(), rng.random());
         }
-        if rng.gen() {
-            builder.set(rotation(), rng.gen());
+        if rng.random() {
+            builder.set(rotation(), rng.random());
         }
-        if rng.gen() {
-            builder.set(scale(), rng.gen());
+        if rng.random() {
+            builder.set(scale(), rng.random());
         }
 
         builder
@@ -214,13 +214,13 @@ fn merge_custom() {
 
     let root = Entity::builder()
         .set(name(), "root".into())
-        .set(position(), rng.gen())
-        .set(rotation(), rng.gen())
+        .set(position(), rng.random())
+        .set(rotation(), rng.random())
         .attach(
             child_of,
             Entity::builder()
                 .set(name(), "child.1".into())
-                .set(rotation(), rng.gen()),
+                .set(rotation(), rng.random()),
         )
         .set(custom_component, shared.clone())
         .attach_with(
@@ -228,7 +228,7 @@ fn merge_custom() {
             "Mom".into(),
             Entity::builder()
                 .set(name(), "child_custom.1".into())
-                .set(scale(), rng.gen()),
+                .set(scale(), rng.random()),
         )
         .spawn(&mut src_world);
 
