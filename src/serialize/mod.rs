@@ -215,7 +215,7 @@ mod test {
     use alloc::vec;
     use alloc::vec::Vec;
     use rand::{
-        distributions::{Standard, Uniform},
+        distr::{StandardUniform, Uniform},
         rngs::StdRng,
         Rng, SeedableRng,
     };
@@ -254,12 +254,14 @@ mod test {
             .set(
                 health(),
                 (&mut rng)
-                    .sample_iter(Uniform::new(0.0, 100.0))
+                    .sample_iter(Uniform::new(0.0, 100.0).unwrap())
                     .map(|v: f32| (v * 5.0).round() / 5.0),
             )
             .unwrap();
 
-        batch.set(pos(), (&mut rng).sample_iter(Standard)).unwrap();
+        batch
+            .set(pos(), (&mut rng).sample_iter(StandardUniform))
+            .unwrap();
 
         let enemies = batch.spawn(&mut world);
 

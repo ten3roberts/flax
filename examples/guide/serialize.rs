@@ -5,7 +5,7 @@ fn main() {}
 fn main() -> anyhow::Result<()> {
     use flax::{components::name, *};
     use glam::*;
-    use rand::{distributions::Standard, rngs::StdRng, Rng, SeedableRng};
+    use rand::{distr::StandardUniform, rngs::StdRng, Rng, SeedableRng};
     use serde::de::DeserializeSeed;
 
     // ANCHOR: setup
@@ -27,9 +27,11 @@ fn main() -> anyhow::Result<()> {
 
     batch.set(
         position(),
-        (&mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
+        (&mut rng)
+            .sample_iter(StandardUniform)
+            .map(|v: Vec3| v * 2.0),
     )?;
-    batch.set(velocity(), (&mut rng).sample_iter(Standard))?;
+    batch.set(velocity(), (&mut rng).sample_iter(StandardUniform))?;
     batch.set(name(), (0..).map(|v| format!("id.{v}")))?;
 
     batch.spawn(&mut world);
@@ -38,7 +40,9 @@ fn main() -> anyhow::Result<()> {
 
     batch.set(
         position(),
-        (&mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
+        (&mut rng)
+            .sample_iter(StandardUniform)
+            .map(|v: Vec3| v * 2.0),
     )?;
     batch.set(name(), (16..).map(|v| format!("id.{v}")))?;
     batch.spawn(&mut world);
@@ -66,7 +70,9 @@ fn main() -> anyhow::Result<()> {
 
     batch.set(
         position(),
-        (&mut rng).sample_iter(Standard).map(|v: Vec3| v * 2.0),
+        (&mut rng)
+            .sample_iter(StandardUniform)
+            .map(|v: Vec3| v * 2.0),
     )?;
     batch.set(name(), (0..).map(|v| format!("other_id.{v}")))?;
     batch.spawn(&mut world);

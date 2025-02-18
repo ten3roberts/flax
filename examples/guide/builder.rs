@@ -51,10 +51,10 @@ fn main() {
     let enemies = (0..10)
         .map(|i| {
             builder
-                .set(health(), rng.gen_range(50..100) as f32)
+                .set(health(), rng.random_range(50..100) as f32)
                 .set(
                     position(),
-                    (rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0)),
+                    (rng.random_range(-10.0..10.0), rng.random_range(-10.0..10.0)),
                 )
                 .set(name(), format!("Enemy.{i}"))
                 .spawn(&mut world)

@@ -91,7 +91,7 @@ fn main() {
             let mut query = Query::new(health().as_mut());
             for h in &mut query.borrow(world) {
                 // &mut f32
-                *h -= rng.gen_range(10.0..20.0);
+                *h -= rng.random_range(10.0..20.0);
             }
         }
 

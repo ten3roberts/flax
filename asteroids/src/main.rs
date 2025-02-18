@@ -241,8 +241,8 @@ fn create_explosion(
     color: Color,
 ) -> impl Iterator<Item = EntityBuilder> + '_ {
     (0..count).map(move |_| {
-        let dir = rng.gen_range(0.0..TAU);
-        let speed = rng.gen_range(speed * 0.5..speed);
+        let dir = rng.random_range(0.0..TAU);
+        let speed = rng.random_range(speed * 0.5..speed);
 
         create_particle(size, lifetime, color)
             .set(velocity(), speed * vec2(dir.cos(), dir.sin()))
@@ -674,27 +674,27 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
 
                 (existing..max_count).for_each(|_| {
                     // Spawn around player
-                    let dir = rng.gen_range(0f32..TAU);
+                    let dir = rng.random_range(0f32..TAU);
                     let dir = vec2(dir.cos(), dir.sin());
-                    let pos = *player_pos + dir * rng.gen_range(512.0..2048.0);
+                    let pos = *player_pos + dir * rng.random_range(512.0..2048.0);
 
-                    let size = rng.gen_range(0.2..1.0);
+                    let size = rng.random_range(0.2..1.0);
                     let radius = size * ASTEROID_SIZE;
                     let health = size * 100.0;
 
-                    let dir = rng.gen_range(0f32..TAU);
+                    let dir = rng.random_range(0f32..TAU);
                     let dir = vec2(dir.cos(), dir.sin());
-                    let vel = dir * rng.gen_range(30.0..80.0) * difficulty.sqrt();
+                    let vel = dir * rng.random_range(30.0..80.0) * difficulty.sqrt();
 
                     builder
                         .set(position(), pos)
-                        .set(rotation(), rng.gen())
+                        .set(rotation(), rng.random())
                         .set_default(asteroid())
                         .set(
                             shape(),
                             Shape::Polygon {
                                 radius,
-                                sides: rng.gen_range(3..16),
+                                sides: rng.random_range(3..16),
                             },
                         )
                         .set(mass(), radius * radius)
@@ -703,7 +703,7 @@ fn spawn_asteroids(max_count: usize) -> BoxedSystem {
                         .set(self::health(), health)
                         .set(color(), hsl_to_rgb(0.75, 0.5, 0.5))
                         .set(velocity(), vel)
-                        .set(angular_velocity(), rng.gen_range(-4.0..4.0))
+                        .set(angular_velocity(), rng.random_range(-4.0..4.0))
                         .spawn_into(cmd);
                 })
             },

@@ -5,7 +5,7 @@ use flax::{
     Schedule, System, World,
 };
 use itertools::Itertools;
-use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
+use rand::{rngs::StdRng, seq::IndexedRandom, Rng, SeedableRng};
 use tracing::info_span;
 use tracing_subscriber::prelude::*;
 
@@ -61,7 +61,7 @@ fn main() {
 
     let all = enemies.iter().copied().chain([player_id]).collect_vec();
 
-    let mut rng = StdRng::from_entropy();
+    let mut rng = StdRng::seed_from_u64(5);
 
     all.choose_multiple(&mut rng, all.len() / 5)
         .for_each(|&id| {
@@ -71,7 +71,7 @@ fn main() {
     let damage_random = System::builder()
         .with_world_mut()
         .build(move |world: &mut World| {
-            let count = rng.gen_range(0..enemies.len());
+            let count = rng.random_range(0..enemies.len());
             let targets = all.choose_multiple(&mut rng, count);
             for &enemy in targets {
                 if let Ok(mut health) = world.get_mut(enemy, health()) {

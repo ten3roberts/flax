@@ -49,7 +49,7 @@ fn change_detection() {
         .map(|i| {
             Entity::builder()
                 .set(name(), format!("a.{i}"))
-                .set(position(), rng.gen())
+                .set(position(), rng.random())
                 .spawn(&mut world)
         })
         .collect_vec();
@@ -57,8 +57,8 @@ fn change_detection() {
     ids.extend((0..30).map(|i| {
         Entity::builder()
             .set(name(), format!("b.{i}"))
-            .set(position(), rng.gen())
-            .set(rotation(), Quat::from_scaled_axis(rng.gen()))
+            .set(position(), rng.random())
+            .set(rotation(), Quat::from_scaled_axis(rng.random()))
             .spawn(&mut world)
     }));
 

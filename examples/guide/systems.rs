@@ -151,7 +151,7 @@ fn main() -> anyhow::Result<()> {
             .with_cmd_mut()
             .build(move |cmd: &mut CommandBuffer| {
                 for _ in 0..count {
-                    let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+                    let pos = vec2(rng.random_range(-10.0..10.0), rng.random_range(-10.0..10.0));
                     println!("Spawning new entity at: {pos:?}");
                     Entity::builder()
                         .set(position(), pos)

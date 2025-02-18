@@ -159,7 +159,7 @@ fn main() -> anyhow::Result<()> {
     let mut rng = StdRng::seed_from_u64(42);
 
     for _ in 0..150 {
-        let pos = vec2(rng.gen_range(-5.0..5.0), rng.gen_range(-5.0..5.0));
+        let pos = vec2(rng.random_range(-5.0..5.0), rng.random_range(-5.0..5.0));
         Entity::builder()
             .set(position(), pos)
             .set_default(distance())
@@ -182,7 +182,7 @@ fn main() -> anyhow::Result<()> {
     let spawn = System::builder().with_name("spawner").with_cmd_mut().build(
         move |cmd: &mut CommandBuffer| {
             for _ in 0..100 {
-                let pos = vec2(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+                let pos = vec2(rng.random_range(-10.0..10.0), rng.random_range(-10.0..10.0));
                 println!("Spawning new entity at: {pos:?}");
                 Entity::builder()
                     .set(position(), pos)

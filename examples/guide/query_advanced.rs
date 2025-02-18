@@ -3,7 +3,7 @@ use std::{thread::sleep, time::Duration};
 use flax::{components::name, *};
 use glam::{Mat4, Quat, Vec3};
 use itertools::Itertools;
-use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
+use rand::{rngs::StdRng, seq::IndexedRandom, Rng, SeedableRng};
 use tracing_subscriber::prelude::*;
 
 fn main() -> anyhow::Result<()> {
@@ -28,9 +28,9 @@ fn main() -> anyhow::Result<()> {
     (0..10).for_each(|i| {
         builder
             .set(name(), format!("Entity.{i}"))
-            .set(position(), rng.gen::<Vec3>() * 10.0)
-            .set(velocity(), rng.gen())
-            .set(mass(), rng.gen_range(10..30) as f32)
+            .set(position(), rng.random::<Vec3>() * 10.0)
+            .set(velocity(), rng.random())
+            .set(mass(), rng.random_range(10..30) as f32)
             .spawn(&mut world);
     });
 
@@ -38,8 +38,8 @@ fn main() -> anyhow::Result<()> {
     (0..100).for_each(|i| {
         builder
             .set(name(), format!("Entity.{i}"))
-            .set(position(), rng.gen::<Vec3>() * 0.5)
-            .set(velocity(), rng.gen())
+            .set(position(), rng.random::<Vec3>() * 0.5)
+            .set(velocity(), rng.random())
             .spawn(&mut world);
     });
 
@@ -123,7 +123,7 @@ fn main() -> anyhow::Result<()> {
             let mut pos = world.get_mut(id, position())?;
             // Move a bit away from origin
             let dir = pos.normalize();
-            *pos += dir * rng.gen::<f32>();
+            *pos += dir * rng.random::<f32>();
             drop(pos);
 
             let mut scale = world.entry(id, scale())?.or_insert(Vec3::ONE);
