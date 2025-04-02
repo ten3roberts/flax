@@ -214,6 +214,8 @@ pub mod component;
 pub mod entity;
 /// Filter items yielded queries
 pub mod filter;
+/// Single entity invocations
+pub mod signal;
 /// System execution
 pub mod system;
 /// Contains the main ecs world

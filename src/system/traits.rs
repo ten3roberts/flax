@@ -37,6 +37,14 @@ impl<'a, T: 'a> AsBorrowed<'a> for AtomicRefMut<'_, T> {
     }
 }
 
+impl<'a> AsBorrowed<'a> for Entity {
+    type Borrowed = Self;
+
+    fn as_borrowed(&'a mut self) -> Self::Borrowed {
+        *self
+    }
+}
+
 struct FmtSystemData<'a, S>(&'a S);
 impl<'w, S> core::fmt::Debug for FmtSystemData<'_, S>
 where
@@ -50,7 +58,7 @@ where
 /// Borrow state from the system execution data
 pub trait SystemData<'a>: SystemAccess {
     /// The borrow from the system context
-    type Value;
+    type Value: for<'x> AsBorrowed<'x>;
 
     /// Get the data from the system context
     fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value;
@@ -65,20 +73,35 @@ pub trait SystemAccess {
 }
 
 /// A callable function
-pub trait SystemFn<'this, Args, Ret> {
+pub trait CallableVariadic<Args, Ret> {
     /// Execute the function
-    fn execute(&'this mut self, args: Args) -> Ret;
+    fn execute(&mut self, args: Args) -> Ret;
 }
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
-        impl<'this, Func, Ret, $($ty,)*> SystemFn<'this, ($($ty,)*), Ret> for Func
+
+        // AsBorrowed
+        impl<'a, $($ty,)*> AsBorrowed<'a> for ($($ty,)*)
         where
-            $(for<'x> $ty: AsBorrowed<'x>,)*
-            for<'x> Func: FnMut($(<$ty as AsBorrowed<'x>>::Borrowed),*) -> Ret,
+            $($ty: AsBorrowed<'a>,)*
         {
-            fn execute(&'this mut self, mut _args: ($($ty,)*)) -> Ret {
-                let _borrowed = ($(_args.$idx.as_borrowed(),)*);
+            type Borrowed = ($($ty::Borrowed,)*);
+
+            fn as_borrowed(&'a mut self) -> Self::Borrowed {
+                #[allow(clippy::unused_unit)]
+                ($(
+                    self.$idx.as_borrowed(),
+                )*)
+            }
+        }
+
+        impl<Func, Ret, $($ty,)*> CallableVariadic<($($ty,)*), Ret> for Func
+        where
+            for<'x> Func: FnMut($($ty),*) -> Ret,
+        {
+            fn execute(&mut self, mut _args: ($($ty,)*)) -> Ret {
+                let _borrowed = ($(_args.$idx,)*);
                 (self)($(_borrowed.$idx,)*)
             }
         }
@@ -287,7 +310,7 @@ mod test {
         CommandBuffer, Component, Entity, Query, QueryBorrow, World,
     };
 
-    use super::{SystemData, SystemFn, WithWorldMut};
+    use super::{AsBorrowed, CallableVariadic, SystemData, WithWorldMut};
 
     component! {
         health: f32,
@@ -320,13 +343,16 @@ mod test {
         };
 
         let data = &mut (WithWorldMut,);
-        let data: (AtomicRefMut<World>,) = data.acquire(&ctx);
-        SystemFn::<(AtomicRefMut<World>,), ()>::execute(&mut spawner, data);
-        // (spawner).execute(data);
+        {
+            let mut data: (AtomicRefMut<World>,) = data.acquire(&ctx);
+            CallableVariadic::<(_,), ()>::execute(&mut spawner, data.as_borrowed());
+        }
 
         let data = &mut (Query::new(name()),);
-        let data = data.acquire(&ctx);
-        SystemFn::<(QueryData<_>,), ()>::execute(&mut reader, data);
+        {
+            let mut data = data.acquire(&ctx);
+            CallableVariadic::<(QueryBorrow<_>,), ()>::execute(&mut reader, data.as_borrowed());
+        }
         Ok(())
     }
 }

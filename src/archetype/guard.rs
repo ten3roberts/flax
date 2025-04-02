@@ -54,6 +54,11 @@ impl<'a, T: ?Sized> CellMutGuard<'a, T> {
         self.storage
     }
 
+    #[inline]
+    pub(crate) fn changes(&self) -> &Changes {
+        &self.data.changes
+    }
+
     pub(crate) fn get(&self) -> &T {
         unsafe { self.storage.as_ref() }
     }

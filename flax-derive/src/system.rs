@@ -8,7 +8,7 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Expr, FnArg, GenericArgument, Ident, Pat, Path, ReturnType, Token, Type, TypePath,
+    Expr, FnArg, GenericArgument, Ident, Pat, Path, ReturnType, Signature, Token, Type, TypePath,
     TypeReference,
 };
 
@@ -28,9 +28,24 @@ pub(crate) fn system_impl(
     let mut query_arguments = Vec::new();
     let mut query_idents = Vec::new();
 
-    let is_method = matches!(item.sig.inputs.first(), Some(&syn::FnArg::Receiver(_)));
+    let has_receiver = matches!(item.sig.inputs.first(), Some(&syn::FnArg::Receiver(_)));
 
     let with_items = &*args.with;
+
+    if arguments.len() < with_items.len() {
+        return Err(syn::Error::new(
+            item.sig.inputs.span(),
+            "Insufficient signature for specified modifier arguments",
+        ));
+    }
+
+    let original_ident = &item.sig.ident;
+    if !original_ident.to_string().ends_with("_system") {
+        return Err(syn::Error::new(
+            item.sig.ident.span(),
+            "Systems must have a `_system` suffix",
+        ));
+    };
 
     for v in arguments.iter().take(arguments.len() - with_items.len()) {
         match v {
@@ -120,20 +135,24 @@ pub(crate) fn system_impl(
         }
     }
 
-    let fn_ident = &item.sig.ident;
-    if fn_ident.to_string().ends_with("system") {
-        return Err(syn::Error::new_spanned(
-            fn_ident,
-            "System function must not end with `system`",
-        ));
-    }
+    let vis = &item.vis.clone();
 
-    let system_name = format_ident!("{fn_ident}_system");
+    let outer_attrs = item.outer_attrs.clone();
 
-    let vis = &item.vis;
+    let item = MaybeItemFn {
+        vis: syn::Visibility::Inherited,
+        sig: Signature {
+            ident: format_ident!("__{}_impl", item.sig.ident),
+            ..item.sig
+        },
+        ..item
+    };
 
-    let call_sig = match is_method {
-        true => quote!(Self::#fn_ident),
+    let call_sig = match has_receiver {
+        true => {
+            let fn_ident = &item.sig.ident;
+            quote!(Self::#fn_ident)
+        }
         false => item.sig.ident.to_token_stream(),
     };
 
@@ -213,9 +232,10 @@ pub(crate) fn system_impl(
         quote! { #crate_name::Query::new( (#(#query_ctors,)*)).with_filter((#(#filters,)*)) };
 
     let system_impl = quote! {
-        #vis fn #system_name() -> #crate_name::system::BoxedSystem {
+        #(#outer_attrs)*
+        #vis fn #original_ident() -> #crate_name::system::BoxedSystem {
             #crate_name::system::System::builder()
-                .with_name(stringify!(#fn_ident))
+                .with_name(stringify!(#original_ident))
                 #(.#with_exprs)*
                 .with_query(#query)
                 .#iter_fn
@@ -224,6 +244,7 @@ pub(crate) fn system_impl(
     };
 
     Ok(quote! {
+        #[doc(hidden)]
         #item
 
         #system_impl
@@ -435,6 +456,12 @@ impl Parse for SystemAttrs {
 
                 args.with
                     .push(WithExpr::new(ty, quote!(with_world()), quote!()));
+            } else if lookahead.peek(kw::with_system_ctx) {
+                let _ = input.parse::<kw::with_system_ctx>()?;
+                let ty = syn::parse2(quote!(&#crate_name::system::SystemContext)).unwrap();
+
+                args.with
+                    .push(WithExpr::new(ty, quote!(with_system_ctx()), quote!()));
             }
             //
             else if lookahead.peek(kw::with_cmd) {
@@ -510,6 +537,7 @@ mod kw {
     syn::custom_keyword!(filter);
     syn::custom_keyword!(par);
     syn::custom_keyword!(with_world);
+    syn::custom_keyword!(with_system_ctx);
     // syn::custom_keyword!(with_world_mut); // NOTE: this will always panic due to a query always being borrowed
     syn::custom_keyword!(with_cmd);
     syn::custom_keyword!(with_cmd_mut);

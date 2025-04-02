@@ -18,18 +18,18 @@ fn system_macro() {
 
     impl MyType {
         #[system(filter(d().with()), require_all)]
-        pub fn method(self: &mut MyType, b: &String) {
+        pub fn method_system(self: &mut MyType, b: &String) {
             eprintln!("method: {b:?}")
         }
 
         #[system(with_cmd_mut, require_all)]
-        pub fn method_with_cmd(self: &mut MyType, b: &str, cmd: &mut CommandBuffer) {
+        pub fn method_with_cmd_system(self: &mut MyType, b: &str, cmd: &mut CommandBuffer) {
             let _ = b;
             let _ = cmd;
         }
 
         #[system(with_world, with_cmd_mut, with_query(Query::new(a())), require_all)]
-        pub fn method_with_all_sides(
+        pub fn method_with_all_sides_system(
             self: &mut MyType,
             b: &str,
             world: &World,
@@ -42,19 +42,19 @@ fn system_macro() {
     }
 
     #[system(args(c_renamed = c().cloned()), par)]
-    fn string_downcasting(a: &i32, b: &mut str) {
+    fn string_downcasting_system(a: &i32, b: &mut str) {
         let _ = b;
         let _ = a;
     }
 
     #[system(args(c_renamed = c().cloned()), par)]
-    fn update(a: &i32, b: &mut String, c_renamed: i32, d: Option<&mut Vec<String>>) {
+    fn update_system(a: &i32, b: &mut String, c_renamed: i32, d: Option<&mut Vec<String>>) {
         *b = b.to_uppercase();
         eprintln!("{a} {b} {c_renamed} {d:?}");
     }
 
     #[system(filter(a().with()), with_cmd_mut)]
-    fn fallible(a: &mut i32, _cmd: &mut CommandBuffer) -> anyhow::Result<()> {
+    fn fallible_system(a: &mut i32, _cmd: &mut CommandBuffer) -> anyhow::Result<()> {
         (anyhow::Ok(()))?;
 
         let _ = a;

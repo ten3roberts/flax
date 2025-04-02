@@ -9,7 +9,7 @@ use once_cell::unsync::OnceCell;
 
 use crate::{
     archetype::{Archetype, RefMut},
-    component::{ComponentKey, ComponentValue},
+    component::{ComponentDesc, ComponentKey, ComponentValue},
     components::name,
     entity::EntityLocation,
     entry::{Entry, OccupiedEntry, VacantEntry},
@@ -451,6 +451,11 @@ impl<'a> EntityRef<'a> {
         )
     }
 
+    /// Returns a list of all components present on an entity
+    pub fn components(&self) -> impl Iterator<Item = ComponentDesc> + '_ {
+        self.arch.components_desc()
+    }
+
     /// Returns the entity id
     pub fn id(&self) -> Entity {
         self.id
@@ -480,29 +485,37 @@ impl<'a> EntityRef<'a> {
 
 impl Debug for EntityRef<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        EntityFormatter {
-            world: self.world,
-            arch: self.arch,
-            slot: self.loc.slot,
-            id: self.id,
+        if f.alternate() {
+            EntityFormatter {
+                world: self.world,
+                arch: self.arch,
+                slot: self.loc.slot,
+                id: self.id,
+            }
+            .fmt(f)
+        } else {
+            Display::fmt(self, f)
         }
-        .fmt(f)
     }
 }
 
 impl Debug for EntityRefMut<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let loc = self.loc();
+        if f.alternate() {
+            let loc = self.loc();
 
-        let arch = self.world.archetypes.get(loc.arch_id);
+            let arch = self.world.archetypes.get(loc.arch_id);
 
-        EntityFormatter {
-            world: self.world,
-            id: self.id,
-            slot: loc.slot,
-            arch,
+            EntityFormatter {
+                world: self.world,
+                id: self.id,
+                slot: loc.slot,
+                arch,
+            }
+            .fmt(f)
+        } else {
+            Display::fmt(self, f)
         }
-        .fmt(f)
     }
 }
 

@@ -3,6 +3,7 @@ use atomic_refcell::AtomicRef;
 
 use crate::{
     filter::All,
+    signal::{SignalContext, SignalData},
     system::{Access, AsBorrowed, SystemAccess, SystemContext, SystemData},
     Fetch, Planar, Query, World,
 };
@@ -41,6 +42,29 @@ where
     type Value = QueryData<'a, Q, F, S>;
 
     fn acquire(&'a mut self, ctx: &'a SystemContext<'_, '_, '_>) -> Self::Value {
+        let world = ctx.world();
+
+        QueryData { world, query: self }
+    }
+
+    fn describe(&self, f: &mut alloc::fmt::Formatter<'_>) -> alloc::fmt::Result {
+        f.write_str("Query<")?;
+        self.fetch.describe(f)?;
+        f.write_str(", ")?;
+        f.write_str(&tynm::type_name::<S>())?;
+        f.write_str(">")
+    }
+}
+
+impl<'a, Q, F, S> SignalData<'a> for Query<Q, F, S>
+where
+    Q: 'static + for<'x> Fetch<'x>,
+    F: 'static + for<'x> Fetch<'x>,
+    S: 'static + for<'x> QueryStrategy<'x, Q, F>,
+{
+    type Value = QueryData<'a, Q, F, S>;
+
+    fn acquire(&'a mut self, ctx: &'a SignalContext<'_>) -> Self::Value {
         let world = ctx.world();
 
         QueryData { world, query: self }

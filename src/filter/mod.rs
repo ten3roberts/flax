@@ -1,4 +1,5 @@
 mod change;
+mod change_mut;
 mod cmp;
 mod constant;
 mod set;
@@ -21,6 +22,7 @@ use crate::{
 };
 
 pub use change::ChangeFilter;
+pub use change_mut::ChangeFilterMut;
 pub use cmp::{Cmp, Equal, Greater, GreaterEq, Less, LessEq, NotEqual};
 pub(crate) use constant::NoEntities;
 pub use constant::{All, Nothing};
