@@ -3,6 +3,8 @@ use core::{
     marker::PhantomData,
 };
 
+use alloc::{boxed::Box, format, string::String};
+
 use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 
 use crate::{
@@ -157,10 +159,7 @@ impl<T, Args> SignalBuilder<T, Args> {
     /// Finish building the signal
     pub fn build<F, Ret>(self, func: F) -> Signal<F, T, Args, Ret>
     where
-        Args: for<'a> SignalData<'a> + 'static,
-        for<'x, 'y> <<Args as SignalData<'x>>::Value as AsBorrowed<'y>>::Borrowed: TuplePush<T>,
-        F: 'static + Send + Sync +
-         for<'x, 'y> CallableVariadic< <<<Args as SignalData<'x>>::Value as AsBorrowed<'y>>::Borrowed as TuplePush<T>>::PushRight ,Ret>,
+        Signal<F, T, Args, Ret>: DynSignal<T>,
     {
         Signal::new(self.name, self.data, func)
     }
@@ -359,9 +358,9 @@ mod test {
     use core::sync::atomic::AtomicBool;
     use std::sync::Arc;
 
-    use crate::{system::traits::WithWorld, CommandBuffer, Entity, World};
+    use crate::{CommandBuffer, World};
 
-    use super::{BoxedSignal, DynSignal, ExtractEntity, Signal, SignalContext};
+    use super::{BoxedSignal, DynSignal, Signal, SignalContext};
 
     #[test]
     fn basic_signal() {

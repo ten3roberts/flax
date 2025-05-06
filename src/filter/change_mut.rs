@@ -9,6 +9,8 @@ use crate::{
     Component, Fetch, FetchItem,
 };
 
+use alloc::vec::Vec;
+
 use super::change::ChangeCursor;
 
 #[derive(Clone)]
