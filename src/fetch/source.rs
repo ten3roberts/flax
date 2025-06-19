@@ -123,6 +123,7 @@ fn traverse_resolve<'a, 'w, Q: Fetch<'w>>(
     fetch: &Q,
     data: FetchAccessData<'a>,
 ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
+    profile_function!();
     let mut stack = Vec::new();
     stack.push((data.arch_id, None));
     while let Some((arch_id, slot)) = stack.pop() {

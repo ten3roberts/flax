@@ -175,6 +175,7 @@ where
                         return None;
                     }
 
+                    profile_scope!("prepare_fetch");
                     self.state.prepare_fetch(arch_id, arch)
                 }));
         }
