@@ -10,7 +10,7 @@ use crate::{
     BatchSpawn, Component, Entity, EntityBuilder, RelationExt, World,
 };
 
-type DeferFn = Box<dyn FnOnce(&mut World) -> anyhow::Result<()> + Send + Sync>;
+type DeferFn = Box<dyn FnOnce(&mut World) -> anyhow::Result<()> + Send>;
 
 /// A recorded action to be applied to the world.
 enum Command {
@@ -287,7 +287,7 @@ impl CommandBuffer {
     /// Errors will be propagated.
     pub fn defer(
         &mut self,
-        func: impl FnOnce(&mut World) -> anyhow::Result<()> + Send + Sync + 'static,
+        func: impl 'static + Send + FnOnce(&mut World) -> anyhow::Result<()>,
     ) -> &mut Self {
         self.commands.push(Command::Defer(Box::new(func)));
         self

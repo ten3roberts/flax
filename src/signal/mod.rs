@@ -157,11 +157,11 @@ impl<T, Args> SignalBuilder<T, Args> {
     }
 
     /// Finish building the signal
-    pub fn build<F, Ret>(self, func: F) -> Signal<F, T, Args, Ret>
+    pub fn build<F, Ret>(self, func: F) -> BoxedSignal<T>
     where
         Signal<F, T, Args, Ret>: DynSignal<T>,
     {
-        Signal::new(self.name, self.data, func)
+        Signal::new(self.name, self.data, func).boxed()
     }
 }
 
@@ -365,14 +365,14 @@ mod test {
     #[test]
     fn basic_signal() {
         let called = Arc::new(AtomicBool::new(false));
-        let mut signal: BoxedSignal<()> = Signal::builder("test")
-            .with_world()
-            .build(move |_id, _: &World, ()| {
-                called.store(true, core::sync::atomic::Ordering::SeqCst);
+        let mut signal: BoxedSignal<()> =
+            Signal::builder("test")
+                .with_world()
+                .build(move |_id, _: &World, ()| {
+                    called.store(true, core::sync::atomic::Ordering::SeqCst);
 
-                anyhow::Ok(())
-            })
-            .boxed();
+                    anyhow::Ok(())
+                });
 
         let mut world = World::new();
 

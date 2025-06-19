@@ -306,8 +306,8 @@ mod test {
     use itertools::Itertools;
 
     use crate::{
-        component, components::name, filter::All, query::QueryData, system::SystemContext,
-        CommandBuffer, Component, Entity, Query, QueryBorrow, World,
+        component, components::name, filter::All, system::SystemContext, CommandBuffer, Component,
+        Entity, Query, QueryBorrow, World,
     };
 
     use super::{AsBorrowed, CallableVariadic, SystemData, WithWorldMut};
