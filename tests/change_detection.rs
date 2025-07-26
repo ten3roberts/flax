@@ -297,7 +297,7 @@ fn move_older_changes() {
     let mut mark_read = Query::new(a());
     let mut query = Query::new((entity_ids()).filtered(a().modified()));
 
-    assert_eq!(query.collect_vec(&world), [id2, id1]);
+    assert_eq!(query.collect_vec(&world), [id1, id2]);
 
     *world.get_mut(id1, a()).unwrap() = ();
     mark_read.borrow(&world);

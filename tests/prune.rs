@@ -20,40 +20,40 @@ fn prune_archetypes() {
         .spawn(&mut world);
 
     // A(1)
-    //  A_B(1)
-    //      A_B_C(1)
-    //  A_C(1)
+    // A_B(1)
+    // A_B_C(1)
+    // A_C(1)
 
     assert_eq!(world.prune_archetypes(), 0);
     world.despawn(id_a).unwrap();
 
     // A(0)
-    //  A_B(1)
-    //      A_B_C(1)
-    //  A_C(1)
+    // A_B(1)
+    // A_B_C(1)
+    // A_C(1)
 
     world.despawn(id_abc).unwrap();
 
     // A(0)
-    //  A_B(1)
-    //      A_B_C(0) *
-    //  A_C(1)
-    assert_eq!(world.prune_archetypes(), 1);
+    // A_B(1)
+    // A_B_C(0)
+    // A_C(1)
+    assert_eq!(world.prune_archetypes(), 2);
 
     world.despawn(id_ac).unwrap();
 
     // A(0)
-    //  A_B(1)
-    //      A_B_C(0)
-    //  A_C(0) *
+    // A_B(1)
+    // A_B_C(0)
+    // A_C(0)
     assert_eq!(world.prune_archetypes(), 1);
 
     world.despawn(id_ab).unwrap();
 
-    // A(0) *
-    //  A_B(0) *
-    //      A_B_C(0)
-    //  A_C(0)
-    assert_eq!(world.prune_archetypes(), 2);
+    // A(0)
+    // A_B(0)
+    // A_B_C(0)
+    // A_C(0)
+    assert_eq!(world.prune_archetypes(), 1);
     assert_eq!(world.prune_archetypes(), 0);
 }

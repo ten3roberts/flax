@@ -355,12 +355,12 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 
 #[cfg(test)]
 mod test {
+    use alloc::sync::Arc;
     use core::sync::atomic::AtomicBool;
-    use std::sync::Arc;
 
     use crate::{CommandBuffer, World};
 
-    use super::{BoxedSignal, DynSignal, Signal, SignalContext};
+    use super::{BoxedSignal, Signal, SignalContext};
 
     #[test]
     fn basic_signal() {
