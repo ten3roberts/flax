@@ -201,9 +201,8 @@ where
 
             if let Some(mut p) = self.state.prepare_fetch(arch_id, arch) {
                 let chunk = p.chunks();
-
                 for item in chunk.flatten() {
-                    func(item)
+                    func(item);
                 }
             }
         }

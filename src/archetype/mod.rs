@@ -132,7 +132,9 @@ impl CellData {
     }
 
     #[inline]
-    pub(crate) fn set_removed(&mut self, ids: &[Entity], slots: Slice) {
+    pub(crate) fn set_removed(&mut self, ids: &[Entity], slots: Slice, change_tick: u32) {
+        self.changes.set_removed(Change::new(slots, change_tick));
+
         let event = EventData {
             ids,
             slots,
@@ -315,6 +317,33 @@ pub struct Archetype {
     pub(crate) children: BTreeMap<ComponentKey, ArchetypeId>,
     pub(crate) outgoing: BTreeMap<ComponentKey, ArchetypeId>,
     pub(crate) incoming: BTreeMap<ComponentKey, ArchetypeId>,
+
+    /// Tracks removal events for components that don't exist in this archetype
+    /// Used for cross-archetype change tracking
+    external_removals: BTreeMap<ComponentKey, ExternalRemovalData>,
+}
+
+/// Tracks removal events for components that don't physically exist in this archetype
+/// but need to be tracked for cross-archetype change detection
+pub(crate) struct ExternalRemovalData {
+    changes: Changes,
+}
+
+impl ExternalRemovalData {
+    pub(crate) fn new(_key: ComponentKey) -> Self {
+        Self {
+            changes: Changes::new(),
+        }
+    }
+
+    pub(crate) fn record_removal(&mut self, _entity: Entity, entity_slot: Slot, change_tick: u32) {
+        // Record the removal change for this slot
+        self.changes.set_removed(Change::new(Slice::single(entity_slot), change_tick));
+    }
+
+    pub(crate) fn changes(&self) -> &Changes {
+        &self.changes
+    }
 }
 
 /// Since all components are Send + Sync, the cells are as well
@@ -330,6 +359,7 @@ impl Archetype {
             entities: Vec::new(),
             children: Default::default(),
             outgoing: Default::default(),
+            external_removals: BTreeMap::new(),
         }
     }
 
@@ -352,6 +382,7 @@ impl Archetype {
             entities: Vec::new(),
             children: Default::default(),
             outgoing: Default::default(),
+            external_removals: BTreeMap::new(),
         }
     }
 
@@ -678,6 +709,7 @@ impl Archetype {
         &mut self,
         dst: &mut Self,
         slot: Slot,
+        change_tick: u32,
         mut on_drop: impl FnMut(ComponentDesc, *mut u8),
     ) -> (Slot, Option<(Entity, Slot)>) {
         let id = self.entity(slot).expect("Invalid entity");
@@ -694,7 +726,11 @@ impl Archetype {
                 cell.move_to(slot, dst_cell, dst_slot);
             } else {
                 // Notify the subscribers that the component was removed
-                data.set_removed(&[id], Slice::single(slot));
+                data.set_removed(&[id], Slice::single(slot), change_tick);
+
+                // CROSS-ARCHETYPE TRACKING: Also record the removal on the destination archetype
+                // This allows queries on the destination archetype to detect the removal
+                dst.record_external_removal(key, id, dst_slot, change_tick);
 
                 cell.take(slot, &mut on_drop);
             }
@@ -716,6 +752,7 @@ impl Archetype {
     pub unsafe fn take(
         &mut self,
         slot: Slot,
+        change_tick: u32,
         mut on_move: impl FnMut(ComponentDesc, *mut u8),
     ) -> Option<(Entity, Slot)> {
         let id = self.entity(slot).expect("Invalid entity");
@@ -727,7 +764,7 @@ impl Archetype {
         for cell in &mut *self.cells {
             let data = cell.data.get_mut();
             // data.on_event(&self.entities, Slice::single(slot), EventKind::Removed);
-            data.set_removed(&[id], Slice::single(slot));
+            data.set_removed(&[id], Slice::single(slot), change_tick);
 
             cell.take(slot, &mut on_move)
         }
@@ -743,11 +780,12 @@ impl Archetype {
     /// the `on_take` function.
     pub(crate) unsafe fn pop_last(
         &mut self,
+        change_tick: u32,
         on_take: impl FnMut(ComponentDesc, *mut u8),
     ) -> Option<Entity> {
         let last = self.last();
         if let Some(last) = last {
-            self.take(self.len() - 1, on_take);
+            self.take(self.len() - 1, change_tick, on_take);
             Some(last)
         } else {
             None
@@ -796,7 +834,7 @@ impl Archetype {
                 // unsafe { dst.storage.get_mut().append(storage) }
             } else {
                 // Notify the subscribers that the component was removed
-                data.set_removed(&entities[slots.as_range()], slots);
+                data.set_removed(&entities[slots.as_range()], slots, 0);
 
                 cell.clear();
             }
@@ -829,7 +867,7 @@ impl Archetype {
             let data = cell.data.get_mut();
             // Notify the subscribers that the component was removed
             // data.on_event(&self.entities, slots, EventKind::Removed);
-            data.set_removed(&self.entities[slots.as_range()], slots);
+            data.set_removed(&self.entities[slots.as_range()], slots, 0);
 
             cell.clear()
         }
@@ -879,7 +917,7 @@ impl Archetype {
         let slots = self.slots();
         for cell in &mut *self.cells {
             let data = cell.data.get_mut();
-            data.set_removed(&self.entities[slots.as_range()], slots)
+            data.set_removed(&self.entities[slots.as_range()], slots, 0)
         }
 
         ArchetypeDrain {
@@ -888,8 +926,31 @@ impl Archetype {
         }
     }
 
+    /// Record a removal event for a component that doesn't exist in this archetype.
+    /// This is used for cross-archetype change tracking where an entity moved here
+    /// due to a component being removed from its previous archetype.
+    pub(crate) fn record_external_removal(
+        &mut self,
+        component_key: ComponentKey,
+        entity: Entity,
+        entity_slot: Slot,
+        change_tick: u32,
+    ) {
+        // Find or create a phantom component entry for removal tracking
+        let phantom_data = self.external_removals
+            .entry(component_key)
+            .or_insert_with(|| ExternalRemovalData::new(component_key));
+
+        phantom_data.record_removal(entity, entity_slot, change_tick);
+    }
+
     pub(crate) fn entities_mut(&mut self) -> &mut [Entity] {
         &mut self.entities
+    }
+
+    /// Get external removal data for a component that doesn't exist in this archetype
+    pub(crate) fn get_external_removal(&self, component_key: ComponentKey) -> Option<&ExternalRemovalData> {
+        self.external_removals.get(&component_key)
     }
 
     pub(crate) fn component(&self, key: ComponentKey) -> Option<ComponentDesc> {

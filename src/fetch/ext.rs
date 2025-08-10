@@ -14,7 +14,7 @@ use super::{
     expect::Expect,
     opt::{Opt, OptOr},
     source::{FetchSource, FromRelation, Traverse},
-    transform::Added,
+    transform::{Added, Removed},
     Map, Modified, RandomFetch, Satisfied, Source, TransformFetch,
 };
 
@@ -202,6 +202,22 @@ pub trait FetchExt: Sized {
         Self: TransformFetch<Added>,
     {
         self.transform_fetch(Added)
+    }
+
+    /// Transform the fetch into a fetch where each constituent part tracks and yields for
+    /// component removal events.
+    ///
+    /// This is different from E.g; `(a().modified(), b().modified())` as it implies only when
+    /// *both* `a` and `b` are modified in the same iteration, which is seldom useful.
+    ///
+    /// This means will yield *any* of `a` *or* `b` are modified.
+    ///
+    /// Works with `opt`, `copy`, etc constituents.
+    fn removed(self) -> <Self as TransformFetch<Removed>>::Output
+    where
+        Self: TransformFetch<Removed>,
+    {
+        self.transform_fetch(Removed)
     }
     /// Map each item of the query to another type using the provided function.
     fn map<F, T>(self, func: F) -> Map<Self, F>

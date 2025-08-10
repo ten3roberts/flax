@@ -71,10 +71,12 @@ where
             new_tick: self.new_tick,
         };
 
+        let prepared_fetch = self.fetch.prepare(data);
+
         Some(PreparedArchetype {
             arch_id,
             arch,
-            fetch: self.fetch.prepare(data)?,
+            fetch: prepared_fetch?,
         })
     }
 }

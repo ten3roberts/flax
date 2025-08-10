@@ -534,6 +534,12 @@ impl Changes {
         self
     }
 
+    #[inline]
+    pub(crate) fn set_removed(&mut self, change: Change) -> &mut Self {
+        self.map[ChangeKind::Removed as usize].set(change);
+        self
+    }
+
     /// Removes `src` by swapping `dst` into its place
     pub(crate) fn swap_remove(
         &mut self,

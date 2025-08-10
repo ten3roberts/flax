@@ -267,7 +267,7 @@ impl World {
             .get_disjoint(arch_id, self.archetypes.root)
             .unwrap();
 
-        let (dst_slot, swapped) = unsafe { src.move_to(dst, slot, |c, p| c.drop(p)) };
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, slot, 0, |c, p| c.drop(p)) };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -308,7 +308,7 @@ impl World {
 
         let (src, dst) = self.archetypes.get_disjoint(loc.arch_id, dst_id).unwrap();
 
-        let (dst_slot, swapped) = unsafe { src.move_to(dst, loc.slot, |c, p| c.drop(p)) };
+        let (dst_slot, swapped) = unsafe { src.move_to(dst, loc.slot, 0, |c, p| c.drop(p)) };
 
         if let Some((swapped, slot)) = swapped {
             // The last entity in src was moved into the slot occupied by id
@@ -367,10 +367,13 @@ impl World {
         //     panic!("Attempt to despawn static component");
         // }
 
+        // Advance the change tick to record the removal
+        let change_tick = self.advance_change_tick();
+
         let src = self.archetypes.get_mut(arch);
 
         let swapped = unsafe {
-            src.take(slot, |c, p| {
+            src.take(slot, change_tick, |c, p| {
                 c.drop(p);
             })
         };
@@ -640,6 +643,10 @@ impl World {
         };
 
         assert_ne!(src_id, dst_id);
+        
+        // Advance the change tick to record the removal
+        let change_tick = self.advance_change_tick();
+        
         // Borrow disjoint
         let (src, dst) = self.archetypes.get_disjoint(src_id, dst_id).unwrap();
         src.add_incoming(desc.key(), dst_id);
@@ -651,7 +658,7 @@ impl World {
 
         // Capture the ONE moved value
         let mut on_drop = Some(on_drop);
-        let (dst_slot, swapped) = src.move_to(dst, slot, |_, p| {
+        let (dst_slot, swapped) = src.move_to(dst, slot, change_tick, |_, p| {
             let drop = on_drop.take().expect("On drop called more than once");
             (drop)(p);
         });
@@ -1261,7 +1268,7 @@ impl World {
             // Take each entity one by one and append them to the world
             if arch.has(is_static_entity().key()) {
                 while let Some(id) = unsafe {
-                    arch.pop_last(|mut desc, ptr| {
+                    arch.pop_last(0, |mut desc, ptr| {
                         let key = &mut desc.key;
 
                         // Modify the relations to match new components

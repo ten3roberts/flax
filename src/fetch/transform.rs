@@ -32,6 +32,13 @@ impl<T: ComponentValue> TransformFetch<Added> for Component<T> {
     }
 }
 
+impl<T: ComponentValue> TransformFetch<Removed> for Component<T> {
+    type Output = ChangeFilter<T>;
+    fn transform_fetch(self, _: Removed) -> Self::Output {
+        self.into_change_filter(ChangeKind::Removed)
+    }
+}
+
 impl<T: ComponentValue> TransformFetch<Modified> for ComponentMut<T> {
     type Output = Filtered<Self, NoEntities>;
     fn transform_fetch(self, _: Modified) -> Self::Output {
@@ -42,6 +49,13 @@ impl<T: ComponentValue> TransformFetch<Modified> for ComponentMut<T> {
 impl<T: ComponentValue> TransformFetch<Added> for ComponentMut<T> {
     type Output = Filtered<Self, NoEntities>;
     fn transform_fetch(self, _: Added) -> Self::Output {
+        self.filtered(NoEntities)
+    }
+}
+
+impl<T: ComponentValue> TransformFetch<Removed> for ComponentMut<T> {
+    type Output = Filtered<Self, NoEntities>;
+    fn transform_fetch(self, _: Removed) -> Self::Output {
         self.filtered(NoEntities)
     }
 }
@@ -60,6 +74,13 @@ impl TransformFetch<Added> for EntityIds {
     }
 }
 
+impl TransformFetch<Removed> for EntityIds {
+    type Output = Filtered<Self, NoEntities>;
+    fn transform_fetch(self, _: Removed) -> Self::Output {
+        self.filtered(NoEntities)
+    }
+}
+
 /// Marker for a fetch which has been transformed to filter modified items.
 #[derive(Debug, Clone, Copy)]
 pub struct Modified;
@@ -67,6 +88,10 @@ pub struct Modified;
 /// Marker for a fetch which has been transformed to filter inserted items.
 #[derive(Debug, Clone, Copy)]
 pub struct Added;
+
+/// Marker for a fetch which has been transformed to filter removed items.
+#[derive(Debug, Clone, Copy)]
+pub struct Removed;
 
 macro_rules! tuple_impl {
     ($($idx: tt => $ty: ident),*) => {
@@ -80,6 +105,13 @@ macro_rules! tuple_impl {
         impl<$($ty: TransformFetch<Added>,)*> TransformFetch<Added> for ($($ty,)*) {
             type Output = Union<($($ty::Output,)*)>;
             fn transform_fetch(self, method: Added) -> Self::Output {
+                Union(($(self.$idx.transform_fetch(method),)*))
+            }
+        }
+
+        impl<$($ty: TransformFetch<Removed>,)*> TransformFetch<Removed> for ($($ty,)*) {
+            type Output = Union<($($ty::Output,)*)>;
+            fn transform_fetch(self, method: Removed) -> Self::Output {
                 Union(($(self.$idx.transform_fetch(method),)*))
             }
         }

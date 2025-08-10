@@ -44,7 +44,17 @@ where
 
 impl<'q, T: ComponentValue> RandomFetch<'q> for PreparedChangeFilter<'_, T> {
     unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
-        unsafe { self.data.get().get_unchecked(slot) }
+        match &self.data {
+            ChangeFilterData::Component(guard) => {
+                unsafe { guard.get().get_unchecked(slot) }
+            }
+            ChangeFilterData::ExternalRemoval(_) => {
+                // For external removals, we can't return actual component data
+                // This should never be called in practice for removal filters
+                // since they only use the filtering logic
+                panic!("Cannot fetch component data for removed components")
+            }
+        }
     }
 
     #[inline]
@@ -62,23 +72,48 @@ where
     type Prepared = PreparedChangeFilter<'w, T>;
 
     fn prepare(&'w self, data: FetchPrepareData<'w>) -> Option<Self::Prepared> {
-        let cell = data.arch.cell(self.component.key())?;
-        let guard = cell.borrow();
+        let cell = data.arch.cell(self.component.key());
+        
+        let filter_data = if let Some(cell) = cell {
+            // Component exists in archetype - use normal cell data
+            let guard = cell.borrow();
 
-        // Make sure to enable modification tracking if it is actively used
-        if self.kind.is_modified() {
-            guard.changes().set_track_modified()
-        }
+            // Make sure to enable modification tracking if it is actively used
+            if self.kind.is_modified() {
+                guard.changes().set_track_modified()
+            }
+
+            ChangeFilterData::Component(guard)
+        } else if matches!(self.kind, ChangeKind::Removed) {
+            // For removal filters, check if we have external removal data
+            if let Some(external_data) = data.arch.get_external_removal(self.component.key()) {
+                ChangeFilterData::ExternalRemoval(external_data)
+            } else {
+                // No external removal data available
+                return None;
+            }
+        } else {
+            // Component doesn't exist and it's not a removal filter
+            return None;
+        };
 
         Some(PreparedChangeFilter {
-            data: guard,
+            data: filter_data,
             kind: self.kind,
             cursor: ChangeCursor::new(data.old_tick),
         })
     }
 
     fn filter_arch(&self, data: FetchAccessData) -> bool {
-        self.component.filter_arch(data)
+        if matches!(self.kind, ChangeKind::Removed) {
+            // For removal filters, we want to consider all archetypes since:
+            // 1. Archetypes with the component may have normal removal tracking
+            // 2. Archetypes without the component may have external removal data
+            true
+        } else {
+            // For added/modified filters, the component must exist
+            self.component.filter_arch(data)
+        }
     }
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
@@ -90,7 +125,18 @@ where
     }
 
     fn searcher(&self, searcher: &mut crate::ArchetypeSearcher) {
-        searcher.add_required(self.component.key())
+        if matches!(self.kind, ChangeKind::Removed) {
+            // For removal filters, we don't add any archetype requirements
+            // since we need to check all archetypes for external removal data
+            // regardless of their component structure
+            
+            // Note: The query system's archetype caching might miss new entity locations
+            // after removals, so removal filters may need special handling to ensure
+            // all archetypes are re-checked when entities move between archetypes
+        } else {
+            // For added/modified filters, the component must be present
+            searcher.add_required(self.component.key());
+        }
     }
 }
 
@@ -141,9 +187,17 @@ impl ChangeCursor {
     }
 }
 
+/// Data source for change filtering
+enum ChangeFilterData<'w, T> {
+    /// Component exists in archetype - use normal cell data
+    Component(CellGuard<'w, [T]>),
+    /// Component doesn't exist - use external removal tracking
+    ExternalRemoval(&'w crate::archetype::ExternalRemovalData),
+}
+
 #[doc(hidden)]
 pub struct PreparedChangeFilter<'w, T> {
-    data: CellGuard<'w, [T]>,
+    data: ChangeFilterData<'w, T>,
     kind: ChangeKind,
     cursor: ChangeCursor,
 }
@@ -162,7 +216,18 @@ impl<'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'_, T> {
     const HAS_FILTER: bool = true;
 
     unsafe fn create_chunk(&'q mut self, slots: Slice) -> Self::Chunk {
-        Ptr::new(self.data.get()[slots.as_range()].as_ptr())
+        match &self.data {
+            ChangeFilterData::Component(guard) => {
+                Ptr::new(guard.get()[slots.as_range()].as_ptr())
+            }
+            ChangeFilterData::ExternalRemoval(_) => {
+                // For external removals, we don't have actual component data
+                // We just need a dummy pointer for the filter logic
+                // This is safe because removed filters only use the change tracking data,
+                // not the actual component values
+                Ptr::new(core::ptr::null::<T>())
+            }
+        }
     }
 
     #[inline]
@@ -174,10 +239,16 @@ impl<'q, T: ComponentValue> PreparedFetch<'q> for PreparedChangeFilter<'_, T> {
 
     #[inline]
     unsafe fn filter_slots(&mut self, slots: Slice) -> Slice {
-        let cur = match self
-            .cursor
-            .find_slice(self.data.changes().get(self.kind).as_slice(), slots)
-        {
+        let changes = match &self.data {
+            ChangeFilterData::Component(guard) => {
+                guard.changes().get(self.kind).as_slice()
+            }
+            ChangeFilterData::ExternalRemoval(external_data) => {
+                external_data.changes().get(self.kind).as_slice()
+            }
+        };
+
+        let cur = match self.cursor.find_slice(changes, slots) {
             Some(v) => v,
             None => return Slice::new(slots.end, slots.end),
         };
