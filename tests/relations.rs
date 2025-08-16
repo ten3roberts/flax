@@ -483,3 +483,113 @@ fn relations_mut() {
         ]
     );
 }
+
+// Tests for despawn_children relation cleanup fix
+component! {
+    subscribes_to(target): (),
+    has_subscriber(target): (),
+    follows(target): (),
+}
+
+fn setup_bidirectional_relations(world: &mut World) -> (Entity, Entity, Entity) {
+    let parent = Entity::builder().spawn(world);
+    let data_source = Entity::builder().spawn(world);
+    
+    let child = Entity::builder()
+        .set_default(child_of(parent))
+        .set_default(subscribes_to(data_source))
+        .spawn(world);
+
+    world.set(data_source, has_subscriber(child), ()).unwrap();
+    
+    (parent, data_source, child)
+}
+
+#[test]
+fn despawn_children_cleans_all_relations() {
+    // Test that despawn_children properly cleans up all relation types:
+    // 1. Relations FROM children TO other entities (subscribes_to)
+    // 2. Relations FROM other entities TO children (has_subscriber)  
+    // 3. Relations in different archetypes (follows)
+    
+    let mut world = World::new();
+    let parent = Entity::builder().spawn(&mut world);
+    let data_source = Entity::builder().spawn(&mut world);
+    
+    // Create children with bidirectional relations to data_source
+    let child1 = Entity::builder()
+        .set_default(child_of(parent))
+        .set_default(subscribes_to(data_source))
+        .spawn(&mut world);
+    let child2 = Entity::builder()
+        .set_default(child_of(parent))
+        .set_default(subscribes_to(data_source))
+        .spawn(&mut world);
+
+    // Set up reverse relations
+    world.set(data_source, has_subscriber(child1), ()).unwrap();
+    world.set(data_source, has_subscriber(child2), ()).unwrap();
+
+    // Create entities in different archetypes that reference the children
+    let follower1 = Entity::builder()
+        .set_default(follows(child1))
+        .spawn(&mut world);
+    let follower2 = Entity::builder()
+        .set_default(follows(child2))
+        .spawn(&mut world);
+
+    // Verify initial state
+    assert!(world.has(child1, subscribes_to(data_source)));
+    assert!(world.has(child2, subscribes_to(data_source)));
+    assert!(world.has(data_source, has_subscriber(child1)));
+    assert!(world.has(data_source, has_subscriber(child2)));
+    assert!(world.has(follower1, follows(child1)));
+    assert!(world.has(follower2, follows(child2)));
+
+    // Despawn children
+    world.despawn_children(parent, child_of).unwrap();
+    assert!(!world.is_alive(child1));
+    assert!(!world.is_alive(child2));
+
+    // All relation types should be cleaned up
+    assert_eq!(
+        Query::new(entity_ids())
+            .with(subscribes_to(data_source))
+            .collect_vec(&world),
+        vec![] // No entities should subscribe to data_source
+    );
+    assert!(!world.has(data_source, has_subscriber(child1)));
+    assert!(!world.has(data_source, has_subscriber(child2)));
+    assert!(!world.has(follower1, follows(child1)));
+    assert!(!world.has(follower2, follows(child2)));
+}
+
+#[test]
+fn despawn_vs_despawn_children_consistency() {
+    // Test that both regular despawn() and despawn_children() clean up relations identically
+    
+    let mut world1 = World::new();
+    let mut world2 = World::new();
+    
+    // Setup identical scenarios in both worlds
+    let (parent1, data_source1, child1) = setup_bidirectional_relations(&mut world1);
+    let (_, data_source2, child2) = setup_bidirectional_relations(&mut world2);
+
+    // Use regular despawn in world1
+    world1.despawn(child1).unwrap();
+    
+    // Use despawn_children in world2
+    world2.despawn_children(parent1, child_of).unwrap();
+
+    // Both should have identical cleanup results
+    let relations1 = Query::new(entity_ids())
+        .with(subscribes_to(data_source1))
+        .collect_vec(&world1);
+    let relations2 = Query::new(entity_ids())
+        .with(subscribes_to(data_source2))
+        .collect_vec(&world2);
+    
+    assert_eq!(relations1, relations2); // Both should be empty
+    assert!(!world1.has(data_source1, has_subscriber(child1)));
+    assert!(!world2.has(data_source2, has_subscriber(child2)));
+}

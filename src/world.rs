@@ -445,6 +445,8 @@ impl World {
 
         let mut stack = alloc::vec![id];
         let mut archetypes = Vec::new();
+        let mut all_entities_to_detach = Vec::new();
+        
         while let Some(id) = stack.pop() {
             profile_scope!("traverse_archetypes");
             archetypes.clear();
@@ -458,12 +460,24 @@ impl World {
 
             for &arch_id in &archetypes {
                 let arch = self.archetypes.get(arch_id);
-                stack.extend(arch.entities());
-                for &id in arch.entities() {
+                let entities_to_despawn: Vec<Entity> = arch.entities().iter().copied().collect();
+                stack.extend(&entities_to_despawn);
+                all_entities_to_detach.extend(&entities_to_despawn);
+                
+                // Despawn entities from entity store
+                for &id in &entities_to_despawn {
                     self.entities.init(id.kind()).despawn(id).unwrap();
                 }
+                
+                // Despawn the archetype
                 self.archetypes.despawn(arch_id).clear();
             }
+        }
+        
+        // After all entities and archetypes are despawned, detach all entities
+        // This ensures relations pointing to the despawned entities are cleaned up
+        for &id in &all_entities_to_detach {
+            self.detach(id);
         }
 
         Ok(())
