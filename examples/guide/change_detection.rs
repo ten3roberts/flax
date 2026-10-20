@@ -5,7 +5,7 @@ use flax::{
     Schedule, System, World,
 };
 use itertools::Itertools;
-use rand::{rngs::StdRng, seq::IndexedRandom, Rng, SeedableRng};
+use rand::{rngs::StdRng, seq::IndexedRandom, RngExt, SeedableRng};
 use tracing::info_span;
 use tracing_subscriber::prelude::*;
 

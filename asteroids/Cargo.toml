@@ -11,7 +11,7 @@ flax = { path = "../", default-features = false, features = [ "flume", "derive",
 macroquad = "0.4.4"
 # sapp-wasm = "=0.1.26"
 
-flume = { version = "0.11.0", default-features = false }
+flume = { version = "0.12.0", default-features = false }
 rand = { version = "0.9.1", default-features = false, features = ["std_rng"] }
 
 # Pin to rand to support js implementations
@@ -19,6 +19,6 @@ getrandom = { version = "0.2", features = ["js"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.17"
 tracing-tree = "0.4.0"
-itertools = "0.14.0"
+itertools = "0.15.0"
 anyhow = "1.0.71"
 ahash = "0.8"

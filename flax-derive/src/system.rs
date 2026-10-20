@@ -8,8 +8,8 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Expr, FnArg, GenericArgument, Ident, Pat, Path, ReturnType, Signature, Token, Type, TypePath,
-    TypeReference,
+    Expr, FnArg, GenericArgument, Ident, Pat, Path, Receiver, ReceiverKind, ReturnType, Signature,
+    Token, Type, TypePath, TypeReference,
 };
 
 use crate::maybe_fn::MaybeItemFn;
@@ -50,7 +50,8 @@ pub(crate) fn system_impl(
     for v in arguments.iter().take(arguments.len() - with_items.len()) {
         match v {
             FnArg::Receiver(receiver) => {
-                let recv_ty = match &*receiver.ty {
+                let receiver_ty = receiver_type(receiver)?;
+                let recv_ty = match &receiver_ty {
                     Type::Reference(TypeReference { elem, .. }) => {
                         let Type::Path(TypePath { path, .. }) = &**elem else {
                             return Err(syn::Error::new(
@@ -74,14 +75,14 @@ pub(crate) fn system_impl(
                 let recv_name = format_ident!("{}", recv_ty.to_string().to_snake_case());
 
                 let ctor = if let Some(ctor) = args.query_arg(&format_ident!("self")) {
-                    let recv_ty = &*receiver.ty;
+                    let recv_ty = &receiver_ty;
                     QueryArgument {
                         ctor: ctor.expr.to_token_stream(),
                         adapter: quote! {#recv_name},
                         ty: quote! {#recv_ty},
                     }
                 } else if recv_ty != "Self" {
-                    component_ctor_from_type(&crate_name, &recv_name, &receiver.ty, quote! {})?
+                    component_ctor_from_type(&crate_name, &recv_name, &receiver_ty, quote! {})?
                 } else {
                     return Err(syn::Error::new(
                         receiver.span(),
@@ -253,6 +254,33 @@ pub(crate) fn system_impl(
 
 fn extract_path_ident(path: &Path) -> &Ident {
     &path.segments.last().unwrap().ident
+}
+
+/// The type of a method receiver, e.g. `&Self` for `&self` or `T` for `self: T`
+fn receiver_type(receiver: &Receiver) -> syn::Result<Type> {
+    let self_ty = Type::Path(TypePath {
+        attrs: Vec::new(),
+        qself: None,
+        path: Path::from(Ident::new("Self", receiver.self_token.span)),
+    });
+
+    match &receiver.kind {
+        ReceiverKind::Value => Ok(self_ty),
+        ReceiverKind::Reference(and_token, lifetime, mutability) => {
+            Ok(Type::Reference(TypeReference {
+                attrs: Vec::new(),
+                and_token: *and_token,
+                lifetime: lifetime.clone(),
+                mutability: *mutability,
+                elem: Box::new(self_ty),
+            }))
+        }
+        ReceiverKind::Typed(_, ty) => Ok((**ty).clone()),
+        _ => Err(syn::Error::new(
+            receiver.span(),
+            "Unsupported receiver kind",
+        )),
+    }
 }
 
 fn matches_path(ty: &Type, ident: &str) -> bool {

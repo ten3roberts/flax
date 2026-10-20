@@ -8,7 +8,7 @@ use flax::{
 };
 use glam::{vec3, Quat, Vec3};
 use itertools::Itertools;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, Rng, RngExt, SeedableRng};
 
 component! {
     position: Vec3,

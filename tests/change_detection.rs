@@ -25,7 +25,7 @@ fn change_detection() {
     use glam::{Quat, Vec3};
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{rngs::StdRng, RngExt, SeedableRng};
 
     use flax::events::{EventKind, EventSubscriber};
 
