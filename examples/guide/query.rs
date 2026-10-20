@@ -3,7 +3,7 @@ use flax::{
     EntityBorrow, FetchExt, Query, QueryBorrow, Schedule, System, World,
 };
 use glam::{vec2, Vec2};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, RngExt, SeedableRng};
 
 fn main() -> anyhow::Result<()> {
     let mut world = World::new();

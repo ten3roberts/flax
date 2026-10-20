@@ -8,6 +8,7 @@
   - [Queries](fundamentals/query.md)
   - [Systems](fundamentals/systems.md)
   - [Schedule](fundamentals/schedule.md)
+  - [Signals](./fundamentals/signals.md)
   - [EntityBuilder](fundamentals/builder.md)
   - [CommandBuffer](fundamentals/commandbuffer.md)
   - [Relations](fundamentals/relations.md)

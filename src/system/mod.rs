@@ -1,13 +1,13 @@
 mod context;
 mod input;
-mod traits;
+pub(crate) mod traits;
 
 use crate::{
     archetype::{ArchetypeId, ArchetypeInfo},
     component::ComponentKey,
-    query::{QueryData, QueryStrategy},
+    query::QueryStrategy,
     util::TuplePush,
-    CommandBuffer, Fetch, FetchItem, Query, World,
+    CommandBuffer, Fetch, FetchItem, Query, QueryBorrow, World,
 };
 use alloc::{
     boxed::Box,
@@ -24,7 +24,7 @@ use core::{
 
 pub use context::*;
 pub use input::IntoInput;
-pub use traits::{AsBorrowed, SystemAccess, SystemData, SystemFn};
+pub use traits::{AsBorrowed, CallableVariadic, SystemAccess, SystemData};
 
 use self::traits::{WithCmd, WithCmdMut, WithInput, WithInputMut, WithWorld, WithWorldMut};
 
@@ -59,14 +59,14 @@ pub struct ForEach<Func> {
     func: Func,
 }
 
-impl<'a, Func, Q, F> SystemFn<'a, (QueryData<'a, Q, F>,), ()> for ForEach<Func>
+impl<Func, Q, F> CallableVariadic<(QueryBorrow<'_, Q, F>,), ()> for ForEach<Func>
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
     for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item),
 {
-    fn execute(&mut self, mut data: (QueryData<Q, F>,)) {
-        for item in &mut data.0.borrow() {
+    fn execute(&mut self, mut data: (QueryBorrow<Q, F>,)) {
+        for item in &mut data.0 {
             (self.func)(item)
         }
     }
@@ -78,14 +78,15 @@ pub struct TryForEach<Func, E> {
     _marker: PhantomData<E>,
 }
 
-impl<'a, Func, Q, F, E> SystemFn<'a, (QueryData<'a, Q, F>,), Result<(), E>> for TryForEach<Func, E>
+impl<Func, Q, F, E> CallableVariadic<(QueryBorrow<'_, Q, F>,), Result<(), E>>
+    for TryForEach<Func, E>
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
     for<'x> Func: FnMut(<Q as FetchItem<'x>>::Item) -> Result<(), E>,
 {
-    fn execute(&mut self, mut data: (QueryData<Q, F>,)) -> Result<(), E> {
-        for item in &mut data.0.borrow() {
+    fn execute(&mut self, mut data: (QueryBorrow<Q, F>,)) -> Result<(), E> {
+        for item in &mut data.0 {
             (self.func)(item)?;
         }
 
@@ -100,7 +101,7 @@ pub struct ParForEach<F> {
 }
 
 #[cfg(feature = "rayon")]
-impl<'a, Func, Q, F> SystemFn<'a, (QueryData<'a, Q, F>,), ()> for ParForEach<Func>
+impl<Func, Q, F> CallableVariadic<(QueryBorrow<'_, Q, F>,), ()> for ParForEach<Func>
 where
     for<'x> Q: Fetch<'x>,
     for<'x> F: Fetch<'x>,
@@ -108,9 +109,8 @@ where
     for<'x, 'y> <<Q as Fetch<'x>>::Prepared as crate::fetch::PreparedFetch<'y>>::Chunk: Send,
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) + Send + Sync,
 {
-    fn execute(&mut self, mut data: (QueryData<Q, F>,)) {
-        let mut borrow = data.0.borrow();
-        borrow
+    fn execute(&mut self, mut data: (QueryBorrow<Q, F>,)) {
+        data.0
             .iter_batched()
             .par_bridge()
             .for_each(|v| v.for_each(&self.func));
@@ -124,7 +124,7 @@ pub struct TryParForEach<F> {
 }
 
 #[cfg(feature = "rayon")]
-impl<'a, Func, Q, F, Err> SystemFn<'a, (QueryData<'a, Q, F>,), Result<(), Err>>
+impl<Func, Q, F, Err> CallableVariadic<(QueryBorrow<'_, Q, F>,), Result<(), Err>>
     for TryParForEach<Func>
 where
     for<'x> Q: Fetch<'x>,
@@ -134,9 +134,8 @@ where
     for<'x> Func: Fn(<Q as FetchItem<'x>>::Item) -> Result<(), Err> + Send + Sync,
     Err: Send + Sync,
 {
-    fn execute(&mut self, mut data: (QueryData<Q, F>,)) -> Result<(), Err> {
-        let mut borrow = data.0.borrow();
-        borrow
+    fn execute(&mut self, mut data: (QueryBorrow<Q, F>,)) -> Result<(), Err> {
+        data.0
             .iter_batched()
             .par_bridge()
             .try_for_each(|mut v| v.try_for_each(&self.func))?;
@@ -316,7 +315,10 @@ impl<Args> SystemBuilder<Args> {
     pub fn build<Func, Ret>(self, func: Func) -> System<Func, Args, Ret>
     where
         Args: for<'a> SystemData<'a> + 'static,
-        Func: for<'this, 'a> SystemFn<'this, <Args as SystemData<'a>>::Value, Ret>,
+        Func: for<'a, 'b> CallableVariadic<
+            <<Args as SystemData<'a>>::Value as AsBorrowed<'b>>::Borrowed,
+            Ret,
+        >,
     {
         System::new(
             self.name.unwrap_or_else(|| type_name::<Func>().to_string()),
@@ -359,7 +361,10 @@ pub trait DynSystem {
 impl<F, Args, Err> DynSystem for System<F, Args, Result<(), Err>>
 where
     Args: for<'x> SystemData<'x>,
-    F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, Result<(), Err>>,
+    F: for<'x, 'y> CallableVariadic<
+        <<Args as SystemData<'x>>::Value as AsBorrowed<'y>>::Borrowed,
+        Result<(), Err>,
+    >,
     Err: Into<anyhow::Error>,
 {
     fn execute(&mut self, ctx: &SystemContext<'_, '_, '_>) -> anyhow::Result<()> {
@@ -368,9 +373,10 @@ where
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
-        let data = self.data.acquire(ctx);
-
-        let res: anyhow::Result<()> = self.func.execute(data).map_err(Into::into);
+        let res: anyhow::Result<()> = {
+            let mut data = self.data.acquire(ctx);
+            self.func.execute(data.as_borrowed()).map_err(Into::into)
+        };
         if let Err(err) = res {
             return Err(err.context(format!("Failed to execute system: {:?}", self)));
         }
@@ -400,7 +406,10 @@ where
 impl<F, Args> DynSystem for System<F, Args, ()>
 where
     Args: for<'x> SystemData<'x>,
-    F: for<'x> SystemFn<'x, <Args as SystemData<'x>>::Value, ()>,
+    F: for<'x, 'y> CallableVariadic<
+        <<Args as SystemData<'x>>::Value as AsBorrowed<'y>>::Borrowed,
+        (),
+    >,
 {
     fn execute(&mut self, ctx: &SystemContext<'_, '_, '_>) -> anyhow::Result<()> {
         profile_function!(self.name());
@@ -408,14 +417,13 @@ where
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("system", name = self.name).entered();
 
-        let data = {
-            profile_scope!("acquire_data");
-            self.data.acquire(ctx)
-        };
-
         {
+            let mut data = {
+                profile_scope!("acquire_data");
+                self.data.acquire(ctx)
+            };
             profile_scope!("exec");
-            self.func.execute(data);
+            self.func.execute(data.as_borrowed());
         }
 
         Ok(())
@@ -482,7 +490,8 @@ impl<F, Args, Ret> System<F, Args, Ret> {
     where
         Ret: 'static,
         for<'x> Args: SystemData<'x>,
-        for<'x> F: SystemFn<'x, <Args as SystemData<'x>>::Value, Ret>,
+        for<'x, 'y> F:
+            CallableVariadic<<<Args as SystemData<'x>>::Value as AsBorrowed<'y>>::Borrowed, Ret>,
     {
         self.run_with(world, &mut ())
     }
@@ -494,7 +503,8 @@ impl<F, Args, Ret> System<F, Args, Ret> {
     where
         Ret: 'static,
         for<'x> Args: SystemData<'x>,
-        for<'x> F: SystemFn<'x, <Args as SystemData<'x>>::Value, Ret>,
+        for<'x, 'y> F:
+            CallableVariadic<<<Args as SystemData<'x>>::Value as AsBorrowed<'y>>::Borrowed, Ret>,
     {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("run_on", name = self.name).entered();
@@ -503,11 +513,13 @@ impl<F, Args, Ret> System<F, Args, Ret> {
         let input = input.into_input();
         let ctx = SystemContext::new(world, &mut cmd, &input);
 
-        let data = self.data.acquire(&ctx);
+        let ret = {
+            let mut data = self.data.acquire(&ctx);
+            self.func.execute(data.as_borrowed())
+        };
 
-        let ret = self.func.execute(data);
         ctx.cmd_mut()
-            .apply(&mut ctx.world.borrow_mut())
+            .apply(&mut ctx.world_mut())
             .expect("Failed to apply commandbuffer");
         ret
     }
@@ -688,7 +700,7 @@ impl BoxedSystem {
         self.inner.execute(&ctx)?;
 
         ctx.cmd_mut()
-            .apply(&mut ctx.world.borrow_mut())
+            .apply(&mut ctx.world_mut())
             .expect("Failed to apply commandbuffer");
 
         Ok(())

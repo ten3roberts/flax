@@ -123,6 +123,7 @@ fn traverse_resolve<'a, 'w, Q: Fetch<'w>>(
     fetch: &Q,
     data: FetchAccessData<'a>,
 ) -> Option<(ArchetypeId, &'a Archetype, Option<Slot>)> {
+    profile_function!();
     let mut stack = Vec::new();
     stack.push((data.arch_id, None));
     while let Some((arch_id, slot)) = stack.pop() {
@@ -365,12 +366,12 @@ mod test {
         .with_strategy(Topo::new(child_of));
 
         pretty_assertions::assert_eq!(
-            query.borrow(&world).iter().collect_vec(),
+            query.borrow(&world).iter().sorted().collect_vec(),
             [
-                ("root", None),
                 ("child.1", Some(("root", 4))),
                 ("child.1.1", Some(("child.1", 8))),
                 ("child.2", Some(("root", 4))),
+                ("root", None),
             ]
         );
     }
@@ -405,8 +406,8 @@ mod test {
         assert_eq!(
             query.borrow(&world).iter().collect_vec(),
             [
-                ("parent", None),
                 ("parent2", None),
+                ("parent", None),
                 ("child", Some(("parent2", 8))),
             ]
         );

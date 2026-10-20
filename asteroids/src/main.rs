@@ -117,11 +117,6 @@ async fn main() -> Result<()> {
             physics_schedule.execute_seq(&mut world)?;
         }
 
-        match world.prune_archetypes() {
-            0 => {}
-            n => tracing::info!("Pruned {} archetypes", n),
-        }
-
         clear_background(BLACK);
 
         frame_schedule.execute_seq(&mut world)?;
@@ -813,8 +808,9 @@ fn draw_ui() -> BoxedSystem {
 
                     draw_text(
                         &format!(
-                            "Archetype Gen: {}, Change Tick: {}, Frametime: {}",
+                            "Archetype Gen: {}, Archetypes: {}, Change Tick: {}, Frametime: {}",
                             world.archetype_gen(),
+                            world.archetypes().count(),
                             world.change_tick(),
                             get_frame_time(),
                         ),

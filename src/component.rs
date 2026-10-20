@@ -462,11 +462,6 @@ impl ComponentDesc {
         (self.vtable.type_name)()
     }
 
-    #[inline]
-    pub(crate) fn is_relation(&self) -> bool {
-        self.key.target.is_some()
-    }
-
     pub(crate) fn create_meta(&self) -> ComponentBuffer {
         self.vtable.meta.get(*self)
     }

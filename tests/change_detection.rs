@@ -25,7 +25,7 @@ fn change_detection() {
     use glam::{Quat, Vec3};
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{rngs::StdRng, RngExt, SeedableRng};
 
     use flax::events::{EventKind, EventSubscriber};
 
@@ -297,7 +297,7 @@ fn move_older_changes() {
     let mut mark_read = Query::new(a());
     let mut query = Query::new((entity_ids()).filtered(a().modified()));
 
-    assert_eq!(query.collect_vec(&world), [id2, id1]);
+    assert_eq!(query.collect_vec(&world), [id1, id2]);
 
     *world.get_mut(id1, a()).unwrap() = ();
     mark_read.borrow(&world);

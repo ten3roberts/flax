@@ -1,8 +1,8 @@
 use crate::{
     archetype::ChangeKind,
     component::ComponentValue,
-    filter::{ChangeFilter, Filtered, NoEntities, Union},
-    Component, EntityIds, FetchExt, ComponentMut,
+    filter::{ChangeFilter, ChangeFilterMut, Filtered, NoEntities, Union},
+    Component, ComponentMut, EntityIds, FetchExt,
 };
 
 /// Allows transforming a fetch into another.
@@ -32,17 +32,17 @@ impl<T: ComponentValue> TransformFetch<Added> for Component<T> {
     }
 }
 
-impl<T: ComponentValue> TransformFetch<Modified> for ComponentMut<T> {
-    type Output = Filtered<Self, NoEntities>;
-    fn transform_fetch(self, _: Modified) -> Self::Output {
-        self.filtered(NoEntities)
+impl<T: ComponentValue> TransformFetch<Added> for ComponentMut<T> {
+    type Output = ChangeFilterMut<T>;
+    fn transform_fetch(self, _: Added) -> Self::Output {
+        ChangeFilterMut::new(self.0, ChangeKind::Added)
     }
 }
 
-impl<T: ComponentValue> TransformFetch<Added> for ComponentMut<T> {
-    type Output = Filtered<Self, NoEntities>;
-    fn transform_fetch(self, _: Added) -> Self::Output {
-        self.filtered(NoEntities)
+impl<T: ComponentValue> TransformFetch<Modified> for ComponentMut<T> {
+    type Output = ChangeFilterMut<T>;
+    fn transform_fetch(self, _: Modified) -> Self::Output {
+        ChangeFilterMut::new(self.0, ChangeKind::Modified)
     }
 }
 
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     #[cfg(feature = "derive")]
     fn query_modified_struct() {
-        use crate::{fetch::Cloned, Component, Fetch, ComponentMut, Opt};
+        use crate::{fetch::Cloned, Component, ComponentMut, Fetch, Opt};
 
         component! {
             a: i32,
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     #[cfg(feature = "derive")]
     fn query_inserted_struct() {
-        use crate::{fetch::Cloned, Component, EntityIds, Fetch, ComponentMut};
+        use crate::{fetch::Cloned, Component, ComponentMut, EntityIds, Fetch};
 
         #[derive(Debug)]
         struct Custom;

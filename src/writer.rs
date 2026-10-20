@@ -133,7 +133,7 @@ unsafe impl<W: ComponentUpdater + ComponentPusher> EntityWriter for SingleCompon
             );
 
             world.init_component(self.desc);
-            let (dst_id, _) = world.archetypes.find_create(components.iter().copied());
+            let (dst_id, _) = world.archetypes.find_or_create(components.iter().copied());
 
             // Add a quick edge to refer to later
             let reserved_id = world.archetypes.reserved;
@@ -438,7 +438,7 @@ unsafe impl EntityWriter for Buffered<'_> {
             world.init_component(desc);
         }
 
-        let (dst_id, _) = world.archetypes.find_create(components);
+        let (dst_id, _) = world.archetypes.find_or_create(components);
 
         let (src, dst) = world
             .archetypes

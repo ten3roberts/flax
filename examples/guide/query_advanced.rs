@@ -3,7 +3,7 @@ use std::{thread::sleep, time::Duration};
 use flax::{components::name, *};
 use glam::{Mat4, Quat, Vec3};
 use itertools::Itertools;
-use rand::{rngs::StdRng, seq::IndexedRandom, Rng, SeedableRng};
+use rand::{rngs::StdRng, seq::IndexedRandom, RngExt, SeedableRng};
 use tracing_subscriber::prelude::*;
 
 fn main() -> anyhow::Result<()> {
