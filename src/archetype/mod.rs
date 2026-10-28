@@ -186,6 +186,12 @@ impl Cell {
             dst.storage.extend(p, 1);
         });
 
+        // A modification filter that tracked the source must still see this slot's changes after
+        // the move, even before it has visited the destination
+        if data.changes.track_modified() {
+            dst.changes.set_track_modified();
+        }
+
         // Replace this slot with the last slot and move everything to the dst archetype
         data.changes.swap_remove(slot, last, |kind, v| {
             dst.changes.set_slot(kind, dst_slot, v.tick);
@@ -202,6 +208,10 @@ impl Cell {
 
         debug_assert_eq!(dst.storage.len(), dst_start);
         unsafe { dst.storage.append(&mut data.storage) }
+
+        if data.changes.track_modified() {
+            dst.changes.set_track_modified();
+        }
 
         data.changes.zip_map(&mut dst.changes, |_, a, b| {
             a.inner.drain(..).for_each(|mut change| {
