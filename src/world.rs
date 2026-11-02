@@ -128,14 +128,14 @@ impl World {
     /// Spawn a new empty entity into the default namespace
     pub fn spawn(&mut self) -> Entity {
         profile_function!();
-        self.spawn_inner(self.archetypes.root, EntityKind::empty())
+        self.spawn_inner(self.archetypes.empty, EntityKind::empty())
             .0
     }
 
     /// Spawn a new empty entity and acquire an entity reference.
     pub fn spawn_ref(&mut self) -> EntityRefMut {
         profile_function!();
-        let (id, loc, _) = self.spawn_inner(self.archetypes.root, EntityKind::empty());
+        let (id, loc, _) = self.spawn_inner(self.archetypes.empty, EntityKind::empty());
         EntityRefMut {
             world: self,
             loc: OnceCell::with_value(loc),
@@ -154,7 +154,7 @@ impl World {
 
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, arch) = self.archetypes.find_create(chunk.components());
+        let (arch_id, arch) = self.archetypes.find_or_create(chunk.components());
 
         let base = arch.len();
         let store = self.entities.init(EntityKind::empty());
@@ -189,7 +189,7 @@ impl World {
     /// Spawns an entitiy with a specific id.
     /// Fails if an entity with the same index already exists.
     pub fn spawn_at(&mut self, id: Entity) -> Result<Entity> {
-        self.spawn_at_inner(id, self.archetypes.root)?;
+        self.spawn_at_inner(id, self.archetypes.empty)?;
         Ok(id)
     }
 
@@ -226,7 +226,7 @@ impl World {
             self.init_component(component);
         }
 
-        let (arch_id, _) = self.archetypes.find_create(buffer.components().copied());
+        let (arch_id, _) = self.archetypes.find_or_create(buffer.components().copied());
         let (loc, arch) = self.spawn_at_inner(id, arch_id)?;
 
         for (desc, src) in buffer.drain() {
@@ -245,7 +245,7 @@ impl World {
         }
 
         let change_tick = self.advance_change_tick();
-        let (arch_id, _) = self.archetypes.find_create(buffer.components().copied());
+        let (arch_id, _) = self.archetypes.find_or_create(buffer.components().copied());
 
         let (id, _, arch) = self.spawn_inner(arch_id, EntityKind::empty());
 
@@ -264,7 +264,7 @@ impl World {
 
         let (src, dst) = self
             .archetypes
-            .get_disjoint(arch_id, self.archetypes.root)
+            .get_disjoint(arch_id, self.archetypes.empty)
             .unwrap();
 
         let (dst_slot, swapped) = unsafe { src.move_to(dst, slot, |c, p| c.drop(p)) };
@@ -282,7 +282,7 @@ impl World {
 
         *self.location_mut(id).unwrap() = EntityLocation {
             slot: dst_slot,
-            arch_id: self.archetypes.root,
+            arch_id: self.archetypes.empty,
         };
 
         Ok(())
@@ -304,7 +304,7 @@ impl World {
         let dst_components: SmallVec<[ComponentDesc; 8]> =
             src.components_desc().filter(|v| f(v.key())).collect();
 
-        let (dst_id, _) = self.archetypes.find_create(dst_components);
+        let (dst_id, _) = self.archetypes.find_or_create(dst_components);
 
         let (src, dst) = self.archetypes.get_disjoint(loc.arch_id, dst_id).unwrap();
 
@@ -491,7 +491,7 @@ impl World {
                 !(key.id == id || key.target == Some(id))
             });
 
-            let (dst_id, dst) = self.archetypes.find_create(components);
+            let (dst_id, dst) = self.archetypes.find_or_create(components);
 
             for (id, slot) in src.move_all(dst) {
                 *self.location_mut(id).expect("Entity id was not valid") = EntityLocation {
@@ -633,7 +633,7 @@ impl World {
                     .filter(|v| v.key != desc.key())
                     .collect_vec();
 
-                let (dst_id, _) = self.archetypes.find_create(components);
+                let (dst_id, _) = self.archetypes.find_or_create(components);
 
                 dst_id
             }
@@ -920,7 +920,7 @@ impl World {
 
         let change_tick = self.advance_change_tick();
 
-        let (arch_id, arch) = self.archetypes.find_create(chunk.components());
+        let (arch_id, arch) = self.archetypes.find_or_create(chunk.components());
 
         let base = arch.len();
         for (idx, &id) in ids.iter().enumerate() {
@@ -960,7 +960,7 @@ impl World {
         &mut self,
         vtable: &'static ComponentVTable<T>,
     ) -> Component<T> {
-        let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
+        let (id, _, _) = self.spawn_inner(self.archetypes.empty, EntityKind::COMPONENT);
 
         // Safety
         // The id is not used by anything else
@@ -983,7 +983,7 @@ impl World {
         &mut self,
         vtable: &'static ComponentVTable<T>,
     ) -> Relation<T> {
-        let (id, _, _) = self.spawn_inner(self.archetypes.root, EntityKind::COMPONENT);
+        let (id, _, _) = self.spawn_inner(self.archetypes.empty, EntityKind::COMPONENT);
 
         Relation::new(id, vtable)
     }
@@ -1015,6 +1015,11 @@ impl World {
     #[must_use]
     pub fn archetype_gen(&self) -> u32 {
         self.archetypes.gen()
+    }
+
+    /// Returns an iterator over all archetypes in the world
+    pub fn archetypes(&self) -> impl Iterator<Item = (ArchetypeId, &Archetype)> {
+        self.archetypes.iter()
     }
 
     #[must_use]
@@ -1418,7 +1423,7 @@ mod tests {
         // () -> (a) -> (ab) -> (abc)
         let (_, archetype) = world
             .archetypes
-            .find_create([a().desc(), b().desc(), c().desc()]);
+            .find_or_create([a().desc(), b().desc(), c().desc()]);
         assert!(!archetype.has(d().key()));
         assert!(archetype.has(a().key()));
         assert!(archetype.has(b().key()));
@@ -1427,7 +1432,7 @@ mod tests {
         //                   -> (abd)
         let (_, archetype) = world
             .archetypes
-            .find_create([a().desc(), b().desc(), d().desc()]);
+            .find_or_create([a().desc(), b().desc(), d().desc()]);
         assert!(archetype.has(d().key()));
         assert!(!archetype.has(c().key()));
     }

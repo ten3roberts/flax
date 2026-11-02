@@ -167,18 +167,17 @@ where
         // Clear previous borrows
         if self.prepared.len() != self.archetypes.len() {
             self.clear_borrows();
-            self.prepared = self
-                .archetypes
-                .iter()
-                .filter_map(|&arch_id| {
+            profile_scope!("prepare_borrows");
+            self.prepared
+                .extend(self.archetypes.iter().filter_map(|&arch_id| {
                     let arch = self.state.world.archetypes.get(arch_id);
                     if arch.is_empty() {
                         return None;
                     }
 
+                    profile_scope!("prepare_fetch");
                     self.state.prepare_fetch(arch_id, arch)
-                })
-                .collect();
+                }));
         }
 
         BatchedIter {

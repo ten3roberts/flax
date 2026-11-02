@@ -1,21 +1,22 @@
 use core::fmt::{Debug, Formatter};
 
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
+use itertools::Itertools;
 
 use crate::{
     archetype::{Archetype, ArchetypeId},
     component::{dummy, ComponentDesc, ComponentKey},
     entity::{EntityKind, EntityStore, EntityStoreIter, EntityStoreIterMut},
     events::EventSubscriber,
-    metadata::exclusive,
     Entity,
 };
 
 pub(crate) struct Archetypes {
-    pub(crate) root: ArchetypeId,
+    pub(crate) empty: ArchetypeId,
     pub(crate) reserved: ArchetypeId,
     gen: u32,
     inner: EntityStore<Archetype>,
+    archetypes: BTreeMap<Vec<ComponentDesc>, ArchetypeId>,
 
     // These trickle down to the archetypes
     subscribers: Vec<Arc<dyn EventSubscriber>>,
@@ -24,20 +25,23 @@ pub(crate) struct Archetypes {
 
 impl Archetypes {
     pub fn new() -> Self {
-        let mut archetypes = EntityStore::new(EntityKind::empty());
-        let root = archetypes.spawn(Archetype::empty());
-        let reserved = archetypes.spawn(Archetype::empty());
+        let mut inner = EntityStore::new(EntityKind::empty());
+        let empty = inner.spawn(Archetype::empty());
+        let reserved = inner.spawn(Archetype::empty());
 
         let mut index = ArchetypeIndex::new();
-        index.register(root, archetypes.get(root).unwrap());
+        index.register(empty, inner.get(empty).unwrap());
+        let mut archetypes = BTreeMap::new();
+        archetypes.insert(Vec::new(), empty);
 
         Self {
-            root,
-            inner: archetypes,
+            empty,
+            inner,
             gen: 2,
             reserved,
             subscribers: Vec::new(),
             index: ArchetypeIndex::new(),
+            archetypes,
         }
     }
 
@@ -60,31 +64,12 @@ impl Archetypes {
 
     /// Prunes a leaf and its ancestors from empty archetypes
     pub(crate) fn prune_all(&mut self) -> usize {
-        fn prune(
-            archetypes: &EntityStore<Archetype>,
-            id: ArchetypeId,
-            res: &mut Vec<ArchetypeId>,
-        ) -> bool {
-            let arch = archetypes.get(id).unwrap();
-
-            // An archetype can be removed iff all its children are removed
-            let mut pruned_children = true;
-            for &id in arch.children.values() {
-                pruned_children = prune(archetypes, id, res) && pruned_children;
-            }
-
-            if pruned_children && arch.is_empty() {
-                res.push(id);
-                true
-            } else {
-                false
-            }
-        }
-
-        let mut to_remove = Vec::new();
-        for &id in self.get(self.root()).children.values() {
-            prune(&self.inner, id, &mut to_remove);
-        }
+        let to_remove = self
+            .inner
+            .iter()
+            .filter(|v| v.0 != self.empty && v.0 != self.reserved && v.1.is_empty())
+            .map(|v| v.0)
+            .collect_vec();
 
         if to_remove.is_empty() {
             return 0;
@@ -94,6 +79,9 @@ impl Archetypes {
         for id in to_remove {
             let arch = self.inner.despawn(id).unwrap();
             self.index.unregister(id, &arch);
+            self.archetypes
+                .remove(&arch.components_desc().collect_vec())
+                .unwrap();
 
             for (&key, &dst_id) in &arch.incoming {
                 self.get_mut(dst_id).remove_link(key);
@@ -115,61 +103,29 @@ impl Archetypes {
     /// `components` must be sorted.
     ///
     /// Ensures the `exclusive` property of any relations are satisfied
-    pub(crate) fn find_create(
+    pub(crate) fn find_or_create(
         &mut self,
         components: impl IntoIterator<Item = ComponentDesc>,
     ) -> (ArchetypeId, &mut Archetype) {
-        let mut cursor = self.root;
+        // let mut cursor = self.empty;
 
-        for head in components {
-            let cur = &mut self.inner.get(cursor).expect("Invalid archetype id");
-
-            cursor = match cur.outgoing.get(&head.key) {
-                Some(&id) => id,
-                None => {
-                    // Create archetypes as we go and build the tree
-                    let arch_components = cur.components_desc().chain([head]);
-
-                    // Ensure exclusive property of the new component are maintained
-                    let mut new = if head.is_relation() && head.meta_ref().has(exclusive()) {
-                        // Remove any existing components of the same relation
-                        // `head` is always a more recently added component since an
-                        // archetype with it does not exist (yet)
-                        Archetype::new(
-                            arch_components
-                                .filter(|v| v.key.id != head.key.id || v.key == head.key),
-                        )
-                    } else {
-                        Archetype::new(arch_components)
-                    };
-
-                    // Insert the appropriate subscribers
-                    for s in &self.subscribers {
-                        if s.matches_arch(&new) {
-                            new.add_handler(s.clone())
-                        }
-                    }
-
-                    // Increase gen
-                    self.gen = self.gen.wrapping_add(1);
-                    let new_id = self.inner.spawn(new);
-
-                    let (cur, new) = self.inner.get_disjoint(cursor, new_id).unwrap();
-                    cur.add_child(head.key, new_id);
-                    new.add_incoming(head.key, cursor);
-
-                    self.index.register(new_id, new);
-
-                    new_id
+        let keys = components.into_iter().collect_vec();
+        let id = *self.archetypes.entry(keys).or_insert_with_key(|keys| {
+            let mut arch = Archetype::new(keys.to_vec());
+            // Insert the appropriate subscribers
+            for s in &self.subscribers {
+                if s.matches_arch(&arch) {
+                    arch.add_handler(s.clone())
                 }
-            };
-        }
+            }
 
-        (cursor, self.inner.get_mut(cursor).unwrap())
-    }
+            self.gen = self.gen.wrapping_add(1);
+            let id = self.inner.spawn(arch);
+            self.index.register(id, self.inner.get(id).unwrap());
+            id
+        });
 
-    pub fn root(&self) -> ArchetypeId {
-        self.root
+        (id, self.inner.get_mut(id).expect("Invalid archetype id"))
     }
 
     pub fn get_disjoint(

@@ -3,7 +3,7 @@ use std::f32::consts::TAU;
 use flax::{components::name, *};
 use glam::{vec3, Vec3};
 use itertools::Itertools;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, RngExt, SeedableRng};
 use tracing::info_span;
 use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;

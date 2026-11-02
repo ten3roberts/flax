@@ -217,7 +217,7 @@ mod test {
     use rand::{
         distr::{StandardUniform, Uniform},
         rngs::StdRng,
-        Rng, SeedableRng,
+        RngExt, SeedableRng,
     };
     use serde::de::DeserializeSeed;
 

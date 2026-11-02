@@ -25,7 +25,7 @@ fn change_detection() {
     use glam::{Quat, Vec3};
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{rngs::StdRng, RngExt, SeedableRng};
 
     use flax::events::{EventKind, EventSubscriber};
 
@@ -297,7 +297,7 @@ fn move_older_changes() {
     let mut mark_read = Query::new(a());
     let mut query = Query::new((entity_ids()).filtered(a().modified()));
 
-    assert_eq!(query.collect_vec(&world), [id2, id1]);
+    assert_eq!(query.collect_vec(&world), [id1, id2]);
 
     *world.get_mut(id1, a()).unwrap() = ();
     mark_read.borrow(&world);
@@ -313,4 +313,40 @@ fn move_older_changes() {
     world.detach(b().id());
 
     assert_eq!(query.collect_vec(&world), [id2, id1]);
+}
+
+#[test]
+fn modified_after_move_to_new_archetype() {
+    component! {
+        a: i32,
+        b: (),
+    }
+
+    let mut world = World::new();
+    let id = Entity::builder().set(a(), 0).spawn(&mut world);
+
+    let mut query = Query::new((entity_ids(), a().as_mut().modified()));
+    let mut consume = |world: &World| {
+        query
+            .borrow(world)
+            .iter()
+            .map(|(id, v)| (id, *v))
+            .collect_vec()
+    };
+
+    assert_eq!(consume(&world), [(id, 0)]);
+    assert_eq!(consume(&world), []);
+
+    // Gaining `b` moves the entity to an archetype the query has not visited yet
+    world.set(id, b(), ()).unwrap();
+    *world.entity(id).unwrap().get_mut(a()).unwrap() = 1;
+    assert_eq!(consume(&world), [(id, 1)]);
+    assert_eq!(consume(&world), []);
+
+    // Modified before moving to another new archetype
+    *world.get_mut(id, a()).unwrap() = 2;
+    world.remove(id, b()).unwrap();
+    world.set(id, name(), "moved".into()).unwrap();
+    assert_eq!(consume(&world), [(id, 2)]);
+    assert_eq!(consume(&world), []);
 }

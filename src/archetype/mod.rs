@@ -186,6 +186,12 @@ impl Cell {
             dst.storage.extend(p, 1);
         });
 
+        // A modification filter that tracked the source must still see this slot's changes after
+        // the move, even before it has visited the destination
+        if data.changes.track_modified() {
+            dst.changes.set_track_modified();
+        }
+
         // Replace this slot with the last slot and move everything to the dst archetype
         data.changes.swap_remove(slot, last, |kind, v| {
             dst.changes.set_slot(kind, dst_slot, v.tick);
@@ -202,6 +208,10 @@ impl Cell {
 
         debug_assert_eq!(dst.storage.len(), dst_start);
         unsafe { dst.storage.append(&mut data.storage) }
+
+        if data.changes.track_modified() {
+            dst.changes.set_track_modified();
+        }
 
         data.changes.zip_map(&mut dst.changes, |_, a, b| {
             a.inner.drain(..).for_each(|mut change| {
@@ -312,7 +322,6 @@ pub struct Archetype {
     pub(crate) entities: Vec<Entity>,
 
     // ComponentId => ArchetypeId
-    pub(crate) children: BTreeMap<ComponentKey, ArchetypeId>,
     pub(crate) outgoing: BTreeMap<ComponentKey, ArchetypeId>,
     pub(crate) incoming: BTreeMap<ComponentKey, ArchetypeId>,
 }
@@ -328,7 +337,6 @@ impl Archetype {
             components: BTreeMap::new(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
-            children: Default::default(),
             outgoing: Default::default(),
         }
     }
@@ -350,7 +358,6 @@ impl Archetype {
             cells: cells.into_boxed_slice(),
             incoming: BTreeMap::new(),
             entities: Vec::new(),
-            children: Default::default(),
             outgoing: Default::default(),
         }
     }
@@ -377,6 +384,10 @@ impl Archetype {
         self.components.contains_key(&component)
     }
 
+    pub fn has_all(&self, components: &[ComponentKey]) -> bool {
+        components.iter().all(|v| self.has(*v))
+    }
+
     pub(crate) fn incoming(&self, component: ComponentKey) -> Option<ArchetypeId> {
         self.incoming.get(&component).copied()
     }
@@ -394,13 +405,6 @@ impl Archetype {
 
     pub(crate) fn add_outgoing(&mut self, component: ComponentKey, dst_id: ArchetypeId) {
         self.outgoing.insert(component, dst_id);
-    }
-
-    pub(crate) fn add_child(&mut self, component: ComponentKey, id: ArchetypeId) {
-        self.outgoing.insert(component, id);
-
-        let existing = self.children.insert(component, id);
-        debug_assert!(existing.is_none());
     }
 
     pub(crate) fn borrow<T: ComponentValue>(
@@ -926,8 +930,6 @@ impl Archetype {
     pub(crate) fn remove_link(&mut self, component: ComponentKey) {
         let linked = self.outgoing.remove(&component);
         assert!(linked.is_some());
-
-        self.children.remove(&component);
     }
 
     /// Borrow the change list mutably

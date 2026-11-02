@@ -5,7 +5,7 @@ fn main() {}
 fn main() -> anyhow::Result<()> {
     use flax::{components::name, *};
     use glam::*;
-    use rand::{distr::StandardUniform, rngs::StdRng, Rng, SeedableRng};
+    use rand::{distr::StandardUniform, rngs::StdRng, RngExt, SeedableRng};
     use serde::de::DeserializeSeed;
 
     // ANCHOR: setup

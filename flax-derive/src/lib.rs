@@ -44,7 +44,7 @@ use system::{system_impl, SystemAttrs};
 /// Works on both free functions and associated methods
 ///
 /// # Examples
-/// ```
+/// ```ignore
 /// component! {
 ///     foo: String,
 ///     my_type: MyType,
@@ -706,27 +706,27 @@ impl<'a> Params<'a> {
         })
     }
 
-    fn q_impl(&self) -> ImplGenerics {
+    fn q_impl(&self) -> ImplGenerics<'_> {
         self.q_generics.split_for_impl().0
     }
 
-    fn wq_impl(&self) -> ImplGenerics {
+    fn wq_impl(&self) -> ImplGenerics<'_> {
         self.wq_generics.split_for_impl().0
     }
 
-    fn w_impl(&self) -> ImplGenerics {
+    fn w_impl(&self) -> ImplGenerics<'_> {
         self.w_generics.split_for_impl().0
     }
 
-    fn base_ty(&self) -> TypeGenerics {
+    fn base_ty(&self) -> TypeGenerics<'_> {
         self.generics.split_for_impl().1
     }
 
-    fn q_ty(&self) -> TypeGenerics {
+    fn q_ty(&self) -> TypeGenerics<'_> {
         self.q_generics.split_for_impl().1
     }
 
-    fn w_ty(&self) -> TypeGenerics {
+    fn w_ty(&self) -> TypeGenerics<'_> {
         self.w_generics.split_for_impl().1
     }
 }

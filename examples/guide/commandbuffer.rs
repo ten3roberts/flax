@@ -4,7 +4,7 @@ use flax::{
     *,
 };
 use glam::{vec2, Mat4, Vec2};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, RngExt, SeedableRng};
 use tracing_subscriber::{prelude::*, registry};
 use tracing_tree::HierarchicalLayer;
 

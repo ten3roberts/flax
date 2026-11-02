@@ -332,6 +332,12 @@ where
 
         self.strategy.borrow(borrow_state, dirty)
     }
+
+    /// Moves the query to a new change tick, this is used to reset the query and skip a specific
+    /// change.
+    pub fn set_change_tick(&mut self, change_tick: u32) {
+        self.change_tick = change_tick;
+    }
 }
 
 #[cfg(test)]

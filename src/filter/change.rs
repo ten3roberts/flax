@@ -94,14 +94,14 @@ where
     }
 }
 
-struct ChangeCursor {
+pub(crate) struct ChangeCursor {
     cursor: usize,
     old_tick: u32,
     cur: Option<Slice>,
 }
 
 impl ChangeCursor {
-    fn new(old_tick: u32) -> Self {
+    pub(crate) fn new(old_tick: u32) -> Self {
         Self {
             cursor: 0,
             old_tick,

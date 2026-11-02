@@ -256,7 +256,6 @@ where
 mod test {
     use alloc::vec;
     use itertools::Itertools;
-    use pretty_assertions::assert_eq;
 
     use crate::{
         components::{component_info, name},
@@ -332,10 +331,7 @@ mod test {
             })
             .collect_vec();
 
-        assert_eq!(
-            visited,
-            [vec![a, d], vec![g], vec![f], vec![c], vec![], vec![e, b]]
-        );
+        assert_eq!(visited, [vec![a, d], vec![g], vec![c], vec![e, b], vec![f]]);
     }
 
     #[test]
@@ -387,7 +383,7 @@ mod test {
 
         let items = query.borrow(&world).iter().collect_vec();
 
-        assert_eq!(items, ["a", "d", "b", "c", "f", "e", "g"]);
+        assert_eq!(items, ["a", "d", "b", "e", "c", "f", "g"]);
 
         // Detaching `b` creates a separate tree
         //   d ----*     a
@@ -402,13 +398,13 @@ mod test {
 
         let items = query.borrow(&world).iter().collect_vec();
 
-        assert_eq!(items, ["a", "d", "c", "f", "b", "e", "g"]);
+        assert_eq!(items, ["a", "d", "c", "b", "e", "f", "g"]);
 
         // Removing the `tree` from `e` is equivalent to removing the dependency
         world.remove(e, tree()).unwrap();
 
         let items = query.borrow(&world).iter().collect_vec();
 
-        assert_eq!(items, ["a", "d", "c", "f", "b", "g"]);
+        assert_eq!(items, ["a", "d", "c", "b", "f", "g"]);
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     buffer::ComponentBuffer,
-    component::{ComponentDesc, ComponentValue},
+    component::{ComponentDesc, ComponentKey, ComponentValue},
     error::Result,
     relation::RelationExt,
     CommandBuffer, Component, Entity, World,
@@ -132,6 +132,31 @@ impl EntityBuilder {
     /// Remove a component from the component buffer
     pub fn remove<T: ComponentValue>(&mut self, component: Component<T>) -> Option<T> {
         self.buffer.remove(component)
+    }
+
+    /// Retains only the components for which `f` returns true, and drops the rest
+    ///
+    /// This does not affect the attached children, which are reached through
+    /// [`Self::children_mut`]. The closure is called once for every component, and may be
+    /// stateful.
+    ///
+    /// ```rust
+    /// # use flax::*;
+    /// component! {
+    ///     name: String,
+    ///     health: f32,
+    /// }
+    ///
+    /// let mut builder = Entity::builder();
+    /// builder.set(name(), "player".into()).set(health(), 100.0);
+    ///
+    /// builder.retain(|key| key == name().key());
+    /// assert!(builder.has(name()));
+    /// assert!(!builder.has(health()));
+    /// ```
+    pub fn retain(&mut self, f: impl FnMut(ComponentKey) -> bool) -> &mut Self {
+        self.buffer.retain(f);
+        self
     }
 
     /// Attach a child with the provided relation and value.
@@ -294,5 +319,44 @@ mod test {
                 desc: is_enemy().desc()
             }))
         );
+    }
+}
+
+#[cfg(test)]
+mod retain_test {
+    use alloc::sync::Arc;
+
+    use crate::{component, Entity, World};
+
+    component! {
+        kept: String,
+        owned: Arc<()>,
+        health: f32,
+    }
+
+    #[test]
+    fn retain_drops_the_rest_and_keeps_the_kept_spawnable() {
+        let shared = Arc::new(());
+        let mut builder = Entity::builder();
+        builder
+            .set(kept(), "player".into())
+            .set(owned(), shared.clone())
+            .set(health(), 100.0);
+        assert_eq!(Arc::strong_count(&shared), 2);
+
+        let mut asked = 0;
+        builder.retain(|key| {
+            asked += 1;
+            key == kept().key()
+        });
+
+        assert_eq!(asked, 3);
+        assert_eq!(Arc::strong_count(&shared), 1, "the removed value is dropped once");
+        assert!(builder.has(kept()) && !builder.has(owned()) && !builder.has(health()));
+
+        let mut world = World::new();
+        let id = builder.spawn(&mut world);
+        assert_eq!(world.get(id, kept()).as_deref(), Ok(&"player".to_string()));
+        assert!(world.get(id, health()).is_err());
     }
 }
