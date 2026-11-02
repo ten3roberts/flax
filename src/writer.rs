@@ -393,7 +393,7 @@ unsafe impl EntityWriter for Buffered<'_> {
 
         let arch = world.archetypes.get_mut(src_loc.arch_id);
         unsafe {
-            self.buffer.retain(|desc, src| {
+            self.buffer.drain_where(|desc, src| {
                 let key = desc.key;
                 // The component exists in the current archetype
                 // This implies that is it also satisfies any exclusive properties
@@ -405,7 +405,7 @@ unsafe impl EntityWriter for Buffered<'_> {
                     ptr::copy_nonoverlapping(src, dst, desc.size());
 
                     data.set_modified(&[id], Slice::single(src_loc.slot), tick);
-                    false
+                    true
                 } else {
                     // Component does not exist yet, so defer a move
 
@@ -418,7 +418,7 @@ unsafe impl EntityWriter for Buffered<'_> {
                         exclusive_relations.push(key.id);
                     }
 
-                    true
+                    false
                 }
             });
         }

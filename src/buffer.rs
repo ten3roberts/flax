@@ -372,16 +372,27 @@ impl ComponentBuffer {
         self.entries.is_empty()
     }
 
-    /// Retains only the components specified by the predicate
-    /// If the closure returns true the element is removed and **not** dropped at the end of
-    /// collection
+    /// Retains only the components for which `f` returns true, and drops the rest
+    pub fn retain(&mut self, mut f: impl FnMut(ComponentKey) -> bool) {
+        let storage = &mut self.storage;
+        self.entries.retain(|&key, &mut (desc, offset)| {
+            let keep = f(key);
+            if !keep {
+                unsafe { desc.drop(storage.at_mut(offset)) }
+            }
+            keep
+        })
+    }
+
+    /// Removes the components for which `f` returns true, without dropping them
+    ///
     /// # Safety
-    /// If the passed closure returns *false* the element is considered moved and shall be handled by
+    /// If the passed closure returns *true* the element is considered moved and shall be handled by
     /// the caller.
-    pub(crate) unsafe fn retain(&mut self, mut f: impl FnMut(ComponentDesc, *mut u8) -> bool) {
+    pub(crate) unsafe fn drain_where(&mut self, mut f: impl FnMut(ComponentDesc, *mut u8) -> bool) {
         self.entries.retain(|_, (desc, offset)| {
             let ptr = unsafe { self.storage.at_mut(*offset) };
-            f(*desc, ptr)
+            !f(*desc, ptr)
         })
     }
 }
