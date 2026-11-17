@@ -173,6 +173,16 @@ impl FetchSource for Traverse {
 /// As an explicit source means the same item may be returned for each in the fetch Q must be read
 /// only, so that the returned items can safely alias. Additionally, this reduces collateral damage
 /// as it forces mutation to be contained to the currently iterated entity (mostly).
+///
+/// Sources can be nested, but may not yield aliased mutable references:
+///
+/// ```compile_fail,E0277
+/// use flax::{component, FetchExt, Query, World};
+/// component! { value: i32, parent(id): (), }
+/// let world = World::new();
+/// let mut query = Query::new(value().as_mut().relation(parent).relation(parent));
+/// let _borrow = query.borrow(&world);
+/// ```
 pub struct Source<Q, S> {
     fetch: Q,
     source: S,
@@ -247,14 +257,21 @@ where
     }
 }
 
-// impl<'w, 'q, Q> ReadOnlyFetch<'q> for PreparedSource<Q>
-// where
-//     Q: ReadOnlyFetch<'q>,
-// {
-//     unsafe fn fetch_shared(&'q self, _: crate::archetype::Slot) -> Self::Item {
-//         self.fetch.fetch_shared(self.slot)
-//     }
-// }
+impl<'w, 'q, Q> RandomFetch<'q> for PreparedSource<'w, Q>
+where
+    Q: 'w + RandomFetch<'q>,
+{
+    unsafe fn fetch_shared(&'q self, slot: Slot) -> Self::Item {
+        // Direct access uses an absolute slot in the resolved archetype.
+        self.fetch.fetch_shared(self.slot.unwrap_or(slot))
+    }
+
+    unsafe fn fetch_shared_chunk(chunk: &Self::Chunk, slot: Slot) -> Self::Item {
+        // Redirected chunks contain only the resolved slot. Otherwise the slot
+        // is an offset relative to the slice passed to create_chunk.
+        Q::fetch_shared_chunk(&chunk.0, if chunk.1 { 0 } else { slot })
+    }
+}
 
 impl<'w, 'q, Q> PreparedFetch<'q> for PreparedSource<'w, Q>
 where
@@ -330,6 +347,202 @@ mod test {
     component! {
         a: u32,
         relation(id): (),
+        module(id): (),
+        ship(id): (),
+        endpoint: u32,
+        extra: (),
+    }
+
+    #[test]
+    fn nested_relations() {
+        let mut world = World::new();
+        // Keep the targets in the same archetype to exercise nonzero slots.
+        let ships = [10, 20, 30].map(|value| Entity::builder().set(a(), value).spawn(&mut world));
+        let modules = ships.map(|target| Entity::builder().set(ship(target), ()).spawn(&mut world));
+        let mut expected = Vec::new();
+        for (index, target) in modules.into_iter().enumerate() {
+            for row in 0..4 {
+                let id = (index * 4 + row) as u32;
+                let entity = Entity::builder()
+                    .set(endpoint(), id)
+                    .set(module(target), ())
+                    .spawn(&mut world);
+                // Split each group across multiple endpoint archetypes.
+                if row % 2 == 0 {
+                    world.set(entity, extra(), ()).unwrap();
+                }
+                expected.push((id, Some((ships[index], (index as u32 + 1) * 10))));
+            }
+        }
+
+        let missing_ship = Entity::builder().spawn(&mut world);
+        let missing_component = Entity::builder()
+            .set(ship(missing_ship), ())
+            .spawn(&mut world);
+        for (id, target) in [
+            (12, Some(missing_ship)),
+            (13, Some(missing_component)),
+            (14, None),
+        ] {
+            let entity = Entity::builder().set(endpoint(), id).spawn(&mut world);
+            if let Some(target) = target {
+                world.set(entity, module(target), ()).unwrap();
+            }
+            expected.push((id, None));
+        }
+
+        let mut optional = Query::new((
+            endpoint().copied(),
+            (entity_ids(), a().copied())
+                .relation(ship)
+                .relation(module)
+                .opt(),
+        ));
+        assert_eq!(
+            optional.borrow(&world).iter().sorted().collect_vec(),
+            expected
+        );
+
+        let mut required = Query::new((
+            endpoint().copied(),
+            (entity_ids(), a().copied()).relation(ship).relation(module),
+        ));
+        let present = expected
+            .iter()
+            .filter_map(|&(id, value)| value.map(|value| (id, value)))
+            .collect_vec();
+        assert_eq!(
+            required.borrow(&world).iter().sorted().collect_vec(),
+            present
+        );
+
+        // Multiple live results may share the same ship component.
+        let mut shared = Query::new((endpoint().copied(), a().relation(ship).relation(module)));
+        let mut borrow = shared.borrow(&world);
+        let rows = borrow.iter().sorted().collect_vec();
+        assert_eq!(rows.len(), 12);
+        for group in rows.chunks(4) {
+            assert!(group
+                .iter()
+                .all(|&(_, value)| core::ptr::eq(value, group[0].1)));
+        }
+
+        // Filtering inside a redirected source must inspect the ship slot,
+        // not the endpoint or module slot.
+        let mut filtered = Query::new((
+            endpoint().copied(),
+            a().gt(15).relation(ship).relation(module).copied(),
+        ));
+        let matching = present
+            .iter()
+            .filter_map(|&(id, (_, value))| (value > 15).then_some((id, value)))
+            .collect_vec();
+        assert_eq!(
+            filtered.borrow(&world).iter().sorted().collect_vec(),
+            matching
+        );
+
+        // A comparison outside the nested sources calls fetch_shared directly.
+        let mut filtered = Query::new((
+            endpoint().copied(),
+            a().relation(ship).relation(module).gt(15).copied(),
+        ));
+        assert_eq!(
+            filtered.borrow(&world).iter().sorted().collect_vec(),
+            matching
+        );
+    }
+
+    fn prepare_data(world: &World, entity: Entity) -> FetchPrepareData<'_> {
+        let loc = world.location(entity).unwrap();
+        FetchPrepareData {
+            world,
+            arch: world.archetypes.get(loc.arch_id),
+            arch_id: loc.arch_id,
+            old_tick: 0,
+            new_tick: 1,
+        }
+    }
+
+    #[test]
+    fn random_source_slots_and_chunks() {
+        unsafe fn check_chunk<'q, P: RandomFetch<'q, Item = &'q u32>>(
+            prepared: &'q mut P,
+            expected: &[u32],
+        ) {
+            let mut chunk = prepared.create_chunk(Slice::new(1, 4));
+            assert_eq!(*P::fetch_shared_chunk(&chunk, 2), expected[2]);
+            // Shared random reads do not advance the sequential cursor.
+            for value in expected {
+                assert_eq!(*P::fetch_next(&mut chunk), *value);
+            }
+        }
+
+        let mut world = World::new();
+        let roots =
+            [10, 20, 30, 40, 50].map(|value| Entity::builder().set(a(), value).spawn(&mut world));
+        let children = [0; 4].map(|_| {
+            Entity::builder()
+                .set(relation(roots[3]), ())
+                .spawn(&mut world)
+        });
+        let fetch = a().traverse(relation);
+
+        // A traversal matching the current archetype passes slots through.
+        let mut prepared = fetch.prepare(prepare_data(&world, roots[0])).unwrap();
+        assert_eq!(prepared.slot, None);
+        unsafe {
+            assert_eq!(*prepared.fetch_shared(3), 40);
+            check_chunk(&mut prepared, &[20, 30, 40]);
+        }
+
+        // A redirected traversal ignores the input slot and chunk offset.
+        let mut prepared = fetch.prepare(prepare_data(&world, children[0])).unwrap();
+        assert_eq!(prepared.slot, Some(3));
+        unsafe {
+            assert_eq!(*prepared.fetch_shared(1), 40);
+            check_chunk(&mut prepared, &[40, 40, 40]);
+        }
+
+        // Nesting a passthrough source under a redirect still preserves the
+        // target's nonzero slot, including during filtering.
+        let mut query = Query::new((
+            entity_ids(),
+            a().traverse(relation).relation(relation).gt(35).copied(),
+        ));
+        assert_eq!(
+            query.borrow(&world).iter().sorted().collect_vec(),
+            children
+                .into_iter()
+                .map(|id| (id, 40))
+                .sorted()
+                .collect_vec()
+        );
+    }
+
+    #[test]
+    fn nested_source_access() {
+        use crate::system::AccessKind;
+
+        let mut world = World::new();
+        let target = Entity::builder().set(a(), 42).spawn(&mut world);
+        let middle = Entity::builder().set(ship(target), ()).spawn(&mut world);
+        let source = Entity::builder().set(module(middle), ()).spawn(&mut world);
+        let data = prepare_data(&world, source);
+        let mut accesses = Vec::new();
+        a().relation(ship)
+            .relation(module)
+            .access(data.into(), &mut accesses);
+        assert_eq!(
+            accesses,
+            [Access {
+                kind: AccessKind::Archetype {
+                    id: world.location(target).unwrap().arch_id,
+                    component: a().key(),
+                },
+                mutable: false,
+            }]
+        );
     }
 
     #[test]
